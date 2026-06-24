@@ -2,7 +2,7 @@
 
 ## 项目概览
 
-这是一个名为「长生札记」的单机文字修仙 RPG。核心玩法是把现实任务转化为修为、心境、气血、灵石等游戏资源，再通过突破、副本、宗门、切磋、丹药等系统推动角色成长。
+这是一个名为「长生札记」的单机文字修仙 RPG。核心玩法是把现实任务转化为修为、心境、气血、灵石等游戏资源，再通过突破、副本、宗门、切磋、丹药、排行榜和人物详情等系统推动角色成长。
 
 项目采用前后端分离但同仓库部署的结构：
 
@@ -108,6 +108,7 @@ npm run start
 - `POST /api/tasks`：提交现实任务。
 - `POST /api/breakthrough`：尝试突破。
 - `POST /api/rest`：闭关调息。
+- `POST /api/day/advance`：手动推进一天，触发每日结算。
 - `POST /api/dungeons/run`：探索副本。
 - `POST /api/sect/mission`：执行宗门任务。
 - `POST /api/sect/war`：发起宗门战。
@@ -125,6 +126,7 @@ npm run start
 - 打开或创建 `data/game.sqlite`。
 - 创建 `saves` 表。
 - 读取、写入、重置默认存档。
+- 调用 `ensureStateShape` 补齐旧存档缺失字段。
 - 调用 `settleIfNeeded` 做跨日自动结算。
 
 存档表结构：
@@ -165,8 +167,11 @@ CREATE TABLE IF NOT EXISTS saves (
 主要内容：
 
 - 默认角色和世界生成：`createDefaultState`
+- NPC 完整属性生成：`makeNpc`
+- 旧存档结构补齐：`ensureStateShape`
 - 战力计算：`powerOf`
 - 派生字段：`getPublicState`
+- 宗门汇总：`buildSectSummaries`
 - 每日结算：`settleIfNeeded` / `dailySettlement`
 - 现实任务收益：`addTask`
 - 突破逻辑：`attemptBreakthrough`
@@ -175,7 +180,16 @@ CREATE TABLE IF NOT EXISTS saves (
 公开给前端的状态由 `getPublicState` 生成，其中会附带：
 
 - `catalog`：前端渲染所需的静态目录。
-- `derived`：修为需求、战力、下一境界、突破概率。
+- `derived`：修为需求、玩家战力、下一境界、突破概率、NPC 战力映射和宗门汇总。
+
+当前状态模型比初版更完整：
+
+- 玩家和 NPC 都有 `id`、灵根、天赋、气血、心境、灵石、声望、根骨、悟性、攻伐、守御、机缘、心魔。
+- 玩家和 NPC 都记录 `duelWins`、`duelLosses`、`dungeonClears`、`bestDungeonPower`、`bestDungeonName`。
+- 玩家和 NPC 都有 `dailyRecords`、`breakthroughs`、`duelHistory`，用于榜单详情页展示成长、突破和切磋明细。
+- 宗门状态记录 `warWins` 和 `warLosses`。
+
+每日结算会推进天数、更新 NPC 修为/灵石/心境倾向、记录 NPC 每日成长和突破记录，同时恢复玩家气血与心境，并写入玩家每日记录。自动结算发生在后端读取存档时，手动推进则通过 `/api/day/advance` 触发。
 
 如果新增前端需要展示的派生数据，优先加到 `derived`，避免前端重复实现后端规则。
 
@@ -202,7 +216,10 @@ Vue 应用入口，挂载 `App.vue` 并引入全局样式。
 
 - 顶部品牌区和当前状态摘要。
 - 倒计时卡片，显示距离下一次跨日结算的时间。
+- “推进一天”按钮，手动调用 `/api/day/advance`。
+- “重开一世”按钮，调用 `/api/reset` 覆盖当前 SQLite 存档。
 - 左侧角色信息、修为/气血/心境进度条、核心属性。
+- 核心属性 hover/focus 提示，解释灵石、声望、根骨、悟性、攻伐、守御、机缘、心魔。
 - 右侧 Tab 视图：
   - 修炼
   - 现实任务
@@ -217,7 +234,22 @@ Vue 应用入口，挂载 `App.vue` 并引入全局样式。
 - 页面加载时调用 `refresh()` 拉取状态。
 - 用户动作统一通过 `act(path, body)` POST 到后端。
 - 后端返回完整公开状态后，前端直接替换 `state`。
-- 重开一世调用 `/api/reset`，会覆盖当前 SQLite 存档。
+- 重开一世后会回到“修炼”页，并把榜单详情状态重置为榜单首页。
+
+榜单页包含四个分榜：
+
+- `power`：个人战力。
+- `duel`：个人切磋。
+- `sect`：宗门战力。
+- `dungeon`：副本闯关。
+
+榜单项可点击进入详情：
+
+- 人物详情展示修为、气血、心境、八项属性、每日成长、突破记录、切磋战绩和副本闯关记录。
+- 宗门详情展示总战力、成员数、声望、物资、敌意、宗门战绩、成员列表。
+- 宗门成员列表里的角色可继续进入人物详情。
+
+注意：`App.vue` 当前有一个本地 `npcPower` 计算函数，用于前端榜单中的 NPC 战力。后端也会返回 `derived.npcPowers`，如果后续要严格统一战力展示，应优先复用后端派生值或保持两边公式同步。
 
 ### `web/src/components/Meter.vue`
 
@@ -225,36 +257,52 @@ Vue 应用入口，挂载 `App.vue` 并引入全局样式。
 
 ### `web/src/components/LogPanel.vue`
 
-日志面板组件，展示后端写入的事件日志。
+日志面板组件，展示后端写入的事件日志。主界面目前会过滤部分 NPC 突破日志，避免普通修炼日志过于嘈杂。
 
 ### `web/src/styles.css`
 
 全局样式。当前视觉风格是温暖纸色、青玉色、金色和朱红色组合，偏文字修仙题材。
 
+样式重点：
+
+- 顶部品牌、山景 hero、快捷操作区。
+- 左侧 sticky 角色面板。
+- 属性 tooltip。
+- 榜单分段按钮。
+- 榜单行 hover/focus 说明。
+- 人物/宗门详情页布局。
+- 详情页滚动记录区。
+
 响应式断点：
 
-- `1040px` 以下：顶部和主布局改为单列。
-- `720px` 以下：卡片、表单、战斗布局等改为单列，Tab 改为两列网格。
+- `1040px` 以下：顶部和主布局改为单列，详情属性网格改为三列。
+- `720px` 以下：卡片、表单、战斗布局、详情头像区、详情属性、详情进度条等改为单列，Tab 改为两列网格。
 
 ## 数据流
 
 1. 前端加载页面，请求 `GET /api/state`。
 2. `store.mjs` 打开 SQLite 存档。
 3. 如果没有存档，`gameLogic.mjs` 生成默认状态并写库。
-4. 如果日期已变化，`settleIfNeeded` 自动推进一天并写库。
-5. 后端通过 `getPublicState` 返回状态、静态目录和派生数据。
-6. 前端渲染角色、任务、副本、宗门、榜单等视图。
-7. 用户触发动作后，前端 POST 到对应 API。
-8. 后端在 `mutateState` 中读取状态、执行游戏逻辑、写回 SQLite，并返回新状态。
+4. 如果已有旧存档，`ensureStateShape` 补齐新增字段。
+5. 如果日期已变化，`settleIfNeeded` 自动推进一天并写库。
+6. 后端通过 `getPublicState` 返回状态、静态目录和派生数据。
+7. 前端渲染角色、任务、副本、宗门、切磋、洞府、榜单和详情视图。
+8. 用户触发动作后，前端 POST 到对应 API。
+9. 后端在 `mutateState` 中读取状态、执行游戏逻辑、写回 SQLite，并返回新状态。
+10. 前端用返回的新状态整体刷新页面数据。
 
 ## 维护注意事项
 
 - 游戏规则应尽量留在后端 `gameLogic.mjs`，前端只负责展示和发起动作。
 - 静态配置应优先放在 `gameData.mjs`，不要散落到组件里。
 - 前端不使用浏览器本地存储，当前唯一可信存档是 `data/game.sqlite`。
+- 新增存档字段时，要同步更新 `createDefaultState` 和 `ensureStateShape`，否则旧存档可能缺字段。
 - 增加新 API 时，需要同时更新 `server/index.mjs` 的路由表和前端调用入口。
 - 增加新物品时，要检查 `createDefaultState` 中的 `bag` 是否需要默认数量。
+- 如果新增榜单维度，通常需要更新 `rankBoards`、`activeRanking` 分发逻辑、对应 ranking computed，以及点击详情的 `kind` 处理。
+- 如果新增人物详情字段，优先让后端状态或 `derived` 提供稳定数据，前端只做展示格式化。
 - `state.log` 最多保留 80 条，`state.tasks` 最多保留 16 条。
+- `dailyRecords` 最多保留 14 条，`breakthroughs` 最多保留 12 条，`duelHistory` 最多保留 20 条。
 - 当前没有测试框架；改动核心数值逻辑后，至少手动跑一次 `npm run dev` 或 `npm run build`。
 - `npm run build` 是当前最基本的构建验证命令。
 
@@ -262,7 +310,9 @@ Vue 应用入口，挂载 `App.vue` 并引入全局样式。
 
 - 当前只支持一个默认存档。
 - 每日结算依赖服务器运行环境的本地日期。
+- 手动推进一天不会改变真实日期，但会推进游戏内天数并覆盖 `lastSettlementDate` 为当前日期。
 - 后端服务只绑定 `127.0.0.1`，默认不是局域网公开服务。
 - 生产静态文件来自 `dist/`，没有构建时不能直接用 `npm run start` 提供完整前端页面。
 - SQLite wasm 路径依赖 `node_modules`，部署前需要确保依赖完整安装。
-
+- 宗门汇总中非玩家宗门的声望、物资、敌意和战绩目前由派生逻辑随机生成，刷新状态时可能变化；只有玩家宗门 `云麓盟` 的这些数值来自存档。
+- 前端 NPC 战力展示存在本地简化计算，与后端 `powerOf`/`derived.npcPowers` 不完全一致；若要严谨排行，需要统一这一处。
