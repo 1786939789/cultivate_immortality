@@ -39,7 +39,7 @@
           <strong>{{ countdown }}</strong>
           <small>每日 00:00 后由后端自动推进一天</small>
         </div>
-        <button class="secondary" @click="refresh">刷新进度</button>
+        <button class="secondary" @click="advanceDay">推进一天</button>
         <button class="danger" @click="resetGame">重开一世</button>
       </section>
     </header>
@@ -70,9 +70,16 @@
         <Meter label="心境" :value="player.mind" :max="120" tone="focus" />
 
         <section class="stats">
-          <div class="stat" v-for="[label, value] in stats" :key="label">
-            <b>{{ value }}</b>
-            <span>{{ label }}</span>
+          <div
+            class="stat"
+            v-for="stat in stats"
+            :key="stat.label"
+            tabindex="0"
+            :aria-label="`${stat.label}：${stat.help}`"
+          >
+            <b>{{ stat.value }}</b>
+            <span>{{ stat.label }}</span>
+            <small class="stat-tip" role="tooltip">{{ stat.help }}</small>
           </div>
         </section>
 
@@ -121,7 +128,7 @@
               </div>
             </div>
           </div>
-          <LogPanel :logs="state.log" />
+          <LogPanel :logs="mainLogs" />
         </section>
 
         <section v-if="activeTab === 'tasks'" class="view active">
@@ -240,13 +247,130 @@
         </section>
 
         <section v-if="activeTab === 'rank'" class="view active">
-          <div class="panel">
-            <h3>天南小榜</h3>
+          <div class="panel" v-if="detailView === 'rank'">
+            <div class="section-head">
+              <h3>天南小榜</h3>
+              <div class="segmented">
+                <button
+                  v-for="board in rankBoards"
+                  :key="board.id"
+                  class="segment"
+                  :class="{ active: activeRankBoard === board.id }"
+                  @click="activeRankBoard = board.id"
+                >
+                  {{ board.label }}
+                </button>
+              </div>
+            </div>
             <div class="rank-list">
-              <div class="row" v-for="(item, index) in ranking" :key="`${item.name}-${item.sect}`">
+              <button
+                class="row rank-row"
+                v-for="(item, index) in activeRanking"
+                :key="`${activeRankBoard}-${item.name}-${item.sect}`"
+                type="button"
+                :aria-label="`${item.name}：${item.help}`"
+                @click="openRankItem(item)"
+              >
                 <span class="tag">#{{ index + 1 }}</span>
-                <div><strong>{{ item.name }}</strong><small>{{ item.sect }} · {{ item.mood }}</small></div>
-                <span>{{ realmName(item.realm) }}</span>
+                <div><strong>{{ item.name }}</strong><small>{{ item.subtitle }}</small></div>
+                <span>{{ item.value }}</span>
+                <small class="rank-tip" role="tooltip">{{ item.help }}</small>
+              </button>
+            </div>
+          </div>
+
+          <div class="panel" v-else-if="detailView === 'person' && selectedPerson">
+            <button class="secondary back-button" @click="detailView = 'rank'">返回榜单</button>
+            <div class="detail-hero">
+              <div class="detail-avatar" :class="{ npc: !selectedPerson.isPlayer }">
+                <span>{{ selectedPerson.name.slice(0, 1) }}</span>
+              </div>
+              <div>
+                <h3>{{ selectedPerson.name }}</h3>
+                <p>{{ selectedPerson.sect }} · {{ realmName(selectedPerson.realm) }} · {{ selectedPerson.root.name }} · {{ selectedPerson.talent.name }}</p>
+                <div class="detail-meters">
+                  <Meter label="修为" :value="selectedPerson.xp" :max="personXpNeed(selectedPerson)" />
+                  <Meter label="气血" :value="selectedPerson.hp" :max="selectedPerson.maxHp" tone="health" />
+                  <Meter label="心境" :value="selectedPerson.mind" :max="120" tone="focus" />
+                </div>
+              </div>
+            </div>
+
+            <div class="detail-grid">
+              <div class="detail-box" v-for="[label, value] in personStats(selectedPerson)" :key="label">
+                <b>{{ value }}</b>
+                <span>{{ label }}</span>
+              </div>
+            </div>
+
+            <div class="grid detail-sections">
+              <div class="panel flat">
+                <h3>每日成长</h3>
+                <div class="timeline detail-scroll">
+                  <div class="event" v-for="record in selectedPerson.dailyRecords" :key="`${record.day}-${record.note}`">
+                    第{{ record.day }}日：+{{ record.xp }}修为，+{{ record.spirit }}灵石，{{ dailyChanceText(record) }}，{{ record.note }}
+                  </div>
+                  <div v-if="!selectedPerson.dailyRecords.length" class="empty">暂无每日成长记录，下一次自动结算后会写入。</div>
+                </div>
+              </div>
+              <div class="panel flat">
+                <h3>突破记录</h3>
+                <div class="timeline detail-scroll">
+                  <div class="event" :class="{ bad: !record.success, gold: record.success }" v-for="record in selectedPerson.breakthroughs" :key="`${record.day}-${record.from}-${record.to}`">
+                    第{{ record.day }}日：{{ record.from }} → {{ record.to }}，{{ record.success ? "成功" : "失败" }}，当时突破率 {{ formatPercent(record.chance) }}
+                  </div>
+                  <div v-if="!selectedPerson.breakthroughs.length" class="empty">暂无突破记录。</div>
+                </div>
+              </div>
+              <div class="panel flat">
+                <h3>切磋战绩</h3>
+                <p>{{ selectedPerson.duelWins || 0 }} 胜 {{ selectedPerson.duelLosses || 0 }} 负，切磋评分 {{ (selectedPerson.duelWins || 0) * 3 - (selectedPerson.duelLosses || 0) }}。</p>
+                <div class="timeline detail-scroll">
+                  <div class="event" :class="{ bad: record.result === '负', gold: record.result === '胜' }" v-for="record in selectedPerson.duelHistory" :key="`${record.day}-${record.opponent}-${record.result}`">
+                    第{{ record.day }}日：对阵 {{ record.opponent }}，{{ record.result }}，+{{ record.xp || 0 }}修为，+{{ record.spirit || 0 }}灵石<span v-if="record.hpLoss">，气血 -{{ record.hpLoss }}</span>
+                  </div>
+                  <div v-if="!selectedPerson.duelHistory?.length" class="empty">暂无切磋明细。</div>
+                </div>
+              </div>
+              <div class="panel flat">
+                <h3>副本闯关</h3>
+                <div class="timeline detail-scroll">
+                  <div class="event">最高副本：{{ selectedPerson.bestDungeonName || "未入秘境" }}</div>
+                  <div class="event">副本评分 {{ selectedPerson.bestDungeonPower || 0 }}</div>
+                  <div class="event">累计通关 {{ selectedPerson.dungeonClears || 0 }} 次</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel" v-else-if="detailView === 'sect' && selectedSect">
+            <button class="secondary back-button" @click="detailView = 'rank'">返回榜单</button>
+            <div class="section-head">
+              <div>
+                <h3>{{ selectedSect.name }}</h3>
+                <p>总战力 {{ selectedSect.totalPower }} · 掌事 {{ selectedSect.leader }}</p>
+              </div>
+            </div>
+            <div class="detail-grid">
+              <div class="detail-box" v-for="[label, value] in sectStats(selectedSect)" :key="label">
+                <b>{{ value }}</b>
+                <span>{{ label }}</span>
+              </div>
+            </div>
+            <div class="grid detail-sections">
+              <div class="panel flat">
+                <h3>人物列表</h3>
+                <div class="rank-list">
+                  <button class="row link-row" v-for="member in sectMembers(selectedSect)" :key="member.id" @click="openPersonById(member.id)">
+                    <span class="tag">{{ realmName(member.realm) }}</span>
+                    <div><strong>{{ member.name }}</strong><small>{{ member.mood }} · 战力 {{ member.power }}</small></div>
+                    <span>{{ member.isPlayer ? "你" : "NPC" }}</span>
+                  </button>
+                </div>
+              </div>
+              <div class="panel flat">
+                <h3>宗门战绩</h3>
+                <p>{{ selectedSect.warWins || 0 }} 胜 {{ selectedSect.warLosses || 0 }} 负。敌对热度 {{ selectedSect.rivalHeat }}，物资 {{ selectedSect.supplies }}，声望 {{ selectedSect.reputation }}。</p>
               </div>
             </div>
           </div>
@@ -274,10 +398,21 @@ const tabs = [
   { id: "rank", label: "榜单" }
 ];
 
+const rankBoards = [
+  { id: "power", label: "个人战力" },
+  { id: "duel", label: "个人切磋" },
+  { id: "sect", label: "宗门战力" },
+  { id: "dungeon", label: "副本闯关" }
+];
+
 const state = ref(null);
 const loading = ref(true);
 const error = ref("");
 const activeTab = ref("practice");
+const activeRankBoard = ref("power");
+const detailView = ref("rank");
+const selectedPersonId = ref("player");
+const selectedSectName = ref("");
 const opponentIndex = ref(0);
 const countdown = ref("--:--:--");
 const taskForm = reactive({ name: "", type: "study", diff: 3 });
@@ -286,26 +421,104 @@ const player = computed(() => state.value.player);
 const derived = computed(() => state.value.derived);
 const catalog = computed(() => state.value.catalog);
 const selectedNpc = computed(() => state.value.npcs[opponentIndex.value] || state.value.npcs[0]);
+const sectSummaries = computed(() => derived.value.sects || []);
+const mainLogs = computed(() => state.value.log.filter((entry) => !isNpcBreakthroughLog(entry)));
 
 const stats = computed(() => [
-  ["灵石", player.value.spirit],
-  ["声望", player.value.reputation],
-  ["根骨", player.value.body],
-  ["悟性", player.value.wisdom],
-  ["攻伐", player.value.attack],
-  ["守御", player.value.defense],
-  ["机缘", player.value.chance],
-  ["心魔", player.value.heartDemon]
+  { label: "灵石", value: player.value.spirit, help: "通用货币，用于购买丹药、后续炼器材料和洞府升级。" },
+  { label: "声望", value: player.value.reputation, help: "影响宗门地位、帮派战表现和部分奖励获取。" },
+  { label: "根骨", value: player.value.body, help: "提升气血成长、调息恢复，并略微增强战斗承伤能力。" },
+  { label: "悟性", value: player.value.wisdom, help: "提高突破成功率，也会增强学习类任务和后续功法理解。" },
+  { label: "攻伐", value: player.value.attack, help: "决定副本、PK 和宗门战中的主要输出能力。" },
+  { label: "守御", value: player.value.defense, help: "提升综合战力，降低战斗失败时的风险和损耗。" },
+  { label: "机缘", value: player.value.chance, help: "影响副本探索收益、稀有事件和后续奇遇概率。" },
+  { label: "心魔", value: player.value.heartDemon, help: "越高越不利于突破，失败后会上升，可通过自律任务或清心散降低。" }
 ]);
-
-const ranking = computed(() => {
-  const self = { name: player.value.name, sect: "云麓盟", realm: player.value.realm, xp: player.value.xp, mood: "求道" };
-  return [self, ...state.value.npcs].sort((a, b) => b.realm - a.realm || b.xp - a.xp);
-});
 
 function realmName(index) {
   return catalog.value.realms[Math.min(index, catalog.value.realms.length - 1)];
 }
+
+function npcPower(npc) {
+  return Math.floor(30 + npc.realm * 23 + npc.xp * 0.12 + (npc.mood === "好斗" ? 14 : 0));
+}
+
+const cultivators = computed(() => [
+  {
+    ...player.value,
+    name: player.value.name,
+    sect: "云麓盟",
+    mood: "求道",
+    power: derived.value.playerPower,
+    isPlayer: true
+  },
+  ...state.value.npcs.map((npc) => ({ ...npc, power: npcPower(npc), isPlayer: false }))
+]);
+
+const selectedPerson = computed(() => cultivators.value.find((item) => item.id === selectedPersonId.value));
+const selectedSect = computed(() => sectSummaries.value.find((sect) => sect.name === selectedSectName.value));
+
+const activeRanking = computed(() => {
+  if (activeRankBoard.value === "duel") return duelRanking.value;
+  if (activeRankBoard.value === "sect") return sectRanking.value;
+  if (activeRankBoard.value === "dungeon") return dungeonRanking.value;
+  return powerRanking.value;
+});
+
+const powerRanking = computed(() => cultivators.value
+  .map((item) => ({
+    name: item.name,
+    id: item.id,
+    kind: "person",
+    sect: item.sect,
+    subtitle: `${item.sect} · ${item.mood} · ${realmName(item.realm)}`,
+    value: item.power,
+    help: `战力 ${item.power}。境界：${realmName(item.realm)}；修为：${Math.floor(item.xp)}；攻伐 ${item.attack}，守御 ${item.defense}，根骨 ${item.body}，悟性 ${item.wisdom}，机缘 ${item.chance}，心魔 ${item.heartDemon}。`
+  }))
+  .sort((a, b) => b.value - a.value));
+
+const duelRanking = computed(() => cultivators.value
+  .map((item) => {
+    const wins = item.duelWins || 0;
+    const losses = item.duelLosses || 0;
+    return {
+      name: item.name,
+      id: item.id,
+      kind: "person",
+      sect: item.sect,
+      subtitle: `${item.sect} · ${realmName(item.realm)} · ${wins}胜${losses}负`,
+      value: `${wins}胜`,
+      score: wins * 3 - losses,
+      help: `切磋战绩：${wins}胜${losses}负；切磋评分 ${wins * 3 - losses}。战力 ${item.power}，境界 ${realmName(item.realm)}。`
+    };
+  })
+  .sort((a, b) => b.score - a.score));
+
+const sectRanking = computed(() => sectSummaries.value
+  .map((sect) => {
+    const members = sectMembers(sect);
+    return {
+      name: sect.name,
+      id: sect.name,
+      kind: "sect",
+      sect: sect.name,
+      subtitle: `${members.length}人 · 最强 ${sect.leader}`,
+      value: sect.totalPower,
+      help: `宗门总战力 ${sect.totalPower}；成员 ${members.length} 人；最强修士 ${sect.leader}。声望 ${sect.reputation}，物资 ${sect.supplies}，宗门战 ${sect.warWins}胜${sect.warLosses}负。`
+    };
+  }));
+
+const dungeonRanking = computed(() => cultivators.value
+  .map((item) => ({
+    name: item.name,
+    id: item.id,
+    kind: "person",
+    sect: item.sect,
+    subtitle: `${item.sect} · ${item.bestDungeonName || "未入秘境"} · ${item.dungeonClears || 0}次`,
+    value: item.bestDungeonPower || 0,
+    help: `最高副本：${item.bestDungeonName || "未入秘境"}；副本评分 ${item.bestDungeonPower || 0}；累计通关 ${item.dungeonClears || 0} 次。机缘越高，探索收益越好。`
+  }))
+  .sort((a, b) => b.value - a.value));
 
 function relationHeat(index) {
   return Math.round(Math.max(0, Math.min(100, state.value.sect.rivalHeat + index * 8 - state.value.sect.reputation / 4)));
@@ -314,6 +527,68 @@ function relationHeat(index) {
 function relationClass(index) {
   const heat = relationHeat(index);
   return heat > 65 ? "bad" : heat > 35 ? "gold" : "";
+}
+
+function isNpcBreakthroughLog(entry) {
+  if (!entry?.text?.includes("突破至")) return false;
+  return state.value.npcs.some((npc) => entry.text.includes(`${npc.name}在${npc.sect}`));
+}
+
+function formatPercent(value) {
+  if (typeof value !== "number") return "未记录";
+  return `${Math.round(value * 100)}%`;
+}
+
+function dailyChanceText(record) {
+  return typeof record.breakChance === "number" ? `突破率 ${formatPercent(record.breakChance)}` : "未尝试突破";
+}
+
+function openRankItem(item) {
+  if (item.kind === "sect") {
+    selectedSectName.value = item.id;
+    detailView.value = "sect";
+    return;
+  }
+  selectedPersonId.value = item.id;
+  detailView.value = "person";
+}
+
+function openPersonById(id) {
+  selectedPersonId.value = id;
+  detailView.value = "person";
+}
+
+function personStats(person) {
+  return [
+    ["灵石", person.spirit],
+    ["声望", person.reputation],
+    ["根骨", person.body],
+    ["悟性", person.wisdom],
+    ["攻伐", person.attack],
+    ["守御", person.defense],
+    ["机缘", person.chance],
+    ["心魔", person.heartDemon]
+  ];
+}
+
+function personXpNeed(person) {
+  return Math.floor(100 * Math.pow(1.34, person.realm || 0));
+}
+
+function sectMembers(sect) {
+  return Array.isArray(sect?.members) ? sect.members : [];
+}
+
+function sectStats(sect) {
+  const members = sectMembers(sect);
+  return [
+    ["总战力", sect.totalPower],
+    ["成员", members.length],
+    ["声望", sect.reputation],
+    ["物资", sect.supplies],
+    ["敌意", sect.rivalHeat],
+    ["宗门战", `${sect.warWins}胜${sect.warLosses}负`]
+  ];
 }
 
 function updateCountdown() {
@@ -352,10 +627,15 @@ async function submitTask() {
   taskForm.name = "";
 }
 
+async function advanceDay() {
+  await act("/api/day/advance");
+}
+
 async function resetGame() {
   if (!confirm("确定重开一世？当前 SQLite 存档会被覆盖。")) return;
   await act("/api/reset");
   activeTab.value = "practice";
+  detailView.value = "rank";
 }
 
 let timer;
