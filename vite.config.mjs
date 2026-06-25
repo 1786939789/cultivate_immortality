@@ -1,6 +1,8 @@
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 
+const apiPort = process.env.API_PORT || process.env.PORT || "8787";
+
 export default defineConfig({
   root: "web",
   plugins: [vue()],
@@ -8,7 +10,7 @@ export default defineConfig({
     host: "127.0.0.1",
     port: 5173,
     proxy: {
-      "/api": "http://127.0.0.1:8787"
+      "/api": `http://127.0.0.1:${apiPort}`
     }
   },
   build: {

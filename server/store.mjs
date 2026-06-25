@@ -48,8 +48,10 @@ export async function readState(id = "default") {
     return state;
   }
 
-  const state = ensureStateShape(JSON.parse(result[0].values[0][0]));
-  if (settleIfNeeded(state)) await writeState(state, id);
+  const state = JSON.parse(result[0].values[0][0]);
+  const shapeChanged = ensureStateShape(state);
+  const settled = settleIfNeeded(state);
+  if (shapeChanged || settled) await writeState(state, id);
   return state;
 }
 
@@ -69,12 +71,19 @@ export async function writeState(state, id = "default") {
 
 export async function mutateState(mutator, id = "default") {
   const state = await readState(id);
-  mutator(state);
+  const result = mutator(state);
   await writeState(state, id);
-  return getPublicState(state);
+  const publicState = getPublicState(state);
+  return result === undefined ? publicState : { state: publicState, result };
 }
 
 export async function resetState(id = "default") {
+  const db = await openDb();
+  const statement = db.prepare("DELETE FROM saves WHERE id = $id");
+  statement.run({ $id: id });
+  statement.free();
+  persist(db);
+
   const state = createDefaultState();
   await writeState(state, id);
   return getPublicState(state);
