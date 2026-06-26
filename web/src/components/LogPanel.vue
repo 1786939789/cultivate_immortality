@@ -1,7 +1,7 @@
 <template>
   <section class="log">
     <div v-for="entry in logs" :key="`${entry.day}-${entry.time}-${entry.text}`">
-      第{{ entry.day }}日 {{ entry.time }}｜{{ entry.text }}
+      {{ entry.date || "未知日期" }} {{ entry.time }}｜{{ entry.text }}
     </div>
   </section>
 </template>

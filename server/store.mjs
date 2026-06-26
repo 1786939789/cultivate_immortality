@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import initSqlJs from "sql.js";
-import { createDefaultState, ensureStateShape, getPublicState, settleIfNeeded } from "./gameLogic.mjs";
+import { clearProgressHistory, createDefaultState, ensureStateShape, getPublicState, settleIfNeeded } from "./gameLogic.mjs";
 
 const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const dataDir = join(rootDir, "data");
@@ -84,7 +84,7 @@ export async function resetState(id = "default") {
   statement.free();
   persist(db);
 
-  const state = createDefaultState();
+  const state = clearProgressHistory(createDefaultState());
   await writeState(state, id);
   return getPublicState(state);
 }

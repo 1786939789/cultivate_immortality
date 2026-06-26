@@ -13,8 +13,23 @@ export const roots = [
   { key: "heaven", name: "天灵根", effect: "mana", min: 0.1, max: 0.2, note: "法力上限提高 10%-20%。" }
 ];
 
-export const sects = ["赤霞谷", "玄剑楼", "百草堂"];
-export const npcNames = ["陆青衡", "辛如霜", "赵玄策", "沈照夜", "顾南枝", "韩立言", "闻人渡", "白砚秋"];
+export const rosterVersion = 2;
+
+export const sectRoster = [
+  { name: "黄枫谷", members: ["韩立", "陈巧倩", "钟卫娘", "刘靖", "吴风"] },
+  { name: "掩月宗", members: ["南宫婉", "霓裳仙子", "穹老怪", "燕如嫣"] },
+  { name: "灵兽山", members: ["涵云芝", "御灵子", "秦叶岭"] },
+  { name: "清虚门", members: ["浮云子", "清虚散人", "明阳道人"] },
+  { name: "化刀坞", members: ["封岳", "刀坞老祖"] },
+  { name: "巨剑门", members: ["巨剑老祖", "铁罗", "剑眉修士"] },
+  { name: "天阙堡", members: ["天阙堡主", "辛如音", "齐云霄"] },
+  { name: "鬼灵门", members: ["王蝉", "王天胜", "燕如嫣", "鬼灵老祖", "碎魂真人"] },
+  { name: "合欢宗", members: ["合欢老魔", "田不缺", "云露老魔"] },
+  { name: "落云宗", members: ["程天坤", "吕洛", "慕沛灵", "银月"] }
+];
+
+export const sects = sectRoster.map((sect) => sect.name);
+export const npcNames = sectRoster.flatMap((sect) => sect.members);
 
 export const dungeons = [
   { id: "mist", name: "雾隐药谷", min: 0, power: 42, reward: "草药、灵石、经验", text: "适合炼气修士试炼，有低阶妖兽与残缺药圃。" },

@@ -1,10 +1,21 @@
-import { combatSkills, dungeons, itemCatalog, npcNames, realms, realmStages, roots, sects, taskTemplates } from "./gameData.mjs";
+import { combatSkills, dungeons, itemCatalog, npcNames, realms, realmStages, roots, rosterVersion, sectRoster, sects, taskTemplates } from "./gameData.mjs";
 
 export function dateKey(date = new Date()) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function addDays(dateText, offset) {
+  const [year, month, day] = String(dateText || dateKey()).split("-").map(Number);
+  const date = new Date(year || new Date().getFullYear(), (month || 1) - 1, day || 1);
+  date.setDate(date.getDate() + offset);
+  return dateKey(date);
+}
+
+function stateDateForDay(state, day = state.day) {
+  return addDays(state.calendarStartDate || state.lastSettlementDate || dateKey(), Math.max(0, Number(day || 1) - 1));
 }
 
 function timestampKey(date = new Date()) {
@@ -545,6 +556,24 @@ function makeSectStatus(name, index) {
   };
 }
 
+function sectForNpcIndex(index) {
+  let cursor = 0;
+  for (const sect of sectRoster) {
+    if (index < cursor + sect.members.length) return sect.name;
+    cursor += sect.members.length;
+  }
+  return sects[index % sects.length];
+}
+
+function shuffle(list) {
+  const result = [...list];
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [result[index], result[swapIndex]] = [result[swapIndex], result[index]];
+  }
+  return result;
+}
+
 function makeNpc(name, index) {
   const root = normalizeRoot(pick(roots));
   const realm = 0;
@@ -555,7 +584,7 @@ function makeNpc(name, index) {
   return {
     id: `npc-${index}`,
     name,
-    sect: sects[index % sects.length],
+    sect: sectForNpcIndex(index),
     root,
     realm,
     xp: 0,
@@ -591,6 +620,7 @@ function log(state, text, type = "") {
     text,
     type,
     day: state.day,
+    date: stateDateForDay(state),
     time: new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
   });
   state.log = state.log.slice(0, 80);
@@ -633,10 +663,11 @@ export function createDefaultState() {
       duelHistory: []
     },
     bag: { focus: 1, blood: 1, insight: 0 },
+    rosterVersion,
     tasks: [],
     npcs: npcNames.map((name, index) => makeNpc(name, index)),
     sect: {
-      name: "云麓盟",
+      name: "黄枫谷",
       reputation: 20,
       supplies: 80,
       rivalHeat: 18,
@@ -644,13 +675,77 @@ export function createDefaultState() {
       warLosses: 0
     },
     sectRivals: Object.fromEntries(sects.map((name, index) => [name, makeSectStatus(name, index)])),
+    duelDays: [],
+    calendarStartDate: dateKey(),
     lastSettlementDate: dateKey(),
-    log: [{ text: "你在山脚租下一间小屋，翻开第一卷长生札记。", type: "", day: 1, time: "初入" }]
+    log: [{ text: "你在山脚租下一间小屋，翻开第一卷长生札记。", type: "", day: 1, date: dateKey(), time: "初入" }]
   };
+}
+
+export function clearProgressHistory(state) {
+  const resetPerson = (person) => {
+    person.duelWins = 0;
+    person.duelLosses = 0;
+    person.duelHistory = [];
+    person.dungeonClears = 0;
+    person.bestDungeonPower = 0;
+    person.bestDungeonName = "未入秘境";
+    person.dailyRecords = [];
+    person.breakthroughs = [];
+  };
+
+  resetPerson(state.player);
+  for (const npc of state.npcs || []) resetPerson(npc);
+  state.duelDays = [];
+  state.tasks = [];
+  state.player.sect = state.sect?.name || "黄枫谷";
+  state.sect.warWins = 0;
+  state.sect.warLosses = 0;
+  return state;
+}
+
+function migrateRoster(state) {
+  state.rosterVersion = rosterVersion;
+  state.sect = {
+    name: "黄枫谷",
+    reputation: state.sect?.reputation ?? 20,
+    supplies: state.sect?.supplies ?? 80,
+    rivalHeat: state.sect?.rivalHeat ?? 18,
+    warWins: 0,
+    warLosses: 0
+  };
+  state.player.sect = state.sect.name;
+  state.npcs = npcNames.map((name, index) => makeNpc(name, index));
+  state.sectRivals = Object.fromEntries(sects.map((name, index) => [name, makeSectStatus(name, index)]));
+  clearProgressHistory(state);
 }
 
 export function ensureStateShape(state) {
   let changed = false;
+  if (state.rosterVersion !== rosterVersion) {
+    migrateRoster(state);
+    changed = true;
+  }
+  if (!state.calendarStartDate) {
+    state.calendarStartDate = addDays(state.lastSettlementDate || dateKey(), 1 - Number(state.day || 1));
+    changed = true;
+  }
+  const ensureDatedRecord = (record) => {
+    if (record && !record.date) {
+      record.date = stateDateForDay(state, record.day || state.day);
+      return true;
+    }
+    return false;
+  };
+  if (Array.isArray(state.log)) {
+    for (const entry of state.log) changed = ensureDatedRecord(entry) || changed;
+  }
+  if (Array.isArray(state.tasks)) {
+    for (const task of state.tasks) changed = ensureDatedRecord(task) || changed;
+  }
+  if (Array.isArray(state.duelDays)) {
+    for (const record of state.duelDays) changed = ensureDatedRecord(record) || changed;
+  }
   if ("talent" in state.player) {
     delete state.player.talent;
     changed = true;
@@ -660,6 +755,7 @@ export function ensureStateShape(state) {
     changed = true;
   }
   state.player.id ??= "player";
+  state.player.sect ??= state.sect?.name || "黄枫谷";
   state.player.duelWins ??= 0;
   state.player.duelLosses ??= 0;
   state.player.dungeonClears ??= 0;
@@ -668,6 +764,8 @@ export function ensureStateShape(state) {
   state.player.dailyRecords ??= [];
   state.player.breakthroughs ??= [];
   state.player.duelHistory ??= [];
+  for (const record of state.player.dailyRecords) changed = ensureDatedRecord(record) || changed;
+  for (const record of state.player.breakthroughs) changed = ensureDatedRecord(record) || changed;
   if (needsSkillMigration(state.player.skillId)) {
     state.player.skillId = randomSkillId();
     changed = true;
@@ -692,6 +790,7 @@ export function ensureStateShape(state) {
   state.player.mana = Math.min(state.player.mana, effectiveMaxMana(state.player));
   state.sect.warWins ??= 0;
   state.sect.warLosses ??= 0;
+  state.duelDays ??= [];
   state.sectRivals ??= {};
   for (const [index, name] of sects.entries()) {
     if (!state.sectRivals[name]) {
@@ -712,7 +811,7 @@ export function ensureStateShape(state) {
       changed = true;
     }
     changed = ensureField(full, "name", npcNames[index] || `散修${index + 1}`) || changed;
-    changed = ensureField(full, "sect", sects[index % sects.length]) || changed;
+    changed = ensureField(full, "sect", sectForNpcIndex(index)) || changed;
     changed = ensureField(full, "root", () => normalizeRoot(pick(roots))) || changed;
     changed = ensureField(full, "realm", () => Math.floor(Math.random() * 4)) || changed;
     changed = ensureField(full, "xp", () => Math.floor(Math.random() * 90)) || changed;
@@ -747,6 +846,8 @@ export function ensureStateShape(state) {
     changed = ensureField(full, "dailyRecords", []) || changed;
     changed = ensureField(full, "breakthroughs", []) || changed;
     changed = ensureField(full, "duelHistory", []) || changed;
+    for (const record of full.dailyRecords) changed = ensureDatedRecord(record) || changed;
+    for (const record of full.breakthroughs) changed = ensureDatedRecord(record) || changed;
     changed = ensureField(full, "duelWins", () => Math.floor(Math.random() * 6)) || changed;
     changed = ensureField(full, "duelLosses", () => Math.floor(Math.random() * 4)) || changed;
     changed = ensureField(full, "dungeonClears", () => Math.floor(Math.random() * 5)) || changed;
@@ -756,6 +857,10 @@ export function ensureStateShape(state) {
     full.mana = Math.min(full.mana, effectiveMaxMana(full));
     return full;
   });
+  if (state.duelDays.length) {
+    syncDuelDayRecords(state);
+    changed = true;
+  }
   return changed;
 }
 
@@ -862,6 +967,7 @@ export function settleIfNeeded(state) {
 
 export function dailySettlement(state, options = {}) {
   state.day += 1;
+  const settlementDate = stateDateForDay(state);
   const events = [
     "坊市传来秘境流言，众修士人心浮动。",
     "宗门执事清点物资，贡献高者可先得丹药。",
@@ -886,11 +992,12 @@ export function dailySettlement(state, options = {}) {
       npc.hp = effectiveMaxHp(npc);
       npc.mana = effectiveMaxMana(npc);
       npc.reputation += 4 + npc.realm;
-      npc.breakthroughs.unshift({ day: state.day, from: realms[beforeRealm], to: realms[npc.realm], success: true, chance: breakChance, growth });
+      npc.breakthroughs.unshift({ day: state.day, date: settlementDate, from: realms[beforeRealm], to: realms[npc.realm], success: true, chance: breakChance, growth });
       npc.breakthroughs = npc.breakthroughs.slice(0, 12);
     }
     npc.dailyRecords.unshift({
       day: state.day,
+      date: settlementDate,
       xp: actualGain,
       spirit,
       realm: realms[npc.realm],
@@ -913,6 +1020,7 @@ export function dailySettlement(state, options = {}) {
   state.player.mana = clamp((state.player.mana || 0) + 8, 0, effectiveMaxMana(state.player));
   state.player.dailyRecords.unshift({
     day: state.day,
+    date: settlementDate,
     xp: 0,
     spirit: 0,
     realm: realms[state.player.realm],
@@ -948,7 +1056,7 @@ export function addTask(state, payload) {
   if (type === "craft") p.divineSense += Math.ceil(diff / 2);
   if (type === "discipline") p.maxMana += diff;
 
-  state.tasks.unshift({ name, type: template.label, diff, xp: xpGain, day: state.day });
+  state.tasks.unshift({ name, type: template.label, diff, xp: xpGain, day: state.day, date: stateDateForDay(state) });
   state.tasks = state.tasks.slice(0, 16);
   log(state, `完成「${name}」，获得 ${xpGain} 经验。${template.label}让你的道基更扎实。`, "gold");
 }
@@ -974,13 +1082,13 @@ export function attemptBreakthrough(state) {
     p.hp = effectiveMaxHp(p);
     p.mana = effectiveMaxMana(p);
     p.reputation += 6 + p.realm;
-    p.breakthroughs.unshift({ day: state.day, from: realms[p.realm - 1], to: realms[p.realm], success: true, chance, growth });
+    p.breakthroughs.unshift({ day: state.day, date: stateDateForDay(state), from: realms[p.realm - 1], to: realms[p.realm], success: true, chance, growth });
     p.breakthroughs = p.breakthroughs.slice(0, 12);
     log(state, `灵气贯通周天，你成功突破至「${realms[p.realm]}」。`, "gold");
   } else {
     p.hp = clamp(p.hp - 26, 1, effectiveMaxHp(p));
     p.mana = clamp((p.mana || 0) - 18, 0, effectiveMaxMana(p));
-    p.breakthroughs.unshift({ day: state.day, from: realms[p.realm], to: realms[p.realm + 1] || "未知境界", success: false, chance });
+    p.breakthroughs.unshift({ day: state.day, date: stateDateForDay(state), from: realms[p.realm], to: realms[p.realm + 1] || "未知境界", success: false, chance });
     p.breakthroughs = p.breakthroughs.slice(0, 12);
     log(state, "突破失败，灵力逆冲经脉。气息紊乱，需要调息或完成自律任务。", "bad");
   }
@@ -1050,7 +1158,7 @@ export function sectMission(state) {
   state.sect.reputation += rep;
   state.sect.supplies += 10;
   p.hp = clamp(p.hp - 6, 1, effectiveMaxHp(p));
-  log(state, `完成云麓盟任务，获得 ${xp} 经验、${rep} 声望与 16 灵石。`, "gold");
+  log(state, `完成${state.sect.name}任务，获得 ${xp} 经验、${rep} 声望与 16 灵石。`, "gold");
 }
 
 export function sectWar(state) {
@@ -1082,7 +1190,7 @@ export function sectWar(state) {
     state.sect.reputation += 18;
     state.sect.warWins += 1;
     state.sect.rivalHeat = Math.max(0, state.sect.rivalHeat - 20);
-    log(state, `云麓盟击退${enemyName}挑衅，你在回合战中取胜，获得 45 灵石。`, "gold");
+    log(state, `${state.sect.name}击退${enemyName}挑衅，你在回合战中取胜，获得 45 灵石。`, "gold");
   } else {
     state.player.hp = Math.max(1, state.player.hp);
     state.sect.supplies = Math.max(0, state.sect.supplies - 28);
@@ -1091,69 +1199,40 @@ export function sectWar(state) {
   }
 }
 
-export function duel(state, index) {
-  const npc = state.npcs[Number(index)];
-  if (!npc) throw new Error("未知对手");
-  const p = state.player;
-  const playerBefore = { ...p };
-  const npcBefore = { ...npc };
-  const duelPlayer = { ...p, hp: effectiveMaxHp(p), mana: effectiveMaxMana(p) };
-  const duelNpc = { ...npc, hp: effectiveMaxHp(npc), mana: effectiveMaxMana(npc) };
-  const battle = runTurnBattle(duelPlayer, duelNpc);
-  let result = "负";
-  let reward = { xp: 0, spirit: 0, reputation: 0 };
-  const foughtAt = timestampKey();
+function entityRef(entity, kind) {
+  return {
+    kind,
+    id: entity.id,
+    name: entity.name,
+    realm: entity.realm,
+    sect: kind === "player" ? entity.sect || "黄枫谷" : entity.sect,
+    root: entity.root,
+    skillId: entity.skillId
+  };
+}
 
-  if (battle.winner === "left") {
-    const xp = applyXpGain(p, 24 + npc.realm * 8);
-    result = "胜";
-    reward = { xp, spirit: 12, reputation: 5 };
-    p.reputation += 5;
-    p.spirit += 12;
-    p.duelWins += 1;
-    npc.duelLosses += 1;
-    log(state, `你在回合切磋中胜过${npc.name}，获得 ${xp} 经验。`, "gold");
-  } else {
-    const xp = applyXpGain(p, 10);
-    reward = { xp, spirit: 0, reputation: 0 };
-    p.duelLosses += 1;
-    npc.duelWins += 1;
-    log(state, `${npc.name}招式老辣，你血量见底败下阵来。`, "bad");
-  }
+function buildReplay(left, right, battle, result, foughtAt) {
+  const leftBefore = { ...left };
+  const rightBefore = { ...right };
 
-  p.hp = effectiveMaxHp(p);
-  p.mana = effectiveMaxMana(p);
-  npc.hp = effectiveMaxHp(npc);
-  npc.mana = effectiveMaxMana(npc);
-
-  const replay = {
+  return {
     kind: "duel",
     result,
     winner: battle.winner,
     foughtAt,
-    reward,
     left: {
-      id: p.id,
-      name: p.name,
-      realm: p.realm,
-      root: p.root,
-      skillId: p.skillId,
-      power: powerOf(playerBefore),
-      stats: effectiveStats(playerBefore),
+      ...entityRef(leftBefore, leftBefore.id === "player" ? "player" : "npc"),
+      power: powerOf(leftBefore),
+      stats: effectiveStats(leftBefore),
       startHp: battle.leftStart.hp,
       startMana: battle.leftStart.mana,
       endHp: battle.leftHp,
       endMana: battle.leftMana
     },
     right: {
-      id: npc.id,
-      name: npc.name,
-      realm: npc.realm,
-      sect: npc.sect,
-      root: npc.root,
-      skillId: npc.skillId,
-      power: powerOf(npcBefore),
-      stats: effectiveStats(npcBefore),
+      ...entityRef(rightBefore, rightBefore.id === "player" ? "player" : "npc"),
+      power: powerOf(rightBefore),
+      stats: effectiveStats(rightBefore),
       startHp: battle.rightStart.hp,
       startMana: battle.rightStart.mana,
       endHp: battle.rightHp,
@@ -1161,13 +1240,154 @@ export function duel(state, index) {
     },
     events: battle.events
   };
+}
 
-  p.duelHistory.unshift({ foughtAt, opponent: npc.name, result, xp: reward.xp, spirit: reward.spirit, replay });
-  npc.duelHistory.unshift({ foughtAt, opponent: p.name, result: result === "胜" ? "负" : "胜", xp: 0, spirit: 0, replay });
-  p.duelHistory = p.duelHistory.slice(0, 20);
-  npc.duelHistory = npc.duelHistory.slice(0, 20);
+function runDuelMatch(state, left, right, options = {}) {
+  const foughtAt = timestampKey();
+  const leftBefore = { ...left };
+  const rightBefore = { ...right };
+  const duelLeft = { ...left, hp: effectiveMaxHp(left), mana: effectiveMaxMana(left) };
+  const duelRight = { ...right, hp: effectiveMaxHp(right), mana: effectiveMaxMana(right) };
+  const battle = runTurnBattle(duelLeft, duelRight);
+  const leftWon = battle.winner === "left";
+  const winner = leftWon ? left : right;
+  const loser = leftWon ? right : left;
+  const result = leftWon ? "胜" : "负";
+  const leftResult = leftWon ? "胜" : "负";
+  const rightResult = leftWon ? "负" : "胜";
+  if (options.logPlayer && left.id === "player") {
+    log(state, leftWon ? `你在回合切磋中胜过${right.name}。` : `${right.name}招式老辣，你血量见底败下阵来。`, leftWon ? "gold" : "bad");
+  }
+
+  winner.duelWins += 1;
+  loser.duelLosses += 1;
+  left.hp = effectiveMaxHp(left);
+  left.mana = effectiveMaxMana(left);
+  right.hp = effectiveMaxHp(right);
+  right.mana = effectiveMaxMana(right);
+
+  const replay = buildReplay(leftBefore, rightBefore, battle, result, foughtAt);
+
+  left.duelHistory.unshift({ foughtAt, opponent: right.name, result: leftResult, replay });
+  right.duelHistory.unshift({ foughtAt, opponent: left.name, result: rightResult, replay });
+  left.duelHistory = left.duelHistory.slice(0, 20);
+  right.duelHistory = right.duelHistory.slice(0, 20);
+
+  return { replay, winner, loser, result: leftResult };
+}
+
+function cultivatorMap(state) {
+  return new Map([
+    [state.player.id, state.player],
+    ...state.npcs.map((npc) => [npc.id, npc])
+  ]);
+}
+
+function replayResultFor(replay, entityId) {
+  if (!replay) return "";
+  if (replay.left?.id === entityId) return replay.winner === "left" ? "胜" : "负";
+  if (replay.right?.id === entityId) return replay.winner === "right" ? "胜" : "负";
+  return "";
+}
+
+function syncDuelDayRecords(state) {
+  const map = cultivatorMap(state);
+  for (const entity of map.values()) {
+    entity.duelWins = 0;
+    entity.duelLosses = 0;
+    entity.duelHistory = [];
+  }
+
+  const records = [...(state.duelDays || [])].sort((a, b) => a.day - b.day);
+  for (const record of records) {
+    for (const match of record.matches || []) {
+      if (match.type === "bye") {
+        const winner = map.get(match.winner?.id);
+        if (winner) winner.duelWins += 1;
+        continue;
+      }
+      if (!match.replay) continue;
+      const left = map.get(match.replay.left?.id);
+      const right = map.get(match.replay.right?.id);
+      if (!left || !right) continue;
+      const winnerId = match.winner?.id || (match.replay.winner === "left" ? left.id : right.id);
+      const loserId = match.loser?.id || (winnerId === left.id ? right.id : left.id);
+      const winner = map.get(winnerId);
+      const loser = map.get(loserId);
+      if (winner) winner.duelWins += 1;
+      if (loser) loser.duelLosses += 1;
+
+      left.duelHistory.unshift({ foughtAt: match.replay.foughtAt || record.createdAt, opponent: right.name, result: replayResultFor(match.replay, left.id), replay: match.replay });
+      right.duelHistory.unshift({ foughtAt: match.replay.foughtAt || record.createdAt, opponent: left.name, result: replayResultFor(match.replay, right.id), replay: match.replay });
+    }
+  }
+
+  for (const entity of map.values()) {
+    entity.duelHistory = entity.duelHistory.slice(0, 20);
+  }
+}
+
+export function duel(state, index) {
+  const npc = state.npcs[Number(index)];
+  if (!npc) throw new Error("未知对手");
+  const { replay } = runDuelMatch(state, state.player, npc, { logPlayer: true });
 
   return replay;
+}
+
+export function runDailyDuels(state) {
+  state.duelDays ??= [];
+  const existing = state.duelDays.find((record) => record.day === state.day);
+  if (existing) {
+    syncDuelDayRecords(state);
+    return existing;
+  }
+
+  const roster = [
+    { entity: state.player, kind: "player" },
+    ...state.npcs.map((npc) => ({ entity: npc, kind: "npc" }))
+  ];
+  const shuffled = shuffle(roster);
+  const matches = [];
+
+  if (shuffled.length % 2 === 1) {
+    const bye = shuffled.pop();
+    bye.entity.duelWins += 1;
+    matches.push({
+      id: `day-${state.day}-bye-${bye.entity.id}`,
+      type: "bye",
+      winner: entityRef(bye.entity, bye.kind),
+      summary: `${bye.entity.name}本轮轮空，直接记为胜。`
+    });
+  }
+
+  for (let index = 0; index < shuffled.length; index += 2) {
+    const left = shuffled[index];
+    const right = shuffled[index + 1];
+    const { replay, winner, loser } = runDuelMatch(state, left.entity, right.entity);
+    matches.push({
+      id: `day-${state.day}-match-${index / 2 + 1}`,
+      type: "battle",
+      left: entityRef(left.entity, left.kind),
+      right: entityRef(right.entity, right.kind),
+      winner: entityRef(winner, winner.id === "player" ? "player" : "npc"),
+      loser: entityRef(loser, loser.id === "player" ? "player" : "npc"),
+      replay,
+      summary: `${winner.name}胜过${loser.name}`
+    });
+  }
+
+  const record = {
+    day: state.day,
+    date: stateDateForDay(state),
+    createdAt: timestampKey(),
+    matches
+  };
+  state.duelDays.unshift(record);
+  state.duelDays = state.duelDays.slice(0, 30);
+  syncDuelDayRecords(state);
+  log(state, `${record.date} 全员切磋完成，共 ${matches.length} 组对阵。`, "gold");
+  return record;
 }
 
 export function buyItem(state, kind) {

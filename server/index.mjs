@@ -9,6 +9,7 @@ import {
   dailySettlement,
   duel,
   rest,
+  runDailyDuels,
   runDungeon,
   sectMission,
   sectWar,
@@ -24,6 +25,9 @@ function sendJson(res, status, data) {
   const body = JSON.stringify(data);
   res.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
+    "access-control-allow-origin": "*",
+    "access-control-allow-methods": "GET,POST,OPTIONS",
+    "access-control-allow-headers": "content-type",
     "content-length": Buffer.byteLength(body)
   });
   res.end(body);
@@ -54,6 +58,16 @@ function readJson(req) {
 }
 
 async function handleApi(req, res, url) {
+  if (req.method === "OPTIONS") {
+    res.writeHead(204, {
+      "access-control-allow-origin": "*",
+      "access-control-allow-methods": "GET,POST,OPTIONS",
+      "access-control-allow-headers": "content-type"
+    });
+    res.end();
+    return;
+  }
+
   if (req.method === "GET" && url.pathname === "/api/state") {
     sendJson(res, 200, await publicState());
     return;
@@ -79,6 +93,7 @@ async function handleApi(req, res, url) {
     "/api/sect/mission": (state) => sectMission(state),
     "/api/sect/war": (state) => sectWar(state),
     "/api/duel": (state) => duel(state, body.index),
+    "/api/duels/day": (state) => runDailyDuels(state),
     "/api/items/buy": (state) => buyItem(state, body.kind),
     "/api/items/use": (state) => useItem(state, body.kind)
   };

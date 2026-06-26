@@ -85,7 +85,7 @@
 
         <section class="panel">
           <h3>道途</h3>
-          <p>第 {{ state.day }} 日，战力 {{ derived.playerPower }}。基础突破率 {{ formatPercent(derived.baseBreakChance) }}，当前约 {{ formatPercent(derived.breakChance) }}。</p>
+          <p>{{ currentDate }}，战力 {{ derived.playerPower }}。基础突破率 {{ formatPercent(derived.baseBreakChance) }}，当前约 {{ formatPercent(derived.breakChance) }}。</p>
           <div class="actions">
             <button class="primary" @click="act('/api/breakthrough')">尝试突破</button>
             <button class="secondary" @click="act('/api/rest')">闭关调息</button>
@@ -283,11 +283,11 @@
             <article class="card" v-for="task in state.tasks" :key="`${task.day}-${task.name}-${task.xp}`">
               <div>
                 <h3>{{ task.name }}</h3>
-                <p class="meta">第 {{ task.day }} 日 · {{ task.type }} · {{ task.diff }} 星</p>
+                <p class="meta">{{ displayDate(task) }} · {{ task.type }} · {{ task.diff }} 星</p>
               </div>
               <span class="tag">+{{ task.xp }} 经验</span>
             </article>
-            <div v-if="!state.tasks.length" class="empty">今日还没有记录任务。完成一件小事，也算向长生路迈一步。</div>
+            <div v-if="!state.tasks.length" class="empty">{{ currentDate }} 还没有记录任务。完成一件小事，也算向长生路迈一步。</div>
           </div>
         </section>
 
@@ -335,7 +335,7 @@
         <section v-if="activeTab === 'sect'" class="view active">
           <div class="grid">
             <div class="panel">
-              <h3>云麓盟</h3>
+              <h3>{{ state.sect.name }}</h3>
               <p>当前声望 {{ state.sect.reputation }}，物资 {{ state.sect.supplies }}，敌对热度 {{ state.sect.rivalHeat }}。</p>
               <div class="actions">
                 <button class="primary" @click="act('/api/sect/mission')">接宗门任务</button>
@@ -356,47 +356,77 @@
         <section v-if="activeTab === 'arena'" class="view active">
           <div v-if="!lastBattle" class="panel">
             <h3>人物切磋</h3>
-            <p>选择电脑修士进行回合制 PK。神识高者先手并可能闪避，血量归零即败。</p>
-            <div class="battle-line">
-              <div class="fighter">
-                <strong>{{ player.name }}</strong>
-                <small>{{ realmName(player.realm) }} · 战力 {{ derived.playerPower }}</small>
-                <div class="battle-stats">
-                  <span v-for="stat in battlePreviewStats(player)" :key="stat.label">{{ stat.label }} {{ stat.value }}</span>
-                </div>
-                <div class="skill-chip" tabindex="0">
-                  {{ playerSkill.name }}
-                  <span class="skill-tip" role="tooltip">{{ skillTip(player.skillId) }}</span>
-                </div>
-              </div>
-              <div class="vs">VS</div>
-              <div class="fighter">
-                <strong>{{ selectedNpc.name }}</strong>
-                <small>{{ realmName(selectedNpc.realm) }} · {{ selectedNpc.sect }}</small>
-                <div class="battle-stats">
-                  <span v-for="stat in battlePreviewStats(selectedNpc)" :key="stat.label">{{ stat.label }} {{ stat.value }}</span>
-                </div>
-                <div class="skill-chip" tabindex="0">
-                  {{ skillName(selectedNpc.skillId) }}
-                  <span class="skill-tip" role="tooltip">{{ skillTip(selectedNpc.skillId) }}</span>
-                </div>
-              </div>
+            <p>点击开始后，系统会把所有角色随机分组 PK；人数为奇数时，会有一名角色轮空并直接记为胜。</p>
+            <div class="arena-toolbar">
+              <button class="secondary" type="button" @click="changeDuelDay(-1)">前一天</button>
+              <label>查看日期
+                <select v-model.number="selectedDuelDay">
+                  <option v-for="option in duelDateOptions" :key="option.day" :value="option.day">{{ option.date }}</option>
+                </select>
+              </label>
+              <button class="secondary" type="button" :disabled="selectedDuelDay >= state.day" @click="changeDuelDay(1)">后一天</button>
+              <button class="primary" type="button" @click="startDailyDuels">{{ todaysDuelRecord ? "查看今日切磋" : "开始切磋" }}</button>
             </div>
-            <div class="actions">
-              <select v-model.number="opponentIndex">
-                <option v-for="(npc, index) in state.npcs" :key="npc.name" :value="index">
-                  {{ npc.name }} · {{ realmName(npc.realm) }} · {{ npc.sect }}
-                </option>
-              </select>
-              <button class="primary" @click="startDuel">开始切磋</button>
+          </div>
+
+          <div v-if="!lastBattle" class="duel-day-board">
+            <div class="panel section-head compact">
+              <div>
+                <h3>{{ selectedDuelDate }} 对阵</h3>
+                <p v-if="selectedDuelRecord">共 {{ selectedDuelRecord.matches.length }} 组结果，点击有战斗的对阵可查看回放。</p>
+                <p v-else>这个日期还没有切磋记录。</p>
+              </div>
+              <span class="tag" v-if="selectedDuelRecord">{{ selectedDuelRecord.createdAt }}</span>
+              <span class="tag" v-else>未开赛</span>
             </div>
+
+            <div class="match-list" v-if="selectedDuelRecord">
+              <button
+                class="match-card"
+                :class="{ bye: match.type === 'bye' }"
+                v-for="match in selectedDuelRecord.matches"
+                :key="match.id"
+                type="button"
+                :disabled="match.type === 'bye'"
+                @click="openMatchReplay(match)"
+              >
+                <template v-if="match.type === 'battle'">
+                  <div class="match-person" :class="{ winner: match.winner.id === match.left.id }">
+                    <strong>{{ match.left.name }}</strong>
+                    <small>{{ realmName(match.left.realm) }} · {{ match.left.sect }}</small>
+                  </div>
+                  <div class="match-result">
+                    <span>{{ match.winner.id === match.left.id ? "胜" : "负" }}</span>
+                    <small>回放</small>
+                  </div>
+                  <div class="match-person" :class="{ winner: match.winner.id === match.right.id }">
+                    <strong>{{ match.right.name }}</strong>
+                    <small>{{ realmName(match.right.realm) }} · {{ match.right.sect }}</small>
+                  </div>
+                </template>
+                <template v-else>
+                  <div class="match-person winner">
+                    <strong>{{ match.winner.name }}</strong>
+                    <small>{{ realmName(match.winner.realm) }} · {{ match.winner.sect }}</small>
+                  </div>
+                  <div class="match-result">
+                    <span>轮空</span>
+                    <small>直接胜</small>
+                  </div>
+                  <p>{{ match.summary }}</p>
+                </template>
+              </button>
+            </div>
+
+            <div class="empty" v-else-if="selectedDuelDay === state.day">{{ currentDate }} 尚未开赛，点击“开始切磋”生成全员对阵。</div>
+            <div class="empty" v-else>没有找到 {{ selectedDuelDate }} 的切磋记录。</div>
           </div>
 
           <div v-else class="battle-detail">
             <div class="panel battle-header">
               <div>
                 <h3>切磋实况</h3>
-                <p>{{ lastBattle.left.name }} 对阵 {{ lastBattle.right.name }}，{{ lastBattle.result === "胜" ? "你胜出了这一场。" : "你败下阵来。" }}</p>
+                <p>{{ lastBattle.left.name }} 对阵 {{ lastBattle.right.name }}，{{ battleStatusText }}</p>
               </div>
               <div class="actions">
                 <button class="secondary" @click="replayBattle">重播</button>
@@ -409,41 +439,40 @@
                 <strong>{{ lastBattle.left.name }}</strong>
                 <small>{{ realmName(lastBattle.left.realm) }} · 战力 {{ lastBattle.left.power }}</small>
                 <div class="battle-stats">
-                  <span>攻击 {{ lastBattle.left.stats.attack }}</span>
-                  <span>防御 {{ lastBattle.left.stats.defense }}</span>
-                  <span>神识 {{ lastBattle.left.stats.divineSense }}</span>
+                  <span v-for="stat in battleStatsFromEffective(lastBattle.left.stats)" :key="stat.label" :aria-label="`${stat.label} ${stat.value}`">
+                    <StatIcon :name="stat.icon" />
+                    <span>{{ stat.label }}</span>
+                    <strong>{{ stat.value }}</strong>
+                  </span>
                 </div>
                 <div class="skill-chip" tabindex="0">
                   {{ skillName(lastBattle.left.skillId) }}
                   <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.left.skillId) }}</span>
                 </div>
-                <Meter label="血量" :value="currentBattleFrame.leftHp" :max="lastBattle.left.startHp" tone="health" />
-                <Meter label="法力" :value="currentBattleFrame.leftMana" :max="lastBattle.left.startMana" tone="focus" />
+                <Meter label="血量" icon="health" :value="currentBattleFrame.leftHp" :max="lastBattle.left.startHp" tone="health" />
+                <Meter label="法力" icon="mana" :value="currentBattleFrame.leftMana" :max="lastBattle.left.startMana" tone="focus" />
               </div>
-              <div class="vs">{{ lastBattle.result }}</div>
+              <div class="vs">{{ battleOutcomeLabel }}</div>
               <div class="fighter">
                 <strong>{{ lastBattle.right.name }}</strong>
                 <small>{{ realmName(lastBattle.right.realm) }} · 战力 {{ lastBattle.right.power }}</small>
                 <div class="battle-stats">
-                  <span>攻击 {{ lastBattle.right.stats.attack }}</span>
-                  <span>防御 {{ lastBattle.right.stats.defense }}</span>
-                  <span>神识 {{ lastBattle.right.stats.divineSense }}</span>
+                  <span v-for="stat in battleStatsFromEffective(lastBattle.right.stats)" :key="stat.label" :aria-label="`${stat.label} ${stat.value}`">
+                    <StatIcon :name="stat.icon" />
+                    <span>{{ stat.label }}</span>
+                    <strong>{{ stat.value }}</strong>
+                  </span>
                 </div>
                 <div class="skill-chip" tabindex="0">
                   {{ skillName(lastBattle.right.skillId) }}
                   <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.right.skillId) }}</span>
                 </div>
-                <Meter label="血量" :value="currentBattleFrame.rightHp" :max="lastBattle.right.startHp" tone="health" />
-                <Meter label="法力" :value="currentBattleFrame.rightMana" :max="lastBattle.right.startMana" tone="focus" />
+                <Meter label="血量" icon="health" :value="currentBattleFrame.rightHp" :max="lastBattle.right.startHp" tone="health" />
+                <Meter label="法力" icon="mana" :value="currentBattleFrame.rightMana" :max="lastBattle.right.startMana" tone="focus" />
               </div>
             </div>
 
             <div class="panel">
-              <div class="battle-summary">
-                <span class="tag">奖励：+{{ lastBattle.reward.xp }} 经验</span>
-                <span class="tag" v-if="lastBattle.reward.spirit">+{{ lastBattle.reward.spirit }} 灵石</span>
-                <span class="tag">切磋结束后血量与法力已恢复</span>
-              </div>
               <div class="battle-feed">
                 <div
                   class="battle-event"
@@ -452,7 +481,9 @@
                   :class="[event.kind, skillEffectClass(event)]"
                 >
                   <div v-if="event.kind === 'skill'" class="skill-cast" aria-hidden="true">
-                    <i></i>
+                    <i>
+                      <span>{{ skillEffectGlyph(event) }}</span>
+                    </i>
                     <b>{{ skillEffectTitle(event) }}</b>
                   </div>
                   <span>{{ event.round ? `第${event.round}回合` : "战报" }}</span>
@@ -555,7 +586,7 @@
                 <h3>每日成长</h3>
                 <div class="timeline detail-scroll">
                   <div class="event" v-for="record in selectedPerson.dailyRecords" :key="`${record.day}-${record.note}`">
-                    第{{ record.day }}日：+{{ record.xp }}经验，+{{ record.spirit }}灵石，{{ dailyChanceText(record) }}，{{ record.note }}
+                    {{ displayDate(record) }}：+{{ record.xp }}经验，+{{ record.spirit }}灵石，{{ dailyChanceText(record) }}，{{ record.note }}
                   </div>
                   <div v-if="!selectedPerson.dailyRecords.length" class="empty">暂无每日成长记录，下一次自动结算后会写入。</div>
                 </div>
@@ -564,7 +595,7 @@
                 <h3>突破记录</h3>
                 <div class="timeline detail-scroll">
                   <div class="event" :class="{ bad: !record.success, gold: record.success }" v-for="record in selectedPerson.breakthroughs" :key="`${record.day}-${record.from}-${record.to}`">
-                    第{{ record.day }}日：{{ record.from }} → {{ record.to }}，{{ record.success ? "成功" : "失败" }}，当时突破率 {{ formatPercent(record.chance) }}<span v-if="record.growth">，{{ growthText(record.growth) }}</span>
+                    {{ displayDate(record) }}：{{ record.from }} → {{ record.to }}，{{ record.success ? "成功" : "失败" }}，当时突破率 {{ formatPercent(record.chance) }}<span v-if="record.growth">，{{ growthText(record.growth) }}</span>
                   </div>
                   <div v-if="!selectedPerson.breakthroughs.length" class="empty">暂无突破记录。</div>
                 </div>
@@ -582,8 +613,8 @@
                     :disabled="!record.replay"
                     @click="openDuelReplay(record)"
                   >
-                    <strong>{{ record.foughtAt || `第${record.day}日` }}</strong>
-                    <span>对阵 {{ record.opponent }}，{{ record.result }}，+{{ record.xp || 0 }}经验<span v-if="record.spirit">，+{{ record.spirit }}灵石</span></span>
+                    <strong>{{ record.foughtAt || displayDate(record) }}</strong>
+                    <span>对阵 {{ record.opponent }}，{{ record.result }}</span>
                   </button>
                   <div v-if="!selectedPerson.duelHistory?.length" class="empty">暂无切磋明细。</div>
                 </div>
@@ -613,10 +644,10 @@
                 <span>{{ label }}</span>
               </div>
             </div>
-            <div class="grid detail-sections">
-              <div class="panel flat">
-                <h3>人物列表</h3>
-                <div class="rank-list">
+            <div class="grid detail-sections sect-detail-sections">
+              <div class="panel flat sect-member-panel">
+                <h3>人物列表 · {{ sectMembers(selectedSect).length }} 人</h3>
+                <div class="rank-list detail-scroll">
                   <button class="row link-row" v-for="member in sectMembers(selectedSect)" :key="member.id" @click="openPersonById(member.id)">
                     <span class="tag">{{ realmName(member.realm) }}</span>
                     <div><strong>{{ member.name }}</strong><small>{{ member.mood }} · 战力 {{ member.power }}</small></div>
@@ -643,6 +674,7 @@ import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 import { getState, postAction } from "./api";
 import LogPanel from "./components/LogPanel.vue";
 import Meter from "./components/Meter.vue";
+import StatIcon from "./components/StatIcon.vue";
 
 const tabs = [
   { id: "practice", label: "修炼" },
@@ -673,7 +705,7 @@ const detailView = ref("rank");
 const selectedPersonId = ref("player");
 const selectedSectName = ref("");
 const selectedRealmStage = ref("");
-const opponentIndex = ref(0);
+const selectedDuelDay = ref(null);
 const lastBattle = ref(null);
 const battleCursor = ref(0);
 const countdown = ref("--:--:--");
@@ -689,16 +721,43 @@ const fallbackSkill = {
 const player = computed(() => state.value.player);
 const derived = computed(() => state.value.derived);
 const catalog = computed(() => state.value.catalog);
+const currentDate = computed(() => dateForDay(state.value.day));
 const combatSkills = computed(() => catalog.value.combatSkills?.length ? catalog.value.combatSkills : [fallbackSkill]);
-const selectedNpc = computed(() => state.value.npcs[opponentIndex.value] || state.value.npcs[0]);
 const playerSkill = computed(() => skillById(player.value.skillId));
 const sectSummaries = computed(() => derived.value.sects || []);
 const mainLogs = computed(() => state.value.log.filter((entry) => !isNpcBreakthroughLog(entry)));
+const duelRecords = computed(() => state.value.duelDays || []);
+const duelDayOptions = computed(() => {
+  const days = new Set([state.value.day, selectedDuelDay.value, ...duelRecords.value.map((record) => record.day)]);
+  return [...days].filter((day) => day >= 1 && day <= state.value.day).sort((a, b) => b - a);
+});
+const duelDateOptions = computed(() => duelDayOptions.value.map((day) => ({ day, date: dateForDay(day) })));
+const selectedDuelRecord = computed(() => duelRecords.value.find((record) => record.day === selectedDuelDay.value));
+const selectedDuelDate = computed(() => selectedDuelRecord.value?.date || dateForDay(selectedDuelDay.value));
+const todaysDuelRecord = computed(() => duelRecords.value.find((record) => record.day === state.value.day));
 const visibleBattleEvents = computed(() => lastBattle.value?.events.slice(0, battleCursor.value) || []);
 const displayedBattleEvents = computed(() => [...visibleBattleEvents.value].reverse());
+const isBattleReplayDone = computed(() => {
+  const total = lastBattle.value?.events.length || 0;
+  return total > 0 && battleCursor.value >= total;
+});
+const battleStatusText = computed(() => {
+  if (!lastBattle.value) return "";
+  if (!isBattleReplayDone.value) return "战斗正在回放中。";
+  return lastBattle.value.result === "胜" ? "你胜出了这一场。" : "你败下阵来。";
+});
+const battleOutcomeLabel = computed(() => (isBattleReplayDone.value ? lastBattle.value.result : "回放"));
 const currentBattleFrame = computed(() => {
   const battle = lastBattle.value;
   if (!battle) return { leftHp: 0, rightHp: 0, leftMana: 0, rightMana: 0 };
+  if (isBattleReplayDone.value) {
+    return {
+      leftHp: battle.left.endHp,
+      rightHp: battle.right.endHp,
+      leftMana: battle.left.endMana,
+      rightMana: battle.right.endMana
+    };
+  }
   const latest = [...visibleBattleEvents.value].reverse().find((event) => typeof event.leftHp === "number");
   return {
     leftHp: latest?.leftHp ?? battle.left.startHp,
@@ -785,7 +844,7 @@ function skillEffectClass(event) {
     reflect: "skill-water",
     field: "skill-field"
   };
-  return effectMap[skill.type] || "skill-light";
+  return `skill-visual ${effectMap[skill.type] || "skill-light"} skill-id-${skill.id}`;
 }
 
 function skillEffectTitle(event) {
@@ -797,11 +856,39 @@ function skillEffectTitle(event) {
   return `${skill.name} · 术法爆发`;
 }
 
+function skillEffectGlyph(event) {
+  const skill = skillForEvent(event);
+  if (!skill) return "✦";
+  const glyphs = {
+    azure_sword: "剑",
+    thunder_pearl: "雷",
+    blood_escape: "影",
+    poison_flame: "毒",
+    magnetic_light: "磁",
+    golden_body: "阙",
+    soul_hook: "魂",
+    green_bamboo: "竹",
+    spirit_armor: "甲",
+    bone_spike: "骨",
+    fire_crow: "鸦",
+    wood_recovery: "春",
+    ghost_step: "鬼",
+    demon_cut: "煞",
+    ice_seal: "寒",
+    starfall: "星",
+    blood_drink: "血",
+    mirror_water: "镜",
+    wind_blade: "风",
+    five_element: "阵"
+  };
+  return glyphs[skill.id] || "术";
+}
+
 const cultivators = computed(() => [
   {
     ...player.value,
     name: player.value.name,
-    sect: "云麓盟",
+    sect: state.value.sect.name,
     mood: "求道",
     power: derived.value.playerPower,
     isPlayer: true
@@ -893,6 +980,24 @@ function formatPercent(value) {
   return `${Math.round(value * 100)}%`;
 }
 
+function addDays(dateText, offset) {
+  const [year, month, day] = String(dateText || new Date().toISOString().slice(0, 10)).split("-").map(Number);
+  const date = new Date(year || new Date().getFullYear(), (month || 1) - 1, day || 1);
+  date.setDate(date.getDate() + offset);
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function dateForDay(day) {
+  return addDays(state.value.calendarStartDate || state.value.lastSettlementDate, Math.max(0, Number(day || 1) - 1));
+}
+
+function displayDate(record) {
+  return record?.date || dateForDay(record?.day || state.value.day);
+}
+
 function dailyChanceText(record) {
   return typeof record.breakChance === "number" ? `突破率 ${formatPercent(record.breakChance)}` : "未尝试突破";
 }
@@ -934,10 +1039,14 @@ function personStats(person) {
 
 function battlePreviewStats(person) {
   const effective = personEffectiveStats(person);
+  return battleStatsFromEffective(effective);
+}
+
+function battleStatsFromEffective(effective) {
   return [
-    { label: "攻击", value: statWithBonus(effective.attack, effective.bonuses.attack) },
-    { label: "防御", value: statWithBonus(effective.defense, effective.bonuses.defense) },
-    { label: "神识", value: statWithBonus(effective.divineSense, effective.bonuses.divineSense) }
+    { label: "攻击", icon: "attack", value: statWithBonus(effective.attack, effective.bonuses?.attack || 0) },
+    { label: "防御", icon: "defense", value: statWithBonus(effective.defense, effective.bonuses?.defense || 0) },
+    { label: "神识", icon: "sense", value: statWithBonus(effective.divineSense, effective.bonuses?.divineSense || 0) }
   ];
 }
 
@@ -1057,6 +1166,8 @@ async function refresh() {
     if (!selectedRealmStage.value) {
       selectedRealmStage.value = derived.value.currentRealmInfo?.stage || groupedRealmProgression.value[0]?.stage || "";
     }
+    if (!selectedDuelDay.value) selectedDuelDay.value = state.value.day;
+    else selectedDuelDay.value = clampDay(selectedDuelDay.value);
     error.value = "";
   } catch (err) {
     error.value = err.message;
@@ -1100,11 +1211,27 @@ function openDuelReplay(record) {
   playBattle();
 }
 
-async function startDuel() {
-  const result = await act("/api/duel", { index: opponentIndex.value });
-  if (!result) return;
-  lastBattle.value = result;
+function openMatchReplay(match) {
+  if (!match?.replay) return;
+  lastBattle.value = match.replay;
   playBattle();
+}
+
+function clampDay(day) {
+  if (!state.value) return Math.max(1, Number(day) || 1);
+  return Math.max(1, Math.min(state.value.day, Number(day) || state.value.day));
+}
+
+function changeDuelDay(offset) {
+  selectedDuelDay.value = clampDay(selectedDuelDay.value + offset);
+  lastBattle.value = null;
+}
+
+async function startDailyDuels() {
+  const result = await act("/api/duels/day");
+  if (!result) return;
+  selectedDuelDay.value = result.day;
+  lastBattle.value = null;
 }
 
 async function submitTask() {
@@ -1117,11 +1244,18 @@ async function advanceDay() {
 }
 
 async function resetGame() {
-  if (!confirm("确定重开一世？将删除当前主角、NPC、切磋、宗门等存档数据，并重新生成。")) return;
+  if (!confirm("确定重开一世？将删除当前主角、NPC、成长、突破、切磋、闯关、宗门战等全部历史记录，并重新生成。")) return;
   await act("/api/reset");
   activeTab.value = "practice";
+  activeRankBoard.value = "power";
   detailView.value = "rank";
+  selectedPersonId.value = "player";
+  selectedSectName.value = "";
   selectedRealmStage.value = derived.value.currentRealmInfo?.stage || "";
+  selectedDuelDay.value = state.value.day;
+  lastBattle.value = null;
+  battleCursor.value = 0;
+  clearInterval(battleTimer);
 }
 
 let timer;
