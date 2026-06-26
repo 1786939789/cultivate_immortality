@@ -333,25 +333,153 @@
         </section>
 
         <section v-if="activeTab === 'sect'" class="view active">
-          <div class="grid">
-            <div class="panel">
-              <h3>{{ state.sect.name }}</h3>
-              <p>当前声望 {{ state.sect.reputation }}，物资 {{ state.sect.supplies }}，敌对热度 {{ state.sect.rivalHeat }}。</p>
-              <div class="actions">
-                <button class="primary" @click="act('/api/sect/mission')">接宗门任务</button>
-                <button class="secondary" @click="act('/api/sect/war')">发起帮派战</button>
-              </div>
+          <div class="panel section-head compact">
+            <div>
+              <h3>宗门疆域</h3>
+              <p>各宗门每日会随机攻打一处省级行政区；无主之地直接占领，有主之地按守城者车轮战结算。</p>
             </div>
-            <div class="panel">
-              <h3>势力关系</h3>
-              <div class="timeline">
-                <div v-for="(sect, index) in catalog.sects" :key="sect" class="event" :class="relationClass(index)">
-                  {{ sect }}：敌意 {{ relationHeat(index) }} / 100
-                </div>
+            <span class="tag">{{ occupiedProvinceCount }} / {{ provinceTerritories.length }} 已占领</span>
+          </div>
+
+          <div class="subtabs">
+            <button
+              v-for="tab in sectSubTabs"
+              :key="tab.id"
+              type="button"
+              class="segment"
+              :class="{ active: activeSectSubTab === tab.id }"
+              @click="activeSectSubTab = tab.id"
+            >
+              {{ tab.label }}
+            </button>
+          </div>
+
+          <div v-if="activeSectSubTab === 'map'" class="panel map-panel">
+            <div class="map-shell">
+              <div class="map-toolbar">
+                <span>中国省级行政区宗门占领图</span>
+                <button class="secondary map-fullscreen-button" type="button" @click="openMapFullscreen">全屏</button>
+              </div>
+              <div ref="normalMapMount" class="map-normal-mount">
+                <div ref="chinaMapRef" class="china-map" role="img" aria-label="中国省级行政区宗门占领图"></div>
+              </div>
+              <div class="province-legend">
+                <span v-for="sect in sectSummaries" :key="sect.name">
+                  <i :style="{ background: sectColor(sect.name) }"></i>{{ sect.name }}
+                </span>
+                <span><i></i>无主</span>
               </div>
             </div>
           </div>
+
+          <div v-else-if="activeSectSubTab === 'sects'" class="panel">
+            <h3>宗门占领排行</h3>
+            <div class="sect-territory-list">
+              <article v-for="sect in sectTerritoryRanking" :key="sect.name" class="sect-territory-card" :style="{ '--sect-color': sectColor(sect.name) }">
+                <div class="sect-territory-rank">
+                  <strong>{{ sect.name }}</strong>
+                  <span>{{ sect.provinceCount }} 省</span>
+                </div>
+                <div class="territory-stats compact">
+                  <span>
+                    <small>每日灵石</small>
+                    <strong>+{{ sect.spirit }}</strong>
+                    <em>{{ bonusItemsText(sect.spiritItems, "spirit") }}</em>
+                  </span>
+                  <span>
+                    <small>经验加成</small>
+                    <strong>+{{ Math.round(sect.xp * 100) }}%</strong>
+                    <em>{{ bonusItemsText(sect.xpItems, "xp") }}</em>
+                  </span>
+                  <span>
+                    <small>突破加成</small>
+                    <strong>+{{ Math.round(sect.breakthrough * 100) }}%</strong>
+                    <em>{{ bonusItemsText(sect.breakthroughItems, "breakthrough") }}</em>
+                  </span>
+                </div>
+                <p>{{ sect.provinceNames.join("、") || "暂无占领省份" }}</p>
+              </article>
+            </div>
+          </div>
+
+          <div v-else-if="activeSectSubTab === 'provinces'" class="panel">
+            <h3>省份资源排行</h3>
+            <div class="province-table">
+              <div class="province-table-head">
+                <span>省份</span>
+                <span>GDP档位</span>
+                <span>加成</span>
+                <span>占领宗门</span>
+                <span>守城人员</span>
+              </div>
+              <div v-for="territory in provinceResourceRanking" :key="territory.id" class="province-table-row" :style="{ '--sect-color': sectColor(territory.owner) }">
+                <strong>{{ territory.name }}</strong>
+                <span>{{ territory.rank }}</span>
+                <span>{{ territory.effect.text }}</span>
+                <span>{{ territory.owner || "无主之地" }}</span>
+                <span>{{ defenderNames(territory).join("、") || "未派驻" }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div v-else class="panel">
+            <div class="section-head compact">
+              <div>
+                <h3>每日攻城记录</h3>
+                <p v-if="selectedProvinceWarDayRecord">共 {{ selectedProvinceWarDayRecord.wars.length }} 场攻守，点击具体车轮战可看回放。</p>
+                <p v-else>这个日期还没有攻城记录。</p>
+              </div>
+              <div class="arena-toolbar compact">
+                <button class="secondary" type="button" @click="changeProvinceWarDay(-1)">前一天</button>
+                <label>查看日期
+                  <select v-model.number="selectedProvinceWarDay">
+                    <option v-for="option in provinceWarDateOptions" :key="option.day" :value="option.day">{{ option.date }}</option>
+                  </select>
+                </label>
+                <button class="secondary" type="button" :disabled="selectedProvinceWarDay >= state.day" @click="changeProvinceWarDay(1)">后一天</button>
+              </div>
+            </div>
+
+            <div class="war-day-list" v-if="selectedProvinceWarDayRecord">
+              <article v-for="war in selectedProvinceWarDayRecord.wars" :key="war.id" class="war-day-card" :class="{ captured: war.captured }">
+                <div class="war-day-title">
+                  <div>
+                    <strong>{{ war.provinceName }}</strong>
+                    <small>{{ war.attacker }} 攻 {{ war.defender }}</small>
+                  </div>
+                  <span class="tag">{{ war.captured ? "易主" : "守住" }}</span>
+                </div>
+                <p>{{ war.result }}</p>
+                <div class="war-battle-grid" v-if="war.battles.length">
+                  <button class="war-battle-link" v-for="battle in war.battles" :key="`${war.id}-${battle.order}`" type="button" @click="openProvinceBattle(battle)">
+                    第 {{ battle.order }} 战：{{ battle.summary }}
+                  </button>
+                </div>
+                <small v-else>无主之地直接占领。</small>
+              </article>
+            </div>
+            <div v-else class="empty">没有找到 {{ selectedProvinceWarDate }} 的攻城记录。</div>
+          </div>
         </section>
+
+        <teleport to="body">
+          <div v-if="mapFullscreen" class="map-fullscreen" role="dialog" aria-modal="true" aria-label="宗门占领地图全屏">
+            <div class="map-fullscreen-head">
+              <div>
+                <strong>九州势力图</strong>
+                <span>{{ occupiedProvinceCount }} / {{ provinceTerritories.length }} 已占领</span>
+              </div>
+              <button class="secondary" type="button" @click="closeMapFullscreen">退出全屏</button>
+            </div>
+            <div ref="fullscreenMapMount" class="map-fullscreen-body"></div>
+            <div class="province-legend fullscreen-legend">
+              <span v-for="sect in sectSummaries" :key="`full-${sect.name}`">
+                <i :style="{ background: sectColor(sect.name) }"></i>{{ sect.name }}
+              </span>
+              <span><i></i>无主</span>
+            </div>
+          </div>
+        </teleport>
 
         <section v-if="activeTab === 'arena'" class="view active">
           <div v-if="!lastBattle" class="panel">
@@ -586,7 +714,7 @@
                 <h3>每日成长</h3>
                 <div class="timeline detail-scroll">
                   <div class="event" v-for="record in selectedPerson.dailyRecords" :key="`${record.day}-${record.note}`">
-                    {{ displayDate(record) }}：+{{ record.xp }}经验，+{{ record.spirit }}灵石，{{ dailyChanceText(record) }}，{{ record.note }}
+                    {{ displayDate(record) }}：{{ dailyXpText(record) }}，+{{ record.spirit }}灵石，{{ dailyChanceText(record) }}，{{ record.note }}
                   </div>
                   <div v-if="!selectedPerson.dailyRecords.length" class="empty">暂无每日成长记录，下一次自动结算后会写入。</div>
                 </div>
@@ -595,7 +723,7 @@
                 <h3>突破记录</h3>
                 <div class="timeline detail-scroll">
                   <div class="event" :class="{ bad: !record.success, gold: record.success }" v-for="record in selectedPerson.breakthroughs" :key="`${record.day}-${record.from}-${record.to}`">
-                    {{ displayDate(record) }}：{{ record.from }} → {{ record.to }}，{{ record.success ? "成功" : "失败" }}，当时突破率 {{ formatPercent(record.chance) }}<span v-if="record.growth">，{{ growthText(record.growth) }}</span>
+                    {{ displayDate(record) }}：{{ record.from }} → {{ record.to }}，{{ record.success ? "成功" : "失败" }}，{{ breakthroughChanceText(record) }}<span v-if="record.growth">，{{ growthText(record.growth) }}</span>
                   </div>
                   <div v-if="!selectedPerson.breakthroughs.length" class="empty">暂无突破记录。</div>
                 </div>
@@ -670,11 +798,19 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
+import * as echarts from "echarts/core";
+import { GeoComponent, TitleComponent, TooltipComponent, VisualMapComponent } from "echarts/components";
+import { MapChart } from "echarts/charts";
+import { CanvasRenderer } from "echarts/renderers";
+import chinaGeoJson from "china-geojson/src/geojson/china.json";
 import { getState, postAction } from "./api";
 import LogPanel from "./components/LogPanel.vue";
 import Meter from "./components/Meter.vue";
 import StatIcon from "./components/StatIcon.vue";
+
+echarts.use([GeoComponent, TitleComponent, TooltipComponent, VisualMapComponent, MapChart, CanvasRenderer]);
+echarts.registerMap("china-sect", chinaGeoJson);
 
 const tabs = [
   { id: "practice", label: "修炼" },
@@ -700,16 +836,22 @@ const state = ref(null);
 const loading = ref(true);
 const error = ref("");
 const activeTab = ref("practice");
+const activeSectSubTab = ref("map");
 const activeRankBoard = ref("power");
 const detailView = ref("rank");
 const selectedPersonId = ref("player");
 const selectedSectName = ref("");
 const selectedRealmStage = ref("");
 const selectedDuelDay = ref(null);
+const selectedProvinceWarDay = ref(null);
 const lastBattle = ref(null);
 const battleCursor = ref(0);
 const countdown = ref("--:--:--");
 const taskForm = reactive({ name: "", type: "study", diff: 3 });
+const chinaMapRef = ref(null);
+const normalMapMount = ref(null);
+const fullscreenMapMount = ref(null);
+const mapFullscreen = ref(false);
 const fallbackSkill = {
   id: "basic_strike",
   name: "凝气一击",
@@ -718,6 +860,13 @@ const fallbackSkill = {
   text: "技能目录尚未加载时使用的基础攻击。"
 };
 
+const sectSubTabs = [
+  { id: "map", label: "势力地图" },
+  { id: "sects", label: "宗门排行" },
+  { id: "provinces", label: "省份资源" },
+  { id: "wars", label: "攻城记录" }
+];
+
 const player = computed(() => state.value.player);
 const derived = computed(() => state.value.derived);
 const catalog = computed(() => state.value.catalog);
@@ -725,6 +874,71 @@ const currentDate = computed(() => dateForDay(state.value.day));
 const combatSkills = computed(() => catalog.value.combatSkills?.length ? catalog.value.combatSkills : [fallbackSkill]);
 const playerSkill = computed(() => skillById(player.value.skillId));
 const sectSummaries = computed(() => derived.value.sects || []);
+const provinceWarRecords = computed(() => state.value.provinceWars || []);
+const provinceTerritories = computed(() => {
+  const owners = new Map((state.value.provinces || []).map((item) => [item.id, item]));
+  return (catalog.value.provinces || []).map((province) => {
+    const territory = owners.get(province.id) || {};
+    const currentProvince = { ...province, type: province.type || "spirit" };
+    return {
+      ...currentProvince,
+      owner: territory.owner || "",
+      defenders: territory.defenders || [],
+      effect: provinceEffect(currentProvince)
+    };
+  });
+});
+const occupiedProvinceCount = computed(() => provinceTerritories.value.filter((item) => item.owner).length);
+const playerSectSummary = computed(() => sectSummaries.value.find((sect) => sect.name === state.value.sect.name));
+const sectTerritoryRanking = computed(() => sectSummaries.value
+  .map((sect) => {
+    const provinces = provinceTerritories.value.filter((province) => province.owner === sect.name);
+    const spiritItems = provinces.filter((province) => province.effect.type === "spirit").map((province) => ({ name: province.name, value: province.effect.value, text: province.effect.text }));
+    const xpItems = provinces.filter((province) => province.effect.type === "xp").map((province) => ({ name: province.name, value: province.effect.value, text: province.effect.text }));
+    const breakthroughItems = provinces.filter((province) => province.effect.type === "breakthrough").map((province) => ({ name: province.name, value: province.effect.value, text: province.effect.text }));
+    return {
+      name: sect.name,
+      provinceCount: provinces.length,
+      provinceNames: provinces.map((province) => province.name),
+      spirit: spiritItems.reduce((sum, item) => sum + (Number(item.value) || 0), 0),
+      xp: xpItems.reduce((sum, item) => sum + (Number(item.value) || 0), 0),
+      breakthrough: breakthroughItems.reduce((sum, item) => sum + (Number(item.value) || 0), 0),
+      spiritItems,
+      xpItems,
+      breakthroughItems
+    };
+  })
+  .sort((a, b) => b.provinceCount - a.provinceCount || b.spirit - a.spirit || b.xp - a.xp));
+const provinceResourceRanking = computed(() => [...provinceTerritories.value].sort((a, b) => a.rank - b.rank));
+const provinceWarDayRecords = computed(() => {
+  const groups = new Map();
+  for (const war of provinceWarRecords.value) {
+    const day = war.day || state.value.day;
+    if (!groups.has(day)) groups.set(day, { day, date: war.date || dateForDay(day), wars: [] });
+    groups.get(day).wars.push(war);
+  }
+  return [...groups.values()].sort((a, b) => b.day - a.day);
+});
+const provinceWarDayOptions = computed(() => {
+  const days = new Set([state.value.day, selectedProvinceWarDay.value, ...provinceWarDayRecords.value.map((record) => record.day)]);
+  return [...days].filter((day) => day >= 1 && day <= state.value.day).sort((a, b) => b - a);
+});
+const provinceWarDateOptions = computed(() => provinceWarDayOptions.value.map((day) => ({ day, date: dateForDay(day) })));
+const selectedProvinceWarDayRecord = computed(() => provinceWarDayRecords.value.find((record) => record.day === selectedProvinceWarDay.value));
+const selectedProvinceWarDate = computed(() => selectedProvinceWarDayRecord.value?.date || dateForDay(selectedProvinceWarDay.value));
+const playerSectTerritoryStats = computed(() => {
+  const ranking = sectTerritoryRanking.value.find((sect) => sect.name === state.value.sect.name);
+  const provinces = playerSectSummary.value?.provinces || [];
+  const spirit = ranking?.spirit || 0;
+  const xp = ranking?.xp || 0;
+  const breakthrough = ranking?.breakthrough || 0;
+  return [
+    { label: "占领省份", value: provinces.length },
+    { label: "每日灵石", value: `+${spirit}` },
+    { label: "经验加成", value: `+${Math.round(xp * 100)}%` },
+    { label: "突破加成", value: `+${Math.round(breakthrough * 100)}%` }
+  ];
+});
 const mainLogs = computed(() => state.value.log.filter((entry) => !isNpcBreakthroughLog(entry)));
 const duelRecords = computed(() => state.value.duelDays || []);
 const duelDayOptions = computed(() => {
@@ -884,6 +1098,46 @@ function skillEffectGlyph(event) {
   return glyphs[skill.id] || "术";
 }
 
+function provinceEffect(province) {
+  const rank = province.rank || 99;
+  const tier = rank <= 5 ? 1 : rank <= 12 ? 0.82 : rank <= 22 ? 0.62 : 0.42;
+  if (province.type === "spirit") {
+    const value = 10 + Math.round(10 * tier);
+    return { type: province.type, value, text: `每日成员灵石 +${value}` };
+  }
+  if (province.type === "xp") {
+    const value = Number((0.4 + 0.2 * tier).toFixed(2));
+    return { type: province.type, value, text: `经验获取 +${Math.round(value * 100)}%` };
+  }
+  if (province.type === "breakthrough") {
+    const value = Number((0.05 + 0.05 * tier).toFixed(3));
+    return { type: province.type, value, text: `突破概率 +${Math.round(value * 100)}%` };
+  }
+  const value = 10 + Math.round(10 * tier);
+  return { type: "spirit", value, text: `每日成员灵石 +${value}` };
+}
+
+function bonusItemsText(items, type) {
+  if (!items?.length) return "无对应省份";
+  return items.map((item) => {
+    const value = Number(item.value) || 0;
+    if (type === "spirit") return `${item.name} +${value}`;
+    return `${item.name} +${Math.round(value * 100)}%`;
+  }).join("、");
+}
+
+function sectColor(sectName) {
+  if (!sectName) return "#9ca3af";
+  const palette = ["#0f766e", "#b7791f", "#245c8d", "#b91c1c", "#5b7f2a", "#7c3aed", "#c05621", "#0e7490", "#be185d", "#4b5563"];
+  const index = catalog.value.sects?.indexOf(sectName) ?? -1;
+  return palette[Math.max(0, index) % palette.length];
+}
+
+function defenderNames(territory) {
+  const ids = new Set(territory.defenders || []);
+  return cultivators.value.filter((person) => ids.has(person.id)).map((person) => person.name);
+}
+
 const cultivators = computed(() => [
   {
     ...player.value,
@@ -999,7 +1253,31 @@ function displayDate(record) {
 }
 
 function dailyChanceText(record) {
-  return typeof record.breakChance === "number" ? `突破率 ${formatPercent(record.breakChance)}` : "未尝试突破";
+  if (typeof record.breakChance !== "number") return "未尝试突破";
+  if (typeof record.baseBreakChance === "number" || typeof record.bonusBreakChance === "number") {
+    return `突破率 ${formatPercent(record.breakChance)}（基础 ${formatPercent(record.baseBreakChance || 0)}，加成 ${formatPercent(record.bonusBreakChance || 0)}）`;
+  }
+  return `突破率 ${formatPercent(record.breakChance)}`;
+}
+
+function dailyXpText(record) {
+  const total = Number(record.xp) || 0;
+  if (typeof record.baseXp === "number" || typeof record.bonusXp === "number" || typeof record.boughtXp === "number") {
+    const base = Number(record.baseXp) || 0;
+    const bonus = Number(record.bonusXp) || 0;
+    const bought = Number(record.boughtXp) || 0;
+    const boughtText = bought > 0 ? `，灵石补足 ${bought}` : "";
+    return `+${total}经验（基础 ${base}，加成 ${bonus}${boughtText}）`;
+  }
+  return `+${total}经验`;
+}
+
+function breakthroughChanceText(record) {
+  if (typeof record.chance !== "number") return "当时突破率未记录";
+  if (typeof record.baseChance === "number" || typeof record.bonusChance === "number") {
+    return `当时突破率 ${formatPercent(record.chance)}（基础 ${formatPercent(record.baseChance || 0)}，加成 ${formatPercent(record.bonusChance || 0)}）`;
+  }
+  return `当时突破率 ${formatPercent(record.chance)}`;
 }
 
 function openRankItem(item) {
@@ -1149,6 +1427,134 @@ function sectStats(sect) {
   ];
 }
 
+function provinceByName(name) {
+  const normalized = String(name || "").replace(/省|市|壮族自治区|回族自治区|维吾尔自治区|自治区|特别行政区/g, "");
+  return provinceTerritories.value.find((province) => province.name === normalized || province.name.replace(/省|市|自治区|特别行政区/g, "") === normalized);
+}
+
+function mapTooltipHtml(params) {
+  const territory = provinceByName(params.name);
+  if (!territory) {
+    return `<strong>${params.name}</strong><br><span>地图附属区域</span>`;
+  }
+  const defenders = defenderNames(territory).join("、") || "未派驻";
+  return [
+    `<strong>${territory.name}</strong>`,
+    `归属：${territory.owner || "无主之地"}`,
+    `守城：${defenders}`,
+    `加成：${territory.effect.text}`,
+    `GDP档位：${territory.rank}`
+  ].join("<br>");
+}
+
+function chinaMapOption() {
+  const data = provinceTerritories.value.map((territory, index) => ({
+    name: territory.name,
+    value: index + 1,
+    itemStyle: {
+      areaColor: territory.owner ? sectColor(territory.owner) : "#d8e2e7",
+      borderColor: "#f8fafc",
+      borderWidth: 1
+    },
+    emphasis: {
+      itemStyle: {
+        areaColor: territory.owner ? sectColor(territory.owner) : "#cbd5e1",
+        borderColor: "#17324a",
+        borderWidth: 1.4,
+        shadowBlur: 12,
+        shadowColor: "rgba(23, 50, 74, .25)"
+      },
+      label: { color: "#17324a", fontWeight: 700 }
+    }
+  }));
+  data.push({ name: "南海诸岛", value: 0, itemStyle: { areaColor: "#d8e2e7", borderColor: "#f8fafc" } });
+
+  return {
+    backgroundColor: "#214a82",
+    tooltip: {
+      trigger: "item",
+      borderWidth: 0,
+      backgroundColor: "rgba(255, 253, 246, .96)",
+      textStyle: { color: "#17324a", fontSize: 12 },
+      extraCssText: "box-shadow:0 12px 28px rgba(31,41,51,.22);border-radius:8px;padding:9px 11px;",
+      formatter: mapTooltipHtml
+    },
+    series: [
+      {
+        type: "map",
+        map: "china-sect",
+        roam: false,
+        layoutCenter: ["50%", "50%"],
+        layoutSize: "88%",
+        selectedMode: false,
+        label: {
+          show: true,
+          color: "rgba(255,255,255,.9)",
+          fontSize: 11
+        },
+        itemStyle: {
+          areaColor: "#d8e2e7",
+          borderColor: "#f8fafc",
+          borderWidth: 1
+        },
+        emphasis: {
+          label: { show: true, color: "#17324a", fontWeight: 700 },
+          itemStyle: {
+            areaColor: "#f6d365",
+            borderColor: "#17324a",
+            borderWidth: 1.4,
+            shadowBlur: 12,
+            shadowColor: "rgba(23, 50, 74, .25)"
+          }
+        },
+        data
+      }
+    ]
+  };
+}
+
+function renderChinaMap() {
+  if (!chinaMapRef.value || !state.value) return;
+  if (chinaMapChart && chinaMapChart.getDom() !== chinaMapRef.value) {
+    chinaMapChart.dispose();
+    chinaMapChart = null;
+  }
+  if (!chinaMapChart) chinaMapChart = echarts.init(chinaMapRef.value);
+  chinaMapChart.setOption(chinaMapOption(), true);
+  chinaMapChart.resize();
+}
+
+function disposeChinaMap() {
+  chinaMapChart?.dispose();
+  chinaMapChart = null;
+}
+
+function resizeChinaMap() {
+  chinaMapChart?.resize();
+}
+
+function handleMapFullscreenKey(event) {
+  if (event.key === "Escape" && mapFullscreen.value) closeMapFullscreen();
+}
+
+async function openMapFullscreen() {
+  mapFullscreen.value = true;
+  await nextTick();
+  if (fullscreenMapMount.value && chinaMapRef.value) {
+    fullscreenMapMount.value.appendChild(chinaMapRef.value);
+    resizeChinaMap();
+  }
+}
+
+async function closeMapFullscreen() {
+  mapFullscreen.value = false;
+  await nextTick();
+  if (normalMapMount.value && chinaMapRef.value) {
+    normalMapMount.value.appendChild(chinaMapRef.value);
+    resizeChinaMap();
+  }
+}
+
 function updateCountdown() {
   const now = new Date();
   const next = new Date(now);
@@ -1168,6 +1574,8 @@ async function refresh() {
     }
     if (!selectedDuelDay.value) selectedDuelDay.value = state.value.day;
     else selectedDuelDay.value = clampDay(selectedDuelDay.value);
+    if (!selectedProvinceWarDay.value) selectedProvinceWarDay.value = state.value.day;
+    else selectedProvinceWarDay.value = clampDay(selectedProvinceWarDay.value);
     error.value = "";
   } catch (err) {
     error.value = err.message;
@@ -1217,6 +1625,14 @@ function openMatchReplay(match) {
   playBattle();
 }
 
+function openProvinceBattle(battle) {
+  if (!battle?.replay) return;
+  lastBattle.value = battle.replay;
+  activeTab.value = "arena";
+  detailView.value = "rank";
+  playBattle();
+}
+
 function clampDay(day) {
   if (!state.value) return Math.max(1, Number(day) || 1);
   return Math.max(1, Math.min(state.value.day, Number(day) || state.value.day));
@@ -1225,6 +1641,10 @@ function clampDay(day) {
 function changeDuelDay(offset) {
   selectedDuelDay.value = clampDay(selectedDuelDay.value + offset);
   lastBattle.value = null;
+}
+
+function changeProvinceWarDay(offset) {
+  selectedProvinceWarDay.value = clampDay(selectedProvinceWarDay.value + offset);
 }
 
 async function startDailyDuels() {
@@ -1253,6 +1673,7 @@ async function resetGame() {
   selectedSectName.value = "";
   selectedRealmStage.value = derived.value.currentRealmInfo?.stage || "";
   selectedDuelDay.value = state.value.day;
+  selectedProvinceWarDay.value = state.value.day;
   lastBattle.value = null;
   battleCursor.value = 0;
   clearInterval(battleTimer);
@@ -1260,6 +1681,7 @@ async function resetGame() {
 
 let timer;
 let battleTimer;
+let chinaMapChart;
 
 onMounted(async () => {
   updateCountdown();
@@ -1268,10 +1690,28 @@ onMounted(async () => {
     if (countdown.value === "00:00:00") refresh();
   }, 1000);
   await refresh();
+  window.addEventListener("resize", resizeChinaMap);
+  window.addEventListener("keydown", handleMapFullscreenKey);
 });
 
 onUnmounted(() => {
   clearInterval(timer);
   clearInterval(battleTimer);
+  window.removeEventListener("resize", resizeChinaMap);
+  window.removeEventListener("keydown", handleMapFullscreenKey);
+  disposeChinaMap();
 });
+
+watch([state, activeTab, activeSectSubTab], async () => {
+  if (activeTab.value !== "sect" || activeSectSubTab.value !== "map" || !state.value) {
+    if (mapFullscreen.value) {
+      if (normalMapMount.value && chinaMapRef.value) normalMapMount.value.appendChild(chinaMapRef.value);
+      mapFullscreen.value = false;
+    }
+    disposeChinaMap();
+    return;
+  }
+  await nextTick();
+  renderChinaMap();
+}, { deep: true });
 </script>

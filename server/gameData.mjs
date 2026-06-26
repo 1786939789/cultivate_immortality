@@ -31,6 +31,45 @@ export const sectRoster = [
 export const sects = sectRoster.map((sect) => sect.name);
 export const npcNames = sectRoster.flatMap((sect) => sect.members);
 
+export const provinceVersion = 2;
+
+export const provinces = [
+  { id: "xinjiang", name: "新疆", rank: 23, type: "xp", x: 12, y: 26 },
+  { id: "tibet", name: "西藏", rank: 31, type: "breakthrough", x: 20, y: 58 },
+  { id: "qinghai", name: "青海", rank: 30, type: "spirit", x: 31, y: 45 },
+  { id: "gansu", name: "甘肃", rank: 27, type: "spirit", x: 38, y: 38 },
+  { id: "ningxia", name: "宁夏", rank: 29, type: "xp", x: 47, y: 35 },
+  { id: "inner_mongolia", name: "内蒙古", rank: 21, type: "breakthrough", x: 54, y: 22 },
+  { id: "heilongjiang", name: "黑龙江", rank: 25, type: "spirit", x: 82, y: 13 },
+  { id: "jilin", name: "吉林", rank: 26, type: "xp", x: 80, y: 22 },
+  { id: "liaoning", name: "辽宁", rank: 17, type: "spirit", x: 76, y: 31 },
+  { id: "beijing", name: "北京", rank: 12, type: "breakthrough", x: 66, y: 35 },
+  { id: "tianjin", name: "天津", rank: 24, type: "breakthrough", x: 69, y: 38 },
+  { id: "hebei", name: "河北", rank: 13, type: "xp", x: 64, y: 41 },
+  { id: "shanxi", name: "山西", rank: 20, type: "spirit", x: 58, y: 42 },
+  { id: "shaanxi", name: "陕西", rank: 14, type: "breakthrough", x: 52, y: 48 },
+  { id: "henan", name: "河南", rank: 6, type: "spirit", x: 61, y: 50 },
+  { id: "shandong", name: "山东", rank: 3, type: "xp", x: 70, y: 47 },
+  { id: "jiangsu", name: "江苏", rank: 2, type: "xp", x: 73, y: 56 },
+  { id: "shanghai", name: "上海", rank: 9, type: "breakthrough", x: 78, y: 60 },
+  { id: "anhui", name: "安徽", rank: 11, type: "spirit", x: 68, y: 59 },
+  { id: "hubei", name: "湖北", rank: 7, type: "xp", x: 59, y: 60 },
+  { id: "chongqing", name: "重庆", rank: 16, type: "breakthrough", x: 50, y: 62 },
+  { id: "sichuan", name: "四川", rank: 5, type: "spirit", x: 43, y: 63 },
+  { id: "guizhou", name: "贵州", rank: 22, type: "xp", x: 50, y: 74 },
+  { id: "yunnan", name: "云南", rank: 18, type: "xp", x: 42, y: 82 },
+  { id: "hunan", name: "湖南", rank: 10, type: "breakthrough", x: 59, y: 70 },
+  { id: "jiangxi", name: "江西", rank: 15, type: "spirit", x: 67, y: 70 },
+  { id: "zhejiang", name: "浙江", rank: 4, type: "breakthrough", x: 75, y: 66 },
+  { id: "fujian", name: "福建", rank: 8, type: "spirit", x: 72, y: 78 },
+  { id: "taiwan", name: "台湾", rank: 6, type: "breakthrough", x: 82, y: 82 },
+  { id: "guangxi", name: "广西", rank: 19, type: "xp", x: 56, y: 83 },
+  { id: "guangdong", name: "广东", rank: 1, type: "spirit", x: 66, y: 84 },
+  { id: "hongkong", name: "香港", rank: 10, type: "spirit", x: 70, y: 88 },
+  { id: "macau", name: "澳门", rank: 18, type: "spirit", x: 66, y: 89 },
+  { id: "hainan", name: "海南", rank: 28, type: "breakthrough", x: 61, y: 94 }
+];
+
 export const dungeons = [
   { id: "mist", name: "雾隐药谷", min: 0, power: 42, reward: "草药、灵石、经验", text: "适合炼气修士试炼，有低阶妖兽与残缺药圃。" },
   { id: "mine", name: "沉星矿脉", min: 3, power: 82, reward: "灵石、炼器材料", text: "矿洞深处灵压混乱，偶有敌修埋伏。" },
