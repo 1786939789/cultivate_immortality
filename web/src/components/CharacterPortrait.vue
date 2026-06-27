@@ -1,5 +1,5 @@
 <template>
-  <span class="character-portrait" :class="[size, { npc: !person?.isPlayer, failed: imageFailed }]" :style="portraitStyle" aria-hidden="true">
+  <span class="character-portrait" :class="[size, rankClass, { npc: !person?.isPlayer, failed: imageFailed }]" :style="portraitStyle" aria-hidden="true">
     <img v-if="imageSrc && !imageFailed" :src="imageSrc" :alt="person?.name || '角色头像'" @error="imageFailed = true">
     <span v-else>{{ initial }}</span>
   </span>
@@ -17,6 +17,7 @@ const props = defineProps({
 const imageFailed = ref(false);
 const imageSrc = computed(() => portraitFor(props.person));
 const initial = computed(() => props.person?.name?.slice(0, 1) || "?");
+const rankClass = computed(() => props.person?.duelSeason?.rankId ? `duel-frame-${props.person.duelSeason.rankId}` : "");
 const portraitStyle = computed(() => ({
   "--portrait-hue": String(hueFor(props.person?.name || "player"))
 }));

@@ -1,4 +1,4 @@
-import { combatSkills, dungeons, itemCatalog, npcGenders, npcNames, provinceVersion, provinces, realms, realmStages, roots, rosterVersion, sectRoster, sects, taskTemplates } from "./gameData.mjs";
+import { combatSkills, dungeons, duelLossScore, duelRankForScore, duelRanks, duelSeasonDay, duelSeasonLength, duelSeasonMaxScore, duelSeasonOfDay, duelWinScore, equipmentCatalog, equipmentSlots, equipmentTiers, itemCatalog, npcGenders, npcNames, provinceVersion, provinces, realms, realmStages, roots, rosterVersion, sectRoster, sects, taskTemplates } from "./gameData.mjs";
 
 export function dateKey(date = new Date()) {
   const year = date.getFullYear();
@@ -140,37 +140,37 @@ export function needsRootMigration(root) {
   return !canonical || typeof root?.bonus !== "number" || root.name !== canonical.name || root.effect !== canonical.effect;
 }
 
-export function effectiveAttack(entity) {
+export function effectiveAttack(entity, state) {
   const bonus = entity.root?.effect === "attack" ? rootBonus(entity.root) : 0;
-  return Math.floor((entity.attack || 0) * (1 + bonus));
+  return Math.floor((entity.attack || 0) * (1 + bonus + equipmentBonusFor(state, entity, "attack")));
 }
 
-export function effectiveDefense(entity) {
+export function effectiveDefense(entity, state) {
   const bonus = entity.root?.effect === "defense" ? rootBonus(entity.root) : 0;
-  return Math.floor((entity.defense || 0) * (1 + bonus));
+  return Math.floor((entity.defense || 0) * (1 + bonus + equipmentBonusFor(state, entity, "defense")));
 }
 
-export function effectiveMaxHp(entity) {
+export function effectiveMaxHp(entity, state) {
   const bonus = entity.root?.effect === "hp" ? rootBonus(entity.root) : 0;
-  return Math.floor((entity.maxHp || 0) * (1 + bonus));
+  return Math.floor((entity.maxHp || 0) * (1 + bonus + equipmentBonusFor(state, entity, "maxHp")));
 }
 
-export function effectiveMaxMana(entity) {
+export function effectiveMaxMana(entity, state) {
   const bonus = entity.root?.effect === "mana" ? rootBonus(entity.root) : 0;
-  return Math.floor((entity.maxMana || 0) * (1 + bonus));
+  return Math.floor((entity.maxMana || 0) * (1 + bonus + equipmentBonusFor(state, entity, "maxMana")));
 }
 
-export function effectiveDivineSense(entity) {
+export function effectiveDivineSense(entity, state) {
   const bonus = entity.root?.effect === "divineSense" ? rootBonus(entity.root) : 0;
-  return Math.floor((entity.divineSense || 0) * (1 + bonus));
+  return Math.floor((entity.divineSense || 0) * (1 + bonus + equipmentBonusFor(state, entity, "divineSense")));
 }
 
-export function effectiveStats(entity) {
-  const attack = effectiveAttack(entity);
-  const defense = effectiveDefense(entity);
-  const maxHp = effectiveMaxHp(entity);
-  const divineSense = effectiveDivineSense(entity);
-  const maxMana = effectiveMaxMana(entity);
+export function effectiveStats(entity, state) {
+  const attack = effectiveAttack(entity, state);
+  const defense = effectiveDefense(entity, state);
+  const maxHp = effectiveMaxHp(entity, state);
+  const divineSense = effectiveDivineSense(entity, state);
+  const maxMana = effectiveMaxMana(entity, state);
   return {
     attack,
     defense,
@@ -198,9 +198,9 @@ export function applyXpGain(entity, amount, extraMultiplier = 1) {
   return gain;
 }
 
-function applyDamage(entity, amount) {
+function applyDamage(entity, amount, state) {
   const damage = Math.max(1, Math.floor(amount));
-  entity.hp = clamp((entity.hp || 0) - damage, 0, effectiveMaxHp(entity));
+  entity.hp = clamp((entity.hp || 0) - damage, 0, effectiveMaxHp(entity, state));
   return damage;
 }
 
@@ -216,21 +216,21 @@ function needsSkillMigration(skillId) {
   return !combatSkills.some((skill) => skill.id === skillId);
 }
 
-function combatSnapshot(entity) {
+function combatSnapshot(entity, state) {
   return {
-    attack: effectiveAttack(entity),
-    defense: effectiveDefense(entity),
-    maxHp: effectiveMaxHp(entity),
-    hp: Math.max(0, Math.min(entity.hp || effectiveMaxHp(entity), effectiveMaxHp(entity))),
-    divineSense: effectiveDivineSense(entity),
-    maxMana: effectiveMaxMana(entity),
-    mana: Math.max(0, Math.min(entity.mana ?? effectiveMaxMana(entity), effectiveMaxMana(entity)))
+    attack: effectiveAttack(entity, state),
+    defense: effectiveDefense(entity, state),
+    maxHp: effectiveMaxHp(entity, state),
+    hp: Math.max(0, Math.min(entity.hp || effectiveMaxHp(entity, state), effectiveMaxHp(entity, state))),
+    divineSense: effectiveDivineSense(entity, state),
+    maxMana: effectiveMaxMana(entity, state),
+    mana: Math.max(0, Math.min(entity.mana ?? effectiveMaxMana(entity, state), effectiveMaxMana(entity, state)))
   };
 }
 
 function runTurnBattle(left, right, options = {}) {
-  const a = combatSnapshot(left);
-  const b = combatSnapshot(right);
+  const a = combatSnapshot(left, options.state);
+  const b = combatSnapshot(right, options.state);
   const order = a.divineSense >= b.divineSense ? ["left", "right"] : ["right", "left"];
   const maxRounds = options.maxRounds || 18;
   let leftHp = a.hp;
@@ -275,6 +275,11 @@ function runTurnBattle(left, right, options = {}) {
   const effectSum = (side, type, key) => effects[side]
     .filter((effect) => effect.type === type && effect.duration > 0)
     .reduce((value, effect) => value + (effect[key] || 0), 0);
+  const divineSenseDodgeChance = (target, actor) => {
+    if ((target.divineSense || 0) <= (actor.divineSense || 0)) return 0;
+    const ratio = Math.floor((target.divineSense || 0) / Math.max(1, actor.divineSense || 0));
+    return clamp(Math.max(1, ratio), 1, 20) / 100;
+  };
   const tickEffects = (side) => {
     let target = sideState(side);
     for (const effect of effects[side]) {
@@ -311,13 +316,13 @@ function runTurnBattle(left, right, options = {}) {
       return 0;
     }
 
-    const senseGap = Math.max(0, state.target.divineSense - state.actor.divineSense);
-    const baseDodge = clamp(senseGap / 260, 0, 0.28);
+    const baseDodge = divineSenseDodgeChance(state.target, state.actor);
     const extraDodge = effectValue(targetSide, "evasion", "chance");
     if (Math.random() < clamp(baseDodge + extraDodge, 0, 0.62)) {
       pushEvent("dodge", `${state.targetName}凭神识预判避开一击`, {
         actorSide: targetSide,
         targetSide: side,
+        dodgeChance: baseDodge,
         leftHp,
         rightHp,
         leftMana,
@@ -543,6 +548,129 @@ function ensureField(object, key, value) {
     return true;
   }
   return false;
+}
+
+const equipmentSlotMap = Object.fromEntries(equipmentSlots.map((slot) => [slot.id, slot]));
+const equipmentTierMap = Object.fromEntries(equipmentTiers.map((tier) => [tier.id, tier]));
+const equipmentVersion = 2;
+
+function createEquipmentState() {
+  return equipmentCatalog.map((item) => ({
+    ...item,
+    ownerId: "",
+    acquiredDay: 1,
+    acquiredDate: dateKey()
+  }));
+}
+
+function normalizeEquipmentItem(item, fallback = {}) {
+  const catalogItem = equipmentCatalog.find((entry) => entry.id === item?.id) || fallback;
+  return {
+    ...catalogItem,
+    ...item,
+    ownerId: item?.ownerId || "",
+    acquiredDay: item?.acquiredDay || 1,
+    acquiredDate: item?.acquiredDate || dateKey()
+  };
+}
+
+function ensureEquipmentState(state) {
+  let changed = false;
+  if (state.equipmentVersion !== equipmentVersion) {
+    state.equipment = createEquipmentState();
+    state.equipmentVersion = equipmentVersion;
+    return true;
+  }
+  const current = new Map((state.equipment || []).map((item) => [item.id, item]));
+  state.equipment = equipmentCatalog.map((catalogItem) => {
+    const previous = current.get(catalogItem.id);
+    if (!previous) {
+      changed = true;
+      return normalizeEquipmentItem({ ...catalogItem, ownerId: "", acquiredDay: state.day || 1, acquiredDate: stateDateForDay(state) }, catalogItem);
+    }
+    const normalized = normalizeEquipmentItem(previous, catalogItem);
+    if (JSON.stringify(normalized) !== JSON.stringify(previous)) changed = true;
+    return normalized;
+  });
+  return changed;
+}
+
+function equipmentTier(item) {
+  return equipmentTierMap[item?.tier] || equipmentTiers[0];
+}
+
+function equipmentSlot(item) {
+  return equipmentSlotMap[item?.slot] || equipmentSlots[0];
+}
+
+function equipmentScore(item) {
+  return (item?.tier || 0) * 100 + Math.round((item?.bonus || 0) * 1000);
+}
+
+function equipmentForOwner(state, ownerId) {
+  return (state.equipment || []).filter((item) => item.ownerId === ownerId);
+}
+
+function equippedItemsFor(state, entity) {
+  const bestBySlot = new Map();
+  for (const item of equipmentForOwner(state, entity?.id)) {
+    const current = bestBySlot.get(item.slot);
+    if (!current || equipmentScore(item) > equipmentScore(current)) bestBySlot.set(item.slot, item);
+  }
+  return [...bestBySlot.values()].sort((a, b) => equipmentSlots.findIndex((slot) => slot.id === a.slot) - equipmentSlots.findIndex((slot) => slot.id === b.slot));
+}
+
+function equipmentBonusFor(state, entity, stat) {
+  if (!state || !entity?.id) return 0;
+  return equippedItemsFor(state, entity)
+    .filter((item) => equipmentSlot(item).stat === stat)
+    .reduce((sum, item) => sum + (item.bonus || 0), 0);
+}
+
+function publicEquipment(item, state) {
+  const owner = item.ownerId ? cultivatorMap(state).get(item.ownerId) : null;
+  return {
+    ...item,
+    slotName: equipmentSlot(item).name,
+    stat: equipmentSlot(item).stat,
+    statName: equipmentSlot(item).statName,
+    tierName: equipmentTier(item).name,
+    stealChance: equipmentTier(item).stealChance,
+    ownerName: owner?.name || "",
+    ownerSect: owner?.id === "player" ? state.sect.name : owner?.sect || "",
+    equipped: Boolean(owner && equippedItemsFor(state, owner).some((equipped) => equipped.id === item.id))
+  };
+}
+
+function tryTransferEquipment(state, winner, loser, context = "") {
+  if (!winner?.id || !loser?.id || winner.id === loser.id) return null;
+  const candidates = equippedItemsFor(state, loser).filter((item) => (state.day || 1) > (item.acquiredDay || 1));
+  if (!candidates.length) return null;
+  const item = pick(candidates);
+  const chance = equipmentTier(item).stealChance;
+  if (Math.random() >= chance) return null;
+  item.ownerId = winner.id;
+  item.acquiredDay = state.day;
+  item.acquiredDate = stateDateForDay(state);
+  const transfer = {
+    itemId: item.id,
+    itemName: item.name,
+    tierName: equipmentTier(item).name,
+    slotName: equipmentSlot(item).name,
+    winnerId: winner.id,
+    winnerName: winner.name,
+    loserId: loser.id,
+    loserName: loser.name,
+    chance,
+    day: state.day,
+    date: stateDateForDay(state),
+    context
+  };
+  state.equipmentTransfers ??= [];
+  state.equipmentTransfers.unshift(transfer);
+  state.equipmentTransfers = state.equipmentTransfers.slice(0, 30);
+  log(state, `${winner.name}在${context || "战斗"}中夺得${loser.name}的「${item.name}」。`, "gold");
+  return transfer;
 }
 
 function makeSectStatus(name, index) {
@@ -810,16 +938,16 @@ function runWheelBattle(state, province, attackerSect, defenderSect) {
     const defender = defenders[defenderIndex];
     const left = {
       ...attacker.entity,
-      hp: carry.attackerHp ?? effectiveMaxHp(attacker.entity),
-      mana: carry.attackerMana ?? effectiveMaxMana(attacker.entity)
+      hp: carry.attackerHp ?? effectiveMaxHp(attacker.entity, state),
+      mana: carry.attackerMana ?? effectiveMaxMana(attacker.entity, state)
     };
     const defenderWithBuff = withSiegeDefenseBuff(defender.entity);
     const right = {
       ...defenderWithBuff,
-      hp: carry.defenderHp ?? effectiveMaxHp(defenderWithBuff),
-      mana: carry.defenderMana ?? effectiveMaxMana(defenderWithBuff)
+      hp: carry.defenderHp ?? effectiveMaxHp(defenderWithBuff, state),
+      mana: carry.defenderMana ?? effectiveMaxMana(defenderWithBuff, state)
     };
-    const battle = runTurnBattle(left, right, { maxRounds: 16 });
+    const battle = runTurnBattle(left, right, { maxRounds: 16, state });
     const attackerWon = battle.winner === "left";
     battles.push({
       order: battles.length + 1,
@@ -828,8 +956,9 @@ function runWheelBattle(state, province, attackerSect, defenderSect) {
       winnerSide: attackerWon ? "attacker" : "defender",
       winnerName: attackerWon ? attacker.entity.name : defender.entity.name,
       summary: `${attacker.entity.name} ${attackerWon ? "击败" : "败于"} ${defender.entity.name}`,
-      replay: buildReplay(left, right, battle, attackerWon ? "胜" : "负", timestampKey())
+      replay: buildReplay(left, right, battle, attackerWon ? "胜" : "负", timestampKey(), state)
     });
+    tryTransferEquipment(state, attackerWon ? attacker.entity : defender.entity, attackerWon ? defender.entity : attacker.entity, `${province.name}攻守战`);
     if (attackerWon) {
       defenderIndex += 1;
       carry.attackerHp = Math.max(1, battle.leftHp);
@@ -848,6 +977,8 @@ function runWheelBattle(state, province, attackerSect, defenderSect) {
   return {
     captured: Boolean(attackers[attackerIndex] && !defenders[defenderIndex]),
     battles,
+    attackerLineup: attackers.map((attacker) => siegeEntityRef(attacker)),
+    defenderLineup: defenders.map((defender) => siegeEntityRef(defender)),
     attackerSurvivor: attackers[attackerIndex]?.entity.name || "",
     defenderSurvivor: defenders[defenderIndex]?.entity.name || ""
   };
@@ -886,6 +1017,8 @@ function runProvinceSieges(state, settlementDate) {
     } else {
       const result = runWheelBattle(state, province, attackerSect, defenderSect);
       record.battles = result.battles;
+      record.attackerLineup = result.attackerLineup;
+      record.defenderLineup = result.defenderLineup;
       record.captured = result.captured;
       record.result = result.captured
         ? `${attackerSect}攻破${defenderSect}防线，占下${province.name}`
@@ -935,6 +1068,142 @@ function shuffle(list) {
   return result;
 }
 
+function defaultDuelSeason(day = 1) {
+  return {
+    season: duelSeasonOfDay(day),
+    seasonDay: duelSeasonDay(day),
+    score: 0,
+    wins: 0,
+    losses: 0
+  };
+}
+
+function duelSeasonStartDay(season) {
+  return (Math.max(1, Number(season) || 1) - 1) * duelSeasonLength + 1;
+}
+
+function duelSeasonEndDay(season) {
+  return duelSeasonStartDay(season) + duelSeasonLength - 1;
+}
+
+function duelSeasonRecordFrom(person, seasonState) {
+  const season = Number(seasonState?.season) || 1;
+  const score = Math.max(0, Math.min(duelSeasonMaxScore, Math.floor(Number(seasonState?.score) || 0)));
+  const rank = duelRankForScore(score);
+  return {
+    season,
+    seasonStartDay: duelSeasonStartDay(season),
+    seasonEndDay: duelSeasonEndDay(season),
+    score,
+    wins: Math.max(0, Math.floor(Number(seasonState?.wins) || 0)),
+    losses: Math.max(0, Math.floor(Number(seasonState?.losses) || 0)),
+    rankId: rank.id,
+    rankName: rank.name,
+    rankColor: rank.color,
+    recordedAt: timestampKey()
+  };
+}
+
+function normalizeDuelSeason(person, day = 1) {
+  person.duelSeasonHistory ??= [];
+  const season = duelSeasonOfDay(day);
+  if (!person.duelSeason || person.duelSeason.season !== season) {
+    if (person.duelSeason?.season) {
+      const previous = duelSeasonRecordFrom(person, person.duelSeason);
+      if (!person.duelSeasonHistory.some((record) => record.season === previous.season)) {
+        person.duelSeasonHistory.unshift(previous);
+      }
+    }
+    person.duelSeason = defaultDuelSeason(day);
+    return true;
+  }
+  person.duelSeason.score = Math.max(0, Math.min(duelSeasonMaxScore, Math.floor(Number(person.duelSeason.score) || 0)));
+  person.duelSeason.wins = Math.max(0, Math.floor(Number(person.duelSeason.wins) || 0));
+  person.duelSeason.losses = Math.max(0, Math.floor(Number(person.duelSeason.losses) || 0));
+  person.duelSeason.seasonDay = duelSeasonDay(day);
+  return false;
+}
+
+function duelRankSnapshot(person) {
+  const score = person.duelSeason?.score || 0;
+  const rank = duelRankForScore(score);
+  return {
+    ...person.duelSeason,
+    score,
+    rankId: rank.id,
+    rankName: rank.name,
+    rankColor: rank.color
+  };
+}
+
+function applyDuelScore(person, won, day) {
+  normalizeDuelSeason(person, day);
+  person.duelSeason.score = Math.max(0, Math.min(duelSeasonMaxScore, person.duelSeason.score + (won ? duelWinScore : duelLossScore)));
+  if (won) person.duelSeason.wins += 1;
+  else person.duelSeason.losses += 1;
+}
+
+function duelSeasonStatsFromRecords(state) {
+  const currentSeason = duelSeasonOfDay(state.day);
+  const stats = new Map(allCultivators(state).map(({ entity }) => [entity.id, { score: 0, wins: 0, losses: 0 }]));
+  const records = [...(state.duelDays || [])]
+    .filter((record) => duelSeasonOfDay(record.day || state.day) === currentSeason)
+    .sort((a, b) => (a.day || 0) - (b.day || 0));
+  for (const record of records) {
+    for (const match of record.matches || []) {
+      const winnerId = match.winner?.id || (match.replay?.winner === "left" ? match.replay?.left?.id : match.replay?.right?.id);
+      const loserId = match.loser?.id || (winnerId === match.replay?.left?.id ? match.replay?.right?.id : match.replay?.left?.id);
+      const winner = stats.get(winnerId);
+      if (winner) {
+        winner.score = Math.min(duelSeasonMaxScore, winner.score + duelWinScore);
+        winner.wins += 1;
+      }
+      if (match.type === "bye") continue;
+      const loser = stats.get(loserId);
+      if (loser) {
+        loser.score = Math.max(0, loser.score + duelLossScore);
+        loser.losses += 1;
+      }
+    }
+  }
+  return stats;
+}
+
+function repairDuelSeasonFromRecords(state) {
+  const stats = duelSeasonStatsFromRecords(state);
+  let changed = false;
+  for (const { entity } of allCultivators(state)) {
+    normalizeDuelSeason(entity, state.day);
+    const recordStats = stats.get(entity.id);
+    if (!recordStats) continue;
+    const currentMatches = (entity.duelSeason?.wins || 0) + (entity.duelSeason?.losses || 0);
+    const recordMatches = recordStats.wins + recordStats.losses;
+    if ((entity.duelSeason?.score || 0) < recordStats.score || currentMatches < recordMatches) {
+      entity.duelSeason.score = recordStats.score;
+      entity.duelSeason.wins = recordStats.wins;
+      entity.duelSeason.losses = recordStats.losses;
+      changed = true;
+    }
+    if ((entity.duelWins || 0) < recordStats.wins) {
+      entity.duelWins = recordStats.wins;
+      changed = true;
+    }
+    if ((entity.duelLosses || 0) < recordStats.losses) {
+      entity.duelLosses = recordStats.losses;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+function trimDuelDays(records, currentDay) {
+  const minDayToKeep = Math.max(1, duelSeasonOfDay(currentDay) * duelSeasonLength - duelSeasonLength + 1);
+  return [...(records || [])]
+    .filter((record) => (record.day || currentDay) >= minDayToKeep)
+    .sort((a, b) => b.day - a.day)
+    .slice(0, Math.max(duelSeasonLength, 90));
+}
+
 function makeNpc(name, index) {
   const root = normalizeRoot(pick(roots));
   const realm = 0;
@@ -968,6 +1237,8 @@ function makeNpc(name, index) {
     mood: pick(["谨慎", "好斗", "闭关", "游历"]),
     duelWins: 0,
     duelLosses: 0,
+    duelSeason: defaultDuelSeason(),
+    duelSeasonHistory: [],
     dungeonClears: 0,
     bestDungeonPower: 0,
     bestDungeonName: "未入秘境",
@@ -1018,6 +1289,8 @@ export function createDefaultState() {
       heartDemon: 0,
       duelWins: 0,
       duelLosses: 0,
+      duelSeason: defaultDuelSeason(),
+      duelSeasonHistory: [],
       dungeonClears: 0,
       bestDungeonPower: 0,
       bestDungeonName: "未入秘境",
@@ -1026,6 +1299,9 @@ export function createDefaultState() {
       duelHistory: []
     },
     bag: { focus: 1, blood: 1, insight: 0 },
+    equipment: createEquipmentState(),
+    equipmentVersion,
+    equipmentTransfers: [],
     rosterVersion,
     tasks: [],
     npcs: npcNames.map((name, index) => makeNpc(name, index)),
@@ -1053,6 +1329,8 @@ export function clearProgressHistory(state) {
   const resetPerson = (person) => {
     person.duelWins = 0;
     person.duelLosses = 0;
+    person.duelSeason = defaultDuelSeason(state.day);
+    person.duelSeasonHistory = [];
     person.duelHistory = [];
     person.dungeonClears = 0;
     person.bestDungeonPower = 0;
@@ -1068,6 +1346,9 @@ export function clearProgressHistory(state) {
   state.provinceVersion = provinceVersion;
   state.provinceWars = [];
   state.provinceIncomeLog = [];
+  state.equipment = createEquipmentState();
+  state.equipmentVersion = equipmentVersion;
+  state.equipmentTransfers = [];
   state.tasks = [];
   state.player.sect = state.sect?.name || "黄枫谷";
   state.sect.warWins = 0;
@@ -1133,6 +1414,8 @@ export function ensureStateShape(state) {
   state.player.sect ??= state.sect?.name || "黄枫谷";
   state.player.duelWins ??= 0;
   state.player.duelLosses ??= 0;
+  state.player.duelSeasonHistory ??= [];
+  changed = normalizeDuelSeason(state.player, state.day) || changed;
   state.player.dungeonClears ??= 0;
   state.player.bestDungeonPower ??= 0;
   state.player.bestDungeonName ??= "未入秘境";
@@ -1159,13 +1442,16 @@ export function ensureStateShape(state) {
     state.player.attack = state.player.defense + rollRange([3, 5]);
     changed = true;
   }
+  state.equipmentTransfers ??= [];
+  changed = ensureEquipmentState(state) || changed;
   changed = ensureField(state.player, "mana", () => effectiveMaxMana(state.player)) || changed;
   changed = ensureField(state.player, "hp", () => effectiveMaxHp(state.player)) || changed;
-  state.player.hp = Math.min(state.player.hp, effectiveMaxHp(state.player));
-  state.player.mana = Math.min(state.player.mana, effectiveMaxMana(state.player));
+  state.player.hp = Math.min(state.player.hp, effectiveMaxHp(state.player, state));
+  state.player.mana = Math.min(state.player.mana, effectiveMaxMana(state.player, state));
   state.sect.warWins ??= 0;
   state.sect.warLosses ??= 0;
   state.duelDays ??= [];
+  state.duelDays = trimDuelDays(state.duelDays, state.day);
   state.sectRivals ??= {};
   for (const [index, name] of sects.entries()) {
     if (!state.sectRivals[name]) {
@@ -1226,13 +1512,16 @@ export function ensureStateShape(state) {
     for (const record of full.breakthroughs) changed = ensureDatedRecord(record) || changed;
     changed = ensureField(full, "duelWins", () => Math.floor(Math.random() * 6)) || changed;
     changed = ensureField(full, "duelLosses", () => Math.floor(Math.random() * 4)) || changed;
+    changed = ensureField(full, "duelSeasonHistory", []) || changed;
+    changed = normalizeDuelSeason(full, state.day) || changed;
     changed = ensureField(full, "dungeonClears", () => Math.floor(Math.random() * 5)) || changed;
     changed = ensureField(full, "bestDungeonPower", () => Math.floor(Math.random() * 90)) || changed;
     changed = ensureField(full, "bestDungeonName", () => full.bestDungeonPower > 65 ? "沉星矿脉" : full.bestDungeonPower > 0 ? "雾隐药谷" : "未入秘境") || changed;
-    full.hp = Math.min(full.hp, effectiveMaxHp(full));
-    full.mana = Math.min(full.mana, effectiveMaxMana(full));
+    full.hp = Math.min(full.hp, effectiveMaxHp(full, state));
+    full.mana = Math.min(full.mana, effectiveMaxMana(full, state));
     return full;
   });
+  changed = repairDuelSeasonFromRecords(state) || changed;
   if (state.duelDays.length) {
     syncDuelDayRecords(state);
     changed = true;
@@ -1243,11 +1532,11 @@ export function ensureStateShape(state) {
 
 export function powerOf(entity, state) {
   return Math.floor(
-    effectiveAttack(entity) * 2.8 +
-    effectiveDefense(entity) * 2 +
-    effectiveMaxHp(entity) * 0.42 +
-    effectiveDivineSense(entity) * 1.35 +
-    effectiveMaxMana(entity) * 0.55
+    effectiveAttack(entity, state) * 2.8 +
+    effectiveDefense(entity, state) * 2 +
+    effectiveMaxHp(entity, state) * 0.42 +
+    effectiveDivineSense(entity, state) * 1.35 +
+    effectiveMaxMana(entity, state) * 0.55
   );
 }
 
@@ -1259,17 +1548,28 @@ export function getPublicState(state) {
 
   return {
     ...state,
-    catalog: { realms, realmStages, roots, dungeons, taskTemplates, itemCatalog, sects, combatSkills, provinces },
+    equipment: state.equipment.map((item) => publicEquipment(item, state)),
+    catalog: { realms, realmStages, roots, dungeons, taskTemplates, itemCatalog, sects, combatSkills, provinces, equipmentSlots, equipmentTiers, equipmentCatalog, duelRanks },
     derived: {
       xpNeed: xpNeed(state.player.realm),
       currentRealmInfo,
       realmProgression: buildRealmProgression(state.player),
       playerPower: powerOf(state.player, state),
-      effectiveStats: effectiveStats(state.player),
+      effectiveStats: effectiveStats(state.player, state),
+      equippedItems: Object.fromEntries(allCultivators(state).map(({ entity }) => [entity.id, equippedItemsFor(state, entity).map((item) => publicEquipment(item, state))])),
+      duelSeason: {
+        season: duelSeasonOfDay(state.day),
+        seasonDay: duelSeasonDay(state.day),
+        length: duelSeasonLength,
+        maxScore: duelSeasonMaxScore,
+        winScore: duelWinScore,
+        lossScore: duelLossScore
+      },
+      duelRanks: Object.fromEntries(allCultivators(state).map(({ entity }) => [entity.id, duelRankSnapshot(entity)])),
       nextRealm,
       breakChance,
       baseBreakChance: currentRealmInfo.baseBreakChance,
-      npcPowers: Object.fromEntries(state.npcs.map((npc) => [npc.id, powerOf(npc)])),
+      npcPowers: Object.fromEntries(state.npcs.map((npc) => [npc.id, powerOf(npc, state)])),
       sects: buildSectSummaries(state)
     }
   };
@@ -1290,7 +1590,7 @@ function buildSectSummaries(state) {
   };
   const members = [
     { ...state.player, sect: state.sect.name, mood: "求道", power: powerOf(state.player, state), isPlayer: true },
-    ...state.npcs.map((npc) => ({ ...npc, power: powerOf(npc), isPlayer: false }))
+    ...state.npcs.map((npc) => ({ ...npc, power: powerOf(npc, state), isPlayer: false }))
   ];
   const groups = new Map();
 
@@ -1399,13 +1699,13 @@ export function dailySettlement(state, options = {}) {
       if (success) {
         npc.realm = targetRealm;
         growth = applyBreakthroughGrowth(npc, fromRealm);
-        npc.hp = effectiveMaxHp(npc);
-        npc.mana = effectiveMaxMana(npc);
+        npc.hp = effectiveMaxHp(npc, state);
+        npc.mana = effectiveMaxMana(npc, state);
         npc.reputation += 4 + npc.realm;
         breakthroughNote = `突破至${realms[npc.realm]}`;
       } else {
-        npc.hp = clamp(npc.hp - 18, 1, effectiveMaxHp(npc));
-        npc.mana = clamp((npc.mana || 0) - 12, 0, effectiveMaxMana(npc));
+        npc.hp = clamp(npc.hp - 18, 1, effectiveMaxHp(npc, state));
+        npc.mana = clamp((npc.mana || 0) - 12, 0, effectiveMaxMana(npc, state));
         breakthroughNote = `冲击${realms[targetRealm]}失败`;
       }
       npc.breakthroughs.unshift({
@@ -1447,9 +1747,9 @@ export function dailySettlement(state, options = {}) {
     status.rivalHeat = clamp(status.rivalHeat + Math.floor(Math.random() * 13) - 4, 0, 100);
   }
   const beforeHp = state.player.hp;
-  state.player.hp = clamp(state.player.hp + 10, 0, effectiveMaxHp(state.player));
+  state.player.hp = clamp(state.player.hp + 10, 0, effectiveMaxHp(state.player, state));
   const beforeMana = state.player.mana;
-  state.player.mana = clamp((state.player.mana || 0) + 8, 0, effectiveMaxMana(state.player));
+  state.player.mana = clamp((state.player.mana || 0) + 8, 0, effectiveMaxMana(state.player, state));
   state.player.dailyRecords.unshift({
     day: state.day,
     date: settlementDate,
@@ -1479,8 +1779,8 @@ export function addTask(state, payload) {
   const baseXpGain = Math.floor(template.xp * diff);
   const xpGain = applyXpGain(p, baseXpGain, 1 + sectXpBonus(state, state.sect.name));
 
-  p.hp = clamp(p.hp + template.hp * diff, 0, effectiveMaxHp(p));
-  p.mana = clamp((p.mana || 0) + template.mana * diff, 0, effectiveMaxMana(p));
+  p.hp = clamp(p.hp + template.hp * diff, 0, effectiveMaxHp(p, state));
+  p.mana = clamp((p.mana || 0) + template.mana * diff, 0, effectiveMaxMana(p, state));
   p.spirit += template.spirit * diff;
 
   if (type === "body") {
@@ -1513,15 +1813,15 @@ export function attemptBreakthrough(state) {
     const fromRealm = p.realm;
     p.realm += 1;
     const growth = applyBreakthroughGrowth(p, fromRealm);
-    p.hp = effectiveMaxHp(p);
-    p.mana = effectiveMaxMana(p);
+    p.hp = effectiveMaxHp(p, state);
+    p.mana = effectiveMaxMana(p, state);
     p.reputation += 6 + p.realm;
     p.breakthroughs.unshift({ day: state.day, date: stateDateForDay(state), from: realms[p.realm - 1], to: realms[p.realm], success: true, chance, growth });
     p.breakthroughs = p.breakthroughs.slice(0, 12);
     log(state, `灵气贯通周天，你成功突破至「${realms[p.realm]}」。`, "gold");
   } else {
-    p.hp = clamp(p.hp - 26, 1, effectiveMaxHp(p));
-    p.mana = clamp((p.mana || 0) - 18, 0, effectiveMaxMana(p));
+    p.hp = clamp(p.hp - 26, 1, effectiveMaxHp(p, state));
+    p.mana = clamp((p.mana || 0) - 18, 0, effectiveMaxMana(p, state));
     p.breakthroughs.unshift({ day: state.day, date: stateDateForDay(state), from: realms[p.realm], to: realms[p.realm + 1] || "未知境界", success: false, chance });
     p.breakthroughs = p.breakthroughs.slice(0, 12);
     log(state, "突破失败，灵力逆冲经脉。气息紊乱，需要调息或完成自律任务。", "bad");
@@ -1530,8 +1830,8 @@ export function attemptBreakthrough(state) {
 
 export function rest(state) {
   const p = state.player;
-  p.hp = clamp(p.hp + 24 + p.body, 0, effectiveMaxHp(p));
-  p.mana = clamp((p.mana || 0) + 20 + Math.ceil(effectiveDivineSense(p) / 4), 0, effectiveMaxMana(p));
+  p.hp = clamp(p.hp + 24 + p.body, 0, effectiveMaxHp(p, state));
+  p.mana = clamp((p.mana || 0) + 20 + Math.ceil(effectiveDivineSense(p, state) / 4), 0, effectiveMaxMana(p, state));
   log(state, "你闭门调息一夜，血量与法力渐复。");
 }
 
@@ -1562,7 +1862,7 @@ export function runDungeon(state, id) {
   guardian.mana = effectiveMaxMana(guardian);
 
   const beforeHp = p.hp;
-  const battle = runTurnBattle(p, guardian, { maxRounds: 14 });
+  const battle = runTurnBattle(p, guardian, { maxRounds: 14, state });
   p.hp = battle.leftHp;
   p.mana = battle.leftMana;
 
@@ -1591,7 +1891,7 @@ export function sectMission(state) {
   p.spirit += 16;
   state.sect.reputation += rep;
   state.sect.supplies += 10;
-  p.hp = clamp(p.hp - 6, 1, effectiveMaxHp(p));
+  p.hp = clamp(p.hp - 6, 1, effectiveMaxHp(p, state));
   log(state, `完成${state.sect.name}任务，获得 ${xp} 经验、${rep} 声望与 16 灵石。`, "gold");
 }
 
@@ -1614,7 +1914,7 @@ export function sectWar(state) {
   };
   enemy.hp = effectiveMaxHp(enemy);
   enemy.mana = effectiveMaxMana(enemy);
-  const battle = runTurnBattle(p, enemy, { maxRounds: 16 });
+  const battle = runTurnBattle(p, enemy, { maxRounds: 16, state });
   p.hp = battle.leftHp;
   p.mana = battle.leftMana;
 
@@ -1645,7 +1945,7 @@ function entityRef(entity, kind) {
   };
 }
 
-function buildReplay(left, right, battle, result, foughtAt) {
+function buildReplay(left, right, battle, result, foughtAt, state) {
   const leftBefore = { ...left };
   const rightBefore = { ...right };
 
@@ -1656,8 +1956,8 @@ function buildReplay(left, right, battle, result, foughtAt) {
     foughtAt,
     left: {
       ...entityRef(leftBefore, leftBefore.id === "player" ? "player" : "npc"),
-      power: powerOf(leftBefore),
-      stats: effectiveStats(leftBefore),
+      power: powerOf(leftBefore, state),
+      stats: effectiveStats(leftBefore, state),
       startHp: battle.leftStart.hp,
       startMana: battle.leftStart.mana,
       endHp: battle.leftHp,
@@ -1665,8 +1965,8 @@ function buildReplay(left, right, battle, result, foughtAt) {
     },
     right: {
       ...entityRef(rightBefore, rightBefore.id === "player" ? "player" : "npc"),
-      power: powerOf(rightBefore),
-      stats: effectiveStats(rightBefore),
+      power: powerOf(rightBefore, state),
+      stats: effectiveStats(rightBefore, state),
       startHp: battle.rightStart.hp,
       startMana: battle.rightStart.mana,
       endHp: battle.rightHp,
@@ -1680,9 +1980,9 @@ function runDuelMatch(state, left, right, options = {}) {
   const foughtAt = timestampKey();
   const leftBefore = { ...left };
   const rightBefore = { ...right };
-  const duelLeft = { ...left, hp: effectiveMaxHp(left), mana: effectiveMaxMana(left) };
-  const duelRight = { ...right, hp: effectiveMaxHp(right), mana: effectiveMaxMana(right) };
-  const battle = runTurnBattle(duelLeft, duelRight);
+  const duelLeft = { ...left, hp: effectiveMaxHp(left, state), mana: effectiveMaxMana(left, state) };
+  const duelRight = { ...right, hp: effectiveMaxHp(right, state), mana: effectiveMaxMana(right, state) };
+  const battle = runTurnBattle(duelLeft, duelRight, { state });
   const leftWon = battle.winner === "left";
   const winner = leftWon ? left : right;
   const loser = leftWon ? right : left;
@@ -1695,12 +1995,16 @@ function runDuelMatch(state, left, right, options = {}) {
 
   winner.duelWins += 1;
   loser.duelLosses += 1;
-  left.hp = effectiveMaxHp(left);
-  left.mana = effectiveMaxMana(left);
-  right.hp = effectiveMaxHp(right);
-  right.mana = effectiveMaxMana(right);
+  applyDuelScore(winner, true, state.day);
+  applyDuelScore(loser, false, state.day);
+  left.hp = effectiveMaxHp(left, state);
+  left.mana = effectiveMaxMana(left, state);
+  right.hp = effectiveMaxHp(right, state);
+  right.mana = effectiveMaxMana(right, state);
 
-  const replay = buildReplay(leftBefore, rightBefore, battle, result, foughtAt);
+  const replay = buildReplay(leftBefore, rightBefore, battle, result, foughtAt, state);
+  const transfer = tryTransferEquipment(state, winner, loser, "每日切磋");
+  if (transfer) replay.equipmentTransfer = transfer;
 
   left.duelHistory.unshift({ foughtAt, opponent: right.name, result: leftResult, replay });
   right.duelHistory.unshift({ foughtAt, opponent: left.name, result: rightResult, replay });
@@ -1726,30 +2030,19 @@ function replayResultFor(replay, entityId) {
 
 function syncDuelDayRecords(state) {
   const map = cultivatorMap(state);
+  const records = [...(state.duelDays || [])].sort((a, b) => a.day - b.day);
   for (const entity of map.values()) {
-    entity.duelWins = 0;
-    entity.duelLosses = 0;
     entity.duelHistory = [];
+    normalizeDuelSeason(entity, state.day);
   }
 
-  const records = [...(state.duelDays || [])].sort((a, b) => a.day - b.day);
   for (const record of records) {
     for (const match of record.matches || []) {
-      if (match.type === "bye") {
-        const winner = map.get(match.winner?.id);
-        if (winner) winner.duelWins += 1;
-        continue;
-      }
+      if (match.type === "bye") continue;
       if (!match.replay) continue;
       const left = map.get(match.replay.left?.id);
       const right = map.get(match.replay.right?.id);
       if (!left || !right) continue;
-      const winnerId = match.winner?.id || (match.replay.winner === "left" ? left.id : right.id);
-      const loserId = match.loser?.id || (winnerId === left.id ? right.id : left.id);
-      const winner = map.get(winnerId);
-      const loser = map.get(loserId);
-      if (winner) winner.duelWins += 1;
-      if (loser) loser.duelLosses += 1;
 
       left.duelHistory.unshift({ foughtAt: match.replay.foughtAt || record.createdAt, opponent: right.name, result: replayResultFor(match.replay, left.id), replay: match.replay });
       right.duelHistory.unshift({ foughtAt: match.replay.foughtAt || record.createdAt, opponent: left.name, result: replayResultFor(match.replay, right.id), replay: match.replay });
@@ -1757,6 +2050,7 @@ function syncDuelDayRecords(state) {
   }
 
   for (const entity of map.values()) {
+    normalizeDuelSeason(entity, state.day);
     entity.duelHistory = entity.duelHistory.slice(0, 20);
   }
 }
@@ -1787,6 +2081,7 @@ export function runDailyDuels(state) {
   if (shuffled.length % 2 === 1) {
     const bye = shuffled.pop();
     bye.entity.duelWins += 1;
+    applyDuelScore(bye.entity, true, state.day);
     matches.push({
       id: `day-${state.day}-bye-${bye.entity.id}`,
       type: "bye",
@@ -1818,7 +2113,7 @@ export function runDailyDuels(state) {
     matches
   };
   state.duelDays.unshift(record);
-  state.duelDays = state.duelDays.slice(0, 30);
+  state.duelDays = trimDuelDays(state.duelDays, state.day);
   syncDuelDayRecords(state);
   log(state, `${record.date} 全员切磋完成，共 ${matches.length} 组对阵。`, "gold");
   return record;
@@ -1844,11 +2139,11 @@ export function useItem(state, kind) {
 
   if (kind === "focus") {
     p.divineSense += 2;
-    p.mana = clamp((p.mana || 0) + 12, 0, effectiveMaxMana(p));
+    p.mana = clamp((p.mana || 0) + 12, 0, effectiveMaxMana(p, state));
     log(state, "服下凝神散，神识澄明，法力回涌。");
   }
   if (kind === "blood") {
-    p.hp = clamp(p.hp + 45, 0, effectiveMaxHp(p));
+    p.hp = clamp(p.hp + 45, 0, effectiveMaxHp(p, state));
     log(state, "服下养血丹，血量回升。");
   }
   if (kind === "insight") {

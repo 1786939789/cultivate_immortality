@@ -358,7 +358,16 @@
                 <div ref="chinaMapRef" class="china-map" role="img" aria-label="中国省级行政区宗门占领图"></div>
               </div>
               <div class="province-legend">
-                <span v-for="sect in sectSummaries" :key="sect.name">
+                <span
+                  v-for="sect in sectSummaries"
+                  :key="sect.name"
+                  tabindex="0"
+                  :class="{ active: hoveredMapSect === sect.name }"
+                  @mouseenter="hoverMapSect(sect.name)"
+                  @mouseleave="hoverMapSect('')"
+                  @focus="hoverMapSect(sect.name)"
+                  @blur="hoverMapSect('')"
+                >
                   <i :style="{ background: sectColor(sect.name) }"></i>{{ sect.name }}
                 </span>
                 <span><i></i>无主</span>
@@ -422,11 +431,134 @@
             </div>
           </div>
 
+          <div v-else-if="lastBattle" class="battle-detail">
+            <div class="panel battle-header">
+              <div>
+                <h3>攻城实况</h3>
+                <p>{{ lastBattle.left.name }} 对阵 {{ lastBattle.right.name }}，{{ battleStatusText }}</p>
+              </div>
+              <div class="actions">
+                <button class="secondary" @click="replayBattle">重播</button>
+                <button class="primary" @click="lastBattle = null">返回攻城记录</button>
+              </div>
+            </div>
+
+            <div class="battle-line live">
+              <div class="fighter">
+                <CharacterPortrait :person="battlePerson(lastBattle.left)" size="lg" />
+                <strong>{{ lastBattle.left.name }}</strong>
+                <small>{{ realmName(lastBattle.left.realm) }} · 战力 {{ lastBattle.left.power }}</small>
+                <div class="battle-stats">
+                  <span v-for="stat in battleStatsFromEffective(lastBattle.left.stats)" :key="stat.label" :aria-label="`${stat.label} ${stat.value}`">
+                    <StatIcon :name="stat.icon" />
+                    <span>{{ stat.label }}</span>
+                    <strong>{{ stat.value }}</strong>
+                  </span>
+                </div>
+                <div class="skill-chip" tabindex="0">
+                  {{ skillName(lastBattle.left.skillId) }}
+                  <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.left.skillId) }}</span>
+                </div>
+                <Meter label="血量" icon="health" :value="currentBattleFrame.leftHp" :max="lastBattle.left.startHp" tone="health" />
+                <Meter label="法力" icon="mana" :value="currentBattleFrame.leftMana" :max="lastBattle.left.startMana" tone="focus" />
+              </div>
+              <div class="vs">{{ battleOutcomeLabel }}</div>
+              <div class="fighter">
+                <CharacterPortrait :person="battlePerson(lastBattle.right)" size="lg" />
+                <strong>{{ lastBattle.right.name }}</strong>
+                <small>{{ realmName(lastBattle.right.realm) }} · 战力 {{ lastBattle.right.power }}</small>
+                <div class="battle-stats">
+                  <span v-for="stat in battleStatsFromEffective(lastBattle.right.stats)" :key="stat.label" :aria-label="`${stat.label} ${stat.value}`">
+                    <StatIcon :name="stat.icon" />
+                    <span>{{ stat.label }}</span>
+                    <strong>{{ stat.value }}</strong>
+                  </span>
+                </div>
+                <div class="skill-chip" tabindex="0">
+                  {{ skillName(lastBattle.right.skillId) }}
+                  <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.right.skillId) }}</span>
+                </div>
+                <Meter label="血量" icon="health" :value="currentBattleFrame.rightHp" :max="lastBattle.right.startHp" tone="health" />
+                <Meter label="法力" icon="mana" :value="currentBattleFrame.rightMana" :max="lastBattle.right.startMana" tone="focus" />
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="battle-feed">
+                <div
+                  class="battle-event"
+                  v-for="(event, index) in displayedBattleEvents"
+                  :key="`${index}-${event.text}`"
+                  :class="[event.kind, skillEffectClass(event)]"
+                >
+                  <div v-if="event.kind === 'skill'" class="skill-cast" aria-hidden="true">
+                    <i>
+                      <span>{{ skillEffectGlyph(event) }}</span>
+                    </i>
+                    <b>{{ skillEffectTitle(event) }}</b>
+                  </div>
+                  <span>{{ event.round ? `第${event.round}回合` : "战报" }}</span>
+                  <p>{{ event.text }}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-else-if="selectedProvinceWar" class="panel">
+            <div class="section-head compact">
+              <div>
+                <h3>{{ selectedProvinceWar.provinceName }} 攻城详情</h3>
+                <p>{{ selectedProvinceWar.result }}。点击下方单场 PK 可看回放。</p>
+              </div>
+              <button class="primary" type="button" @click="closeProvinceWarDetail">返回今日总览</button>
+            </div>
+
+            <div class="war-day-card captured-detail" :class="{ captured: selectedProvinceWar.captured }">
+              <div class="war-day-title">
+                <div>
+                  <strong>{{ selectedProvinceWar.attacker }} 攻 {{ selectedProvinceWar.defender }}</strong>
+                  <small>{{ selectedProvinceWar.provinceName }} · {{ selectedProvinceWar.battles.length }} 场 PK</small>
+                </div>
+                <span class="tag">{{ selectedProvinceWar.captured ? "易主" : "守住" }}</span>
+              </div>
+              <div class="war-killboards">
+                <div class="war-killboard">
+                  <strong>{{ selectedProvinceWar.attacker }} 击杀</strong>
+                  <div v-if="warKillRanking(selectedProvinceWar, 'attacker').length" class="war-kill-list">
+                    <span v-for="item in warKillRanking(selectedProvinceWar, 'attacker')" :key="`${selectedProvinceWar.id}-atk-kill-${item.id || item.name}`">
+                      {{ item.name }} <b>{{ item.kills }}</b>
+                    </span>
+                  </div>
+                  <small v-else>无人破阵</small>
+                </div>
+                <div class="war-killboard">
+                  <strong>{{ selectedProvinceWar.defender }} 击杀</strong>
+                  <div v-if="warKillRanking(selectedProvinceWar, 'defender').length" class="war-kill-list">
+                    <span v-for="item in warKillRanking(selectedProvinceWar, 'defender')" :key="`${selectedProvinceWar.id}-def-kill-${item.id || item.name}`">
+                      {{ item.name }} <b>{{ item.kills }}</b>
+                    </span>
+                  </div>
+                  <small v-else>无人斩敌</small>
+                </div>
+              </div>
+              <div class="war-battle-grid" v-if="selectedProvinceWar.battles.length">
+                <button class="war-battle-link" v-for="battle in selectedProvinceWar.battles" :key="`${selectedProvinceWar.id}-${battle.order}`" type="button" @click="openProvinceBattle(battle)">
+                  <span class="war-battle-order">第 {{ battle.order }} 战</span>
+                  <strong class="war-battle-name left">{{ battleName(battle, "attacker") }}</strong>
+                  <span class="war-battle-vs">VS</span>
+                  <strong class="war-battle-name right">{{ battleName(battle, "defender") }}</strong>
+                  <small class="war-battle-summary">胜者：{{ battle.winnerName || battleWinnerName(battle) }}</small>
+                </button>
+              </div>
+              <small v-else>无主之地直接占领。</small>
+            </div>
+          </div>
+
           <div v-else class="panel">
             <div class="section-head compact">
               <div>
                 <h3>每日攻城记录</h3>
-                <p v-if="selectedProvinceWarDayRecord">共 {{ selectedProvinceWarDayRecord.wars.length }} 场攻守，点击具体车轮战可看回放。</p>
+                <p v-if="selectedProvinceWarDayRecord">共 {{ selectedProvinceWarDayRecord.wars.length }} 场攻守，点击对战图查看每一场 PK。</p>
                 <p v-else>这个日期还没有攻城记录。</p>
               </div>
               <div class="arena-toolbar compact">
@@ -436,27 +568,59 @@
                     <option v-for="option in provinceWarDateOptions" :key="option.day" :value="option.day">{{ option.date }}</option>
                   </select>
                 </label>
+                <label class="war-search">搜索省份 / 宗门
+                  <span class="search-field">
+                    <input v-model.trim="provinceWarSearch" type="search" placeholder="例如：贵州、黄枫谷、妙音门">
+                    <button v-if="provinceWarSearch" class="search-clear" type="button" aria-label="清空攻城记录搜索" @click="provinceWarSearch = ''">×</button>
+                  </span>
+                </label>
                 <button class="secondary" type="button" :disabled="selectedProvinceWarDay >= state.day" @click="changeProvinceWarDay(1)">后一天</button>
               </div>
             </div>
 
             <div class="war-day-list" v-if="selectedProvinceWarDayRecord">
-              <article v-for="war in selectedProvinceWarDayRecord.wars" :key="war.id" class="war-day-card" :class="{ captured: war.captured }">
-                <div class="war-day-title">
+              <button v-for="war in filteredProvinceWars" :key="war.id" class="war-matchup-card" :class="{ captured: war.captured }" type="button" @click="openProvinceWarDetail(war)">
+                <div class="war-matchup-head">
                   <div>
                     <strong>{{ war.provinceName }}</strong>
                     <small>{{ war.attacker }} 攻 {{ war.defender }}</small>
                   </div>
                   <span class="tag">{{ war.captured ? "易主" : "守住" }}</span>
                 </div>
-                <p>{{ war.result }}</p>
-                <div class="war-battle-grid" v-if="war.battles.length">
-                  <button class="war-battle-link" v-for="battle in war.battles" :key="`${war.id}-${battle.order}`" type="button" @click="openProvinceBattle(battle)">
-                    第 {{ battle.order }} 战：{{ battle.summary }}
-                  </button>
+
+                <div class="war-lineup" v-if="war.battles.length">
+                  <div class="war-team">
+                    <span class="war-team-name">{{ war.attacker }}</span>
+                    <div class="war-team-row">
+                      <div v-for="member in warTeam(war, 'attacker')" :key="`${war.id}-attacker-${member.id || member.name}`" class="war-roster-card">
+                        <CharacterPortrait :person="battlePerson(member)" size="sm" />
+                        <strong>{{ member.name }}</strong>
+                        <small>{{ realmName(member.realm) }}</small>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="war-lineup-vs">
+                    <strong>VS</strong>
+                    <span>{{ war.battles.length }} 场</span>
+                  </div>
+                  <div class="war-team">
+                    <span class="war-team-name">{{ war.defender }}</span>
+                    <div class="war-team-row">
+                      <div v-for="member in warTeam(war, 'defender')" :key="`${war.id}-defender-${member.id || member.name}`" class="war-roster-card">
+                        <CharacterPortrait :person="battlePerson(member)" size="sm" />
+                        <strong>{{ member.name }}</strong>
+                        <small>{{ realmName(member.realm) }}</small>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <small v-else>无主之地直接占领。</small>
-              </article>
+                <div v-else class="war-direct-capture">
+                  无主之地直接占领
+                </div>
+
+                <p>{{ war.result }}</p>
+              </button>
+              <div v-if="!filteredProvinceWars.length" class="empty">没有匹配“{{ provinceWarSearch }}”的省份或宗门。</div>
             </div>
             <div v-else class="empty">没有找到 {{ selectedProvinceWarDate }} 的攻城记录。</div>
           </div>
@@ -473,7 +637,16 @@
             </div>
             <div ref="fullscreenMapMount" class="map-fullscreen-body"></div>
             <div class="province-legend fullscreen-legend">
-              <span v-for="sect in sectSummaries" :key="`full-${sect.name}`">
+              <span
+                v-for="sect in sectSummaries"
+                :key="`full-${sect.name}`"
+                tabindex="0"
+                :class="{ active: hoveredMapSect === sect.name }"
+                @mouseenter="hoverMapSect(sect.name)"
+                @mouseleave="hoverMapSect('')"
+                @focus="hoverMapSect(sect.name)"
+                @blur="hoverMapSect('')"
+              >
                 <i :style="{ background: sectColor(sect.name) }"></i>{{ sect.name }}
               </span>
               <span><i></i>无主</span>
@@ -484,7 +657,13 @@
         <section v-if="activeTab === 'arena'" class="view active">
           <div v-if="!lastBattle" class="panel">
             <h3>人物切磋</h3>
-            <p>点击开始后，系统会把所有角色随机分组 PK；人数为奇数时，会有一名角色轮空并直接记为胜。</p>
+            <p>第 {{ duelSeasonInfo.season }} 赛季 · 第 {{ duelSeasonInfo.seasonDay }} / {{ duelSeasonInfo.length }} 天。胜利 +{{ duelSeasonInfo.winScore }} 分，失败 {{ duelSeasonInfo.lossScore }} 分，积分范围 0-{{ duelSeasonInfo.maxScore }}。</p>
+            <div class="duel-rank-table" aria-label="切磋段位分数表">
+              <div v-for="rank in duelRankList" :key="rank.id" class="duel-rank-cell" :class="`duel-rank-${rank.id}`">
+                <strong>{{ rank.name }}</strong>
+                <span>{{ rank.min }}-{{ rank.max }} 分</span>
+              </div>
+            </div>
             <div class="arena-toolbar">
               <button class="secondary" type="button" @click="changeDuelDay(-1)">前一天</button>
               <label>查看日期
@@ -523,7 +702,7 @@
                     <CharacterPortrait :person="matchPerson(match.left)" size="sm" />
                     <div>
                       <strong>{{ match.left.name }}</strong>
-                      <small>{{ genderLabel(matchPerson(match.left)?.gender) }} · {{ realmName(match.left.realm) }} · {{ match.left.sect }}</small>
+                      <small>{{ duelRankText(matchPerson(match.left)) }} · {{ realmName(match.left.realm) }} · {{ match.left.sect }}</small>
                     </div>
                   </div>
                   <div class="match-result">
@@ -534,7 +713,7 @@
                     <CharacterPortrait :person="matchPerson(match.right)" size="sm" />
                     <div>
                       <strong>{{ match.right.name }}</strong>
-                      <small>{{ genderLabel(matchPerson(match.right)?.gender) }} · {{ realmName(match.right.realm) }} · {{ match.right.sect }}</small>
+                      <small>{{ duelRankText(matchPerson(match.right)) }} · {{ realmName(match.right.realm) }} · {{ match.right.sect }}</small>
                     </div>
                   </div>
                 </template>
@@ -543,7 +722,7 @@
                     <CharacterPortrait :person="matchPerson(match.winner)" size="sm" />
                     <div>
                       <strong>{{ match.winner.name }}</strong>
-                      <small>{{ genderLabel(matchPerson(match.winner)?.gender) }} · {{ realmName(match.winner.realm) }} · {{ match.winner.sect }}</small>
+                      <small>{{ duelRankText(matchPerson(match.winner)) }} · {{ realmName(match.winner.realm) }} · {{ match.winner.sect }}</small>
                     </div>
                   </div>
                   <div class="match-result">
@@ -655,6 +834,53 @@
               </div>
             </div>
           </div>
+
+        </section>
+
+        <section v-if="activeTab === 'equipment'" class="view active">
+          <div class="panel equipment-panel">
+            <div class="section-head">
+              <div>
+                <h3>装备图鉴</h3>
+                <p>装备唯一存在；默认无归属。角色获得多件同部位装备时，自动穿戴评分最高的一件。</p>
+              </div>
+              <span class="tag">{{ equipmentList.length }} 件</span>
+            </div>
+            <div class="equipment-tools">
+              <label>品质
+                <select v-model="equipmentTierFilter">
+                  <option value="">全部品质</option>
+                  <option v-for="tier in equipmentTiers" :key="tier.id" :value="String(tier.id)">{{ tier.name }}</option>
+                </select>
+              </label>
+              <label>部位
+                <select v-model="equipmentSlotFilter">
+                  <option value="">全部部位</option>
+                  <option v-for="slot in equipmentSlots" :key="slot.id" :value="slot.id">{{ slot.name }}</option>
+                </select>
+              </label>
+            </div>
+            <div class="equipment-table-head">
+              <span>装备</span>
+              <span>部位</span>
+              <span>加成</span>
+              <span>归属</span>
+              <span>状态</span>
+            </div>
+            <div class="equipment-list">
+              <article class="equipment-row" v-for="item in filteredEquipment" :key="item.id" :class="`tier-${item.tier}`">
+                <div>
+                  <strong>{{ item.name }}</strong>
+                  <small>{{ item.tierName }} · 夺取率 {{ formatLootPercent(item.stealChance) }}</small>
+                </div>
+                <span>{{ item.slotName }}</span>
+                <span>{{ item.statName }} +{{ formatPercent(item.bonus) }}</span>
+                <span>{{ item.ownerName || "无归属" }}</span>
+                <span class="tag">{{ item.equipped ? "已穿戴" : item.ownerName ? "收藏" : "流落在外" }}</span>
+              </article>
+            </div>
+            <div v-if="!filteredEquipment.length" class="empty">没有符合筛选条件的装备。</div>
+          </div>
         </section>
 
         <section v-if="activeTab === 'rank'" class="view active">
@@ -679,6 +905,12 @@
                 <input v-model.trim="rankSearch" placeholder="输入姓名、宗门、境界或关键词">
               </label>
               <span class="rank-count">共 {{ filteredRanking.length }} 条</span>
+            </div>
+            <div v-if="activeRankBoard === 'duel'" class="duel-rank-table compact" aria-label="切磋段位分数表">
+              <div v-for="rank in duelRankList" :key="`rank-board-${rank.id}`" class="duel-rank-cell" :class="`duel-rank-${rank.id}`">
+                <strong>{{ rank.name }}</strong>
+                <span>{{ rank.min }}-{{ rank.max }} 分</span>
+              </div>
             </div>
             <div class="rank-list">
               <button
@@ -713,6 +945,7 @@
                 <h3>{{ selectedPerson.name }}</h3>
                 <p>{{ selectedPerson.sect }} · {{ genderLabel(selectedPerson.gender) }} · {{ realmName(selectedPerson.realm) }} · {{ rootSummary(selectedPerson.root) }}</p>
                 <span class="tag">本命技能：{{ skillName(selectedPerson.skillId) }}</span>
+                <span class="tag rank-tag" :class="`duel-rank-${duelRankId(selectedPerson)}`">{{ duelRankText(selectedPerson) }}</span>
                 <div class="detail-meters">
                   <Meter label="经验" :value="selectedPerson.xp" :max="personXpNeed(selectedPerson)" />
                 </div>
@@ -754,7 +987,12 @@
               </div>
               <div class="panel flat">
                 <h3>切磋战绩</h3>
-                <p>{{ selectedPerson.duelWins || 0 }} 胜 {{ selectedPerson.duelLosses || 0 }} 负。</p>
+                <p>第 {{ duelSeasonInfo.season }} 赛季：{{ duelRankText(selectedPerson) }}，{{ selectedPerson.duelSeason?.wins || 0 }} 胜 {{ selectedPerson.duelSeason?.losses || 0 }} 负；累计 {{ selectedPerson.duelWins || 0 }} 胜 {{ selectedPerson.duelLosses || 0 }} 负。</p>
+                <div class="duel-history-strip" v-if="selectedPerson.duelSeasonHistory?.length">
+                  <span v-for="record in selectedPerson.duelSeasonHistory" :key="`${selectedPerson.id}-season-${record.season}`" class="duel-season-badge" :class="`duel-rank-${record.rankId}`">
+                    S{{ record.season }} {{ record.rankName }} {{ record.score }}分
+                  </span>
+                </div>
                 <div class="timeline detail-scroll">
                   <button
                     class="event duel-record"
@@ -779,6 +1017,19 @@
                   <div class="event">累计通关 {{ selectedPerson.dungeonClears || 0 }} 次</div>
                 </div>
               </div>
+              <div class="panel flat">
+                <h3>当前装备</h3>
+                <div class="equipment-mini-list" v-if="equippedFor(selectedPerson).length">
+                  <div class="equipment-mini" v-for="item in equippedFor(selectedPerson)" :key="item.id">
+                    <span class="tag">{{ item.slotName }}</span>
+                    <div>
+                      <strong>{{ item.name }}</strong>
+                      <small>{{ item.tierName }} · {{ item.statName }} +{{ formatPercent(item.bonus) }}</small>
+                    </div>
+                  </div>
+                </div>
+                <div v-else class="empty">暂无穿戴装备。</div>
+              </div>
             </div>
           </div>
 
@@ -798,13 +1049,27 @@
             </div>
             <div class="grid detail-sections sect-detail-sections">
               <div class="panel flat sect-member-panel">
-                <h3>人物列表 · {{ sectMembers(selectedSect).length }} 人</h3>
-                <div class="rank-list detail-scroll">
-                  <button class="row link-row" v-for="member in sectMembers(selectedSect)" :key="member.id" @click="openPersonById(member.id)">
-                    <span class="tag">{{ realmName(member.realm) }}</span>
-                    <CharacterPortrait :person="member" size="sm" />
-                    <div><strong>{{ member.name }}</strong><small>{{ genderLabel(member.gender) }} · {{ member.mood }} · 战力 {{ member.power }}</small></div>
-                    <span>{{ member.isPlayer ? "你" : "NPC" }}</span>
+                <div class="section-head compact">
+                  <div>
+                    <h3>人物列表</h3>
+                    <p>{{ sectMembers(selectedSect).length }} 人 · 按战力展示宗门成员</p>
+                  </div>
+                </div>
+                <div class="sect-member-grid">
+                  <button class="sect-member-card" v-for="member in sectMembers(selectedSect)" :key="member.id" @click="openPersonById(member.id)">
+                    <CharacterPortrait :person="member" size="md" />
+                    <div class="sect-member-main">
+                      <div class="sect-member-topline">
+                        <span class="tag">{{ realmName(member.realm) }}</span>
+                        <span class="member-badge" :class="{ player: member.isPlayer }">{{ member.isPlayer ? "你" : "NPC" }}</span>
+                      </div>
+                      <strong>{{ member.name }}</strong>
+                      <small>{{ genderLabel(member.gender) }} · {{ member.mood }}</small>
+                    </div>
+                    <div class="sect-member-power">
+                      <b>{{ member.power }}</b>
+                      <span>战力</span>
+                    </div>
                   </button>
                 </div>
               </div>
@@ -829,6 +1094,8 @@ import CharacterPortrait from "./components/CharacterPortrait.vue";
 import LogPanel from "./components/LogPanel.vue";
 import Meter from "./components/Meter.vue";
 import StatIcon from "./components/StatIcon.vue";
+import { equipmentCatalog as fallbackEquipmentCatalog, equipmentSlots as fallbackEquipmentSlots, equipmentTiers as fallbackEquipmentTiers } from "../../shared/equipmentData.mjs";
+import { duelLossScore, duelRanks, duelRankForScore, duelSeasonDay, duelSeasonLength, duelSeasonMaxScore, duelSeasonOfDay, duelWinScore } from "../../shared/duelSeasonData.mjs";
 
 const tabs = [
   { id: "practice", label: "修炼" },
@@ -840,12 +1107,13 @@ const tabs = [
   { id: "sect", label: "宗门" },
   { id: "arena", label: "切磋" },
   { id: "market", label: "洞府" },
+  { id: "equipment", label: "装备" },
   { id: "rank", label: "榜单" }
 ];
 
 const rankBoards = [
   { id: "power", label: "个人战力" },
-  { id: "duel", label: "个人切磋" },
+  { id: "duel", label: "切磋段位" },
   { id: "sect", label: "宗门战力" },
   { id: "dungeon", label: "副本闯关" }
 ];
@@ -859,12 +1127,16 @@ const activeRankBoard = ref("power");
 const rankSearch = ref("");
 const rankPage = ref(1);
 const rankPageSize = 10;
+const equipmentTierFilter = ref("");
+const equipmentSlotFilter = ref("");
 const detailView = ref("rank");
 const selectedPersonId = ref("player");
 const selectedSectName = ref("");
 const selectedRealmStage = ref("");
 const selectedDuelDay = ref(null);
 const selectedProvinceWarDay = ref(null);
+const selectedProvinceWarId = ref("");
+const provinceWarSearch = ref("");
 const lastBattle = ref(null);
 const battleCursor = ref(0);
 const countdown = ref("--:--:--");
@@ -873,6 +1145,7 @@ const chinaMapRef = ref(null);
 const normalMapMount = ref(null);
 const fullscreenMapMount = ref(null);
 const mapFullscreen = ref(false);
+const hoveredMapSect = ref("");
 const fallbackSkill = {
   id: "basic_strike",
   name: "凝气一击",
@@ -891,10 +1164,68 @@ const sectSubTabs = [
 const player = computed(() => state.value.player);
 const derived = computed(() => state.value.derived);
 const catalog = computed(() => state.value.catalog);
+const equipmentSlots = computed(() => catalog.value.equipmentSlots?.length ? catalog.value.equipmentSlots : fallbackEquipmentSlots);
+const equipmentTiers = computed(() => catalog.value.equipmentTiers?.length ? catalog.value.equipmentTiers : fallbackEquipmentTiers);
+const duelRankList = computed(() => catalog.value.duelRanks?.length ? catalog.value.duelRanks : duelRanks);
+const duelSeasonInfo = computed(() => derived.value.duelSeason || {
+  season: duelSeasonOfDay(state.value.day),
+  seasonDay: duelSeasonDay(state.value.day),
+  length: duelSeasonLength,
+  maxScore: duelSeasonMaxScore,
+  winScore: duelWinScore,
+  lossScore: duelLossScore
+});
+const fallbackDuelRankMap = computed(() => {
+  const people = [state.value.player, ...(state.value.npcs || [])].filter(Boolean);
+  const map = Object.fromEntries(people.map((person) => [person.id, {
+    season: duelSeasonInfo.value.season,
+    seasonDay: duelSeasonInfo.value.seasonDay,
+    score: 0,
+    wins: 0,
+    losses: 0
+  }]));
+  const records = [...(state.value.duelDays || [])]
+    .filter((record) => duelSeasonOfDay(record.day || state.value.day) === duelSeasonInfo.value.season)
+    .sort((a, b) => a.day - b.day);
+  for (const record of records) {
+    for (const match of record.matches || []) {
+      if (match.type === "bye") {
+        applyDuelRankDelta(map, match.winner?.id, true);
+        continue;
+      }
+      const winnerId = match.winner?.id || (match.replay?.winner === "left" ? match.replay?.left?.id : match.replay?.right?.id);
+      const loserId = match.loser?.id || (winnerId === match.replay?.left?.id ? match.replay?.right?.id : match.replay?.left?.id);
+      applyDuelRankDelta(map, winnerId, true);
+      applyDuelRankDelta(map, loserId, false);
+    }
+  }
+  return Object.fromEntries(Object.entries(map).map(([id, season]) => [id, {
+    ...season,
+    ...duelRankByScore(season.score)
+  }]));
+});
 const currentDate = computed(() => dateForDay(state.value.day));
 const combatSkills = computed(() => catalog.value.combatSkills?.length ? catalog.value.combatSkills : [fallbackSkill]);
 const playerSkill = computed(() => skillById(player.value.skillId));
 const sectSummaries = computed(() => derived.value.sects || []);
+const equipmentList = computed(() => {
+  const catalogSource = catalog.value.equipmentCatalog?.length ? catalog.value.equipmentCatalog : fallbackEquipmentCatalog;
+  const source = state.value.equipment?.length ? state.value.equipment : catalogSource;
+  return source.map((item) => ({
+    ...item,
+    slotName: item.slotName || equipmentSlotName(item.slot),
+    stat: item.stat || equipmentSlotStat(item.slot),
+    statName: item.statName || equipmentSlotStatName(item.slot),
+    tierName: item.tierName || equipmentTierName(item.tier),
+    stealChance: item.stealChance ?? equipmentTierStealChance(item.tier),
+    ownerName: item.ownerName || "",
+    equipped: Boolean(item.equipped)
+  }));
+});
+const filteredEquipment = computed(() => equipmentList.value
+  .filter((item) => !equipmentTierFilter.value || String(item.tier) === equipmentTierFilter.value)
+  .filter((item) => !equipmentSlotFilter.value || item.slot === equipmentSlotFilter.value)
+  .sort((a, b) => b.tier - a.tier || slotOrder(a.slot) - slotOrder(b.slot) || b.bonus - a.bonus));
 const provinceWarRecords = computed(() => state.value.provinceWars || []);
 const provinceTerritories = computed(() => {
   const owners = new Map((state.value.provinces || []).map((item) => [item.id, item]));
@@ -950,6 +1281,14 @@ const provinceWarDayOptions = computed(() => {
 });
 const provinceWarDateOptions = computed(() => provinceWarDayOptions.value.map((day) => ({ day, date: dateForDay(day) })));
 const selectedProvinceWarDayRecord = computed(() => provinceWarDayRecords.value.find((record) => record.day === selectedProvinceWarDay.value));
+const normalizedProvinceWarSearch = computed(() => provinceWarSearch.value.trim().toLowerCase());
+const filteredProvinceWars = computed(() => {
+  const wars = selectedProvinceWarDayRecord.value?.wars || [];
+  const keyword = normalizedProvinceWarSearch.value;
+  if (!keyword) return wars;
+  return wars.filter((war) => provinceWarSearchText(war).includes(keyword));
+});
+const selectedProvinceWar = computed(() => selectedProvinceWarDayRecord.value?.wars.find((war) => war.id === selectedProvinceWarId.value));
 const selectedProvinceWarDate = computed(() => selectedProvinceWarDayRecord.value?.date || dateForDay(selectedProvinceWarDay.value));
 const mainLogs = computed(() => state.value.log.filter((entry) => !isNpcBreakthroughLog(entry)));
 const duelRecords = computed(() => state.value.duelDays || []);
@@ -1156,15 +1495,15 @@ function defendersFor(territory) {
 }
 
 const cultivators = computed(() => [
-  {
+  withDuelRank({
     ...player.value,
     name: player.value.name,
     sect: state.value.sect.name,
     mood: "求道",
     power: derived.value.playerPower,
     isPlayer: true
-  },
-  ...state.value.npcs.map((npc) => ({ ...npc, power: personPower({ ...npc, isPlayer: false }), isPlayer: false }))
+  }),
+  ...state.value.npcs.map((npc) => withDuelRank({ ...npc, power: personPower({ ...npc, isPlayer: false }), isPlayer: false }))
 ]);
 
 const selectedPerson = computed(() => cultivators.value.find((item) => item.id === selectedPersonId.value));
@@ -1172,7 +1511,83 @@ const selectedSect = computed(() => sectSummaries.value.find((sect) => sect.name
 
 function personByRef(ref) {
   if (!ref) return null;
-  return cultivators.value.find((person) => person.id === ref.id || person.name === ref.name) || ref;
+  return cultivators.value.find((person) => person.id === ref.id || person.name === ref.name) || withDuelRank(ref);
+}
+
+function withDuelRank(person) {
+  if (!person) return person;
+  const rankState = derived.value.duelRanks
+    ? (derived.value.duelRanks[person.id] || person.duelSeason || duelRankByScore(person.duelSeason?.score || 0))
+    : (person.duelSeason || fallbackDuelRankMap.value[person.id] || duelRankByScore(person.duelSeason?.score || 0));
+  return {
+    ...person,
+    duelSeason: {
+      ...person.duelSeason,
+      ...rankState
+    }
+  };
+}
+
+function applyDuelRankDelta(map, id, won) {
+  if (!id || !map[id]) return;
+  const delta = won ? duelSeasonInfo.value.winScore : duelSeasonInfo.value.lossScore;
+  map[id].score = Math.max(0, Math.min(duelSeasonInfo.value.maxScore, map[id].score + delta));
+  if (won) map[id].wins += 1;
+  else map[id].losses += 1;
+}
+
+function duelRankByScore(score) {
+  const rank = duelRankList.value.find((item) => score >= item.min && score <= item.max) || duelRankForScore(score);
+  return {
+    score,
+    rankId: rank.id,
+    rankName: rank.name,
+    rankColor: rank.color
+  };
+}
+
+function slotOrder(slotId) {
+  const index = equipmentSlots.value.findIndex((slot) => slot.id === slotId);
+  return index < 0 ? 99 : index;
+}
+
+function equipmentSlot(slotId) {
+  return equipmentSlots.value.find((slot) => slot.id === slotId) || {};
+}
+
+function equipmentTier(tierId) {
+  return equipmentTiers.value.find((tier) => Number(tier.id) === Number(tierId)) || {};
+}
+
+function equipmentSlotName(slotId) {
+  return equipmentSlot(slotId).name || "未知部位";
+}
+
+function equipmentSlotStat(slotId) {
+  return equipmentSlot(slotId).stat || "";
+}
+
+function equipmentSlotStatName(slotId) {
+  return equipmentSlot(slotId).statName || "属性";
+}
+
+function equipmentTierName(tierId) {
+  return equipmentTier(tierId).name || "未知品质";
+}
+
+function equipmentTierStealChance(tierId) {
+  return equipmentTier(tierId).stealChance || 0;
+}
+
+function equippedFor(person) {
+  if (!person?.id) return [];
+  return derived.value.equippedItems?.[person.id] || [];
+}
+
+function equipmentBonus(person, stat) {
+  return equippedFor(person)
+    .filter((item) => item.stat === stat)
+    .reduce((sum, item) => sum + (item.bonus || 0), 0);
 }
 
 function matchPerson(ref) {
@@ -1181,6 +1596,87 @@ function matchPerson(ref) {
 
 function battlePerson(ref) {
   return personByRef(ref);
+}
+
+function warTeam(war, side) {
+  const explicitLineup = side === "attacker" ? war?.attackerLineup : war?.defenderLineup;
+  if (Array.isArray(explicitLineup) && explicitLineup.length) {
+    return uniquePeople(explicitLineup);
+  }
+
+  const seen = new Set();
+  const members = [];
+  const sectName = side === "attacker" ? war?.attacker : war?.defender;
+  if (side === "attacker" && sectName && sectName !== "无主之地") {
+    for (const person of cultivators.value.filter((item) => item.sect === sectName)) {
+      addWarTeamMember(person, seen, members);
+    }
+  }
+  for (const battle of war?.battles || []) {
+    const ref = side === "attacker"
+      ? battle.replay?.left || battle.attacker
+      : battle.replay?.right || battle.defender;
+    addWarTeamMember(ref, seen, members);
+  }
+  return members;
+}
+
+function uniquePeople(items) {
+  const seen = new Set();
+  const people = [];
+  for (const item of items || []) addWarTeamMember(item, seen, people);
+  return people;
+}
+
+function addWarTeamMember(ref, seen, members) {
+  if (!ref) return;
+  const person = personByRef(ref);
+  const key = person?.id || person?.name || ref.id || ref.name;
+  if (!key || seen.has(key)) return;
+  seen.add(key);
+  members.push(person || ref);
+}
+
+function battleName(battle, side) {
+  const ref = side === "attacker"
+    ? battle?.replay?.left || battle?.attacker
+    : battle?.replay?.right || battle?.defender;
+  return battlePerson(ref)?.name || ref?.name || "未知修士";
+}
+
+function battleWinnerName(battle) {
+  if (battle?.winnerName) return battle.winnerName;
+  if (battle?.winnerSide === "attacker" || battle?.replay?.winner === "left") return battleName(battle, "attacker");
+  if (battle?.winnerSide === "defender" || battle?.replay?.winner === "right") return battleName(battle, "defender");
+  return "未分胜负";
+}
+
+function warKillRanking(war, side) {
+  const wantedSide = side === "attacker" ? "attacker" : "defender";
+  const fallbackReplaySide = side === "attacker" ? "left" : "right";
+  const kills = new Map();
+  for (const battle of war?.battles || []) {
+    const won = battle.winnerSide === wantedSide || (!battle.winnerSide && battle.replay?.winner === fallbackReplaySide);
+    if (!won) continue;
+    const ref = side === "attacker"
+      ? battle.replay?.left || battle.attacker
+      : battle.replay?.right || battle.defender;
+    const person = battlePerson(ref);
+    const key = person?.id || person?.name || ref?.id || ref?.name;
+    if (!key) continue;
+    const current = kills.get(key) || { id: person?.id || ref?.id || key, name: person?.name || ref?.name || "未知修士", kills: 0 };
+    current.kills += 1;
+    kills.set(key, current);
+  }
+  return [...kills.values()].sort((a, b) => b.kills - a.kills || a.name.localeCompare(b.name, "zh-Hans-CN"));
+}
+
+function provinceWarSearchText(war) {
+  return [
+    war.provinceName,
+    war.attacker,
+    war.defender
+  ].filter(Boolean).join(" ").toLowerCase();
 }
 
 function rankPerson(item) {
@@ -1224,18 +1720,21 @@ const duelRanking = computed(() => cultivators.value
   .map((item) => {
     const wins = item.duelWins || 0;
     const losses = item.duelLosses || 0;
+    const season = item.duelSeason || duelRankByScore(0);
+    const seasonWins = season.wins || 0;
+    const seasonLosses = season.losses || 0;
     return {
       name: item.name,
       id: item.id,
       kind: "person",
       sect: item.sect,
-      subtitle: `${item.sect} · ${genderLabel(item.gender)} · ${realmName(item.realm)} · ${wins}胜${losses}负`,
-      value: `${wins}胜`,
-      score: wins * 3 - losses,
-      help: `切磋战绩：${wins}胜${losses}负。性别 ${genderLabel(item.gender)}，战力 ${item.power}，境界 ${realmName(item.realm)}。`
+      subtitle: `${item.sect} · ${realmName(item.realm)} · ${season.rankName} · ${seasonWins}胜${seasonLosses}负`,
+      value: `${season.score || 0}分`,
+      score: season.score || 0,
+      help: `第${duelSeasonInfo.value.season}赛季：${season.rankName}${season.score || 0}分，${seasonWins}胜${seasonLosses}负；累计 ${wins}胜${losses}负。战力 ${item.power}。`
     };
   })
-  .sort((a, b) => b.score - a.score));
+  .sort((a, b) => b.score - a.score || b.value.localeCompare(a.value, "zh-Hans-CN")));
 
 const sectRanking = computed(() => sectSummaries.value
   .map((sect) => {
@@ -1271,6 +1770,22 @@ function isNpcBreakthroughLog(entry) {
 function formatPercent(value) {
   if (typeof value !== "number") return "未记录";
   return `${Math.round(value * 100)}%`;
+}
+
+function formatLootPercent(value) {
+  if (typeof value !== "number") return "未记录";
+  const percent = value * 100;
+  if (percent >= 1) return `${Math.round(percent)}%`;
+  return `${Number(percent.toFixed(2))}%`;
+}
+
+function duelRankId(person) {
+  return person?.duelSeason?.rankId || duelRankByScore(person?.duelSeason?.score || 0).rankId;
+}
+
+function duelRankText(person) {
+  const season = person?.duelSeason || duelRankByScore(0);
+  return `${season.rankName || "黑铁"} ${season.score || 0}分`;
 }
 
 function genderLabel(gender) {
@@ -1442,11 +1957,11 @@ function personEffectiveStats(person) {
   const hpBonus = person.root?.effect === "hp" ? rootBonus(person.root) : 0;
   const divineSenseBonus = person.root?.effect === "divineSense" ? rootBonus(person.root) : 0;
   const manaBonus = person.root?.effect === "mana" ? rootBonus(person.root) : 0;
-  const attack = Math.floor((person.attack || 0) * (1 + attackBonus));
-  const defense = Math.floor((person.defense || 0) * (1 + defenseBonus));
-  const maxHp = Math.floor((person.maxHp || 0) * (1 + hpBonus));
-  const divineSense = Math.floor((person.divineSense || 0) * (1 + divineSenseBonus));
-  const maxMana = Math.floor((person.maxMana || 0) * (1 + manaBonus));
+  const attack = Math.floor((person.attack || 0) * (1 + attackBonus + equipmentBonus(person, "attack")));
+  const defense = Math.floor((person.defense || 0) * (1 + defenseBonus + equipmentBonus(person, "defense")));
+  const maxHp = Math.floor((person.maxHp || 0) * (1 + hpBonus + equipmentBonus(person, "maxHp")));
+  const divineSense = Math.floor((person.divineSense || 0) * (1 + divineSenseBonus + equipmentBonus(person, "divineSense")));
+  const maxMana = Math.floor((person.maxMana || 0) * (1 + manaBonus + equipmentBonus(person, "maxMana")));
   return {
     attack,
     defense,
@@ -1513,13 +2028,17 @@ function mapTooltipHtml(params) {
 }
 
 function chinaMapOption() {
+  const activeSect = hoveredMapSect.value;
   const data = provinceTerritories.value.map((territory, index) => ({
     name: territory.name,
     value: index + 1,
     itemStyle: {
       areaColor: territory.owner ? sectColor(territory.owner) : "#d8e2e7",
-      borderColor: "#f8fafc",
-      borderWidth: 1
+      borderColor: activeSect && territory.owner === activeSect ? "#fff7ed" : "#f8fafc",
+      borderWidth: activeSect && territory.owner === activeSect ? 2.2 : 1,
+      opacity: activeSect && territory.owner !== activeSect ? 0.28 : 1,
+      shadowBlur: activeSect && territory.owner === activeSect ? 14 : 0,
+      shadowColor: "rgba(255, 247, 237, .52)"
     },
     emphasis: {
       itemStyle: {
@@ -1576,6 +2095,11 @@ function chinaMapOption() {
       }
     ]
   };
+}
+
+function hoverMapSect(sectName) {
+  hoveredMapSect.value = sectName;
+  if (chinaMapChart) chinaMapChart.setOption(chinaMapOption(), true);
 }
 
 async function renderChinaMap() {
@@ -1695,9 +2219,22 @@ function openMatchReplay(match) {
 function openProvinceBattle(battle) {
   if (!battle?.replay) return;
   lastBattle.value = battle.replay;
-  activeTab.value = "arena";
   detailView.value = "rank";
   playBattle();
+}
+
+function openProvinceWarDetail(war) {
+  selectedProvinceWarId.value = war.id;
+  lastBattle.value = null;
+  battleCursor.value = 0;
+  clearInterval(battleTimer);
+}
+
+function closeProvinceWarDetail() {
+  selectedProvinceWarId.value = "";
+  lastBattle.value = null;
+  battleCursor.value = 0;
+  clearInterval(battleTimer);
 }
 
 function clampDay(day) {
@@ -1712,6 +2249,8 @@ function changeDuelDay(offset) {
 
 function changeProvinceWarDay(offset) {
   selectedProvinceWarDay.value = clampDay(selectedProvinceWarDay.value + offset);
+  selectedProvinceWarId.value = "";
+  lastBattle.value = null;
 }
 
 async function startDailyDuels() {
@@ -1741,6 +2280,7 @@ async function resetGame() {
   selectedRealmStage.value = derived.value.currentRealmInfo?.stage || "";
   selectedDuelDay.value = state.value.day;
   selectedProvinceWarDay.value = state.value.day;
+  selectedProvinceWarId.value = "";
   lastBattle.value = null;
   battleCursor.value = 0;
   clearInterval(battleTimer);
@@ -1807,6 +2347,14 @@ watch([state, activeTab, activeSectSubTab], async () => {
   }
   await nextTick();
   await renderChinaMap();
+});
+
+watch([activeTab, activeSectSubTab, selectedProvinceWarDay], () => {
+  if (activeTab.value !== "sect" || activeSectSubTab.value !== "wars") {
+    selectedProvinceWarId.value = "";
+    return;
+  }
+  if (selectedProvinceWarId.value && !selectedProvinceWar.value) selectedProvinceWarId.value = "";
 });
 
 watch([activeRankBoard, rankSearch], () => {

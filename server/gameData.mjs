@@ -15,6 +15,8 @@ export const roots = [
 
 export const rosterVersion = 4;
 
+export { duelLossScore, duelRanks, duelSeasonLength, duelSeasonMaxScore, duelSeasonOfDay, duelSeasonDay, duelWinScore, duelRankForScore } from "../shared/duelSeasonData.mjs";
+
 export const sectRoster = [
   { region: "天南", name: "黄枫谷", members: ["韩立", "陈巧倩", "钟卫娘", "刘靖", "吴风", "李化元", "雷万鹤", "红拂", "令狐老祖", "马师伯"] },
   { region: "天南", name: "掩月宗", members: ["南宫婉", "霓裳仙子", "穹老怪", "燕如嫣", "燕家老祖", "宣乐", "掩月长老", "霜华仙子", "月华真人", "素心师太"] },
@@ -194,6 +196,8 @@ export const combatSkills = [
   { id: "wind_blade", name: "风雷翅斩", cost: 18, cooldown: 3, type: "speedStrike", power: 1.0, extraDodge: 0.18, duration: 1, text: "疾速突袭造成 100% 攻击伤害，并在 1 回合内额外提高 18% 闪避。" },
   { id: "five_element", name: "颠倒五行阵", cost: 30, cooldown: 5, type: "field", reduce: 0.25, amount: 6, duration: 3, text: "布下五行阵 3 回合，己方受伤降低 25%，目标防御降低 6 点。" }
 ];
+
+export { equipmentCatalog, equipmentSlots, equipmentTiers } from "../shared/equipmentData.mjs";
 
 export const itemCatalog = {
   focus: { name: "凝神散", price: 30, text: "神识 +2，法力 +12" },
