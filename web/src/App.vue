@@ -823,20 +823,12 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
-import * as echarts from "echarts/core";
-import { GeoComponent, TitleComponent, TooltipComponent, VisualMapComponent } from "echarts/components";
-import { MapChart } from "echarts/charts";
-import { CanvasRenderer } from "echarts/renderers";
-import chinaGeoJson from "china-geojson/src/geojson/china.json";
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from "vue";
 import { getState, postAction } from "./api";
 import CharacterPortrait from "./components/CharacterPortrait.vue";
 import LogPanel from "./components/LogPanel.vue";
 import Meter from "./components/Meter.vue";
 import StatIcon from "./components/StatIcon.vue";
-
-echarts.use([GeoComponent, TitleComponent, TooltipComponent, VisualMapComponent, MapChart, CanvasRenderer]);
-echarts.registerMap("china-sect", chinaGeoJson);
 
 const tabs = [
   { id: "practice", label: "修炼" },
@@ -858,7 +850,7 @@ const rankBoards = [
   { id: "dungeon", label: "副本闯关" }
 ];
 
-const state = ref(null);
+const state = shallowRef(null);
 const loading = ref(true);
 const error = ref("");
 const activeTab = ref("practice");
@@ -918,7 +910,6 @@ const provinceTerritories = computed(() => {
   });
 });
 const occupiedProvinceCount = computed(() => provinceTerritories.value.filter((item) => item.owner).length);
-const playerSectSummary = computed(() => sectSummaries.value.find((sect) => sect.name === state.value.sect.name));
 const sectTerritoryRanking = computed(() => sectSummaries.value
   .map((sect) => {
     const provinces = provinceTerritories.value.filter((province) => province.owner === sect.name);
@@ -938,8 +929,12 @@ const sectTerritoryRanking = computed(() => sectSummaries.value
     };
   })
   .sort((a, b) => b.provinceCount - a.provinceCount || b.spirit - a.spirit || b.xp - a.xp));
-const provinceResourceRanking = computed(() => [...provinceTerritories.value].sort((a, b) => a.rank - b.rank));
+const provinceResourceRanking = computed(() => {
+  if (activeTab.value !== "sect" || activeSectSubTab.value !== "provinces") return [];
+  return [...provinceTerritories.value].sort((a, b) => a.rank - b.rank);
+});
 const provinceWarDayRecords = computed(() => {
+  if (activeTab.value !== "sect" && activeTab.value !== "arena") return [];
   const groups = new Map();
   for (const war of provinceWarRecords.value) {
     const day = war.day || state.value.day;
@@ -949,28 +944,17 @@ const provinceWarDayRecords = computed(() => {
   return [...groups.values()].sort((a, b) => b.day - a.day);
 });
 const provinceWarDayOptions = computed(() => {
+  if (activeTab.value !== "sect") return [];
   const days = new Set([state.value.day, selectedProvinceWarDay.value, ...provinceWarDayRecords.value.map((record) => record.day)]);
   return [...days].filter((day) => day >= 1 && day <= state.value.day).sort((a, b) => b - a);
 });
 const provinceWarDateOptions = computed(() => provinceWarDayOptions.value.map((day) => ({ day, date: dateForDay(day) })));
 const selectedProvinceWarDayRecord = computed(() => provinceWarDayRecords.value.find((record) => record.day === selectedProvinceWarDay.value));
 const selectedProvinceWarDate = computed(() => selectedProvinceWarDayRecord.value?.date || dateForDay(selectedProvinceWarDay.value));
-const playerSectTerritoryStats = computed(() => {
-  const ranking = sectTerritoryRanking.value.find((sect) => sect.name === state.value.sect.name);
-  const provinces = playerSectSummary.value?.provinces || [];
-  const spirit = ranking?.spirit || 0;
-  const xp = ranking?.xp || 0;
-  const breakthrough = ranking?.breakthrough || 0;
-  return [
-    { label: "占领省份", value: provinces.length },
-    { label: "每日灵石", value: `+${spirit}` },
-    { label: "经验加成", value: `+${Math.round(xp * 100)}%` },
-    { label: "突破加成", value: `+${Math.round(breakthrough * 100)}%` }
-  ];
-});
 const mainLogs = computed(() => state.value.log.filter((entry) => !isNpcBreakthroughLog(entry)));
 const duelRecords = computed(() => state.value.duelDays || []);
 const duelDayOptions = computed(() => {
+  if (activeTab.value !== "arena") return [];
   const days = new Set([state.value.day, selectedDuelDay.value, ...duelRecords.value.map((record) => record.day)]);
   return [...days].filter((day) => day >= 1 && day <= state.value.day).sort((a, b) => b - a);
 });
@@ -1278,15 +1262,6 @@ const dungeonRanking = computed(() => cultivators.value
     help: `最高副本：${item.bestDungeonName || "未入秘境"}；副本评分 ${item.bestDungeonPower || 0}；累计通关 ${item.dungeonClears || 0} 次。`
   }))
   .sort((a, b) => b.value - a.value));
-
-function relationHeat(index) {
-  return Math.round(Math.max(0, Math.min(100, state.value.sect.rivalHeat + index * 8 - state.value.sect.reputation / 4)));
-}
-
-function relationClass(index) {
-  const heat = relationHeat(index);
-  return heat > 65 ? "bad" : heat > 35 ? "gold" : "";
-}
 
 function isNpcBreakthroughLog(entry) {
   if (!entry?.text?.includes("突破至")) return false;
@@ -1603,7 +1578,9 @@ function chinaMapOption() {
   };
 }
 
-function renderChinaMap() {
+async function renderChinaMap() {
+  if (!chinaMapRef.value || !state.value) return;
+  const echarts = await loadMapRenderer();
   if (!chinaMapRef.value || !state.value) return;
   if (chinaMapChart && chinaMapChart.getDom() !== chinaMapRef.value) {
     chinaMapChart.dispose();
@@ -1772,6 +1749,33 @@ async function resetGame() {
 let timer;
 let battleTimer;
 let chinaMapChart;
+let echartsModulePromise;
+let echartsInstance;
+
+async function loadMapRenderer() {
+  if (!echartsModulePromise) {
+    echartsModulePromise = Promise.all([
+      import("echarts/core"),
+      import("echarts/components"),
+      import("echarts/charts"),
+      import("echarts/renderers"),
+      import("china-geojson/src/geojson/china.json")
+    ]).then(([echarts, components, charts, renderers, chinaGeo]) => {
+      echarts.use([
+        components.GeoComponent,
+        components.TitleComponent,
+        components.TooltipComponent,
+        components.VisualMapComponent,
+        charts.MapChart,
+        renderers.CanvasRenderer
+      ]);
+      echarts.registerMap("china-sect", chinaGeo.default || chinaGeo);
+      return echarts;
+    });
+  }
+  echartsInstance = await echartsModulePromise;
+  return echartsInstance;
+}
 
 onMounted(async () => {
   updateCountdown();
@@ -1802,8 +1806,8 @@ watch([state, activeTab, activeSectSubTab], async () => {
     return;
   }
   await nextTick();
-  renderChinaMap();
-}, { deep: true });
+  await renderChinaMap();
+});
 
 watch([activeRankBoard, rankSearch], () => {
   rankPage.value = 1;
