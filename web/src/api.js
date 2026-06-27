@@ -47,10 +47,6 @@ async function resolveApiBase() {
 }
 
 async function probeApiBase() {
-  if (fallbackApiBase) {
-    const fallback = await fetchJson(`${fallbackApiBase}/api/state`);
-    if (fallback.ok) return fallbackApiBase;
-  }
   return "";
 }
 

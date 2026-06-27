@@ -1,0 +1,23 @@
+{
+  "南宫婉": {
+    "path": "/portraits/verified/%E5%8D%97%E5%AE%AB%E5%A9%89.jpg",
+    "source": "https://p4.itc.cn/q_70/images01/20230707/c3594adc79254fbeb2a148fece05270d.jpeg",
+    "page": "https://www.sohu.com/picture/695563616",
+    "note": "《凡人修仙传》南宫婉角色海报",
+    "bytes": 411634
+  },
+  "紫灵": {
+    "path": "/portraits/verified/%E7%B4%AB%E7%81%B5.jpg",
+    "source": "https://p3-sdbk2-media.byteimg.com/tos-cn-i-xv4ileqgde/161e9abc98374dd1928a42f461f2b132~tplv-xv4ileqgde-resize-w%3A360.image",
+    "page": "https://www.baike.com/wikiid/1867419186300492107",
+    "note": "紫灵仙子百科角色图",
+    "bytes": 20322
+  },
+  "韩立": {
+    "path": "/portraits/generated/han-li.png",
+    "source": "ai-generated",
+    "page": "",
+    "note": "AI 原创语义兜底头像：青袍少年修士，非官方图像",
+    "bytes": 2180630
+  }
+}

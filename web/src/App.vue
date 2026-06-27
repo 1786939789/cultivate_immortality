@@ -49,13 +49,7 @@
     <div v-else-if="state" class="layout">
       <aside class="sidebar">
         <section class="avatar">
-          <div class="portrait" aria-hidden="true">
-            <svg viewBox="0 0 64 64" fill="none">
-              <path d="M32 8c8 8 13 18 13 29 0 9-5 17-13 17S19 46 19 37c0-11 5-21 13-29Z" fill="#fff7ed" opacity=".9"/>
-              <path d="M21 34c5 2 8 2 11-1 4 3 8 3 12 1" stroke="#0f766e" stroke-width="3" stroke-linecap="round"/>
-              <path d="M24 48h16l5 9H19l5-9Z" fill="#f59e0b"/>
-            </svg>
-          </div>
+          <CharacterPortrait :person="{ ...player, isPlayer: true }" size="xl" />
           <div>
             <div class="name-row">
               <h2>{{ player.name }}</h2>
@@ -417,7 +411,13 @@
                 <span>{{ territory.rank }}</span>
                 <span>{{ territory.effect.text }}</span>
                 <span>{{ territory.owner || "无主之地" }}</span>
-                <span>{{ defenderNames(territory).join("、") || "未派驻" }}</span>
+                <span class="defender-stack" v-if="defendersFor(territory).length">
+                  <span v-for="defender in defendersFor(territory)" :key="`${territory.id}-${defender.id}`" class="defender-chip">
+                    <CharacterPortrait :person="defender" size="xs" />
+                    {{ defender.name }}
+                  </span>
+                </span>
+                <span v-else>未派驻</span>
               </div>
             </div>
           </div>
@@ -520,22 +520,31 @@
               >
                 <template v-if="match.type === 'battle'">
                   <div class="match-person" :class="{ winner: match.winner.id === match.left.id }">
-                    <strong>{{ match.left.name }}</strong>
-                    <small>{{ realmName(match.left.realm) }} · {{ match.left.sect }}</small>
+                    <CharacterPortrait :person="matchPerson(match.left)" size="sm" />
+                    <div>
+                      <strong>{{ match.left.name }}</strong>
+                      <small>{{ genderLabel(matchPerson(match.left)?.gender) }} · {{ realmName(match.left.realm) }} · {{ match.left.sect }}</small>
+                    </div>
                   </div>
                   <div class="match-result">
                     <span>{{ match.winner.id === match.left.id ? "胜" : "负" }}</span>
                     <small>回放</small>
                   </div>
                   <div class="match-person" :class="{ winner: match.winner.id === match.right.id }">
-                    <strong>{{ match.right.name }}</strong>
-                    <small>{{ realmName(match.right.realm) }} · {{ match.right.sect }}</small>
+                    <CharacterPortrait :person="matchPerson(match.right)" size="sm" />
+                    <div>
+                      <strong>{{ match.right.name }}</strong>
+                      <small>{{ genderLabel(matchPerson(match.right)?.gender) }} · {{ realmName(match.right.realm) }} · {{ match.right.sect }}</small>
+                    </div>
                   </div>
                 </template>
                 <template v-else>
                   <div class="match-person winner">
-                    <strong>{{ match.winner.name }}</strong>
-                    <small>{{ realmName(match.winner.realm) }} · {{ match.winner.sect }}</small>
+                    <CharacterPortrait :person="matchPerson(match.winner)" size="sm" />
+                    <div>
+                      <strong>{{ match.winner.name }}</strong>
+                      <small>{{ genderLabel(matchPerson(match.winner)?.gender) }} · {{ realmName(match.winner.realm) }} · {{ match.winner.sect }}</small>
+                    </div>
                   </div>
                   <div class="match-result">
                     <span>轮空</span>
@@ -564,6 +573,7 @@
 
             <div class="battle-line live">
               <div class="fighter">
+                <CharacterPortrait :person="battlePerson(lastBattle.left)" size="lg" />
                 <strong>{{ lastBattle.left.name }}</strong>
                 <small>{{ realmName(lastBattle.left.realm) }} · 战力 {{ lastBattle.left.power }}</small>
                 <div class="battle-stats">
@@ -582,6 +592,7 @@
               </div>
               <div class="vs">{{ battleOutcomeLabel }}</div>
               <div class="fighter">
+                <CharacterPortrait :person="battlePerson(lastBattle.right)" size="lg" />
                 <strong>{{ lastBattle.right.name }}</strong>
                 <small>{{ realmName(lastBattle.right.realm) }} · 战力 {{ lastBattle.right.power }}</small>
                 <div class="battle-stats">
@@ -662,32 +673,45 @@
                 </button>
               </div>
             </div>
+            <div class="rank-tools">
+              <label class="rank-search">
+                <span>搜索</span>
+                <input v-model.trim="rankSearch" placeholder="输入姓名、宗门、境界或关键词">
+              </label>
+              <span class="rank-count">共 {{ filteredRanking.length }} 条</span>
+            </div>
             <div class="rank-list">
               <button
                 class="row rank-row"
-                v-for="(item, index) in activeRanking"
+                :class="{ 'person-rank-row': item.kind === 'person' }"
+                v-for="(item, index) in pagedRanking"
                 :key="`${activeRankBoard}-${item.name}-${item.sect}`"
                 type="button"
                 :aria-label="`${item.name}：${item.help}`"
                 @click="openRankItem(item)"
               >
-                <span class="tag">#{{ index + 1 }}</span>
+                <span class="tag">#{{ rankPageStart + index + 1 }}</span>
+                <CharacterPortrait v-if="item.kind === 'person'" :person="rankPerson(item)" size="sm" />
                 <div><strong>{{ item.name }}</strong><small>{{ item.subtitle }}</small></div>
                 <span>{{ item.value }}</span>
                 <small class="rank-tip" role="tooltip">{{ item.help }}</small>
               </button>
+              <div v-if="!pagedRanking.length" class="empty">没有找到匹配的榜单记录。</div>
+            </div>
+            <div class="rank-pager" v-if="rankPageCount > 1">
+              <button class="secondary" type="button" :disabled="rankPage <= 1" @click="changeRankPage(-1)">上一页</button>
+              <span>第 {{ rankPage }} / {{ rankPageCount }} 页</span>
+              <button class="secondary" type="button" :disabled="rankPage >= rankPageCount" @click="changeRankPage(1)">下一页</button>
             </div>
           </div>
 
           <div class="panel" v-else-if="detailView === 'person' && selectedPerson">
             <button class="secondary back-button" @click="detailView = 'rank'">返回榜单</button>
             <div class="detail-hero">
-              <div class="detail-avatar" :class="{ npc: !selectedPerson.isPlayer }">
-                <span>{{ selectedPerson.name.slice(0, 1) }}</span>
-              </div>
+              <CharacterPortrait :person="selectedPerson" size="xl" />
               <div>
                 <h3>{{ selectedPerson.name }}</h3>
-                <p>{{ selectedPerson.sect }} · {{ realmName(selectedPerson.realm) }} · {{ rootSummary(selectedPerson.root) }}</p>
+                <p>{{ selectedPerson.sect }} · {{ genderLabel(selectedPerson.gender) }} · {{ realmName(selectedPerson.realm) }} · {{ rootSummary(selectedPerson.root) }}</p>
                 <span class="tag">本命技能：{{ skillName(selectedPerson.skillId) }}</span>
                 <div class="detail-meters">
                   <Meter label="经验" :value="selectedPerson.xp" :max="personXpNeed(selectedPerson)" />
@@ -778,7 +802,8 @@
                 <div class="rank-list detail-scroll">
                   <button class="row link-row" v-for="member in sectMembers(selectedSect)" :key="member.id" @click="openPersonById(member.id)">
                     <span class="tag">{{ realmName(member.realm) }}</span>
-                    <div><strong>{{ member.name }}</strong><small>{{ member.mood }} · 战力 {{ member.power }}</small></div>
+                    <CharacterPortrait :person="member" size="sm" />
+                    <div><strong>{{ member.name }}</strong><small>{{ genderLabel(member.gender) }} · {{ member.mood }} · 战力 {{ member.power }}</small></div>
                     <span>{{ member.isPlayer ? "你" : "NPC" }}</span>
                   </button>
                 </div>
@@ -805,6 +830,7 @@ import { MapChart } from "echarts/charts";
 import { CanvasRenderer } from "echarts/renderers";
 import chinaGeoJson from "china-geojson/src/geojson/china.json";
 import { getState, postAction } from "./api";
+import CharacterPortrait from "./components/CharacterPortrait.vue";
 import LogPanel from "./components/LogPanel.vue";
 import Meter from "./components/Meter.vue";
 import StatIcon from "./components/StatIcon.vue";
@@ -838,6 +864,9 @@ const error = ref("");
 const activeTab = ref("practice");
 const activeSectSubTab = ref("map");
 const activeRankBoard = ref("power");
+const rankSearch = ref("");
+const rankPage = ref(1);
+const rankPageSize = 10;
 const detailView = ref("rank");
 const selectedPersonId = ref("player");
 const selectedSectName = ref("");
@@ -1134,8 +1163,12 @@ function sectColor(sectName) {
 }
 
 function defenderNames(territory) {
+  return defendersFor(territory).map((person) => person.name);
+}
+
+function defendersFor(territory) {
   const ids = new Set(territory.defenders || []);
-  return cultivators.value.filter((person) => ids.has(person.id)).map((person) => person.name);
+  return cultivators.value.filter((person) => ids.has(person.id));
 }
 
 const cultivators = computed(() => [
@@ -1153,12 +1186,43 @@ const cultivators = computed(() => [
 const selectedPerson = computed(() => cultivators.value.find((item) => item.id === selectedPersonId.value));
 const selectedSect = computed(() => sectSummaries.value.find((sect) => sect.name === selectedSectName.value));
 
+function personByRef(ref) {
+  if (!ref) return null;
+  return cultivators.value.find((person) => person.id === ref.id || person.name === ref.name) || ref;
+}
+
+function matchPerson(ref) {
+  return personByRef(ref);
+}
+
+function battlePerson(ref) {
+  return personByRef(ref);
+}
+
+function rankPerson(item) {
+  return personByRef(item);
+}
+
 const activeRanking = computed(() => {
+  if (!state.value) return [];
   if (activeRankBoard.value === "duel") return duelRanking.value;
   if (activeRankBoard.value === "sect") return sectRanking.value;
   if (activeRankBoard.value === "dungeon") return dungeonRanking.value;
   return powerRanking.value;
 });
+
+const normalizedRankSearch = computed(() => rankSearch.value.trim().toLowerCase());
+
+const filteredRanking = computed(() => {
+  const keyword = normalizedRankSearch.value;
+  if (!keyword) return activeRanking.value;
+  return activeRanking.value.filter((item) => rankSearchText(item).includes(keyword));
+});
+
+const rankPageCount = computed(() => Math.max(1, Math.ceil(filteredRanking.value.length / rankPageSize)));
+const safeRankPage = computed(() => Math.min(rankPage.value, rankPageCount.value));
+const rankPageStart = computed(() => (safeRankPage.value - 1) * rankPageSize);
+const pagedRanking = computed(() => filteredRanking.value.slice(rankPageStart.value, rankPageStart.value + rankPageSize));
 
 const powerRanking = computed(() => cultivators.value
   .map((item) => ({
@@ -1166,9 +1230,9 @@ const powerRanking = computed(() => cultivators.value
     id: item.id,
     kind: "person",
     sect: item.sect,
-    subtitle: `${item.sect} · ${item.mood} · ${realmName(item.realm)}`,
+    subtitle: `${item.sect} · ${genderLabel(item.gender)} · ${item.mood} · ${realmName(item.realm)}`,
     value: item.power,
-    help: `战力 ${item.power}。境界：${realmName(item.realm)}；经验：${Math.floor(item.xp)}；灵根 ${item.root.name}；攻击 ${personEffectiveStats(item).attack}，防御 ${personEffectiveStats(item).defense}，神识 ${personEffectiveStats(item).divineSense}，法力 ${personEffectiveStats(item).maxMana}。`
+    help: `战力 ${item.power}。性别：${genderLabel(item.gender)}；境界：${realmName(item.realm)}；经验：${Math.floor(item.xp)}；灵根 ${item.root.name}；攻击 ${personEffectiveStats(item).attack}，防御 ${personEffectiveStats(item).defense}，神识 ${personEffectiveStats(item).divineSense}，法力 ${personEffectiveStats(item).maxMana}。`
   }))
   .sort((a, b) => b.value - a.value));
 
@@ -1181,10 +1245,10 @@ const duelRanking = computed(() => cultivators.value
       id: item.id,
       kind: "person",
       sect: item.sect,
-      subtitle: `${item.sect} · ${realmName(item.realm)} · ${wins}胜${losses}负`,
+      subtitle: `${item.sect} · ${genderLabel(item.gender)} · ${realmName(item.realm)} · ${wins}胜${losses}负`,
       value: `${wins}胜`,
       score: wins * 3 - losses,
-      help: `切磋战绩：${wins}胜${losses}负。战力 ${item.power}，境界 ${realmName(item.realm)}。`
+      help: `切磋战绩：${wins}胜${losses}负。性别 ${genderLabel(item.gender)}，战力 ${item.power}，境界 ${realmName(item.realm)}。`
     };
   })
   .sort((a, b) => b.score - a.score));
@@ -1232,6 +1296,12 @@ function isNpcBreakthroughLog(entry) {
 function formatPercent(value) {
   if (typeof value !== "number") return "未记录";
   return `${Math.round(value * 100)}%`;
+}
+
+function genderLabel(gender) {
+  if (gender === "female") return "女";
+  if (gender === "unknown") return "未知";
+  return "男";
 }
 
 function addDays(dateText, offset) {
@@ -1290,6 +1360,25 @@ function openRankItem(item) {
   detailView.value = "person";
 }
 
+function rankSearchText(item) {
+  return [
+    item.name,
+    item.id,
+    item.kind,
+    item.sect,
+    item.subtitle,
+    item.value,
+    item.help
+  ]
+    .filter((value) => value !== undefined && value !== null)
+    .join(" ")
+    .toLowerCase();
+}
+
+function changeRankPage(offset) {
+  rankPage.value = Math.max(1, Math.min(rankPageCount.value, rankPage.value + offset));
+}
+
 function openPersonById(id) {
   selectedPersonId.value = id;
   detailView.value = "person";
@@ -1304,6 +1393,7 @@ function personStats(person) {
   const effective = personEffectiveStats(person);
   const power = personPower(person);
   return [
+    { label: "性别", value: genderLabel(person.gender) },
     { label: "突破概率", value: formatPercent(personBreakthroughChance(person)) },
     { label: "血量", value: statWithBonus(effective.maxHp, effective.bonuses.maxHp) },
     { label: "法力", value: statWithBonus(effective.maxMana, effective.bonuses.maxMana) },
@@ -1714,4 +1804,12 @@ watch([state, activeTab, activeSectSubTab], async () => {
   await nextTick();
   renderChinaMap();
 }, { deep: true });
+
+watch([activeRankBoard, rankSearch], () => {
+  rankPage.value = 1;
+});
+
+watch(rankPageCount, () => {
+  if (rankPage.value > rankPageCount.value) rankPage.value = rankPageCount.value;
+});
 </script>

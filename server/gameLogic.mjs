@@ -1,4 +1,4 @@
-import { combatSkills, dungeons, itemCatalog, npcNames, provinceVersion, provinces, realms, realmStages, roots, rosterVersion, sectRoster, sects, taskTemplates } from "./gameData.mjs";
+import { combatSkills, dungeons, itemCatalog, npcGenders, npcNames, provinceVersion, provinces, realms, realmStages, roots, rosterVersion, sectRoster, sects, taskTemplates } from "./gameData.mjs";
 
 export function dateKey(date = new Date()) {
   const year = date.getFullYear();
@@ -630,6 +630,10 @@ function membersForSect(state, sectName) {
     .sort((a, b) => powerOf(b.entity, state) - powerOf(a.entity, state));
 }
 
+function membersForSectAscending(state, sectName) {
+  return [...membersForSect(state, sectName)].sort((a, b) => powerOf(a.entity, state) - powerOf(b.entity, state));
+}
+
 function provinceIdsForSect(state, sectName) {
   return (state.provinces || []).filter((item) => item.owner === sectName).map((item) => item.id);
 }
@@ -659,19 +663,56 @@ function sectBreakthroughBonus(state, sectName) {
     .reduce((sum, effect) => sum + effect.value, 0);
 }
 
+function provinceRankOf(territory) {
+  return provinceById(territory.id)?.rank || 99;
+}
+
+function enforceProvinceOccupationLimits(state) {
+  state.provinces ??= createProvinceState();
+  let changed = false;
+  for (const sectName of sects) {
+    const limit = membersForSect(state, sectName).length;
+    const owned = state.provinces
+      .filter((item) => item.owner === sectName)
+      .sort((a, b) => provinceRankOf(a) - provinceRankOf(b));
+    if (owned.length <= limit) continue;
+    for (const territory of owned.slice(limit)) {
+      territory.owner = null;
+      territory.defenders = [];
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 function assignProvinceDefenders(state) {
   state.provinces ??= createProvinceState();
-  for (const territory of state.provinces) territory.defenders = [];
+  let changed = false;
+  const setDefenders = (territory, defenders) => {
+    const previous = territory.defenders || [];
+    if (previous.length !== defenders.length || previous.some((id, index) => id !== defenders[index])) {
+      territory.defenders = defenders;
+      changed = true;
+    }
+  };
+  for (const territory of state.provinces) setDefenders(territory, []);
   for (const sectName of sects) {
-    const owned = state.provinces.filter((item) => item.owner === sectName);
-    const members = membersForSect(state, sectName);
-    owned
-      .sort((a, b) => (provinceById(a.id)?.rank || 99) - (provinceById(b.id)?.rank || 99))
-      .forEach((territory, index) => {
-        const defender = members[index % Math.max(1, members.length)];
-        territory.defenders = defender ? [defender.entity.id] : [];
-      });
+    const owned = state.provinces
+      .filter((item) => item.owner === sectName)
+      .sort((a, b) => provinceRankOf(a) - provinceRankOf(b));
+    const members = membersForSectAscending(state, sectName);
+    if (!owned.length || !members.length) continue;
+    const baseCount = Math.floor(members.length / owned.length);
+    const remainder = members.length % owned.length;
+    let cursor = 0;
+    owned.forEach((territory, index) => {
+      const count = baseCount + (index < remainder ? 1 : 0);
+      const defenders = members.slice(cursor, cursor + count).map((member) => member.entity.id);
+      cursor += count;
+      setDefenders(territory, defenders);
+    });
   }
+  return changed;
 }
 
 function ensureProvinceState(state) {
@@ -695,7 +736,8 @@ function ensureProvinceState(state) {
       changed = true;
     }
   }
-  assignProvinceDefenders(state);
+  changed = enforceProvinceOccupationLimits(state) || changed;
+  changed = assignProvinceDefenders(state) || changed;
   return changed;
 }
 
@@ -735,15 +777,28 @@ function siegeEntityRef(item) {
   return entityRef(item.entity, item.kind);
 }
 
+function withSiegeDefenseBuff(entity) {
+  return {
+    ...entity,
+    attack: Math.floor((entity.attack || 0) * 1.1),
+    defense: Math.floor((entity.defense || 0) * 1.1),
+    maxHp: Math.floor((entity.maxHp || 0) * 1.1),
+    hp: Math.floor((entity.hp ?? entity.maxHp ?? 0) * 1.1),
+    divineSense: Math.floor((entity.divineSense || 0) * 1.1),
+    maxMana: Math.floor((entity.maxMana || 0) * 1.1),
+    mana: Math.floor((entity.mana ?? entity.maxMana ?? 0) * 1.1)
+  };
+}
+
 function runWheelBattle(state, province, attackerSect, defenderSect) {
-  const attackers = membersForSect(state, attackerSect);
+  const attackers = membersForSectAscending(state, attackerSect);
   const defenderIds = provinceStateById(state, province.id)?.defenders || [];
   const map = cultivatorMap(state);
   const defenders = defenderIds
     .map((id) => map.get(id))
     .filter(Boolean)
-    .map((entity) => ({ entity, kind: entity.id === "player" ? "player" : "npc" }));
-  if (!defenders.length) defenders.push(...membersForSect(state, defenderSect).slice(0, 1));
+    .map((entity) => ({ entity, kind: entity.id === "player" ? "player" : "npc" }))
+    .sort((a, b) => powerOf(a.entity, state) - powerOf(b.entity, state));
 
   let attackerIndex = 0;
   let defenderIndex = 0;
@@ -758,10 +813,11 @@ function runWheelBattle(state, province, attackerSect, defenderSect) {
       hp: carry.attackerHp ?? effectiveMaxHp(attacker.entity),
       mana: carry.attackerMana ?? effectiveMaxMana(attacker.entity)
     };
+    const defenderWithBuff = withSiegeDefenseBuff(defender.entity);
     const right = {
-      ...defender.entity,
-      hp: carry.defenderHp ?? effectiveMaxHp(defender.entity),
-      mana: carry.defenderMana ?? effectiveMaxMana(defender.entity)
+      ...defenderWithBuff,
+      hp: carry.defenderHp ?? effectiveMaxHp(defenderWithBuff),
+      mana: carry.defenderMana ?? effectiveMaxMana(defenderWithBuff)
     };
     const battle = runTurnBattle(left, right, { maxRounds: 16 });
     const attackerWon = battle.winner === "left";
@@ -802,6 +858,7 @@ function runProvinceSieges(state, settlementDate) {
   const targeted = new Set();
   const wars = [];
   for (const attackerSect of shuffle(sects)) {
+    if (provinceIdsForSect(state, attackerSect).length >= membersForSect(state, attackerSect).length) continue;
     const candidates = shuffle((state.provinces || []).filter((item) => item.owner !== attackerSect && !targeted.has(item.id)));
     const target = candidates[0];
     if (!target) continue;
@@ -823,6 +880,7 @@ function runProvinceSieges(state, settlementDate) {
     };
     if (!defenderSect) {
       target.owner = attackerSect;
+      enforceProvinceOccupationLimits(state);
       record.captured = true;
       record.result = `${attackerSect}兵不血刃占下${province.name}`;
     } else {
@@ -832,7 +890,10 @@ function runProvinceSieges(state, settlementDate) {
       record.result = result.captured
         ? `${attackerSect}攻破${defenderSect}防线，占下${province.name}`
         : `${defenderSect}守住${province.name}，${result.defenderSurvivor || "守城修士"}仍立城头`;
-      if (result.captured) target.owner = attackerSect;
+      if (result.captured) {
+        target.owner = attackerSect;
+        enforceProvinceOccupationLimits(state);
+      }
       const attackerStatus = attackerSect === state.sect.name ? state.sect : state.sectRivals?.[attackerSect];
       const defenderStatus = defenderSect === state.sect.name ? state.sect : state.sectRivals?.[defenderSect];
       if (attackerStatus && defenderStatus) {
@@ -850,6 +911,7 @@ function runProvinceSieges(state, settlementDate) {
   if (wars.length) {
     state.provinceWars.unshift(...wars);
     state.provinceWars = state.provinceWars.slice(0, 40);
+    enforceProvinceOccupationLimits(state);
     assignProvinceDefenders(state);
     log(state, `${settlementDate} 九州攻守结算完成，共 ${wars.length} 处省份被挑战。`, "gold");
   }
@@ -883,6 +945,7 @@ function makeNpc(name, index) {
   return {
     id: `npc-${index}`,
     name,
+    gender: npcGenders[name] || "male",
     sect: sectForNpcIndex(index),
     root,
     realm,
@@ -934,6 +997,7 @@ export function createDefaultState() {
     player: {
       id: "player",
       name: "无名散修",
+      gender: "male",
       root,
       realm: 0,
       xp: 0,
@@ -1065,6 +1129,7 @@ export function ensureStateShape(state) {
     changed = true;
   }
   state.player.id ??= "player";
+  changed = ensureField(state.player, "gender", "male") || changed;
   state.player.sect ??= state.sect?.name || "黄枫谷";
   state.player.duelWins ??= 0;
   state.player.duelLosses ??= 0;
@@ -1121,6 +1186,7 @@ export function ensureStateShape(state) {
       changed = true;
     }
     changed = ensureField(full, "name", npcNames[index] || `散修${index + 1}`) || changed;
+    changed = ensureField(full, "gender", () => npcGenders[full.name] || "male") || changed;
     changed = ensureField(full, "sect", sectForNpcIndex(index)) || changed;
     changed = ensureField(full, "root", () => normalizeRoot(pick(roots))) || changed;
     changed = ensureField(full, "realm", () => Math.floor(Math.random() * 4)) || changed;

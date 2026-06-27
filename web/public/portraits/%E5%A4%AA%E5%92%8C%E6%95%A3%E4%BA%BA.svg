@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+<defs>
+  <linearGradient id="g" x1="18" y1="12" x2="112" y2="122" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#0e7490"/>
+    <stop offset=".58" stop-color="#6d28d9"/>
+    <stop offset="1" stop-color="#d7a23b"/>
+  </linearGradient>
+  <radialGradient id="r" cx="34" cy="28" r="75" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#fff7db" stop-opacity=".62"/>
+    <stop offset="1" stop-color="#fff7db" stop-opacity="0"/>
+  </radialGradient>
+</defs>
+<rect width="128" height="128" rx="18" fill="url(#g)"/>
+<rect width="128" height="128" rx="18" fill="url(#r)"/>
+<path d="M13 102c20-12 38-14 53-7 16 7 32 4 49-9v42H13Z" fill="#0f172a" opacity=".24"/>
+<path d="M70 44c18 17 24 39 18 65-4 17-14 29-30 29s-26-12-30-29c-6-26 0-48 18-65 7 8 16 8 24 0Z" fill="#fff7ed" opacity=".93"/>
+<path d="M44 72c7 4 14 4 20-1 7 5 14 5 22 1" fill="none" stroke="#0f766e" stroke-width="6" stroke-linecap="round"/>
+<path d="M42 103h44l12 25H30l12-25Z" fill="#0f766e" opacity=".86"/>
+<circle cx="96" cy="31" r="11" fill="#fff7db" opacity=".78"/>
+<text x="64" y="91" text-anchor="middle" font-size="42" font-family="serif" font-weight="700" fill="#1f2937" opacity=".82">太</text>
+<text x="64" y="120" text-anchor="middle" font-size="10" font-family="sans-serif" fill="#fff7ed" opacity=".88">大晋</text>
+</svg>
