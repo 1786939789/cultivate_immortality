@@ -168,10 +168,9 @@ export const provinces = [
 ];
 
 export const dungeons = [
-  { id: "mist", name: "雾隐药谷", min: 0, power: 42, reward: "草药、灵石、经验", text: "适合炼气修士试炼，有低阶妖兽与残缺药圃。" },
-  { id: "mine", name: "沉星矿脉", min: 3, power: 82, reward: "灵石、炼器材料", text: "矿洞深处灵压混乱，偶有敌修埋伏。" },
-  { id: "tomb", name: "古修洞府", min: 10, power: 150, reward: "功法残页、灵石", text: "阵法残破但杀机仍在，适合筑基后探索。" },
-  { id: "rift", name: "黑风裂隙", min: 20, power: 260, reward: "稀有灵材、声望", text: "结丹修士也会受伤的危险秘境。" }
+  { id: "blood_trial", name: "血色禁地", min: 0, power: 48, reward: "每日单人洞窟、灵石、装备", text: "每人每日自动闯入禁地洞窟，越往深处妖兽境界越高，奖励越厚。" },
+  { id: "void_hall", name: "虚天殿", min: 0, power: 120, reward: "宗门协作、灵石平分、装备归输出者", text: "全宗门合力挑战守殿妖王，妖王境界按宗门最高修士的下一大境界生成。" },
+  { id: "star_sea", name: "乱星海猎妖", min: 0, power: 86, reward: "全员贡献、声望、稀有装备", text: "乱星海妖潮每日涌动，所有修士按贡献分润灵石，并争夺高阶装备。" }
 ];
 
 export const taskTemplates = {

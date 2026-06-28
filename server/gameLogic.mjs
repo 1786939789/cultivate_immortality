@@ -673,6 +673,20 @@ function ensureField(object, key, value) {
 const equipmentSlotMap = Object.fromEntries(equipmentSlots.map((slot) => [slot.id, slot]));
 const equipmentTierMap = Object.fromEntries(equipmentTiers.map((tier) => [tier.id, tier]));
 const equipmentVersion = 2;
+const dungeonRecordVersion = 1;
+const dungeonTierNames = ["血色外谷", "石殿甬道", "熔岩石窟", "玄冰洞府", "坠魔裂谷", "虚天残境", "乱星海深渊", "昆吾灵山", "真灵天门"];
+const monsterNamesByStage = [
+  ["赤火蟾", "碧水猿", "金背妖狼", "青木蜈蚣"],
+  ["黑煞虎", "铁羽鹰", "紫纹妖蟒", "岩甲犀"],
+  ["血玉蜈蚣", "玄冰蝎王", "金瞳妖狐", "青鳞蛟"],
+  ["玄阴魔蛛", "银甲夜叉", "天目妖鹏", "尸魈王"],
+  ["六翼霜蚣", "裂魂古猿", "青冥蛟王", "噬金虫母"],
+  ["虚空魇兽", "玄磁雷鹏", "万毒蜃蛇", "荒火麟兽"],
+  ["九首妖蛟", "太阴魔凰", "玄甲巨灵", "血海修罗"],
+  ["真灵鲲鹏影", "五色孔雀王", "罗睺古兽", "玄天魔龙"],
+  ["域外天魔", "真仙傀儡", "古魔圣祖影", "天罚雷兽"]
+];
+const monsterNames = monsterNamesByStage.flat();
 
 function createEquipmentState() {
   return equipmentCatalog.map((item) => ({
@@ -727,6 +741,10 @@ function equipmentScore(item) {
   return (item?.tier || 0) * 100 + Math.round((item?.bonus || 0) * 1000);
 }
 
+function equipmentCompensation(item) {
+  return Math.max(8, Math.floor(14 + (item?.tier || 1) * 18 + (item?.bonus || 0) * 260));
+}
+
 function equipmentForOwner(state, ownerId) {
   return (state.equipment || []).filter((item) => item.ownerId === ownerId);
 }
@@ -745,6 +763,97 @@ function equipmentBonusFor(state, entity, stat) {
   return equippedItemsFor(state, entity)
     .filter((item) => equipmentSlot(item).stat === stat)
     .reduce((sum, item) => sum + (item.bonus || 0), 0);
+}
+
+function bestEquippedInSlot(state, entity, slot) {
+  return equippedItemsFor(state, entity).find((item) => item.slot === slot) || null;
+}
+
+function availableEquipmentPool(state, maxTier = 1) {
+  return (state.equipment || [])
+    .filter((item) => !item.ownerId && (item.tier || 1) <= maxTier)
+    .sort((a, b) => equipmentScore(b) - equipmentScore(a));
+}
+
+function rollEquipmentDrop(state, maxTier, difficulty = 1) {
+  const pool = availableEquipmentPool(state, maxTier);
+  if (!pool.length) return null;
+  const chance = clamp(0.12 + difficulty * 0.025, 0.06, 0.34);
+  if (Math.random() > chance) return null;
+  const weighted = pool.map((item) => ({
+    item,
+    weight: Math.max(1, Math.pow(maxTier + 1 - (item.tier || 1), 2) * 12 - Math.floor((item.bonus || 0) * 20))
+  }));
+  const total = weighted.reduce((sum, entry) => sum + entry.weight, 0);
+  let roll = Math.random() * total;
+  for (const entry of weighted) {
+    roll -= entry.weight;
+    if (roll <= 0) return entry.item;
+  }
+  return weighted[weighted.length - 1]?.item || null;
+}
+
+function awardEquipment(state, receiver, item, context, options = {}) {
+  if (!receiver?.id || !item) return null;
+  const current = bestEquippedInSlot(state, receiver, item.slot);
+  const compensationOnly = current && equipmentScore(current) >= equipmentScore(item);
+  const compensation = compensationOnly ? Math.max(6, Math.floor(equipmentCompensation(item) * 0.45)) : (current ? equipmentCompensation(current) : 0);
+
+  if (compensationOnly) {
+    receiver.spirit += compensation;
+    return {
+      type: "spirit",
+      receiverId: receiver.id,
+      receiverName: receiver.name,
+      itemId: item.id,
+      itemName: item.name,
+      tierName: equipmentTier(item).name,
+      slotName: equipmentSlot(item).name,
+      statName: equipmentSlot(item).statName,
+      bonus: item.bonus || 0,
+      compensation,
+      context
+    };
+  }
+
+  if (current) {
+    current.ownerId = "";
+    current.acquiredDay = state.day;
+    current.acquiredDate = stateDateForDay(state);
+    receiver.spirit += compensation;
+  }
+
+  item.ownerId = receiver.id;
+  item.acquiredDay = state.day;
+  item.acquiredDate = stateDateForDay(state);
+
+  const transfer = {
+    type: "dungeon",
+    itemId: item.id,
+    itemName: item.name,
+    tierName: equipmentTier(item).name,
+    slotName: equipmentSlot(item).name,
+    statName: equipmentSlot(item).statName,
+    bonus: item.bonus || 0,
+    winnerId: receiver.id,
+    winnerName: receiver.name,
+    loserId: "",
+    loserName: context,
+    chance: options.chance || 0,
+    day: state.day,
+    date: stateDateForDay(state),
+    context,
+    replacedItemName: current?.name || "",
+    compensation
+  };
+  state.equipmentTransfers ??= [];
+  state.equipmentTransfers.unshift(transfer);
+  state.equipmentTransfers = state.equipmentTransfers.slice(0, 30);
+  if (item.tier >= 4 || receiver.id === "player") {
+    const replaceText = current ? `，旧装备「${current.name}」回流奖池并补偿 ${compensation} 灵石` : "";
+    log(state, `${receiver.name}在${context}获得${equipmentTier(item).name}「${item.name}」${replaceText}。`, item.tier >= 4 ? "gold" : "");
+  }
+  return transfer;
 }
 
 function publicEquipment(item, state) {
@@ -773,10 +882,13 @@ function tryTransferEquipment(state, winner, loser, context = "") {
   item.acquiredDay = state.day;
   item.acquiredDate = stateDateForDay(state);
   const transfer = {
+    type: "steal",
     itemId: item.id,
     itemName: item.name,
     tierName: equipmentTier(item).name,
     slotName: equipmentSlot(item).name,
+    statName: equipmentSlot(item).statName,
+    bonus: item.bonus || 0,
     winnerId: winner.id,
     winnerName: winner.name,
     loserId: loser.id,
@@ -880,6 +992,519 @@ function membersForSect(state, sectName) {
 
 function membersForSectAscending(state, sectName) {
   return [...membersForSect(state, sectName)].sort((a, b) => powerOf(a.entity, state) - powerOf(b.entity, state));
+}
+
+function stageIndexOfRealm(realm) {
+  return clamp(Math.floor((realm || 0) / 10), 0, realmStages.length - 1);
+}
+
+function capRealm(realm) {
+  return clamp(Math.floor(realm || 0), 0, realms.length - 1);
+}
+
+function topRealmOfStage(stageIndex) {
+  return capRealm(stageIndex * 10 + 9);
+}
+
+function equipmentTierForRealm(realm) {
+  return clamp(1 + Math.floor(stageIndexOfRealm(realm) * 0.72), 1, equipmentTiers.length);
+}
+
+function makeMonster(name, realm, rootKey, intensity = 1) {
+  const stats = rollBirthStats(capRealm(realm));
+  const monsterRootKey = rootKey || pick(roots).key;
+  const attack = Math.max(stats.attack + 2, Math.floor(stats.attack * (1.16 + intensity * 0.1)));
+  const defense = Math.max(stats.defense + 1, Math.floor(stats.defense * (1.14 + intensity * 0.08)));
+  const monster = {
+    id: `monster-${stateSafeId(name)}-${realm}-${Math.floor(Math.random() * 100000)}`,
+    name,
+    realm: capRealm(realm),
+    root: normalizeRoot({ key: monsterRootKey, bonus: monsterRootKey === "heaven" ? 0 : undefined }),
+    roots: [],
+    primaryRootKey: monsterRootKey,
+    attack,
+    defense,
+    maxHp: Math.floor(stats.maxHp * (1.34 + intensity * 0.24)),
+    hp: 1,
+    maxMana: Math.floor(stats.maxMana * (1.08 + intensity * 0.1)),
+    mana: 1,
+    divineSense: Math.floor(stats.divineSense * (1.12 + intensity * 0.08)),
+    skillId: randomSkillId()
+  };
+  applyRootSet(monster);
+  if (monster.primaryRootKey === "heaven") monster.root.bonus = 0;
+  monster.roots = [{ ...monster.root }];
+  monster.hp = monster.maxHp;
+  monster.mana = monster.maxMana;
+  return monster;
+}
+
+function stateSafeId(text) {
+  return String(text || "monster").replace(/[^\w-]+/g, "-").slice(0, 30);
+}
+
+function fightMonster(state, entity, monster, maxRounds = 18, start = {}) {
+  const maxHp = effectiveMaxHp(entity, state);
+  const maxMana = effectiveMaxMana(entity, state);
+  const left = {
+    ...entity,
+    hp: clamp(start.hp ?? maxHp, 1, maxHp),
+    mana: clamp(start.mana ?? maxMana, 0, maxMana)
+  };
+  const right = {
+    ...monster,
+    hp: clamp(start.monsterHp ?? monster.hp ?? monster.maxHp, 0, monster.maxHp),
+    mana: clamp(start.monsterMana ?? monster.mana ?? monster.maxMana, 0, monster.maxMana)
+  };
+  return runTurnBattle(left, right, { maxRounds, state });
+}
+
+function ensureDungeonState(state) {
+  state.dungeonRecordVersion ??= dungeonRecordVersion;
+  state.dungeonDays ??= [];
+  state.dungeonDays = [...state.dungeonDays]
+    .filter((record) => (state.day || 1) - (record.day || 1) < 14)
+    .sort((a, b) => b.day - a.day)
+    .slice(0, 14);
+  for (const { entity } of allCultivators(state)) {
+    entity.dungeonHistory ??= [];
+    entity.dungeonHistory = entity.dungeonHistory.slice(0, 14);
+  }
+}
+
+function pushDungeonHistory(entity, entry) {
+  entity.dungeonHistory ??= [];
+  entity.dungeonHistory.unshift(entry);
+  entity.dungeonHistory = entity.dungeonHistory.slice(0, 14);
+}
+
+function updateDungeonBest(entity, name, score, clears = 1) {
+  entity.dungeonClears = (entity.dungeonClears || 0) + clears;
+  if (score > (entity.bestDungeonPower || 0)) {
+    entity.bestDungeonPower = score;
+    entity.bestDungeonName = name;
+  }
+}
+
+function publicMonster(monster) {
+  return {
+    id: monster.id,
+    name: monster.name,
+    realm: realms[monster.realm],
+    realmIndex: monster.realm,
+    rootName: primaryRoot(monster).name,
+    skill: findSkill(monster.skillId)?.name || "妖兽本能",
+    maxHp: monster.maxHp,
+    attack: monster.attack,
+    defense: monster.defense,
+    divineSense: monster.divineSense,
+    maxMana: monster.maxMana
+  };
+}
+
+function publicGroupDungeonReplay(name, monster, contributions, success, totalDamage, requiredDamage, state, focusId = "") {
+  const shown = contributions.slice(0, 8);
+  const monsterPower = powerOf(monster, state);
+  const startHp = Math.max(1, Math.floor(requiredDamage || monsterPower));
+  const focus = shown.find((entry) => entry.entity.id === focusId)?.entity || shown[0]?.entity || { id: "", name: name, realm: 0, sect: "" };
+  const teamStartHp = Math.max(effectiveMaxHp(focus, state), Math.floor(startHp * 0.42));
+  const teamStartMana = Math.max(effectiveMaxMana(focus, state), 1);
+  let remaining = startHp;
+  let teamHp = teamStartHp;
+  let teamMana = teamStartMana;
+  const events = [{ round: 1, kind: "round", text: `${name}讨伐开始，众修士结阵迎敌。`, leftHp: teamHp, rightHp: remaining, leftMana: teamMana, rightMana: monster.maxMana }];
+  shown.forEach(({ entity, damage }, index) => {
+    const dealt = Math.max(1, Math.floor(damage || 0));
+    remaining = Math.max(0, remaining - dealt);
+    teamHp = Math.max(success ? 1 : 0, teamHp - Math.max(1, Math.floor(monster.attack * (0.18 + index * 0.01))));
+    teamMana = Math.max(0, teamMana - Math.max(1, Math.floor(effectiveMaxMana(entity, state) * 0.04)));
+    events.push({
+      round: index + 1,
+      kind: "attack",
+      actor: entity.name,
+      text: `${entity.name}催动法术，击中${monster.name}，造成 ${dealt} 点伤害。`,
+      leftHp: teamHp,
+      rightHp: remaining,
+      leftMana: teamMana,
+      rightMana: Math.max(0, monster.maxMana - (index + 1) * 6)
+    });
+  });
+  events.push({
+    round: shown.length + 1,
+    kind: "finish",
+    text: success ? `${monster.name}妖气溃散，${name}讨伐成功，总输出 ${totalDamage}。` : `${monster.name}仍守住阵眼，${name}未能攻破，总输出 ${totalDamage} / ${requiredDamage}。`,
+    leftHp: success ? Math.max(1, teamHp) : 0,
+    rightHp: success ? 0 : remaining,
+    leftMana: teamMana,
+    rightMana: 0
+  });
+  return {
+    kind: "dungeon",
+    result: success ? "胜" : "负",
+    winner: success ? "left" : "right",
+    foughtAt: timestampKey(),
+    left: {
+      ...entityRef(focus, focus.id === "player" ? "player" : "npc"),
+      power: Math.round(totalDamage),
+      stats: { hp: teamStartHp, mana: teamStartMana, attack: Math.round(totalDamage / Math.max(1, shown.length)), defense: effectiveDefense(focus, state), divineSense: effectiveDivineSense(focus, state) },
+      baseStats: effectiveStats(focus, state),
+      rootCounterPenalty: 0,
+      startHp: teamStartHp,
+      startMana: teamStartMana,
+      endHp: success ? Math.max(1, teamHp) : 0,
+      endMana: teamMana
+    },
+    right: {
+      ...entityRef(monster, "monster"),
+      power: monsterPower,
+      stats: effectiveStats(monster, state),
+      baseStats: effectiveStats(monster, state),
+      rootCounterPenalty: 0,
+      startHp,
+      startMana: monster.maxMana,
+      endHp: success ? 0 : remaining,
+      endMana: 0
+    },
+    events
+  };
+}
+
+function publicStarSeaReplay(monsters, contributions, killed, state) {
+  const target = monsters[Math.min(monsters.length - 1, Math.max(0, killed - 1))] || monsters[0];
+  const requiredDamage = monsters.reduce((sum, monster) => sum + Math.floor(powerOf(monster, state) * 0.55), 0);
+  const totalDamage = contributions.reduce((sum, entry) => sum + entry.damage, 0);
+  return publicGroupDungeonReplay("乱星海猎妖", target, contributions.slice(0, 10), killed > 0, totalDamage, requiredDamage, state);
+}
+
+function createBloodTrialCaves(maxStage) {
+  return Array.from({ length: realmStages.length }, (_, cave) => {
+    const stage = clamp(cave, 0, realmStages.length - 1);
+    const realm = topRealmOfStage(stage);
+    const stageMonsterNames = monsterNamesByStage[stage] || monsterNames;
+    return {
+      cave: cave + 1,
+      name: dungeonTierNames[stage],
+      monster: makeMonster(`${dungeonTierNames[stage]}·${pick(stageMonsterNames)}`, realm, pick(roots).key, 0.8 + cave * 0.18),
+      clears: [],
+      challengers: []
+    };
+  });
+}
+
+function runSoloDungeonFor(state, entity, date, caves) {
+  let clears = 0;
+  let spirit = 0;
+  let finalMonster = "";
+  let finalRealm = entity.realm;
+  let finalOutput = 0;
+  let finalRounds = 0;
+  let finalReplay = null;
+  let drop = null;
+  const maxHp = effectiveMaxHp(entity, state);
+  const maxMana = effectiveMaxMana(entity, state);
+  let runHp = maxHp;
+  let runMana = maxMana;
+
+  for (const cave of caves) {
+    const monster = cave.monster;
+    const startHp = runHp;
+    const startMana = runMana;
+    const battle = fightMonster(state, entity, monster, 13 + cave.cave, { hp: startHp, mana: startMana });
+    const replay = buildReplay({ ...entity, hp: startHp, mana: startMana }, { ...monster }, battle, battle.winner === "left" ? "胜" : "负", timestampKey(), state);
+    finalMonster = monster.name;
+    finalRealm = monster.realm;
+    finalReplay = publicReplay(replay);
+    const output = Math.max(1, Math.floor(monster.maxHp - battle.rightHp));
+    const rounds = Math.max(1, Math.max(...battle.events.map((event) => event.round || 1)));
+    cave.challengers.push({
+      id: entity.id,
+      name: entity.name,
+      sect: entity.id === "player" ? state.sect.name : entity.sect,
+      realm: entity.realm,
+      gender: entity.gender,
+      root: entity.root,
+      roots: entity.roots,
+      primaryRootKey: entity.primaryRootKey,
+      skillId: entity.skillId,
+      output,
+      rounds,
+      success: battle.winner === "left",
+      startHp,
+      startMana,
+      endHp: battle.leftHp,
+      endMana: battle.leftMana,
+      spirit: 0,
+      item: "",
+      tierName: "",
+      replay: finalReplay
+    });
+    if (battle.winner !== "left") break;
+    runHp = clamp(battle.leftHp + Math.floor(maxHp * 0.5), 1, maxHp);
+    runMana = clamp(battle.leftMana + Math.floor(maxMana * 0.5), 0, maxMana);
+
+    clears += 1;
+    const tierCap = equipmentTierForRealm(monster.realm);
+    spirit += Math.floor(10 + stageIndexOfRealm(monster.realm) * 18 + cave.cave * 9 + Math.random() * (20 + stageIndexOfRealm(monster.realm) * 6));
+    const candidate = rollEquipmentDrop(state, tierCap, 1 + cave.cave + stageIndexOfRealm(monster.realm) * 0.6);
+    if (candidate) drop = candidate;
+    finalOutput = output;
+    finalRounds = rounds;
+    const challenger = cave.challengers.find((item) => item.id === entity.id);
+    if (challenger) challenger.spirit = spirit;
+    cave.clears.push({
+      id: entity.id,
+      name: entity.name,
+      sect: entity.id === "player" ? state.sect.name : entity.sect,
+      realm: entity.realm,
+      gender: entity.gender,
+      root: entity.root,
+      roots: entity.roots,
+      primaryRootKey: entity.primaryRootKey,
+      skillId: entity.skillId,
+      output,
+      rounds: finalRounds,
+      startHp,
+      startMana,
+      endHp: battle.leftHp,
+      endMana: battle.leftMana,
+      spirit,
+      item: candidate?.name || "",
+      tierName: candidate ? equipmentTier(candidate).name : "",
+      replay: finalReplay
+    });
+  }
+
+  if (clears <= 0) spirit = Math.floor(4 + stageIndexOfRealm(entity.realm) * 4 + Math.random() * 8);
+  entity.spirit += spirit;
+  const score = clears ? finalRealm + clears * 8 : stageIndexOfRealm(entity.realm) * 10;
+  if (clears) updateDungeonBest(entity, "血色禁地", score, clears);
+  const transfer = drop ? awardEquipment(state, entity, drop, "血色禁地") : null;
+  const entry = {
+    type: "solo",
+    name: "血色禁地",
+    day: state.day,
+    date,
+    clears,
+    spirit,
+    monster: finalMonster,
+    monsterRealm: realms[finalRealm],
+    damage: finalOutput,
+    rounds: finalRounds,
+    replay: finalReplay,
+    item: transfer?.itemName || "",
+    tierName: transfer?.tierName || "",
+    compensation: transfer?.compensation || 0,
+    result: clears ? `连破 ${clears} 洞` : "外谷败退"
+  };
+  for (const cave of caves.slice(0, clears)) {
+    const clear = cave.clears.find((item) => item.id === entity.id);
+    if (clear && transfer?.itemName && cave.cave === clears) {
+      clear.item = transfer.itemName;
+      clear.tierName = transfer.tierName;
+      const challenger = cave.challengers.find((item) => item.id === entity.id);
+      if (challenger) {
+        challenger.item = transfer.itemName;
+        challenger.tierName = transfer.tierName;
+      }
+    }
+  }
+  pushDungeonHistory(entity, entry);
+  return entry;
+}
+
+function runSectDungeon(state, sectName, members, date) {
+  if (!members.length) return null;
+  const highestRealm = Math.max(...members.map(({ entity }) => entity.realm || 0));
+  const targetStage = Math.min(stageIndexOfRealm(highestRealm) + 1, realmStages.length - 1);
+  const monsterRealm = topRealmOfStage(targetStage);
+  const monster = makeMonster(`虚天殿·${pick(monsterNames)}王`, monsterRealm, pick(roots).key, 1.2 + targetStage * 0.14);
+  const contributions = [];
+  const battles = [];
+  let monsterHp = monster.maxHp;
+  let monsterMana = monster.maxMana;
+  for (const { entity } of members) {
+    if (monsterHp <= 0) break;
+    const beforeMonsterHp = monsterHp;
+    const beforeMonsterMana = monsterMana;
+    const battle = fightMonster(state, entity, monster, 16, { monsterHp, monsterMana });
+    const damage = Math.max(0, beforeMonsterHp - battle.rightHp);
+    monsterHp = battle.rightHp;
+    monsterMana = battle.rightMana;
+    const replay = buildReplay({ ...entity }, { ...monster, hp: beforeMonsterHp, mana: beforeMonsterMana }, battle, battle.winner === "left" ? "胜" : "负", timestampKey(), state);
+    contributions.push({ entity, damage });
+    battles.push({
+      order: battles.length + 1,
+      challenger: entityRef(entity, entity.id === "player" ? "player" : "npc"),
+      damage,
+      winnerName: battle.winner === "left" ? entity.name : monster.name,
+      replay: publicReplay(replay)
+    });
+  }
+  contributions.sort((a, b) => b.damage - a.damage);
+  const totalDamage = contributions.reduce((sum, item) => sum + item.damage, 0);
+  const requiredDamage = monster.maxHp;
+  const success = monsterHp <= 0;
+  const poolSpirit = Math.floor((success ? 90 : 34) + targetStage * (success ? 82 : 24) + Math.random() * 70);
+  const share = Math.max(1, Math.floor(poolSpirit / members.length));
+  for (const { entity } of members) entity.spirit += share;
+
+  let transfer = null;
+  if (success) {
+    const item = rollEquipmentDrop(state, equipmentTierForRealm(monsterRealm), 1.8 + targetStage);
+    if (item) {
+      for (const { entity } of contributions) {
+        const current = bestEquippedInSlot(state, entity, item.slot);
+        if (!current || equipmentScore(item) > equipmentScore(current)) {
+          transfer = awardEquipment(state, entity, item, "虚天殿");
+          break;
+        }
+      }
+      if (!transfer) transfer = awardEquipment(state, contributions[0].entity, item, "虚天殿");
+    }
+  }
+
+  const record = {
+    type: "sect",
+    name: "虚天殿",
+    sect: sectName,
+    day: state.day,
+    date,
+    success,
+    monster: monster.name,
+    monsterRealm: realms[monsterRealm],
+    monsterStats: publicMonster(monster),
+    totalDamage,
+    monsterRemainingHp: monsterHp,
+    requiredDamage,
+    replay: publicGroupDungeonReplay("虚天殿", monster, contributions, success, totalDamage, monster.maxHp, state),
+    battles,
+    spiritShare: share,
+    top: contributions.slice(0, 5).map(({ entity, damage }) => ({ id: entity.id, name: entity.name, damage })),
+    item: transfer?.itemName || "",
+    itemOwner: transfer?.winnerName || "",
+    tierName: transfer?.tierName || ""
+  };
+  for (const { entity, damage } of contributions) {
+    pushDungeonHistory(entity, {
+      type: "sect",
+      name: "虚天殿",
+      day: state.day,
+      date,
+      result: success ? "宗门通关" : "未破殿门",
+      spirit: share,
+      damage,
+      monster: monster.name,
+      monsterRealm: realms[monsterRealm],
+      replay: publicGroupDungeonReplay("虚天殿", monster, contributions.slice(0, 8), success, totalDamage, monster.maxHp, state, entity.id),
+      item: transfer?.winnerId === entity.id ? transfer.itemName : "",
+      tierName: transfer?.winnerId === entity.id ? transfer.tierName : ""
+    });
+    if (success) updateDungeonBest(entity, "虚天殿", monsterRealm + Math.floor(damage / 100), 1);
+  }
+  if (success && transfer) log(state, `${sectName}攻破虚天殿，${transfer.winnerName}凭最高贡献得「${transfer.itemName}」。`, "gold");
+  return record;
+}
+
+function runStarSeaDungeon(state, roster, date) {
+  const maxRealm = Math.max(...roster.map(({ entity }) => entity.realm || 0));
+  const baseStage = clamp(stageIndexOfRealm(maxRealm), 0, realmStages.length - 1);
+  const monsters = Array.from({ length: 3 + Math.floor(Math.random() * 3) }, (_, index) => {
+    const stage = clamp(baseStage - 1 + index, 0, realmStages.length - 1);
+    return makeMonster(`乱星海·${pick(monsterNames)}`, topRealmOfStage(stage), pick(roots).key, 0.9 + index * 0.22);
+  });
+  const contributions = roster.map(({ entity }) => {
+    const target = monsters[Math.min(monsters.length - 1, Math.max(0, stageIndexOfRealm(entity.realm) - baseStage + 1 + Math.floor(Math.random() * 2)))];
+    const damage = Math.floor(powerOf(entity, state) * (0.72 + Math.random() * 0.55));
+    return { entity, target, damage };
+  }).sort((a, b) => b.damage - a.damage);
+  const totalDamage = contributions.reduce((sum, item) => sum + item.damage, 0);
+  const killed = monsters.filter((monster) => totalDamage / monsters.length > powerOf(monster, state) * 0.55).length;
+  const basePool = Math.floor(120 + baseStage * 96 + killed * 54 + Math.random() * 90);
+  const totalContribution = Math.max(1, totalDamage);
+  for (const entry of contributions) {
+    const spirit = Math.max(1, Math.floor(basePool * entry.damage / totalContribution));
+    entry.entity.spirit += spirit;
+    entry.spirit = spirit;
+    pushDungeonHistory(entry.entity, {
+      type: "public",
+      name: "乱星海猎妖",
+      day: state.day,
+      date,
+      result: `贡献第 ${contributions.findIndex((item) => item.entity.id === entry.entity.id) + 1}`,
+      spirit,
+      damage: entry.damage,
+      monster: entry.target.name,
+      monsterRealm: realms[entry.target.realm],
+      replay: publicGroupDungeonReplay("乱星海猎妖", entry.target, [entry], entry.damage > powerOf(entry.target, state) * 0.55, entry.damage, Math.floor(powerOf(entry.target, state) * 0.55), state, entry.entity.id)
+    });
+  }
+  let transfer = null;
+  const item = rollEquipmentDrop(state, equipmentTierForRealm(Math.max(...monsters.map((monster) => monster.realm))), 2.2 + killed);
+  if (item) transfer = awardEquipment(state, contributions[0].entity, item, "乱星海猎妖");
+  if (transfer) {
+    const ownerEntry = contributions.find((entry) => entry.entity.id === transfer.winnerId);
+    if (ownerEntry?.entity.dungeonHistory?.[0]?.type === "public") {
+      ownerEntry.entity.dungeonHistory[0].item = transfer.itemName;
+      ownerEntry.entity.dungeonHistory[0].tierName = transfer.tierName;
+    }
+  }
+  const record = {
+    type: "public",
+    name: "乱星海猎妖",
+    day: state.day,
+    date,
+    killed,
+    monsterCount: monsters.length,
+    monsters: monsters.map(publicMonster),
+    totalDamage,
+    replay: publicStarSeaReplay(monsters, contributions, killed, state),
+    top: contributions.slice(0, 8).map(({ entity, damage, spirit }) => ({ id: entity.id, name: entity.name, sect: entity.id === "player" ? state.sect.name : entity.sect, damage, spirit })),
+    item: transfer?.itemName || "",
+    itemOwner: transfer?.winnerName || "",
+    tierName: transfer?.tierName || ""
+  };
+  for (const { entity, damage } of contributions.slice(0, 20)) updateDungeonBest(entity, "乱星海猎妖", baseStage * 10 + killed * 8 + Math.floor(damage / 180), killed > 0 ? 1 : 0);
+  return record;
+}
+
+function runDailyDungeons(state, date) {
+  ensureDungeonState(state);
+  if (state.dungeonDays.some((record) => record.day === state.day)) return state.dungeonDays.find((record) => record.day === state.day);
+  const roster = allCultivators(state);
+  const maxStage = Math.max(...roster.map(({ entity }) => stageIndexOfRealm(entity.realm || 0)));
+  const bloodCaves = createBloodTrialCaves(maxStage);
+  const solo = roster.map(({ entity }) => ({ id: entity.id, personName: entity.name, sect: entity.id === "player" ? state.sect.name : entity.sect, ...runSoloDungeonFor(state, entity, date, bloodCaves) }));
+  const bloodTrial = {
+    name: "血色禁地",
+    caves: bloodCaves.map((cave) => ({
+      cave: cave.cave,
+      name: cave.name,
+      monster: publicMonster(cave.monster),
+      clears: cave.clears
+        .sort((a, b) => b.output - a.output || a.rounds - b.rounds)
+        .slice(0, 12),
+      challengers: cave.challengers
+        .sort((a, b) => Number(b.success) - Number(a.success) || b.output - a.output || a.rounds - b.rounds)
+        .slice(0, 3)
+    }))
+  };
+  const sectRecords = sects
+    .map((sectName) => runSectDungeon(state, sectName, membersForSect(state, sectName), date))
+    .filter(Boolean);
+  const publicRecord = runStarSeaDungeon(state, roster, date);
+  const record = {
+    day: state.day,
+    date,
+    bloodTrial,
+    solo: solo.slice(0, 40),
+    sects: sectRecords,
+    public: publicRecord
+  };
+  state.dungeonDays.unshift(record);
+  state.dungeonDays = state.dungeonDays.slice(0, 14);
+  const playerSolo = solo.find((entry) => entry.id === "player");
+  log(state, `今日副本结算：你在血色禁地${playerSolo?.result || "外谷败退"}，获得 ${playerSolo?.spirit || 0} 灵石；乱星海猎妖击杀 ${publicRecord.killed}/${publicRecord.monsterCount} 只妖兽。`, "gold");
+  return record;
 }
 
 function provinceIdsForSect(state, sectName) {
@@ -1435,6 +2060,7 @@ function makeNpc(name, index) {
     dungeonClears: 0,
     bestDungeonPower: 0,
     bestDungeonName: "未入秘境",
+    dungeonHistory: [],
     dailyRecords: [],
     breakthroughs: [],
     duelHistory: []
@@ -1494,6 +2120,7 @@ export function createDefaultState() {
       dungeonClears: 0,
       bestDungeonPower: 0,
       bestDungeonName: "未入秘境",
+      dungeonHistory: [],
       dailyRecords: [],
       breakthroughs: [],
       duelHistory: []
@@ -1502,6 +2129,8 @@ export function createDefaultState() {
     equipment: createEquipmentState(),
     equipmentVersion,
     equipmentTransfers: [],
+    dungeonRecordVersion,
+    dungeonDays: [],
     rosterVersion,
     tasks: [],
     npcs: npcNames.map((name, index) => makeNpc(name, index)),
@@ -1535,6 +2164,7 @@ export function clearProgressHistory(state) {
     person.dungeonClears = 0;
     person.bestDungeonPower = 0;
     person.bestDungeonName = "未入秘境";
+    person.dungeonHistory = [];
     person.dailyRecords = [];
     person.breakthroughs = [];
   };
@@ -1549,6 +2179,8 @@ export function clearProgressHistory(state) {
   state.equipment = createEquipmentState();
   state.equipmentVersion = equipmentVersion;
   state.equipmentTransfers = [];
+  state.dungeonRecordVersion = dungeonRecordVersion;
+  state.dungeonDays = [];
   state.tasks = [];
   state.player.sect = state.sect?.name || "黄枫谷";
   state.sect.warWins = 0;
@@ -1622,6 +2254,7 @@ export function ensureStateShape(state) {
   state.player.dungeonClears ??= 0;
   state.player.bestDungeonPower ??= 0;
   state.player.bestDungeonName ??= "未入秘境";
+  state.player.dungeonHistory ??= [];
   state.player.dailyRecords ??= [];
   state.player.breakthroughs ??= [];
   state.player.duelHistory ??= [];
@@ -1647,6 +2280,7 @@ export function ensureStateShape(state) {
   }
   state.equipmentTransfers ??= [];
   changed = ensureEquipmentState(state) || changed;
+  ensureDungeonState(state);
   changed = ensureField(state.player, "mana", () => effectiveMaxMana(state.player)) || changed;
   changed = ensureField(state.player, "hp", () => effectiveMaxHp(state.player)) || changed;
   state.player.hp = Math.min(state.player.hp, effectiveMaxHp(state.player, state));
@@ -1722,7 +2356,8 @@ export function ensureStateShape(state) {
     changed = normalizeDuelSeason(full, state.day) || changed;
     changed = ensureField(full, "dungeonClears", () => Math.floor(Math.random() * 5)) || changed;
     changed = ensureField(full, "bestDungeonPower", () => Math.floor(Math.random() * 90)) || changed;
-    changed = ensureField(full, "bestDungeonName", () => full.bestDungeonPower > 65 ? "沉星矿脉" : full.bestDungeonPower > 0 ? "雾隐药谷" : "未入秘境") || changed;
+    changed = ensureField(full, "bestDungeonName", () => full.bestDungeonPower > 65 ? "虚天殿" : full.bestDungeonPower > 0 ? "血色禁地" : "未入秘境") || changed;
+    changed = ensureField(full, "dungeonHistory", []) || changed;
     full.hp = Math.min(full.hp, effectiveMaxHp(full, state));
     full.mana = Math.min(full.mana, effectiveMaxMana(full, state));
     return full;
@@ -1754,7 +2389,12 @@ export function getPublicState(state) {
 
   return {
     ...state,
+    player: publicCultivator(state.player, state, { includeRecentReplays: true }),
+    npcs: state.npcs.map((npc) => publicCultivator(npc, state)),
     equipment: state.equipment.map((item) => publicEquipment(item, state)),
+    duelDays: publicDuelDays(state.duelDays || []),
+    provinceWars: publicProvinceWars(state.provinceWars || []),
+    dungeonDays: state.dungeonDays || [],
     catalog: { realms, realmStages, roots, rootRules: rootRulesCatalog(), dungeons, taskTemplates, itemCatalog, sects, combatSkills, provinces, equipmentSlots, equipmentTiers, equipmentCatalog, duelRanks },
     derived: {
       xpNeed: xpNeed(state.player.realm),
@@ -1779,6 +2419,68 @@ export function getPublicState(state) {
       npcPowers: Object.fromEntries(state.npcs.map((npc) => [npc.id, powerOf(npc, state)])),
       sects: buildSectSummaries(state)
     }
+  };
+}
+
+function publicCultivator(entity, state, options = {}) {
+  return {
+    ...entity,
+    duelHistory: publicDuelHistory(entity.duelHistory || [], options),
+    power: powerOf(entity, state)
+  };
+}
+
+function publicDuelHistory(records, options = {}) {
+  const replayLimit = options.includeRecentReplays ? 5 : 0;
+  return records.map((record, index) => ({
+    ...record,
+    replay: index < replayLimit ? publicReplay(record.replay) : null
+  }));
+}
+
+function publicDuelDays(records) {
+  return records.map((record, recordIndex) => ({
+    ...record,
+    matches: (record.matches || []).map((match, matchIndex) => ({
+      ...match,
+      left: publicEntityRef(match.left),
+      right: publicEntityRef(match.right),
+      winner: publicEntityRef(match.winner),
+      loser: publicEntityRef(match.loser),
+      replay: null
+    }))
+  }));
+}
+
+function publicProvinceWars(records) {
+  return records.map((record, recordIndex) => ({
+    ...record,
+    battles: (record.battles || []).map((battle, battleIndex) => ({
+      ...battle,
+      attacker: publicEntityRef(battle.attacker),
+      defender: publicEntityRef(battle.defender),
+      replay: publicReplay(battle.replay)
+    }))
+  }));
+}
+
+function publicReplay(replay) {
+  if (!replay) return null;
+  return {
+    ...replay,
+    events: (replay.events || []).slice(0, 40)
+  };
+}
+
+function publicEntityRef(ref) {
+  if (!ref) return ref;
+  return {
+    kind: ref.kind,
+    id: ref.id,
+    name: ref.name,
+    realm: ref.realm,
+    sect: ref.sect,
+    skillId: ref.skillId
   };
 }
 
@@ -1965,6 +2667,10 @@ export function dailySettlement(state, options = {}) {
   state.player.hp = clamp(state.player.hp + 10, 0, effectiveMaxHp(state.player, state));
   const beforeMana = state.player.mana;
   state.player.mana = clamp((state.player.mana || 0) + 8, 0, effectiveMaxMana(state.player, state));
+  runDailyDungeons(state, settlementDate);
+  const playerDungeonEntries = (state.player.dungeonHistory || []).filter((record) => record.day === state.day);
+  const playerSoloDungeon = playerDungeonEntries.find((record) => record.type === "solo");
+  const playerDungeonSpirit = playerDungeonEntries.reduce((sum, record) => sum + (record.spirit || 0), 0);
   const playerChanceParts = breakthroughChanceParts(state, state.player);
   state.player.dailyRecords.unshift({
     day: state.day,
@@ -1972,7 +2678,7 @@ export function dailySettlement(state, options = {}) {
     xp: 0,
     baseXp: 0,
     bonusXp: 0,
-    spirit: 0,
+    spirit: playerDungeonSpirit,
     realm: realms[state.player.realm],
     breakChance: playerChanceParts.total,
     realmBaseBreakChance: playerChanceParts.realmBase,
@@ -1980,7 +2686,7 @@ export function dailySettlement(state, options = {}) {
     sectBreakMultiplier: playerChanceParts.sectMultiplier,
     baseBreakChance: playerChanceParts.base,
     bonusBreakChance: playerChanceParts.bonus,
-    note: `自然恢复：血量 +${state.player.hp - beforeHp}，法力 +${state.player.mana - beforeMana}`
+    note: `自然恢复：血量 +${state.player.hp - beforeHp}，法力 +${state.player.mana - beforeMana}；副本：${playerSoloDungeon?.name || "今日历练"} ${playerSoloDungeon?.result || ""}`
   });
   state.player.dailyRecords = state.player.dailyRecords.slice(0, 14);
   runDailyDuels(state);

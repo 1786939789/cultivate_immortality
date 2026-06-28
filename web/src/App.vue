@@ -1,6 +1,22 @@
 <template>
   <div class="app">
     <header class="topbar">
+      <section class="loot-ticker" v-if="todayEquipmentDrops.length">
+        <span class="loot-ticker-label">今日掉落</span>
+        <div class="loot-ticker-track">
+          <div class="loot-ticker-content">
+            <span v-for="drop in todayEquipmentDrops" :key="`${drop.day}-${drop.winnerId}-${drop.itemId}-${equipmentDropKind(drop)}`">
+              <em class="loot-source">{{ equipmentDropSource(drop) }}</em>
+              <strong>{{ drop.winnerName }}</strong>
+              获得
+              <b>{{ drop.tierName }}「{{ drop.itemName }}」</b>
+              <template v-if="equipmentDropKind(drop) === 'steal' && drop.loserName">自 {{ drop.loserName }}</template>
+              · {{ equipmentDropSlotName(drop) }} · {{ equipmentDropStatName(drop) }} +{{ formatPercent(equipmentDropBonus(drop)) }}
+            </span>
+          </div>
+        </div>
+      </section>
+
       <section class="brand">
         <div class="sigil" aria-hidden="true">
           <svg viewBox="0 0 64 64" fill="none">
@@ -339,16 +355,301 @@
         </section>
 
         <section v-if="activeTab === 'dungeon'" class="view active">
-          <div class="cards">
-            <article class="card" v-for="dungeon in catalog.dungeons" :key="dungeon.id">
+          <div v-if="lastBattle" class="battle-detail rank-battle-detail">
+            <div class="panel battle-header">
               <div>
-                <h3>{{ dungeon.name }}</h3>
-                <p>{{ dungeon.text }}</p>
-                <p class="meta">要求：{{ realmName(dungeon.min) }} · 推荐战力 {{ dungeon.power }}<br>产出：{{ dungeon.reward }}</p>
+                <h3>副本回合</h3>
+                <p>{{ lastBattle.left.name }} 对阵 {{ lastBattle.right.name }}，{{ battleStatusText }}</p>
               </div>
-              <button :class="player.realm >= dungeon.min ? 'primary' : 'secondary'" @click="act('/api/dungeons/run', { id: dungeon.id })">探索</button>
-            </article>
+              <div class="actions">
+                <button class="secondary" @click="replayBattle">重播</button>
+                <button class="primary" @click="returnFromBattle">{{ battleBackLabel }}</button>
+              </div>
+            </div>
+
+            <div class="battle-line live">
+              <div class="fighter">
+                <CharacterPortrait :person="battlePerson(lastBattle.left)" size="lg" />
+                <strong>{{ lastBattle.left.name }}</strong>
+                <small>{{ realmName(lastBattle.left.realm) }} · 战力 {{ lastBattle.left.power }}</small>
+                <div class="battle-stats">
+                  <span v-for="stat in battleStatsFromEffective(lastBattle.left.stats)" :key="stat.label" :aria-label="`${stat.label} ${stat.value}`">
+                    <StatIcon :name="stat.icon" />
+                    <span>{{ stat.label }}</span>
+                    <strong>{{ stat.value }}</strong>
+                  </span>
+                </div>
+                <div class="skill-chip" tabindex="0">
+                  {{ skillName(lastBattle.left.skillId) }}
+                  <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.left.skillId) }}</span>
+                </div>
+                <Meter label="血量" icon="health" :value="currentBattleFrame.leftHp" :max="battleMax(lastBattle.left, 'hp')" tone="health" />
+                <Meter label="法力" icon="mana" :value="currentBattleFrame.leftMana" :max="battleMax(lastBattle.left, 'mana')" tone="focus" />
+              </div>
+              <div class="vs">{{ battleOutcomeLabel }}</div>
+              <div class="fighter">
+                <CharacterPortrait :person="battlePerson(lastBattle.right)" size="lg" />
+                <strong>{{ lastBattle.right.name }}</strong>
+                <small>{{ realmName(lastBattle.right.realm) }} · 战力 {{ lastBattle.right.power }}</small>
+                <div class="battle-stats">
+                  <span v-for="stat in battleStatsFromEffective(lastBattle.right.stats)" :key="stat.label" :aria-label="`${stat.label} ${stat.value}`">
+                    <StatIcon :name="stat.icon" />
+                    <span>{{ stat.label }}</span>
+                    <strong>{{ stat.value }}</strong>
+                  </span>
+                </div>
+                <div class="skill-chip" tabindex="0">
+                  {{ skillName(lastBattle.right.skillId) }}
+                  <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.right.skillId) }}</span>
+                </div>
+                <Meter label="血量" icon="health" :value="currentBattleFrame.rightHp" :max="battleMax(lastBattle.right, 'hp')" tone="health" />
+                <Meter label="法力" icon="mana" :value="currentBattleFrame.rightMana" :max="battleMax(lastBattle.right, 'mana')" tone="focus" />
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="battle-feed">
+                <div
+                  class="battle-event"
+                  v-for="(event, index) in displayedBattleEvents"
+                  :key="`${index}-${event.text}`"
+                  :class="[event.kind, skillEffectClass(event)]"
+                >
+                  <div v-if="event.kind === 'skill'" class="skill-cast" aria-hidden="true">
+                    <i>
+                      <span>{{ skillEffectGlyph(event) }}</span>
+                    </i>
+                    <b>{{ skillEffectTitle(event) }}</b>
+                  </div>
+                  <span>{{ event.round ? `第${event.round}回合` : "战报" }}</span>
+                  <p>{{ event.text }}</p>
+                </div>
+              </div>
+            </div>
           </div>
+
+          <template v-else>
+          <div class="panel section-head">
+            <div>
+              <h3>副本闯关记录</h3>
+              <p>按日期查看每日自动副本，切换副本可查看对应闯关、宗门输出和乱星海贡献。</p>
+            </div>
+            <div class="dungeon-day-nav">
+              <button class="secondary" type="button" :disabled="!canShowPreviousDungeonDay" @click="showPreviousDungeonDay">前一日</button>
+              <span class="tag">{{ selectedDungeonDay?.date || currentDate }}</span>
+              <button class="secondary" type="button" :disabled="!canShowNextDungeonDay" @click="showNextDungeonDay">后一日</button>
+            </div>
+          </div>
+
+          <div class="subtabs">
+            <button
+              v-for="tab in dungeonRecordTabs"
+              :key="tab.id"
+              type="button"
+              class="segment"
+              :class="{ active: activeDungeonRecordTab === tab.id }"
+              @click="activeDungeonRecordTab = tab.id"
+            >
+              {{ tab.label }}
+            </button>
+          </div>
+
+          <div v-if="selectedDungeonDay && activeDungeonRecordTab === 'blood'" class="panel dungeon-record-panel">
+            <div class="section-head compact">
+              <div>
+                <h3>血色禁地</h3>
+                <p>查看每日洞窟妖兽属性和通关人数；个人通关明细在人物属性页查看。</p>
+              </div>
+              <span class="tag">{{ bloodTrialClearCount }} 人次通关</span>
+            </div>
+            <div class="dungeon-cave-list" v-if="selectedDungeonDay.bloodTrial?.caves?.length">
+              <article class="dungeon-cave-card" v-for="cave in selectedDungeonDay.bloodTrial?.caves || []" :key="cave.cave">
+                <div class="dungeon-monster-card">
+                  <div>
+                    <span class="tag">第 {{ cave.cave }} 关</span>
+                    <h3>{{ cave.name }}</h3>
+                    <p>{{ cave.monster?.name }} · {{ cave.monster?.realm }} · {{ cave.monster?.rootName }}</p>
+                  </div>
+                  <div class="monster-stats">
+                    <span v-for="stat in monsterStatItems(cave.monster)" :key="stat.icon" :aria-label="`${stat.label} ${stat.value}`" :title="`${stat.label}：${stat.value}`">
+                      <StatIcon :name="stat.icon" />
+                      <b>{{ stat.value }}</b>
+                    </span>
+                  </div>
+                </div>
+                <div class="blood-podium" v-if="bloodCaveEntries(cave).length">
+                  <button
+                    class="blood-podium-card"
+                    :class="[`rank-${entry.rank}`, { failed: !entry.success, pending: entry.pending }]"
+                    type="button"
+                    v-for="(entry, index) in bloodCaveEntries(cave)"
+                    :key="`${cave.cave}-${entry.id}-${entry.rank}`"
+                    :disabled="!entry.replay"
+                    @click="openBloodCaveReplay(entry)"
+                  >
+                    <span class="podium-rank" aria-hidden="true">{{ podiumRankIcon(entry.rank) }}</span>
+                    <CharacterPortrait :person="bloodEntryPerson(entry)" size="lg" />
+                    <strong>{{ entry.name }}</strong>
+                    <small>{{ bloodEntryResultText(entry) }} · 输出 {{ entry.output }} · {{ entry.rounds || "?" }} 回合</small>
+                    <em v-if="entry.success && !entry.pending">+{{ entry.spirit || 0 }} 灵石<span v-if="entry.item"> · {{ entry.tierName }}「{{ entry.item }}」</span></em>
+                    <em v-else-if="entry.pending">上一关通关，待挑战此关</em>
+                    <em v-else>未获奖励</em>
+                  </button>
+                </div>
+                <div v-else class="empty compact-empty">无人进入此关。</div>
+              </article>
+            </div>
+            <div v-else class="empty">这一天是旧版副本记录，未保存洞窟妖兽明细。推进新的一天后会生成完整记录。</div>
+          </div>
+
+          <div v-else-if="selectedDungeonDay && activeDungeonRecordTab === 'void'" class="panel dungeon-record-panel">
+            <div class="section-head compact">
+              <div>
+                <h3>虚天殿</h3>
+                <p>点击妖物查看车轮战列表；新记录可继续进入每一场 PK 回放。</p>
+              </div>
+              <span class="tag">{{ voidHallSuccessCount }} 宗通关</span>
+            </div>
+
+            <div v-if="selectedVoidHallRecord" class="void-hall-detail">
+              <div class="section-head compact">
+                <div>
+                  <h3>{{ selectedVoidHallRecord.sect }} · 车轮战</h3>
+                  <p>{{ selectedVoidHallRecord.monster }} · {{ selectedVoidHallRecord.monsterRealm }}，总输出 {{ selectedVoidHallRecord.totalDamage }}，妖物剩余血量 {{ voidHallRemainingHp(selectedVoidHallRecord) }}。</p>
+                </div>
+                <button class="primary" type="button" @click="closeVoidHallRecord">返回虚天殿</button>
+              </div>
+              <div class="void-battle-list" v-if="voidHallBattles(selectedVoidHallRecord).length">
+                <button
+                  class="war-battle-link"
+                  type="button"
+                  v-for="battle in voidHallBattles(selectedVoidHallRecord)"
+                  :key="`${selectedVoidHallRecord.sect}-${battle.order}`"
+                  :disabled="!battle.replay"
+                  @click="openBattleReplay(battle.replay)"
+                >
+                  <span class="war-battle-order">第 {{ battle.order }} 战</span>
+                  <strong class="war-battle-name left">{{ battle.challenger?.name || battle.name || "参战修士" }}</strong>
+                  <span class="war-battle-vs">VS</span>
+                  <strong class="war-battle-name right">{{ selectedVoidHallRecord.monster }}</strong>
+                  <small class="war-battle-summary">输出 {{ battle.damage || 0 }}<span v-if="battle.winnerName"> · 胜者：{{ battle.winnerName }}</span></small>
+                </button>
+              </div>
+              <button v-else-if="selectedVoidHallRecord.replay" class="event event-button void-overview-button" type="button" @click="openBattleReplay(selectedVoidHallRecord.replay)">
+                旧记录仅保存总览回放，点击查看虚天殿合战。
+              </button>
+              <div v-else class="empty compact-empty">这条记录没有保存可回放战报。</div>
+            </div>
+
+            <div v-else class="sect-dungeon-list">
+              <article class="sect-dungeon-card" v-for="record in sortedVoidHallRecords" :key="record.sect" :class="{ success: record.success }">
+                <div class="section-head compact">
+                  <div>
+                    <h3>{{ record.sect }}</h3>
+                    <p>{{ record.monster }} · {{ record.monsterRealm }} · {{ record.success ? "通关" : "未通关" }}</p>
+                  </div>
+                  <span class="tag">分润 +{{ record.spiritShare }}</span>
+                </div>
+                <div class="attribute-list compact">
+                  <button class="dungeon-monster-card compact void-monster-button" type="button" @click="openVoidHallRecord(record)">
+                    <div>
+                      <span class="tag">妖兽</span>
+                      <h3>{{ record.monster }}</h3>
+                      <p>{{ record.monsterRealm }} · {{ record.monsterStats?.rootName || "未知灵根" }}</p>
+                    </div>
+                    <div class="monster-stats">
+                      <span v-for="stat in monsterStatItems(record.monsterStats)" :key="stat.icon" :aria-label="`${stat.label} ${stat.value}`" :title="`${stat.label}：${stat.value}`">
+                        <StatIcon :name="stat.icon" />
+                        <b>{{ stat.value }}</b>
+                      </span>
+                    </div>
+                  </button>
+                  <div class="attribute-row">
+                    <span>总输出</span>
+                    <b>{{ record.totalDamage }}</b>
+                    <small>妖物血量 {{ record.monsterStats?.maxHp || record.requiredDamage || "?" }} · 剩余 {{ voidHallRemainingHp(record) }}</small>
+                  </div>
+                  <div class="attribute-row" v-if="record.item">
+                    <span>装备</span>
+                    <b>{{ record.item }}</b>
+                    <small>{{ record.itemOwner }} · {{ record.tierName }}</small>
+                  </div>
+                </div>
+                <div class="blood-podium void-podium" v-if="voidHallTopEntries(record).length">
+                  <div
+                    class="blood-podium-card"
+                    :class="`rank-${entry.rank}`"
+                    v-for="entry in voidHallTopEntries(record)"
+                    :key="`${record.sect}-${entry.id}-${entry.rank}`"
+                  >
+                    <span class="podium-rank" aria-hidden="true">{{ podiumRankIcon(entry.rank) }}</span>
+                    <CharacterPortrait :person="bloodEntryPerson(entry)" size="lg" />
+                    <strong>{{ entry.name }}</strong>
+                    <small>输出 {{ entry.damage || 0 }}</small>
+                    <em>{{ record.success ? "宗门通关" : "未破殿门" }}</em>
+                  </div>
+                </div>
+              </article>
+            </div>
+          </div>
+
+          <div v-else-if="selectedDungeonDay && activeDungeonRecordTab === 'sea'" class="panel dungeon-record-panel">
+            <div class="section-head compact">
+              <div>
+                <h3>乱星海猎妖</h3>
+                <p>以击杀进度、宗门贡献和个人贡献榜展示妖潮收获。</p>
+              </div>
+              <span class="tag">{{ selectedDungeonDay.public?.killed || 0 }}/{{ selectedDungeonDay.public?.monsterCount || 0 }} 击杀</span>
+            </div>
+            <div class="grid dungeon-sea-grid">
+              <div class="panel flat">
+                <h3>猎妖概览</h3>
+                <div class="monster-strip" v-if="selectedDungeonDay.public?.monsters?.length">
+                  <div class="monster-chip" v-for="monster in selectedDungeonDay.public.monsters" :key="monster.id || monster.name">
+                    <strong>{{ monster.name }}</strong>
+                    <span>{{ monster.realm }} · {{ monster.rootName }}</span>
+                    <small>血 {{ monster.maxHp }} / 攻 {{ monster.attack }} / 防 {{ monster.defense }} / 神 {{ monster.divineSense }}</small>
+                  </div>
+                </div>
+                <div class="attribute-list compact">
+                  <div class="attribute-row">
+                    <span>总贡献</span>
+                    <b>{{ selectedDungeonDay.public?.totalDamage || 0 }}</b>
+                    <small>所有参战修士合计</small>
+                  </div>
+                  <div class="attribute-row">
+                    <span>装备</span>
+                    <b>{{ selectedDungeonDay.public?.item || "无" }}</b>
+                    <small>{{ selectedDungeonDay.public?.itemOwner || "未掉落" }}</small>
+                  </div>
+                </div>
+              </div>
+              <div class="panel flat">
+                <h3>宗门贡献</h3>
+                <div class="timeline compact-list">
+                  <div class="event" v-for="sect in starSeaSectRanking" :key="sect.name">
+                    <strong>{{ sect.name }}</strong>
+                    <span>贡献 {{ sect.damage }} · 分润 {{ sect.spirit }} 灵石</span>
+                  </div>
+                </div>
+              </div>
+              <div class="panel flat sea-personal-rank">
+                <h3>个人贡献</h3>
+                <div class="timeline compact-list">
+                  <button class="event event-button" type="button" v-for="entry in selectedDungeonDay.public?.top || []" :key="entry.id" @click="openBattleReplay(selectedDungeonDay.public?.replay)">
+                    <strong>{{ entry.name }}</strong>
+                    <span>{{ entry.sect }} · 贡献 {{ entry.damage }} · +{{ entry.spirit }} 灵石</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-else class="panel empty">
+            暂无每日副本记录，点击「推进一天」后会自动结算所有人物的副本。
+          </div>
+          </template>
+
         </section>
 
         <section v-if="activeTab === 'sect'" class="view active">
@@ -484,8 +785,8 @@
                   {{ skillName(lastBattle.left.skillId) }}
                   <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.left.skillId) }}</span>
                 </div>
-                <Meter label="血量" icon="health" :value="currentBattleFrame.leftHp" :max="lastBattle.left.startHp" tone="health" />
-                <Meter label="法力" icon="mana" :value="currentBattleFrame.leftMana" :max="lastBattle.left.startMana" tone="focus" />
+                <Meter label="血量" icon="health" :value="currentBattleFrame.leftHp" :max="battleMax(lastBattle.left, 'hp')" tone="health" />
+                <Meter label="法力" icon="mana" :value="currentBattleFrame.leftMana" :max="battleMax(lastBattle.left, 'mana')" tone="focus" />
               </div>
               <div class="vs">{{ battleOutcomeLabel }}</div>
               <div class="fighter">
@@ -503,8 +804,8 @@
                   {{ skillName(lastBattle.right.skillId) }}
                   <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.right.skillId) }}</span>
                 </div>
-                <Meter label="血量" icon="health" :value="currentBattleFrame.rightHp" :max="lastBattle.right.startHp" tone="health" />
-                <Meter label="法力" icon="mana" :value="currentBattleFrame.rightMana" :max="lastBattle.right.startMana" tone="focus" />
+                <Meter label="血量" icon="health" :value="currentBattleFrame.rightHp" :max="battleMax(lastBattle.right, 'hp')" tone="health" />
+                <Meter label="法力" icon="mana" :value="currentBattleFrame.rightMana" :max="battleMax(lastBattle.right, 'mana')" tone="focus" />
               </div>
             </div>
 
@@ -791,8 +1092,8 @@
                   {{ skillName(lastBattle.left.skillId) }}
                   <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.left.skillId) }}</span>
                 </div>
-                <Meter label="血量" icon="health" :value="currentBattleFrame.leftHp" :max="lastBattle.left.startHp" tone="health" />
-                <Meter label="法力" icon="mana" :value="currentBattleFrame.leftMana" :max="lastBattle.left.startMana" tone="focus" />
+                <Meter label="血量" icon="health" :value="currentBattleFrame.leftHp" :max="battleMax(lastBattle.left, 'hp')" tone="health" />
+                <Meter label="法力" icon="mana" :value="currentBattleFrame.leftMana" :max="battleMax(lastBattle.left, 'mana')" tone="focus" />
               </div>
               <div class="vs">{{ battleOutcomeLabel }}</div>
               <div class="fighter">
@@ -810,8 +1111,8 @@
                   {{ skillName(lastBattle.right.skillId) }}
                   <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.right.skillId) }}</span>
                 </div>
-                <Meter label="血量" icon="health" :value="currentBattleFrame.rightHp" :max="lastBattle.right.startHp" tone="health" />
-                <Meter label="法力" icon="mana" :value="currentBattleFrame.rightMana" :max="lastBattle.right.startMana" tone="focus" />
+                <Meter label="血量" icon="health" :value="currentBattleFrame.rightHp" :max="battleMax(lastBattle.right, 'hp')" tone="health" />
+                <Meter label="法力" icon="mana" :value="currentBattleFrame.rightMana" :max="battleMax(lastBattle.right, 'mana')" tone="focus" />
               </div>
             </div>
 
@@ -909,7 +1210,80 @@
         </section>
 
         <section v-if="activeTab === 'rank'" class="view active">
-          <div class="panel" v-if="detailView === 'rank'">
+          <div v-if="lastBattle" class="battle-detail rank-battle-detail">
+            <div class="panel battle-header">
+              <div>
+                <h3>副本回合</h3>
+                <p>{{ lastBattle.left.name }} 对阵 {{ lastBattle.right.name }}，{{ battleStatusText }}</p>
+              </div>
+              <div class="actions">
+                <button class="secondary" @click="replayBattle">重播</button>
+                <button class="primary" @click="returnFromBattle">{{ battleBackLabel }}</button>
+              </div>
+            </div>
+
+            <div class="battle-line live">
+              <div class="fighter">
+                <CharacterPortrait :person="battlePerson(lastBattle.left)" size="lg" />
+                <strong>{{ lastBattle.left.name }}</strong>
+                <small>{{ realmName(lastBattle.left.realm) }} · 战力 {{ lastBattle.left.power }}</small>
+                <div class="battle-stats">
+                  <span v-for="stat in battleStatsFromEffective(lastBattle.left.stats)" :key="stat.label" :aria-label="`${stat.label} ${stat.value}`">
+                    <StatIcon :name="stat.icon" />
+                    <span>{{ stat.label }}</span>
+                    <strong>{{ stat.value }}</strong>
+                  </span>
+                </div>
+                <div class="skill-chip" tabindex="0">
+                  {{ skillName(lastBattle.left.skillId) }}
+                  <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.left.skillId) }}</span>
+                </div>
+                <Meter label="血量" icon="health" :value="currentBattleFrame.leftHp" :max="battleMax(lastBattle.left, 'hp')" tone="health" />
+                <Meter label="法力" icon="mana" :value="currentBattleFrame.leftMana" :max="battleMax(lastBattle.left, 'mana')" tone="focus" />
+              </div>
+              <div class="vs">{{ battleOutcomeLabel }}</div>
+              <div class="fighter">
+                <CharacterPortrait :person="battlePerson(lastBattle.right)" size="lg" />
+                <strong>{{ lastBattle.right.name }}</strong>
+                <small>{{ realmName(lastBattle.right.realm) }} · 战力 {{ lastBattle.right.power }}</small>
+                <div class="battle-stats">
+                  <span v-for="stat in battleStatsFromEffective(lastBattle.right.stats)" :key="stat.label" :aria-label="`${stat.label} ${stat.value}`">
+                    <StatIcon :name="stat.icon" />
+                    <span>{{ stat.label }}</span>
+                    <strong>{{ stat.value }}</strong>
+                  </span>
+                </div>
+                <div class="skill-chip" tabindex="0">
+                  {{ skillName(lastBattle.right.skillId) }}
+                  <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.right.skillId) }}</span>
+                </div>
+                <Meter label="血量" icon="health" :value="currentBattleFrame.rightHp" :max="battleMax(lastBattle.right, 'hp')" tone="health" />
+                <Meter label="法力" icon="mana" :value="currentBattleFrame.rightMana" :max="battleMax(lastBattle.right, 'mana')" tone="focus" />
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="battle-feed">
+                <div
+                  class="battle-event"
+                  v-for="(event, index) in displayedBattleEvents"
+                  :key="`${index}-${event.text}`"
+                  :class="[event.kind, skillEffectClass(event)]"
+                >
+                  <div v-if="event.kind === 'skill'" class="skill-cast" aria-hidden="true">
+                    <i>
+                      <span>{{ skillEffectGlyph(event) }}</span>
+                    </i>
+                    <b>{{ skillEffectTitle(event) }}</b>
+                  </div>
+                  <span>{{ event.round ? `第${event.round}回合` : "战报" }}</span>
+                  <p>{{ event.text }}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel" v-else-if="detailView === 'rank'">
             <div class="section-head">
               <h3>天南小榜</h3>
               <div class="segmented">
@@ -972,36 +1346,85 @@
 
           <div class="panel" v-else-if="detailView === 'person' && selectedPerson">
             <button class="secondary back-button" @click="returnFromDetail">{{ detailBackLabel }}</button>
-            <div class="detail-hero">
-              <CharacterPortrait :person="selectedPerson" size="xl" />
-              <div>
-                <h3>{{ selectedPerson.name }}</h3>
-                <p>{{ selectedPerson.sect }} · {{ genderLabel(selectedPerson.gender) }} · {{ realmName(selectedPerson.realm) }} · {{ rootLine(selectedPerson) }}</p>
-                <span class="tag">本命技能：{{ skillName(selectedPerson.skillId) }}</span>
-                <span class="tag rank-tag" :class="`duel-rank-${duelRankId(selectedPerson)}`">{{ duelRankText(selectedPerson) }}</span>
-                <span class="tag">{{ rootCounterText(selectedPerson) }}</span>
+            <div class="detail-overview">
+              <div class="detail-side-stats">
+                <div
+                  class="detail-box"
+                  v-for="item in personStats(selectedPerson).slice(0, Math.ceil(personStats(selectedPerson).length / 2))"
+                  :key="item.label"
+                  tabindex="0"
+                  :aria-label="item.help ? `${item.label}：${item.value}。${item.help}` : `${item.label}：${item.value}`"
+                >
+                  <span class="detail-icon" :class="`detail-icon-${item.icon || 'default'}`" aria-hidden="true">
+                    <component :is="detailIconComponent(item.icon)" :size="16" :stroke-width="2.4" />
+                  </span>
+                  <b :title="`${item.label}：${item.value}`">{{ item.value }}</b>
+                  <small class="detail-tip" role="tooltip">
+                    <strong>{{ item.label }}：{{ item.value }}</strong>
+                    <span>{{ item.help || `当前为 ${item.value}。` }}</span>
+                  </small>
+                </div>
+              </div>
+
+              <div class="equipment-avatar-panel detail-equipment-top">
+                <div class="detail-hero compact">
+                  <div>
+                    <h3>{{ selectedPerson.name }}</h3>
+                    <p>{{ selectedPerson.sect }} · {{ genderLabel(selectedPerson.gender) }} · {{ realmName(selectedPerson.realm) }} · {{ rootLine(selectedPerson) }}</p>
+                    <span class="tag">本命技能：{{ skillName(selectedPerson.skillId) }}</span>
+                    <span class="tag rank-tag" :class="`duel-rank-${duelRankId(selectedPerson)}`">{{ duelRankText(selectedPerson) }}</span>
+                    <span class="tag">{{ rootCounterText(selectedPerson) }}</span>
+                  </div>
+                  <span class="tag">{{ equippedFor(selectedPerson).length }}/{{ equipmentSlots.length }}</span>
+                </div>
+                <div class="equipment-paperdoll">
+                  <div class="equipment-slot-column">
+                    <div class="equipment-slot-card" v-for="slot in equipmentSlots.slice(0, 3)" :key="slot.id" :class="equipmentSlotCardClass(selectedPerson, slot)">
+                      <span>{{ slot.name }}</span>
+                      <strong>{{ equippedInSlot(selectedPerson, slot.id)?.name || "空" }}</strong>
+                      <small>{{ equipmentSlotSummary(selectedPerson, slot) }}</small>
+                    </div>
+                  </div>
+                  <div class="equipment-character-core">
+                    <CharacterPortrait :person="selectedPerson" size="xl" />
+                    <b>{{ personPower(selectedPerson) }}</b>
+                    <span>战斗力</span>
+                  </div>
+                  <div class="equipment-slot-column">
+                    <div class="equipment-slot-card" v-for="slot in equipmentSlots.slice(3)" :key="slot.id" :class="equipmentSlotCardClass(selectedPerson, slot)">
+                      <span>{{ slot.name }}</span>
+                      <strong>{{ equippedInSlot(selectedPerson, slot.id)?.name || "空" }}</strong>
+                      <small>{{ equipmentSlotSummary(selectedPerson, slot) }}</small>
+                    </div>
+                    <div class="equipment-slot-card empty-slot" v-if="equipmentSlots.length < 6">
+                      <span>预留</span>
+                      <strong>未开启</strong>
+                      <small>后续境界解锁</small>
+                    </div>
+                  </div>
+                </div>
                 <div class="detail-meters">
                   <Meter label="经验" :value="selectedPerson.xp" :max="personXpNeed(selectedPerson)" />
                 </div>
               </div>
-            </div>
 
-            <div class="detail-grid">
-              <div
-                class="detail-box"
-                v-for="item in personStats(selectedPerson)"
-                :key="item.label"
-                tabindex="0"
-                :aria-label="item.help ? `${item.label}：${item.value}。${item.help}` : `${item.label}：${item.value}`"
-              >
-                <span class="detail-icon" :class="`detail-icon-${item.icon || 'default'}`" aria-hidden="true">
-                  <component :is="detailIconComponent(item.icon)" :size="16" :stroke-width="2.4" />
-                </span>
-                <b :title="`${item.label}：${item.value}`">{{ item.value }}</b>
-                <small class="detail-tip" role="tooltip">
-                  <strong>{{ item.label }}：{{ item.value }}</strong>
-                  <span>{{ item.help || `当前为 ${item.value}。` }}</span>
-                </small>
+              <div class="detail-side-stats">
+                <div
+                  class="detail-box"
+                  v-for="item in personStats(selectedPerson).slice(Math.ceil(personStats(selectedPerson).length / 2))"
+                  :key="item.label"
+                  tabindex="0"
+                  :aria-label="item.help ? `${item.label}：${item.value}。${item.help}` : `${item.label}：${item.value}`"
+                >
+                  <span class="detail-icon" :class="`detail-icon-${item.icon || 'default'}`" aria-hidden="true">
+                    <component :is="detailIconComponent(item.icon)" :size="16" :stroke-width="2.4" />
+                  </span>
+                  <b :title="`${item.label}：${item.value}`">{{ item.value }}</b>
+                  <small class="detail-tip" role="tooltip">
+                    <strong>{{ item.label }}：{{ item.value }}</strong>
+                    <span>{{ item.help || `当前为 ${item.value}。` }}</span>
+                  </small>
+                </div>
               </div>
             </div>
 
@@ -1089,23 +1512,20 @@
               <div class="panel flat">
                 <h3>副本闯关</h3>
                 <div class="timeline detail-scroll">
-                  <div class="event">最高副本：{{ selectedPerson.bestDungeonName || "未入秘境" }}</div>
-                  <div class="event">副本评分 {{ selectedPerson.bestDungeonPower || 0 }}</div>
-                  <div class="event">累计通关 {{ selectedPerson.dungeonClears || 0 }} 次</div>
+                  <button
+                    class="event event-button"
+                    v-for="record in selectedPerson.dungeonHistory || []"
+                    :key="`${record.day}-${record.type}-${record.name}-${record.result}`"
+                    type="button"
+                    :disabled="!record.replay"
+                    @click="openBattleReplay(record.replay)"
+                  >
+                    <strong>{{ record.date || `第${record.day}天` }} · {{ record.name }}：{{ record.result }}</strong>
+                    <span>{{ record.monster || "秘境历练" }}<span v-if="record.monsterRealm"> · {{ record.monsterRealm }}</span>，+{{ record.spirit || 0 }} 灵石<span v-if="record.damage">，输出 {{ record.damage }}</span></span>
+                    <small v-if="record.item">获得{{ record.tierName }}「{{ record.item }}」</small>
+                  </button>
+                  <div v-if="!selectedPerson.dungeonHistory?.length" class="empty">暂无副本闯关记录。</div>
                 </div>
-              </div>
-              <div class="panel flat">
-                <h3>当前装备</h3>
-                <div class="equipment-mini-list" v-if="equippedFor(selectedPerson).length">
-                  <div class="equipment-mini" v-for="item in equippedFor(selectedPerson)" :key="item.id">
-                    <span class="tag">{{ item.slotName }}</span>
-                    <div>
-                      <strong>{{ item.name }}</strong>
-                      <small>{{ item.tierName }} · {{ item.statName }} +{{ formatPercent(item.bonus) }}</small>
-                    </div>
-                  </div>
-                </div>
-                <div v-else class="empty">暂无穿戴装备。</div>
               </div>
             </div>
           </div>
@@ -1153,6 +1573,25 @@
               <div class="panel flat">
                 <h3>宗门战绩</h3>
                 <p>{{ selectedSect.warWins || 0 }} 胜 {{ selectedSect.warLosses || 0 }} 负。敌对热度 {{ selectedSect.rivalHeat }}，物资 {{ selectedSect.supplies }}，声望 {{ selectedSect.reputation }}。</p>
+              </div>
+              <div class="panel flat">
+                <h3>虚天殿记录</h3>
+                <div class="timeline detail-scroll">
+                  <button
+                    class="event event-button"
+                    :class="{ gold: record.success, bad: !record.success }"
+                    v-for="record in sectDungeonRecords(selectedSect)"
+                    :key="`${selectedSect.name}-${record.day}`"
+                    type="button"
+                    :disabled="!record.replay"
+                    @click="openBattleReplay(record.replay)"
+                  >
+                    <strong>{{ record.date || `第${record.day}天` }} · {{ record.success ? "通关" : "未通关" }}</strong>
+                    <span>{{ record.monster }} · {{ record.monsterRealm }}，总输出 {{ record.totalDamage }}，剩余血量 {{ voidHallRemainingHp(record) }}，分润 +{{ record.spiritShare }} 灵石</span>
+                    <small>前三：{{ record.top?.slice(0, 3).map((entry) => `${entry.name} ${entry.damage}`).join("、") || "无" }}<span v-if="record.item">；装备：{{ record.itemOwner }} 获得{{ record.tierName }}「{{ record.item }}」</span></small>
+                  </button>
+                  <div v-if="!sectDungeonRecords(selectedSect).length" class="empty">暂无虚天殿记录。</div>
+                </div>
               </div>
             </div>
           </div>
@@ -1208,6 +1647,45 @@ const rankBoards = [
   { id: "dungeon", label: "副本闯关" }
 ];
 
+const emptyState = {
+  day: 1,
+  calendarStartDate: "",
+  lastSettlementDate: "",
+  player: {
+    id: "player",
+    name: "",
+    realm: 0,
+    layer: 1,
+    xp: 0,
+    hp: 0,
+    maxHp: 1,
+    mood: 0,
+    maxMood: 1,
+    spirit: 0,
+    sect: "",
+    root: { key: "metal", name: "金灵根" },
+    roots: [],
+    attributes: {},
+    dailyRecords: [],
+    breakthroughs: [],
+    duelHistory: [],
+    dungeonHistory: [],
+    equipment: {}
+  },
+  sect: { reputation: 0 },
+  npcs: [],
+  tasks: [],
+  log: [],
+  equipment: [],
+  equipmentTransfers: [],
+  provinces: [],
+  provinceWars: [],
+  duelDays: [],
+  dungeonDays: [],
+  catalog: {},
+  derived: {}
+};
+
 const state = shallowRef(null);
 const loading = ref(true);
 const error = ref("");
@@ -1219,6 +1697,9 @@ const rankPage = ref(1);
 const rankPageSize = 10;
 const equipmentTierFilter = ref("");
 const equipmentSlotFilter = ref("");
+const dungeonDayIndex = ref(0);
+const activeDungeonRecordTab = ref("blood");
+const selectedVoidHallSect = ref("");
 const detailView = ref("rank");
 const selectedPersonId = ref("player");
 const selectedSectName = ref("");
@@ -1253,22 +1734,23 @@ const sectSubTabs = [
   { id: "wars", label: "攻城记录" }
 ];
 
-const player = computed(() => state.value.player);
-const derived = computed(() => state.value.derived);
-const catalog = computed(() => state.value.catalog);
+const gameState = computed(() => state.value || emptyState);
+const player = computed(() => gameState.value.player);
+const derived = computed(() => gameState.value.derived);
+const catalog = computed(() => gameState.value.catalog);
 const equipmentSlots = computed(() => catalog.value.equipmentSlots?.length ? catalog.value.equipmentSlots : fallbackEquipmentSlots);
 const equipmentTiers = computed(() => catalog.value.equipmentTiers?.length ? catalog.value.equipmentTiers : fallbackEquipmentTiers);
 const duelRankList = computed(() => catalog.value.duelRanks?.length ? catalog.value.duelRanks : duelRanks);
 const duelSeasonInfo = computed(() => derived.value.duelSeason || {
-  season: duelSeasonOfDay(state.value.day),
-  seasonDay: duelSeasonDay(state.value.day),
+  season: duelSeasonOfDay(gameState.value.day),
+  seasonDay: duelSeasonDay(gameState.value.day),
   length: duelSeasonLength,
   maxScore: duelSeasonMaxScore,
   winScore: duelWinScore,
   lossScore: duelLossScore
 });
 const fallbackDuelRankMap = computed(() => {
-  const people = [state.value.player, ...(state.value.npcs || [])].filter(Boolean);
+  const people = [gameState.value.player, ...(gameState.value.npcs || [])].filter(Boolean);
   const map = Object.fromEntries(people.map((person) => [person.id, {
     season: duelSeasonInfo.value.season,
     seasonDay: duelSeasonInfo.value.seasonDay,
@@ -1276,8 +1758,8 @@ const fallbackDuelRankMap = computed(() => {
     wins: 0,
     losses: 0
   }]));
-  const records = [...(state.value.duelDays || [])]
-    .filter((record) => duelSeasonOfDay(record.day || state.value.day) === duelSeasonInfo.value.season)
+  const records = [...(gameState.value.duelDays || [])]
+    .filter((record) => duelSeasonOfDay(record.day || gameState.value.day) === duelSeasonInfo.value.season)
     .sort((a, b) => a.day - b.day);
   for (const record of records) {
     for (const match of record.matches || []) {
@@ -1296,13 +1778,42 @@ const fallbackDuelRankMap = computed(() => {
     ...duelRankByScore(season.score)
   }]));
 });
-const currentDate = computed(() => dateForDay(state.value.day));
+const currentDate = computed(() => dateForDay(gameState.value.day));
 const combatSkills = computed(() => catalog.value.combatSkills?.length ? catalog.value.combatSkills : [fallbackSkill]);
 const playerSkill = computed(() => skillById(player.value.skillId));
 const sectSummaries = computed(() => derived.value.sects || []);
+const dungeonRecordTabs = [
+  { id: "blood", label: "血色禁地" },
+  { id: "void", label: "虚天殿" },
+  { id: "sea", label: "乱星海猎妖" }
+];
+const dungeonDays = computed(() => gameState.value.dungeonDays || []);
+const selectedDungeonDay = computed(() => dungeonDays.value[dungeonDayIndex.value] || null);
+const canShowPreviousDungeonDay = computed(() => dungeonDayIndex.value < dungeonDays.value.length - 1);
+const canShowNextDungeonDay = computed(() => dungeonDayIndex.value > 0);
+const bloodTrialClearCount = computed(() => (selectedDungeonDay.value?.bloodTrial?.caves || []).reduce((sum, cave) => sum + (cave.clears?.length || 0), 0));
+const sortedVoidHallRecords = computed(() => [...(selectedDungeonDay.value?.sects || [])].sort((a, b) => Number(b.success) - Number(a.success) || b.totalDamage - a.totalDamage));
+const selectedVoidHallRecord = computed(() => sortedVoidHallRecords.value.find((record) => record.sect === selectedVoidHallSect.value));
+const voidHallSuccessCount = computed(() => (selectedDungeonDay.value?.sects || []).filter((record) => record.success).length);
+const starSeaSectRanking = computed(() => {
+  const map = new Map();
+  for (const entry of selectedDungeonDay.value?.public?.top || []) {
+    const item = map.get(entry.sect) || { name: entry.sect, damage: 0, spirit: 0 };
+    item.damage += entry.damage || 0;
+    item.spirit += entry.spirit || 0;
+    map.set(entry.sect, item);
+  }
+  return [...map.values()].sort((a, b) => b.damage - a.damage).slice(0, 8);
+});
+const todayEquipmentDrops = computed(() => {
+  const today = gameState.value.day;
+  return (gameState.value.equipmentTransfers || [])
+    .filter((drop) => drop.day === today && drop.itemName)
+    .slice(0, 12);
+});
 const equipmentList = computed(() => {
   const catalogSource = catalog.value.equipmentCatalog?.length ? catalog.value.equipmentCatalog : fallbackEquipmentCatalog;
-  const source = state.value.equipment?.length ? state.value.equipment : catalogSource;
+  const source = gameState.value.equipment?.length ? gameState.value.equipment : catalogSource;
   return source.map((item) => ({
     ...item,
     slotName: item.slotName || equipmentSlotName(item.slot),
@@ -1318,9 +1829,9 @@ const filteredEquipment = computed(() => equipmentList.value
   .filter((item) => !equipmentTierFilter.value || String(item.tier) === equipmentTierFilter.value)
   .filter((item) => !equipmentSlotFilter.value || item.slot === equipmentSlotFilter.value)
   .sort((a, b) => b.tier - a.tier || slotOrder(a.slot) - slotOrder(b.slot) || b.bonus - a.bonus));
-const provinceWarRecords = computed(() => state.value.provinceWars || []);
+const provinceWarRecords = computed(() => gameState.value.provinceWars || []);
 const provinceTerritories = computed(() => {
-  const owners = new Map((state.value.provinces || []).map((item) => [item.id, item]));
+  const owners = new Map((gameState.value.provinces || []).map((item) => [item.id, item]));
   return (catalog.value.provinces || []).map((province) => {
     const territory = owners.get(province.id) || {};
     const currentProvince = { ...province, type: province.type || "spirit" };
@@ -1360,7 +1871,7 @@ const provinceWarDayRecords = computed(() => {
   if (activeTab.value !== "sect" && activeTab.value !== "arena") return [];
   const groups = new Map();
   for (const war of provinceWarRecords.value) {
-    const day = war.day || state.value.day;
+    const day = war.day || gameState.value.day;
     if (!groups.has(day)) groups.set(day, { day, date: war.date || dateForDay(day), wars: [] });
     groups.get(day).wars.push(war);
   }
@@ -1368,8 +1879,8 @@ const provinceWarDayRecords = computed(() => {
 });
 const provinceWarDayOptions = computed(() => {
   if (activeTab.value !== "sect") return [];
-  const days = new Set([state.value.day, selectedProvinceWarDay.value, ...provinceWarDayRecords.value.map((record) => record.day)]);
-  return [...days].filter((day) => day >= 1 && day <= state.value.day).sort((a, b) => b - a);
+  const days = new Set([gameState.value.day, selectedProvinceWarDay.value, ...provinceWarDayRecords.value.map((record) => record.day)]);
+  return [...days].filter((day) => day >= 1 && day <= gameState.value.day).sort((a, b) => b - a);
 });
 const provinceWarDateOptions = computed(() => provinceWarDayOptions.value.map((day) => ({ day, date: dateForDay(day) })));
 const selectedProvinceWarDayRecord = computed(() => provinceWarDayRecords.value.find((record) => record.day === selectedProvinceWarDay.value));
@@ -1382,17 +1893,17 @@ const filteredProvinceWars = computed(() => {
 });
 const selectedProvinceWar = computed(() => selectedProvinceWarDayRecord.value?.wars.find((war) => war.id === selectedProvinceWarId.value));
 const selectedProvinceWarDate = computed(() => selectedProvinceWarDayRecord.value?.date || dateForDay(selectedProvinceWarDay.value));
-const mainLogs = computed(() => state.value.log.filter((entry) => !isNpcBreakthroughLog(entry)));
-const duelRecords = computed(() => state.value.duelDays || []);
+const mainLogs = computed(() => gameState.value.log.filter((entry) => !isNpcBreakthroughLog(entry)));
+const duelRecords = computed(() => gameState.value.duelDays || []);
 const duelDayOptions = computed(() => {
   if (activeTab.value !== "arena") return [];
-  const days = new Set([state.value.day, selectedDuelDay.value, ...duelRecords.value.map((record) => record.day)]);
-  return [...days].filter((day) => day >= 1 && day <= state.value.day).sort((a, b) => b - a);
+  const days = new Set([gameState.value.day, selectedDuelDay.value, ...duelRecords.value.map((record) => record.day)]);
+  return [...days].filter((day) => day >= 1 && day <= gameState.value.day).sort((a, b) => b - a);
 });
 const duelDateOptions = computed(() => duelDayOptions.value.map((day) => ({ day, date: dateForDay(day) })));
 const selectedDuelRecord = computed(() => duelRecords.value.find((record) => record.day === selectedDuelDay.value));
 const selectedDuelDate = computed(() => selectedDuelRecord.value?.date || dateForDay(selectedDuelDay.value));
-const todaysDuelRecord = computed(() => duelRecords.value.find((record) => record.day === state.value.day));
+const todaysDuelRecord = computed(() => duelRecords.value.find((record) => record.day === gameState.value.day));
 const visibleBattleEvents = computed(() => lastBattle.value?.events.slice(0, battleCursor.value) || []);
 const displayedBattleEvents = computed(() => [...visibleBattleEvents.value].reverse());
 const isBattleReplayDone = computed(() => {
@@ -1482,6 +1993,102 @@ function skillStyle(skill) {
   if (skill.cost >= 28) return "legendary";
   if (skill.cost >= 22) return "rare";
   return "common";
+}
+
+function showPreviousDungeonDay() {
+  dungeonDayIndex.value = Math.min(dungeonDays.value.length - 1, dungeonDayIndex.value + 1);
+}
+
+function showNextDungeonDay() {
+  dungeonDayIndex.value = Math.max(0, dungeonDayIndex.value - 1);
+}
+
+function sectDungeonRecords(sect) {
+  if (!sect?.name) return [];
+  return dungeonDays.value
+    .map((day) => (day.sects || []).find((record) => record.sect === sect.name))
+    .filter(Boolean);
+}
+
+function monsterStatItems(monster = {}) {
+  return [
+    { label: "血量", value: monster.maxHp || "?", icon: "health" },
+    { label: "法力", value: monster.maxMana || "?", icon: "mana" },
+    { label: "攻击", value: monster.attack || "?", icon: "attack" },
+    { label: "防御", value: monster.defense || "?", icon: "defense" },
+    { label: "神识", value: monster.divineSense || "?", icon: "sense" },
+    { label: "技能", value: monster.skill || "妖术", icon: "skill" }
+  ];
+}
+
+function voidHallTopEntries(record) {
+  const ranked = [...(record?.top || [])]
+    .sort((a, b) => (b.damage || 0) - (a.damage || 0))
+    .slice(0, 3)
+    .map((entry, index) => ({ ...entry, output: entry.damage || 0, rank: index + 1, success: true }));
+  return [ranked[1], ranked[0], ranked[2]].filter(Boolean);
+}
+
+function voidHallBattles(record) {
+  if (record?.battles?.length) return record.battles;
+  return [];
+}
+
+function voidHallRemainingHp(record) {
+  if (typeof record?.monsterRemainingHp === "number") return Math.max(0, record.monsterRemainingHp);
+  const maxHp = Number(record?.monsterStats?.maxHp || record?.requiredDamage || 0);
+  return Math.max(0, maxHp - (Number(record?.totalDamage) || 0));
+}
+
+function openVoidHallRecord(record) {
+  selectedVoidHallSect.value = record?.sect || "";
+}
+
+function closeVoidHallRecord() {
+  selectedVoidHallSect.value = "";
+}
+
+function bloodCaveEntries(cave) {
+  const clears = (cave?.clears || []).map((entry) => ({ ...entry, success: true }));
+  const challengers = (cave?.challengers || []).map((entry) => ({ ...entry, success: Boolean(entry.success) }));
+  const source = clears.length ? clears : challengers.length ? challengers : previousBloodCaveClears(cave);
+  const ranked = source
+    .sort((a, b) => Number(b.success) - Number(a.success) || (b.output || 0) - (a.output || 0) || (a.rounds || 999) - (b.rounds || 999))
+    .slice(0, 3)
+    .map((entry, index) => ({ ...entry, rank: index + 1 }));
+  return [ranked[1], ranked[0], ranked[2]].filter(Boolean);
+}
+
+function previousBloodCaveClears(cave) {
+  const caveIndex = Number(cave?.cave || 0);
+  if (caveIndex <= 1) return [];
+  const previous = (selectedDungeonDay.value?.bloodTrial?.caves || []).find((item) => Number(item.cave) === caveIndex - 1);
+  return (previous?.clears || []).map((entry) => ({
+    ...entry,
+    success: true,
+    pending: true,
+    replay: null,
+    spirit: 0,
+    item: "",
+    tierName: ""
+  }));
+}
+
+function bloodEntryResultText(entry) {
+  if (entry.pending) return "待挑战";
+  return entry.success ? "通关" : "败退";
+}
+
+function podiumRankIcon(rank) {
+  return rank === 1 ? "冠" : rank === 2 ? "亚" : "季";
+}
+
+function bloodEntryPerson(entry) {
+  return personByRef(entry) || entry;
+}
+
+function openBloodCaveReplay(entry) {
+  if (entry?.replay) openBattleReplay(entry.replay);
 }
 
 function skillForEvent(event) {
@@ -1600,12 +2207,12 @@ const cultivators = computed(() => [
   withDuelRank({
     ...player.value,
     name: player.value.name,
-    sect: state.value.sect.name,
+    sect: gameState.value.sect?.name || "",
     mood: "求道",
     power: derived.value.playerPower,
     isPlayer: true
   }),
-  ...state.value.npcs.map((npc) => withDuelRank({ ...npc, power: personPower({ ...npc, isPlayer: false }), isPlayer: false }))
+  ...(gameState.value.npcs || []).map((npc) => withDuelRank({ ...npc, power: personPower({ ...npc, isPlayer: false }), isPlayer: false }))
 ]);
 
 const selectedPerson = computed(() => cultivators.value.find((item) => item.id === selectedPersonId.value));
@@ -1689,9 +2296,52 @@ function equipmentTierStealChance(tierId) {
   return equipmentTier(tierId).stealChance || 0;
 }
 
+function equipmentDropKind(drop) {
+  if (drop?.type) return drop.type;
+  return drop?.loserId ? "steal" : "dungeon";
+}
+
+function equipmentDropSource(drop) {
+  const kind = equipmentDropKind(drop);
+  if (kind === "steal") return drop?.context ? `抢夺 · ${drop.context}` : "抢夺";
+  if (drop?.context) return `副本 · ${drop.context}`;
+  return "副本掉落";
+}
+
+function equipmentDropItem(drop) {
+  return equipmentList.value.find((item) => item.id === drop?.itemId) || {};
+}
+
+function equipmentDropSlotName(drop) {
+  return drop?.slotName || equipmentDropItem(drop).slotName || "未知部位";
+}
+
+function equipmentDropStatName(drop) {
+  return drop?.statName || equipmentDropItem(drop).statName || "属性";
+}
+
+function equipmentDropBonus(drop) {
+  return typeof drop?.bonus === "number" ? drop.bonus : equipmentDropItem(drop).bonus || 0;
+}
+
 function equippedFor(person) {
   if (!person?.id) return [];
   return derived.value.equippedItems?.[person.id] || [];
+}
+
+function equippedInSlot(person, slotId) {
+  return equippedFor(person).find((item) => item.slot === slotId);
+}
+
+function equipmentSlotSummary(person, slot) {
+  const item = equippedInSlot(person, slot.id);
+  if (!item) return `${slot.statName || "属性"} +0%`;
+  return `${item.tierName} · ${item.statName} +${formatPercent(item.bonus)}`;
+}
+
+function equipmentSlotCardClass(person, slot) {
+  const item = equippedInSlot(person, slot.id);
+  return item ? `tier-${item.tier}` : "empty-slot";
 }
 
 function equipmentBonus(person, stat) {
@@ -1706,6 +2356,14 @@ function matchPerson(ref) {
 
 function battlePerson(ref) {
   return personByRef(ref);
+}
+
+function battleMax(side, kind) {
+  if (!side) return 1;
+  const startKey = kind === "mana" ? "startMana" : "startHp";
+  const statKey = kind === "mana" ? "mana" : "hp";
+  const fallbackKey = kind === "mana" ? "maxMana" : "maxHp";
+  return Math.max(1, Number(side.baseStats?.[fallbackKey] || side.baseStats?.[statKey] || side.stats?.[fallbackKey] || side.stats?.[statKey] || side[startKey] || 1));
 }
 
 function warTeam(war, side) {
@@ -1874,7 +2532,7 @@ const dungeonRanking = computed(() => cultivators.value
 
 function isNpcBreakthroughLog(entry) {
   if (!entry?.text?.includes("突破至")) return false;
-  return state.value.npcs.some((npc) => entry.text.includes(`${npc.name}在${npc.sect}`));
+  return (gameState.value.npcs || []).some((npc) => entry.text.includes(`${npc.name}在${npc.sect}`));
 }
 
 function formatPercent(value) {
@@ -1915,11 +2573,11 @@ function addDays(dateText, offset) {
 }
 
 function dateForDay(day) {
-  return addDays(state.value.calendarStartDate || state.value.lastSettlementDate, Math.max(0, Number(day || 1) - 1));
+  return addDays(gameState.value.calendarStartDate || gameState.value.lastSettlementDate, Math.max(0, Number(day || 1) - 1));
 }
 
 function displayDate(record) {
-  return record?.date || dateForDay(record?.day || state.value.day);
+  return record?.date || dateForDay(record?.day || gameState.value.day);
 }
 
 function dailyChanceText(record) {
@@ -2466,9 +3124,9 @@ async function refresh() {
     if (!selectedRealmStage.value) {
       selectedRealmStage.value = derived.value.currentRealmInfo?.stage || groupedRealmProgression.value[0]?.stage || "";
     }
-    if (!selectedDuelDay.value) selectedDuelDay.value = state.value.day;
+    if (!selectedDuelDay.value) selectedDuelDay.value = gameState.value.day;
     else selectedDuelDay.value = clampDay(selectedDuelDay.value);
-    if (!selectedProvinceWarDay.value) selectedProvinceWarDay.value = state.value.day;
+    if (!selectedProvinceWarDay.value) selectedProvinceWarDay.value = gameState.value.day;
     else selectedProvinceWarDay.value = clampDay(selectedProvinceWarDay.value);
     error.value = "";
   } catch (err) {
@@ -2542,7 +3200,7 @@ function closeProvinceWarDetail() {
 
 function clampDay(day) {
   if (!state.value) return Math.max(1, Number(day) || 1);
-  return Math.max(1, Math.min(state.value.day, Number(day) || state.value.day));
+  return Math.max(1, Math.min(gameState.value.day, Number(day) || gameState.value.day));
 }
 
 function changeDuelDay(offset) {
@@ -2582,8 +3240,8 @@ async function resetGame() {
   selectedPersonId.value = "player";
   selectedSectName.value = "";
   selectedRealmStage.value = derived.value.currentRealmInfo?.stage || "";
-  selectedDuelDay.value = state.value.day;
-  selectedProvinceWarDay.value = state.value.day;
+  selectedDuelDay.value = gameState.value.day;
+  selectedProvinceWarDay.value = gameState.value.day;
   selectedProvinceWarId.value = "";
   clearBattleReplay();
 }
@@ -2665,5 +3323,15 @@ watch([activeRankBoard, rankSearch], () => {
 
 watch(rankPageCount, () => {
   if (rankPage.value > rankPageCount.value) rankPage.value = rankPageCount.value;
+});
+
+watch(dungeonDays, () => {
+  if (dungeonDayIndex.value > Math.max(0, dungeonDays.value.length - 1)) {
+    dungeonDayIndex.value = Math.max(0, dungeonDays.value.length - 1);
+  }
+});
+
+watch([activeDungeonRecordTab, dungeonDayIndex], () => {
+  selectedVoidHallSect.value = "";
 });
 </script>
