@@ -1,24 +1,6 @@
-const fallbackApiBase = import.meta.env.VITE_API_FALLBACK || "http://127.0.0.1:8877";
-let activeApiBase = "";
-let apiBasePromise;
-
 async function request(path, options = {}) {
-  const base = await resolveApiBase();
-  const response = await fetchJson(`${base}${path}`, options);
-  if (response.ok) {
-    activeApiBase = base;
-    return response.data;
-  }
-
-  if (fallbackApiBase && shouldTryFallback(response)) {
-    const fallback = await fetchJson(`${fallbackApiBase}${path}`, options);
-    if (fallback.ok) {
-      activeApiBase = fallbackApiBase;
-      return fallback.data;
-    }
-    throw new Error(fallback.data?.error || response.data?.error || "请求失败");
-  }
-
+  const response = await fetchJson(path, options);
+  if (response.ok) return response.data;
   throw new Error(response.data?.error || "请求失败");
 }
 
@@ -35,23 +17,6 @@ async function fetchJson(path, options = {}) {
   } catch (error) {
     return { ok: false, status: 0, data: { error: error.message } };
   }
-}
-
-async function resolveApiBase() {
-  if (activeApiBase) return activeApiBase;
-  if (!apiBasePromise) {
-    apiBasePromise = probeApiBase();
-  }
-  activeApiBase = await apiBasePromise;
-  return activeApiBase;
-}
-
-async function probeApiBase() {
-  return "";
-}
-
-function shouldTryFallback(response) {
-  return response.status === 0 || response.status === 404;
 }
 
 export function getState() {

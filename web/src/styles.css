@@ -1505,11 +1505,108 @@ button.event {
   grid-template-columns: auto auto minmax(0, 1fr) auto;
 }
 
+.rank-row.top-rank-row {
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--rank-glow, #d7a23b) 14%, transparent), transparent 48%),
+    rgba(255, 255, 255, .54);
+  border-color: color-mix(in srgb, var(--rank-glow, #d7a23b) 34%, rgba(120, 91, 43, .18));
+}
+
+.rank-row:has(.rank-medal-1) {
+  --rank-glow: #d9a630;
+}
+
+.rank-row:has(.rank-medal-2) {
+  --rank-glow: #aeb9c6;
+}
+
+.rank-row:has(.rank-medal-3) {
+  --rank-glow: #c47a3b;
+}
+
 .rank-row:hover,
 .rank-row:focus-visible {
   border-color: rgba(15, 118, 110, .58);
   background: rgba(236, 253, 245, .76);
   z-index: 4;
+}
+
+.rank-medal {
+  --medal-main: #d6a22b;
+  --medal-dark: #8a5b13;
+  --medal-light: #fff2b8;
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 42px;
+  isolation: isolate;
+  filter: drop-shadow(0 8px 10px rgba(50, 35, 17, .18));
+  flex: 0 0 auto;
+}
+
+.rank-medal::before {
+  content: "";
+  position: absolute;
+  inset: 0 3px 7px;
+  z-index: -1;
+  clip-path: polygon(0 0, 100% 0, 100% 74%, 50% 100%, 0 74%);
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, .42), transparent 26% 74%, rgba(0, 0, 0, .22)),
+    linear-gradient(145deg, var(--medal-light), var(--medal-main) 44%, var(--medal-dark));
+  border: 1px solid color-mix(in srgb, var(--medal-dark) 72%, #1f2937);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, .34),
+    inset 0 -8px 14px rgba(0, 0, 0, .16);
+}
+
+.rank-medal::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 4px;
+  height: 13px;
+  z-index: -2;
+  clip-path: polygon(0 0, 50% 100%, 100% 0, 100% 52%, 50% 100%, 0 52%);
+  background: linear-gradient(90deg, var(--medal-dark), var(--medal-main), var(--medal-dark));
+}
+
+.rank-medal > span {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-bottom: 8px;
+  color: #fffaf0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+  text-shadow: 0 1px 1px rgba(48, 31, 11, .48);
+}
+
+.rank-medal-1 {
+  --medal-main: #d49b24;
+  --medal-dark: #82510a;
+  --medal-light: #fff0a8;
+}
+
+.rank-medal-2 {
+  --medal-main: #aeb8c4;
+  --medal-dark: #607080;
+  --medal-light: #f5f8fb;
+}
+
+.rank-medal-3 {
+  --medal-main: #c27637;
+  --medal-dark: #7b3f1d;
+  --medal-light: #ffd2a3;
+}
+
+.rank-number {
+  min-width: 34px;
+  text-align: center;
 }
 
 .row strong {
@@ -1620,7 +1717,7 @@ button.event {
 
 .detail-grid {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
   margin: 12px 0;
 }
@@ -1635,11 +1732,14 @@ button.event {
 }
 
 .root-grid {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
 }
 
 .root-card {
-  min-height: 92px;
+  min-width: 0;
+  min-height: 108px;
   border: 1px solid rgba(120, 91, 43, .22);
   border-radius: 7px;
   background: rgba(255, 255, 255, .44);
@@ -1654,8 +1754,25 @@ button.event {
   background: rgba(236, 253, 245, .82);
 }
 
+.root-card.primary {
+  box-shadow:
+    inset 0 0 0 1px rgba(212, 160, 47, .34),
+    0 8px 18px rgba(120, 91, 43, .12);
+}
+
 .root-card strong {
   color: #78350f;
+  overflow-wrap: anywhere;
+}
+
+.root-card small {
+  justify-self: start;
+  border: 1px solid rgba(180, 83, 9, .28);
+  border-radius: 999px;
+  padding: 2px 7px;
+  background: #fff7db;
+  color: #92400e;
+  font-size: 11px;
 }
 
 .root-card span,
@@ -1664,6 +1781,7 @@ button.event {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.55;
+  overflow-wrap: anywhere;
 }
 
 .attribute-hero {
@@ -1678,6 +1796,10 @@ button.event {
 
 .attribute-list {
   margin-top: 0;
+}
+
+.attribute-list.compact {
+  gap: 6px;
 }
 
 .attribute-row {
@@ -1698,6 +1820,69 @@ button.event {
 .attribute-row strong {
   color: #38421f;
   font-size: 20px;
+}
+
+.root-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.root-chip {
+  display: inline-grid;
+  gap: 2px;
+  min-width: 104px;
+  border: 1px solid rgba(120, 91, 43, .24);
+  border-radius: 7px;
+  padding: 7px 9px;
+  background: rgba(255, 255, 255, .55);
+  color: #78350f;
+  font-weight: 800;
+}
+
+.root-chip.primary {
+  border-color: rgba(15, 118, 110, .52);
+  background: rgba(236, 253, 245, .84);
+}
+
+.root-chip.resonance {
+  border-color: rgba(212, 160, 47, .44);
+  background: #fff7db;
+}
+
+.root-chip small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.root-summary-list {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  color: #5b4630;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.root-summary-list li {
+  position: relative;
+  padding-left: 12px;
+}
+
+.root-summary-list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: .68em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(15, 118, 110, .7);
 }
 
 .skill-hero {
@@ -1876,23 +2061,95 @@ button.event {
 
 .detail-box {
   position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 50px;
+  align-items: center;
+  gap: 8px;
   border: 1px solid rgba(120, 91, 43, .22);
   background: rgba(255, 255, 255, .48);
   border-radius: 7px;
-  padding: 9px;
-  min-height: 58px;
+  padding: 8px;
   outline: none;
 }
 
 .detail-box b {
   display: block;
+  min-width: 0;
+  flex: 1 1 auto;
   color: #38421f;
-  font-size: 18px;
+  font-size: 16px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.detail-box span {
-  color: var(--muted);
-  font-size: 12px;
+.detail-icon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(120, 91, 43, .22);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 32% 24%, rgba(255, 255, 255, .9), transparent 34%),
+    linear-gradient(145deg, #fff7db, #e7c779);
+  color: #78350f;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, .35),
+    0 5px 10px rgba(82, 57, 24, .1);
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.detail-icon svg {
+  display: block;
+}
+
+.detail-icon-gender {
+  background: linear-gradient(145deg, #ecfeff, #99f6e4);
+  color: #0f766e;
+}
+
+.detail-icon-breakthrough,
+.detail-icon-rank {
+  background: linear-gradient(145deg, #fff7db, #f0bf4f);
+  color: #92400e;
+}
+
+.detail-icon-spirit {
+  background: linear-gradient(145deg, #fff7ed, #fdba74);
+  color: #9a3412;
+}
+
+.detail-icon-hp {
+  background: linear-gradient(145deg, #fff1f2, #fca5a5);
+  color: #be123c;
+}
+
+.detail-icon-mana {
+  background: linear-gradient(145deg, #eff6ff, #93c5fd);
+  color: #1d4ed8;
+}
+
+.detail-icon-attack,
+.detail-icon-power {
+  background: linear-gradient(145deg, #fef3c7, #f59e0b);
+  color: #7c2d12;
+}
+
+.detail-icon-defense {
+  background: linear-gradient(145deg, #f0fdf4, #86efac);
+  color: #15803d;
+}
+
+.detail-icon-sense,
+.detail-icon-skill {
+  background: linear-gradient(145deg, #f5f3ff, #c4b5fd);
+  color: #6d28d9;
 }
 
 .detail-tip {
@@ -1913,6 +2170,20 @@ button.event {
   padding: 9px 10px;
   font-size: 12px;
   line-height: 1.55;
+}
+
+.detail-tip strong,
+.detail-tip span {
+  display: block;
+}
+
+.detail-tip strong {
+  color: #78350f;
+  margin-bottom: 3px;
+}
+
+.detail-tip span {
+  color: #31414a;
 }
 
 .detail-box:hover .detail-tip,
@@ -2456,6 +2727,11 @@ button.event {
     linear-gradient(135deg, rgba(255, 253, 246, .92), rgba(var(--skill-rgb, 245, 158, 11), .1)),
     rgba(255, 247, 219, .72);
   overflow: hidden;
+}
+
+.battle-event.root {
+  border-left-color: #b45309;
+  background: linear-gradient(90deg, rgba(255, 247, 219, .9), rgba(255, 255, 255, .5));
 }
 
 .battle-event.dodge,

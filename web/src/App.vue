@@ -129,19 +129,20 @@
             <div class="section-head">
               <div>
                 <h3>属性说明</h3>
-                <p>灵根决定一个固定方向的百分比加成；PK 按回合结算，血量归零即败。</p>
+                <p>主灵根决定战斗相克，多灵根会稀释各项加成，并降低经验获取与突破效率。</p>
               </div>
-              <span class="tag">当前 {{ player.root.name }}</span>
+              <span class="tag">当前 {{ rootLine(player) }}</span>
             </div>
             <div class="root-grid">
               <article
                 class="root-card"
                 v-for="root in catalog.roots"
                 :key="root.key"
-                :class="{ active: root.key === player.root.key }"
+                :class="{ active: rootKeys(player).includes(root.key), primary: primaryRoot(player).key === root.key }"
               >
                 <strong>{{ root.name }}</strong>
                 <span>{{ root.note }}</span>
+                <small v-if="primaryRoot(player).key === root.key">主灵根</small>
               </article>
             </div>
           </div>
@@ -150,9 +151,33 @@
             <div class="panel">
               <h3>当前灵根</h3>
               <div class="attribute-hero">
-                <strong>{{ player.root.name }}</strong>
-                <span>{{ player.root.note }}</span>
-                <span class="tag">本次加成 {{ formatPercent(player.root.bonus) }}</span>
+                <strong>{{ rootLine(player) }}</strong>
+                <span>{{ rootSummary(player) }}</span>
+                <span class="tag">经验效率 {{ formatPercent(personInsight(player).rootProfile.cultivationMultiplier) }}</span>
+                <span class="tag">突破效率 {{ formatPercent(personInsight(player).rootProfile.breakthroughMultiplier) }}</span>
+              </div>
+            </div>
+            <div class="panel">
+              <h3>灵根相克</h3>
+              <div class="attribute-list">
+                <div class="attribute-row" v-for="rule in catalog.rootRules?.cycle || []" :key="rule.key">
+                  <span>{{ rule.name }}</span>
+                  <strong>克 {{ rule.targetName }}</strong>
+                  <small>本场战斗使被克者攻击、防御、神识最高降低 10%，跨大境界逐级减半。</small>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid">
+            <div class="panel">
+              <h3>灵根共鸣</h3>
+              <div class="attribute-list">
+                <div class="attribute-row" v-for="resonance in catalog.rootRules?.resonances || []" :key="resonance.id">
+                  <span>{{ resonance.name }}</span>
+                  <strong>{{ resonance.keys.map(rootName).join("、") }}</strong>
+                  <small>{{ resonance.note }}</small>
+                </div>
               </div>
             </div>
             <div class="panel">
@@ -439,7 +464,7 @@
               </div>
               <div class="actions">
                 <button class="secondary" @click="replayBattle">重播</button>
-                <button class="primary" @click="lastBattle = null">返回攻城记录</button>
+                <button class="primary" @click="returnFromBattle">{{ battleBackLabel }}</button>
               </div>
             </div>
 
@@ -746,7 +771,7 @@
               </div>
               <div class="actions">
                 <button class="secondary" @click="replayBattle">重播</button>
-                <button class="primary" @click="lastBattle = null">返回切磋</button>
+                <button class="primary" @click="returnFromBattle">{{ battleBackLabel }}</button>
               </div>
             </div>
 
@@ -915,14 +940,22 @@
             <div class="rank-list">
               <button
                 class="row rank-row"
-                :class="{ 'person-rank-row': item.kind === 'person' }"
+                :class="{ 'person-rank-row': item.kind === 'person', 'top-rank-row': rankPageStart + index < 3 }"
                 v-for="(item, index) in pagedRanking"
                 :key="`${activeRankBoard}-${item.name}-${item.sect}`"
                 type="button"
                 :aria-label="`${item.name}：${item.help}`"
                 @click="openRankItem(item)"
               >
-                <span class="tag">#{{ rankPageStart + index + 1 }}</span>
+                <span
+                  v-if="rankPageStart + index < 3"
+                  class="rank-medal"
+                  :class="`rank-medal-${rankPageStart + index + 1}`"
+                  aria-hidden="true"
+                >
+                  <span>{{ rankPageStart + index + 1 }}</span>
+                </span>
+                <span v-else class="tag rank-number">#{{ rankPageStart + index + 1 }}</span>
                 <CharacterPortrait v-if="item.kind === 'person'" :person="rankPerson(item)" size="sm" />
                 <div><strong>{{ item.name }}</strong><small>{{ item.subtitle }}</small></div>
                 <span>{{ item.value }}</span>
@@ -938,14 +971,15 @@
           </div>
 
           <div class="panel" v-else-if="detailView === 'person' && selectedPerson">
-            <button class="secondary back-button" @click="detailView = 'rank'">返回榜单</button>
+            <button class="secondary back-button" @click="returnFromDetail">{{ detailBackLabel }}</button>
             <div class="detail-hero">
               <CharacterPortrait :person="selectedPerson" size="xl" />
               <div>
                 <h3>{{ selectedPerson.name }}</h3>
-                <p>{{ selectedPerson.sect }} · {{ genderLabel(selectedPerson.gender) }} · {{ realmName(selectedPerson.realm) }} · {{ rootSummary(selectedPerson.root) }}</p>
+                <p>{{ selectedPerson.sect }} · {{ genderLabel(selectedPerson.gender) }} · {{ realmName(selectedPerson.realm) }} · {{ rootLine(selectedPerson) }}</p>
                 <span class="tag">本命技能：{{ skillName(selectedPerson.skillId) }}</span>
                 <span class="tag rank-tag" :class="`duel-rank-${duelRankId(selectedPerson)}`">{{ duelRankText(selectedPerson) }}</span>
+                <span class="tag">{{ rootCounterText(selectedPerson) }}</span>
                 <div class="detail-meters">
                   <Meter label="经验" :value="selectedPerson.xp" :max="personXpNeed(selectedPerson)" />
                 </div>
@@ -958,11 +992,54 @@
                 v-for="item in personStats(selectedPerson)"
                 :key="item.label"
                 tabindex="0"
-                :aria-label="item.help ? `${item.label}：${item.help}` : undefined"
+                :aria-label="item.help ? `${item.label}：${item.value}。${item.help}` : `${item.label}：${item.value}`"
               >
-                <b>{{ item.value }}</b>
-                <span>{{ item.label }}</span>
-                <small v-if="item.help" class="detail-tip" role="tooltip">{{ item.help }}</small>
+                <span class="detail-icon" :class="`detail-icon-${item.icon || 'default'}`" aria-hidden="true">
+                  <component :is="detailIconComponent(item.icon)" :size="16" :stroke-width="2.4" />
+                </span>
+                <b :title="`${item.label}：${item.value}`">{{ item.value }}</b>
+                <small class="detail-tip" role="tooltip">
+                  <strong>{{ item.label }}：{{ item.value }}</strong>
+                  <span>{{ item.help || `当前为 ${item.value}。` }}</span>
+                </small>
+              </div>
+            </div>
+
+            <div class="grid detail-sections">
+              <div class="panel flat">
+                <h3>灵根命盘</h3>
+                <div class="root-chip-list">
+                  <span class="root-chip" v-for="root in rootList(selectedPerson)" :key="`${selectedPerson.id}-${root.key}`" :class="{ primary: root.key === primaryRoot(selectedPerson).key }">
+                    {{ root.name }}<small>{{ root.key === primaryRoot(selectedPerson).key ? "主" : "副" }} · {{ rootBonusText(selectedPerson, root) }}</small>
+                  </span>
+                </div>
+                <ul class="root-summary-list">
+                  <li v-for="line in rootSummaryLines(selectedPerson)" :key="line">{{ line }}</li>
+                </ul>
+              </div>
+              <div class="panel flat">
+                <h3>明日预估</h3>
+                <div class="attribute-list compact">
+                  <div class="attribute-row">
+                    <span>经验</span>
+                    <strong>{{ personInsight(selectedPerson).tomorrowXp.total }}</strong>
+                    <small>{{ tomorrowXpText(selectedPerson) }}</small>
+                  </div>
+                  <div class="attribute-row">
+                    <span>突破</span>
+                    <strong>{{ formatPercent(personInsight(selectedPerson).breakthrough.total) }}</strong>
+                    <small>{{ breakthroughPartsText(selectedPerson) }}</small>
+                  </div>
+                </div>
+              </div>
+              <div class="panel flat">
+                <h3>共鸣</h3>
+                <div class="root-chip-list" v-if="personInsight(selectedPerson).rootProfile.resonances.length">
+                  <span class="root-chip resonance" v-for="resonance in personInsight(selectedPerson).rootProfile.resonances" :key="resonance.id">
+                    {{ resonance.name }}<small>{{ resonance.note }}</small>
+                  </span>
+                </div>
+                <div v-else class="empty">暂无灵根共鸣。</div>
               </div>
             </div>
 
@@ -1034,7 +1111,7 @@
           </div>
 
           <div class="panel" v-else-if="detailView === 'sect' && selectedSect">
-            <button class="secondary back-button" @click="detailView = 'rank'">返回榜单</button>
+            <button class="secondary back-button" @click="returnFromDetail">{{ detailBackLabel }}</button>
             <div class="section-head">
               <div>
                 <h3>{{ selectedSect.name }}</h3>
@@ -1088,6 +1165,19 @@
 </template>
 
 <script setup>
+import {
+  Activity,
+  BadgeCent,
+  CircleUserRound,
+  Coins,
+  Eye,
+  HeartPulse,
+  Shield,
+  Sparkles,
+  Swords,
+  Trophy,
+  Zap
+} from "lucide-vue-next";
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from "vue";
 import { getState, postAction } from "./api";
 import CharacterPortrait from "./components/CharacterPortrait.vue";
@@ -1132,12 +1222,14 @@ const equipmentSlotFilter = ref("");
 const detailView = ref("rank");
 const selectedPersonId = ref("player");
 const selectedSectName = ref("");
+const detailReturnStack = ref([]);
 const selectedRealmStage = ref("");
 const selectedDuelDay = ref(null);
 const selectedProvinceWarDay = ref(null);
 const selectedProvinceWarId = ref("");
 const provinceWarSearch = ref("");
 const lastBattle = ref(null);
+const battleReturnTarget = ref(null);
 const battleCursor = ref(0);
 const countdown = ref("--:--:--");
 const taskForm = reactive({ name: "", type: "study", diff: 3 });
@@ -1313,6 +1405,16 @@ const battleStatusText = computed(() => {
   return lastBattle.value.result === "胜" ? "你胜出了这一场。" : "你败下阵来。";
 });
 const battleOutcomeLabel = computed(() => (isBattleReplayDone.value ? lastBattle.value.result : "回放"));
+const battleBackLabel = computed(() => {
+  const target = battleReturnTarget.value;
+  if (!target) return activeTab.value === "sect" ? "返回攻城记录" : "返回切磋";
+  if (target.detailView === "person") return "返回";
+  if (target.detailView === "sect") return "返回宗门";
+  if (target.activeTab === "sect") return "返回攻城记录";
+  if (target.activeTab === "arena") return "返回切磋";
+  if (target.activeTab === "rank") return "返回榜单";
+  return `返回${tabLabel(target.activeTab)}`;
+});
 const currentBattleFrame = computed(() => {
   const battle = lastBattle.value;
   if (!battle) return { leftHp: 0, rightHp: 0, leftMana: 0, rightMana: 0 };
@@ -1508,6 +1610,14 @@ const cultivators = computed(() => [
 
 const selectedPerson = computed(() => cultivators.value.find((item) => item.id === selectedPersonId.value));
 const selectedSect = computed(() => sectSummaries.value.find((sect) => sect.name === selectedSectName.value));
+const detailBackLabel = computed(() => {
+  const last = detailReturnStack.value[detailReturnStack.value.length - 1];
+  if (!last) return "返回";
+  if (last.detailView === "sect") return "返回宗门";
+  if (last.detailView === "person") return "返回人物";
+  if (last.activeTab === "rank" && last.detailView === "rank") return "返回榜单";
+  return `返回${tabLabel(last.activeTab)}`;
+});
 
 function personByRef(ref) {
   if (!ref) return null;
@@ -1712,7 +1822,7 @@ const powerRanking = computed(() => cultivators.value
     sect: item.sect,
     subtitle: `${item.sect} · ${genderLabel(item.gender)} · ${item.mood} · ${realmName(item.realm)}`,
     value: item.power,
-    help: `战力 ${item.power}。性别：${genderLabel(item.gender)}；境界：${realmName(item.realm)}；经验：${Math.floor(item.xp)}；灵根 ${item.root.name}；攻击 ${personEffectiveStats(item).attack}，防御 ${personEffectiveStats(item).defense}，神识 ${personEffectiveStats(item).divineSense}，法力 ${personEffectiveStats(item).maxMana}。`
+    help: `战力 ${item.power}。性别：${genderLabel(item.gender)}；境界：${realmName(item.realm)}；经验：${Math.floor(item.xp)}；灵根 ${rootLine(item)}；攻击 ${personEffectiveStats(item).attack}，防御 ${personEffectiveStats(item).defense}，神识 ${personEffectiveStats(item).divineSense}，法力 ${personEffectiveStats(item).maxMana}。`
   }))
   .sort((a, b) => b.value - a.value));
 
@@ -1814,8 +1924,14 @@ function displayDate(record) {
 
 function dailyChanceText(record) {
   if (typeof record.breakChance !== "number") return "未尝试突破";
+  if (typeof record.realmBaseBreakChance === "number" || typeof record.rootBreakMultiplier === "number" || typeof record.sectBreakMultiplier === "number") {
+    const realmBase = record.realmBaseBreakChance ?? record.baseBreakChance ?? record.breakChance;
+    const rootMultiplier = record.rootBreakMultiplier ?? 1;
+    const sectMultiplier = record.sectBreakMultiplier ?? (1 + (record.bonusBreakChance || 0));
+    return `突破率 ${formatPercent(record.breakChance)}（境界 ${formatPercent(realmBase)} × 灵根 ${formatPercent(rootMultiplier)} × 宗门 ${formatPercent(sectMultiplier)}）`;
+  }
   if (typeof record.baseBreakChance === "number" || typeof record.bonusBreakChance === "number") {
-    return `突破率 ${formatPercent(record.breakChance)}（基础 ${formatPercent(record.baseBreakChance || 0)}，加成 ${formatPercent(record.bonusBreakChance || 0)}）`;
+    return `突破率 ${formatPercent(record.breakChance)}（基础 ${formatPercent(record.baseBreakChance || 0)}，宗门 ${formatPercent(1 + (record.bonusBreakChance || 0))}）`;
   }
   return `突破率 ${formatPercent(record.breakChance)}`;
 }
@@ -1840,14 +1956,88 @@ function breakthroughChanceText(record) {
   return `当时突破率 ${formatPercent(record.chance)}`;
 }
 
+function tabLabel(id) {
+  return tabs.find((tab) => tab.id === id)?.label || "上一页";
+}
+
+function captureDetailReturn() {
+  return {
+    activeTab: activeTab.value,
+    detailView: detailView.value,
+    selectedPersonId: selectedPersonId.value,
+    selectedSectName: selectedSectName.value
+  };
+}
+
+function openDetailFromCurrent(nextView) {
+  const current = captureDetailReturn();
+  const last = detailReturnStack.value[detailReturnStack.value.length - 1];
+  const sameAsLast = last
+    && last.activeTab === current.activeTab
+    && last.detailView === current.detailView
+    && last.selectedPersonId === current.selectedPersonId
+    && last.selectedSectName === current.selectedSectName;
+  if (!sameAsLast && current.detailView !== nextView) detailReturnStack.value.push(current);
+  detailView.value = nextView;
+}
+
+function returnFromDetail() {
+  const target = detailReturnStack.value.pop();
+  if (!target) {
+    detailView.value = "rank";
+    return;
+  }
+  activeTab.value = target.activeTab;
+  detailView.value = target.detailView;
+  selectedPersonId.value = target.selectedPersonId;
+  selectedSectName.value = target.selectedSectName;
+}
+
+function captureBattleReturn() {
+  return {
+    activeTab: activeTab.value,
+    activeSectSubTab: activeSectSubTab.value,
+    detailView: detailView.value,
+    selectedPersonId: selectedPersonId.value,
+    selectedSectName: selectedSectName.value,
+    selectedDuelDay: selectedDuelDay.value,
+    selectedProvinceWarDay: selectedProvinceWarDay.value,
+    selectedProvinceWarId: selectedProvinceWarId.value
+  };
+}
+
+function openBattleReplay(replay, target = captureBattleReturn()) {
+  if (!replay) return;
+  battleReturnTarget.value = target;
+  lastBattle.value = replay;
+  playBattle();
+}
+
+function returnFromBattle() {
+  const target = battleReturnTarget.value;
+  lastBattle.value = null;
+  battleReturnTarget.value = null;
+  battleCursor.value = 0;
+  clearInterval(battleTimer);
+  if (!target) return;
+  activeTab.value = target.activeTab;
+  activeSectSubTab.value = target.activeSectSubTab;
+  detailView.value = target.detailView;
+  selectedPersonId.value = target.selectedPersonId;
+  selectedSectName.value = target.selectedSectName;
+  selectedDuelDay.value = target.selectedDuelDay;
+  selectedProvinceWarDay.value = target.selectedProvinceWarDay;
+  selectedProvinceWarId.value = target.selectedProvinceWarId;
+}
+
 function openRankItem(item) {
   if (item.kind === "sect") {
     selectedSectName.value = item.id;
-    detailView.value = "sect";
+    openDetailFromCurrent("sect");
     return;
   }
   selectedPersonId.value = item.id;
-  detailView.value = "person";
+  openDetailFromCurrent("person");
 }
 
 function rankSearchText(item) {
@@ -1871,7 +2061,7 @@ function changeRankPage(offset) {
 
 function openPersonById(id) {
   selectedPersonId.value = id;
-  detailView.value = "person";
+  openDetailFromCurrent("person");
 }
 
 function openProgression() {
@@ -1882,17 +2072,39 @@ function openProgression() {
 function personStats(person) {
   const effective = personEffectiveStats(person);
   const power = personPower(person);
+  const powerRank = personPowerRank(person);
   return [
-    { label: "性别", value: genderLabel(person.gender) },
-    { label: "突破概率", value: formatPercent(personBreakthroughChance(person)) },
-    { label: "血量", value: statWithBonus(effective.maxHp, effective.bonuses.maxHp) },
-    { label: "法力", value: statWithBonus(effective.maxMana, effective.bonuses.maxMana) },
-    { label: "攻击", value: statWithBonus(effective.attack, effective.bonuses.attack) },
-    { label: "防御", value: statWithBonus(effective.defense, effective.bonuses.defense) },
-    { label: "神识", value: statWithBonus(effective.divineSense, effective.bonuses.divineSense) },
-    { label: "技能", value: skillName(person.skillId) },
-    { label: "战斗力", value: power, help: personPowerFormula(person, effective, power) }
+    { label: "性别", value: genderLabel(person.gender), icon: "gender" },
+    { label: "灵石", value: Math.floor(person.spirit || 0), icon: "spirit" },
+    { label: "血量", value: statWithBonus(effective.maxHp, effective.bonuses.maxHp), icon: "hp" },
+    { label: "法力", value: statWithBonus(effective.maxMana, effective.bonuses.maxMana), icon: "mana" },
+    { label: "攻击", value: statWithBonus(effective.attack, effective.bonuses.attack), icon: "attack" },
+    { label: "防御", value: statWithBonus(effective.defense, effective.bonuses.defense), icon: "defense" },
+    { label: "神识", value: statWithBonus(effective.divineSense, effective.bonuses.divineSense), icon: "sense" },
+    { label: "技能", value: skillName(person.skillId), icon: "skill" },
+    { label: "战斗力", value: power, icon: "power", help: personPowerFormula(person, effective, power) },
+    { label: "战力排名", value: powerRank ? `#${powerRank}` : "未上榜", icon: "rank", help: powerRank ? `当前个人战力榜第 ${powerRank} 名。` : "当前不在个人战力榜中。" }
   ];
+}
+
+function detailIconComponent(icon) {
+  return {
+    attack: Swords,
+    defense: Shield,
+    gender: CircleUserRound,
+    hp: HeartPulse,
+    mana: Sparkles,
+    power: Zap,
+    rank: Trophy,
+    sense: Eye,
+    skill: Activity,
+    spirit: Coins
+  }[icon] || BadgeCent;
+}
+
+function personPowerRank(person) {
+  const index = powerRanking.value.findIndex((item) => item.id === person?.id);
+  return index >= 0 ? index + 1 : 0;
 }
 
 function battlePreviewStats(person) {
@@ -1910,7 +2122,7 @@ function battleStatsFromEffective(effective) {
 
 function personPower(person) {
   if (person.isPlayer) return derived.value.playerPower;
-  return derived.value.npcPowers?.[person.id] ?? powerFromEffectiveStats(personEffectiveStats(person));
+  return personInsight(person).power ?? derived.value.npcPowers?.[person.id] ?? powerFromEffectiveStats(personEffectiveStats(person));
 }
 
 function powerFromEffectiveStats(effective) {
@@ -1927,14 +2139,92 @@ function personPowerFormula(person, effective, power = personPower(person)) {
   return `战斗力 = 攻击×2.8 + 防御×2 + 血量×0.42 + 神识×1.35 + 法力×0.55。当前为 ${effective.attack}×2.8 + ${effective.defense}×2 + ${effective.maxHp}×0.42 + ${effective.divineSense}×1.35 + ${effective.maxMana}×0.55 = ${power}。`;
 }
 
-function rootSummary(root) {
-  return `${root.name}，${root.note} 本次加成 ${formatPercent(rootBonus(root))}`;
+function rootName(key) {
+  return catalog.value.roots.find((root) => root.key === key)?.name || key;
+}
+
+function rootList(person) {
+  return personInsight(person).rootProfile.roots?.length ? personInsight(person).rootProfile.roots : [person.root].filter(Boolean);
+}
+
+function primaryRoot(person) {
+  return personInsight(person).rootProfile.primaryRoot || rootList(person)[0] || person.root || {};
+}
+
+function rootKeys(person) {
+  return rootList(person).map((root) => root.key);
+}
+
+function rootLine(person) {
+  return rootList(person).map((root) => root.key === primaryRoot(person).key ? `${root.name}（主）` : root.name).join("、");
+}
+
+function rootEffectiveBonus(person, root) {
+  const count = Math.max(1, rootList(person).length);
+  return rootBonus(root) / count;
+}
+
+function rootEffectLabel(root) {
+  return {
+    attack: "攻击",
+    defense: "防御",
+    hp: "血量",
+    mana: "法力",
+    divineSense: "神识",
+    xp: "经验"
+  }[root?.effect] || "加成";
+}
+
+function rootBonusText(person, root) {
+  return `${rootEffectLabel(root)} +${formatPercent(rootEffectiveBonus(person, root))}`;
+}
+
+function rootSummary(person) {
+  const insight = personInsight(person);
+  const rootsText = rootList(person).map((root) => `${root.name}${root.key === primaryRoot(person).key ? "主" : "副"}：${rootBonusText(person, root)}`).join("；");
+  const resonanceText = insight.rootProfile.resonances?.length
+    ? `；共鸣：${insight.rootProfile.resonances.map((item) => item.name).join("、")}`
+    : "";
+  return `${rootsText}；经验效率 ${formatPercent(insight.rootProfile.cultivationMultiplier)}，突破效率 ${formatPercent(insight.rootProfile.breakthroughMultiplier)}${resonanceText}`;
+}
+
+function rootSummaryLines(person) {
+  const insight = personInsight(person);
+  const lines = rootList(person).map((root) => `${root.name}${root.key === primaryRoot(person).key ? "主" : "副"}：${rootBonusText(person, root)}`);
+  lines.push(`经验效率 ${formatPercent(insight.rootProfile.cultivationMultiplier)}，突破效率 ${formatPercent(insight.rootProfile.breakthroughMultiplier)}`);
+  if (insight.rootProfile.resonances?.length) {
+    lines.push(`共鸣：${insight.rootProfile.resonances.map((item) => item.name).join("、")}`);
+  }
+  return lines;
+}
+
+function rootCounterText(person) {
+  const profile = personInsight(person).rootProfile;
+  if (!profile.restrains || !profile.restrainedBy) return "灵根相克未明";
+  return `${profile.primaryRoot.name}克${profile.restrains.name}，受${profile.restrainedBy.name}克`;
+}
+
+function personInsight(person) {
+  return derived.value.personInsights?.[person?.id] || {
+    rootProfile: {
+      roots: [person?.root].filter(Boolean),
+      primaryRoot: person?.root || {},
+      count: 1,
+      cultivationMultiplier: 1,
+      breakthroughMultiplier: 1,
+      restrains: null,
+      restrainedBy: null,
+      resonances: []
+    },
+    effectiveStats: null,
+    power: null,
+    tomorrowXp: { baseXp: person?.isPlayer ? 0 : 100, rootMultiplier: 1, sectMultiplier: 1, total: person?.isPlayer ? 0 : 100 },
+    breakthrough: { realmBase: baseBreakthroughChance(person?.realm || 0), rootMultiplier: 1, sectMultiplier: 1, base: personBreakthroughChance(person), bonus: 0, total: personBreakthroughChance(person) }
+  };
 }
 
 function personBreakthroughChance(person) {
-  const base = baseBreakthroughChance(person.realm || 0);
-  const rootMultiplier = person.root?.effect === "xp" ? person.root.breakMultiplier || 1.1 : 1;
-  return Math.max(0.05, Math.min(0.95, base * rootMultiplier));
+  return personInsight(person).breakthrough?.total ?? Math.max(0.05, Math.min(0.95, baseBreakthroughChance(person.realm || 0)));
 }
 
 function baseBreakthroughChance(realm) {
@@ -1952,6 +2242,8 @@ function rootBonus(root, fallback = 0) {
 }
 
 function personEffectiveStats(person) {
+  const serverStats = personInsight(person).effectiveStats;
+  if (serverStats) return serverStats;
   const attackBonus = person.root?.effect === "attack" ? rootBonus(person.root) : 0;
   const defenseBonus = person.root?.effect === "defense" ? rootBonus(person.root) : 0;
   const hpBonus = person.root?.effect === "hp" ? rootBonus(person.root) : 0;
@@ -1976,6 +2268,17 @@ function personEffectiveStats(person) {
       maxMana: maxMana - (person.maxMana || 0)
     }
   };
+}
+
+function tomorrowXpText(person) {
+  const xp = personInsight(person).tomorrowXp;
+  return `基础 ${xp.baseXp} × 灵根 ${formatPercent(xp.rootMultiplier)} × 宗门 ${formatPercent(xp.sectMultiplier)} = ${xp.total}`;
+}
+
+function breakthroughPartsText(person) {
+  const parts = personInsight(person).breakthrough;
+  const sectMultiplier = parts.sectMultiplier ?? (1 + (parts.bonus || 0));
+  return `境界基础 ${formatPercent(parts.realmBase)} × 灵根 ${formatPercent(parts.rootMultiplier)} × 宗门 ${formatPercent(sectMultiplier)} = ${formatPercent(parts.total)}`;
 }
 
 function statWithBonus(total, bonus = 0) {
@@ -2202,39 +2505,39 @@ function replayBattle() {
   playBattle();
 }
 
+function clearBattleReplay() {
+  lastBattle.value = null;
+  battleReturnTarget.value = null;
+  battleCursor.value = 0;
+  clearInterval(battleTimer);
+}
+
 function openDuelReplay(record) {
   if (!record?.replay) return;
-  lastBattle.value = record.replay;
+  openBattleReplay(record.replay);
   activeTab.value = "arena";
   detailView.value = "rank";
-  playBattle();
 }
 
 function openMatchReplay(match) {
   if (!match?.replay) return;
-  lastBattle.value = match.replay;
-  playBattle();
+  openBattleReplay(match.replay);
 }
 
 function openProvinceBattle(battle) {
   if (!battle?.replay) return;
-  lastBattle.value = battle.replay;
+  openBattleReplay(battle.replay);
   detailView.value = "rank";
-  playBattle();
 }
 
 function openProvinceWarDetail(war) {
   selectedProvinceWarId.value = war.id;
-  lastBattle.value = null;
-  battleCursor.value = 0;
-  clearInterval(battleTimer);
+  clearBattleReplay();
 }
 
 function closeProvinceWarDetail() {
   selectedProvinceWarId.value = "";
-  lastBattle.value = null;
-  battleCursor.value = 0;
-  clearInterval(battleTimer);
+  clearBattleReplay();
 }
 
 function clampDay(day) {
@@ -2244,20 +2547,20 @@ function clampDay(day) {
 
 function changeDuelDay(offset) {
   selectedDuelDay.value = clampDay(selectedDuelDay.value + offset);
-  lastBattle.value = null;
+  clearBattleReplay();
 }
 
 function changeProvinceWarDay(offset) {
   selectedProvinceWarDay.value = clampDay(selectedProvinceWarDay.value + offset);
   selectedProvinceWarId.value = "";
-  lastBattle.value = null;
+  clearBattleReplay();
 }
 
 async function startDailyDuels() {
   const result = await act("/api/duels/day");
   if (!result) return;
   selectedDuelDay.value = result.day;
-  lastBattle.value = null;
+  clearBattleReplay();
 }
 
 async function submitTask() {
@@ -2275,15 +2578,14 @@ async function resetGame() {
   activeTab.value = "practice";
   activeRankBoard.value = "power";
   detailView.value = "rank";
+  detailReturnStack.value = [];
   selectedPersonId.value = "player";
   selectedSectName.value = "";
   selectedRealmStage.value = derived.value.currentRealmInfo?.stage || "";
   selectedDuelDay.value = state.value.day;
   selectedProvinceWarDay.value = state.value.day;
   selectedProvinceWarId.value = "";
-  lastBattle.value = null;
-  battleCursor.value = 0;
-  clearInterval(battleTimer);
+  clearBattleReplay();
 }
 
 let timer;

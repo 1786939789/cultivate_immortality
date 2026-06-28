@@ -13,6 +13,14 @@ export const roots = [
   { key: "heaven", name: "天灵根", effect: "mana", min: 0.1, max: 0.2, note: "法力上限提高 10%-20%。" }
 ];
 
+export const rootCycle = ["metal", "wood", "earth", "water", "fire", "heaven"];
+
+export const rootResonances = [
+  { id: "three_mountains", name: "三山成势", keys: ["metal", "wood", "earth"], effect: "defense", bonus: 0.03, note: "金、木、土齐备，防御提高 3%。" },
+  { id: "three_lights", name: "三光并照", keys: ["water", "fire", "heaven"], effect: "attack", bonus: 0.03, note: "水、火、天齐备，攻击提高 3%。" },
+  { id: "five_elements", name: "五行俱全", keys: ["metal", "wood", "water", "fire", "earth"], effect: "spirit", bonus: 0.05, note: "五行俱全，每日灵石收益提高 5%。" }
+];
+
 export const rosterVersion = 4;
 
 export { duelLossScore, duelRanks, duelSeasonLength, duelSeasonMaxScore, duelSeasonOfDay, duelSeasonDay, duelWinScore, duelRankForScore } from "../shared/duelSeasonData.mjs";

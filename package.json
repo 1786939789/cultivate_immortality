@@ -12,9 +12,13 @@
     "start": "node server/index.mjs"
   },
   "dependencies": {
+    "@dicebear/adventurer": "^9.4.2",
+    "@dicebear/adventurer-neutral": "^9.4.2",
+    "@dicebear/core": "^9.4.2",
     "@vitejs/plugin-vue": "^5.2.4",
     "china-geojson": "^1.0.0",
     "echarts": "^6.1.0",
+    "lucide-vue-next": "^0.577.0",
     "sql.js": "^1.14.1",
     "vite": "^6.3.5",
     "vue": "^3.5.16"

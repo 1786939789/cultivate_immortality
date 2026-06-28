@@ -1,4 +1,4 @@
-import { combatSkills, dungeons, duelLossScore, duelRankForScore, duelRanks, duelSeasonDay, duelSeasonLength, duelSeasonMaxScore, duelSeasonOfDay, duelWinScore, equipmentCatalog, equipmentSlots, equipmentTiers, itemCatalog, npcGenders, npcNames, provinceVersion, provinces, realms, realmStages, roots, rosterVersion, sectRoster, sects, taskTemplates } from "./gameData.mjs";
+import { combatSkills, dungeons, duelLossScore, duelRankForScore, duelRanks, duelSeasonDay, duelSeasonLength, duelSeasonMaxScore, duelSeasonOfDay, duelWinScore, equipmentCatalog, equipmentSlots, equipmentTiers, itemCatalog, npcGenders, npcNames, provinceVersion, provinces, realms, realmStages, rootCycle, rootResonances, roots, rosterVersion, sectRoster, sects, taskTemplates } from "./gameData.mjs";
 
 export function dateKey(date = new Date()) {
   const year = date.getFullYear();
@@ -125,14 +125,41 @@ export function rootBonus(root, fallback = 0) {
   return typeof root?.bonus === "number" ? root.bonus : fallback;
 }
 
-function isKnownRoot(root) {
-  return Boolean(root?.key && roots.some((item) => item.key === root.key));
-}
-
 export function normalizeRoot(root) {
   const picked = root?.key ? roots.find((item) => item.key === root.key) || pick(roots) : pick(roots);
   const bonus = Number((picked.min + Math.random() * (picked.max - picked.min)).toFixed(3));
   return { ...picked, bonus: typeof root?.bonus === "number" ? root.bonus : bonus };
+}
+
+function rootByKey(key) {
+  return roots.find((item) => item.key === key) || roots[0];
+}
+
+function normalizeRootSet(entity) {
+  const source = Array.isArray(entity?.roots) && entity.roots.length ? entity.roots : [entity?.root].filter(Boolean);
+  const seen = new Set();
+  const normalized = [];
+  for (const entry of source) {
+    const root = normalizeRoot(entry);
+    if (seen.has(root.key)) continue;
+    seen.add(root.key);
+    normalized.push(root);
+    if (normalized.length >= 5) break;
+  }
+  if (!normalized.length) normalized.push(normalizeRoot(entity?.root || pick(roots)));
+  const primaryKey = normalized.some((root) => root.key === entity?.primaryRootKey)
+    ? entity.primaryRootKey
+    : normalized[0].key;
+  normalized.sort((a, b) => (a.key === primaryKey ? -1 : b.key === primaryKey ? 1 : 0));
+  return { roots: normalized, primaryRootKey: primaryKey, primaryRoot: normalized[0] };
+}
+
+function applyRootSet(entity) {
+  const normalized = normalizeRootSet(entity);
+  entity.roots = normalized.roots;
+  entity.primaryRootKey = normalized.primaryRootKey;
+  entity.root = normalized.primaryRoot;
+  return entity;
 }
 
 export function needsRootMigration(root) {
@@ -140,28 +167,102 @@ export function needsRootMigration(root) {
   return !canonical || typeof root?.bonus !== "number" || root.name !== canonical.name || root.effect !== canonical.effect;
 }
 
+function rootCount(entity) {
+  return normalizeRootSet(entity).roots.length;
+}
+
+function rootCultivationMultiplier(entity) {
+  return clamp(1 - (rootCount(entity) - 1) * 0.08, 0.6, 1);
+}
+
+function rootBreakthroughMultiplier(entity) {
+  return clamp(1 - (rootCount(entity) - 1) * 0.06, 0.7, 1);
+}
+
+function rootEffectBonus(entity, effect) {
+  const set = normalizeRootSet(entity);
+  const divisor = set.roots.length;
+  return set.roots
+    .filter((root) => root.effect === effect)
+    .reduce((sum, root) => sum + rootBonus(root) / divisor, 0);
+}
+
+function activeResonances(entity) {
+  const keys = new Set(normalizeRootSet(entity).roots.map((root) => root.key));
+  return rootResonances.filter((resonance) => resonance.keys.every((key) => keys.has(key)));
+}
+
+function resonanceBonus(entity, effect) {
+  return activeResonances(entity)
+    .filter((resonance) => resonance.effect === effect)
+    .reduce((sum, resonance) => sum + (resonance.bonus || 0), 0);
+}
+
+function spiritIncomeMultiplier(entity) {
+  return 1 + resonanceBonus(entity, "spirit");
+}
+
+function primaryRoot(entity) {
+  return normalizeRootSet(entity).primaryRoot;
+}
+
+function rootCounterTarget(rootKey) {
+  const index = rootCycle.indexOf(rootKey);
+  return index >= 0 ? rootCycle[(index + 1) % rootCycle.length] : "";
+}
+
+function rootCounteredBy(rootKey) {
+  const index = rootCycle.indexOf(rootKey);
+  return index >= 0 ? rootCycle[(index - 1 + rootCycle.length) % rootCycle.length] : "";
+}
+
+function rootCounters(attacker, defender) {
+  return rootCounterTarget(primaryRoot(attacker).key) === primaryRoot(defender).key;
+}
+
+function rootCounterPenalty(attacker, defender) {
+  if (!rootCounters(attacker, defender)) return 0;
+  const realmGap = Math.max(0, Math.floor((defender.realm || 0) / 10) - Math.floor((attacker.realm || 0) / 10));
+  return 0.1 * Math.pow(0.5, realmGap);
+}
+
+function rootProfile(entity) {
+  const set = normalizeRootSet(entity);
+  return {
+    roots: set.roots,
+    primaryRootKey: set.primaryRootKey,
+    primaryRoot: set.primaryRoot,
+    count: set.roots.length,
+    cultivationMultiplier: rootCultivationMultiplier(entity),
+    breakthroughMultiplier: rootBreakthroughMultiplier(entity),
+    restrains: rootByKey(rootCounterTarget(set.primaryRootKey)),
+    restrainedBy: rootByKey(rootCounteredBy(set.primaryRootKey)),
+    resonances: activeResonances(entity)
+  };
+}
+
 export function effectiveAttack(entity, state) {
-  const bonus = entity.root?.effect === "attack" ? rootBonus(entity.root) : 0;
+  const bonus = rootEffectBonus(entity, "attack") + resonanceBonus(entity, "attack");
   return Math.floor((entity.attack || 0) * (1 + bonus + equipmentBonusFor(state, entity, "attack")));
 }
 
 export function effectiveDefense(entity, state) {
-  const bonus = entity.root?.effect === "defense" ? rootBonus(entity.root) : 0;
+  const bonus = rootEffectBonus(entity, "defense") + resonanceBonus(entity, "defense");
   return Math.floor((entity.defense || 0) * (1 + bonus + equipmentBonusFor(state, entity, "defense")));
 }
 
 export function effectiveMaxHp(entity, state) {
-  const bonus = entity.root?.effect === "hp" ? rootBonus(entity.root) : 0;
+  const bonus = rootEffectBonus(entity, "hp");
   return Math.floor((entity.maxHp || 0) * (1 + bonus + equipmentBonusFor(state, entity, "maxHp")));
 }
 
 export function effectiveMaxMana(entity, state) {
-  const bonus = entity.root?.effect === "mana" ? rootBonus(entity.root) : 0;
+  const bonus = rootEffectBonus(entity, "mana");
   return Math.floor((entity.maxMana || 0) * (1 + bonus + equipmentBonusFor(state, entity, "maxMana")));
 }
 
 export function effectiveDivineSense(entity, state) {
-  const bonus = entity.root?.effect === "divineSense" ? rootBonus(entity.root) : 0;
+  const bonus = rootEffectBonus(entity, "divineSense");
   return Math.floor((entity.divineSense || 0) * (1 + bonus + equipmentBonusFor(state, entity, "divineSense")));
 }
 
@@ -189,7 +290,7 @@ export function effectiveStats(entity, state) {
 }
 
 export function xpGainMultiplier(entity) {
-  return entity.root?.effect === "xp" ? 1 + rootBonus(entity.root) : 1;
+  return (1 + rootEffectBonus(entity, "xp")) * rootCultivationMultiplier(entity);
 }
 
 export function applyXpGain(entity, amount, extraMultiplier = 1) {
@@ -228,9 +329,22 @@ function combatSnapshot(entity, state) {
   };
 }
 
+function applyBattleRootPenalty(snapshot, penalty) {
+  if (!penalty) return snapshot;
+  return {
+    ...snapshot,
+    attack: Math.max(1, Math.floor(snapshot.attack * (1 - penalty))),
+    defense: Math.max(0, Math.floor(snapshot.defense * (1 - penalty))),
+    divineSense: Math.max(0, Math.floor(snapshot.divineSense * (1 - penalty))),
+    rootCounterPenalty: penalty
+  };
+}
+
 function runTurnBattle(left, right, options = {}) {
-  const a = combatSnapshot(left, options.state);
-  const b = combatSnapshot(right, options.state);
+  const leftPenalty = rootCounterPenalty(right, left);
+  const rightPenalty = rootCounterPenalty(left, right);
+  const a = applyBattleRootPenalty(combatSnapshot(left, options.state), leftPenalty);
+  const b = applyBattleRootPenalty(combatSnapshot(right, options.state), rightPenalty);
   const order = a.divineSense >= b.divineSense ? ["left", "right"] : ["right", "left"];
   const maxRounds = options.maxRounds || 18;
   let leftHp = a.hp;
@@ -246,6 +360,9 @@ function runTurnBattle(left, right, options = {}) {
   const pushEvent = (kind, text, detail = {}) => {
     events.push({ round: currentRound, kind, text, ...detail });
   };
+
+  if (leftPenalty) pushEvent("root", `${right.name}主灵根克制${left.name}，${left.name}攻击、防御、神识降低 ${Math.round(leftPenalty * 1000) / 10}%`, { side: "left", penalty: leftPenalty });
+  if (rightPenalty) pushEvent("root", `${left.name}主灵根克制${right.name}，${right.name}攻击、防御、神识降低 ${Math.round(rightPenalty * 1000) / 10}%`, { side: "right", penalty: rightPenalty });
 
   const sideState = (side) => side === "left"
     ? { actor: a, target: b, actorName: left.name, targetName: right.name, hp: leftHp, targetHp: rightHp, mana: leftMana, targetMana: rightMana }
@@ -515,7 +632,10 @@ export function baseBreakthroughChance(realm) {
 
 export function breakthroughChance(entity) {
   const base = baseBreakthroughChance(entity.realm || 0);
-  const rootMultiplier = entity.root?.effect === "xp" ? entity.root.breakMultiplier || 1.1 : 1;
+  const waterBonus = normalizeRootSet(entity).roots
+    .filter((root) => root.effect === "xp")
+    .reduce((sum, root) => sum + ((root.breakMultiplier || 1.1) - 1) / rootCount(entity), 0);
+  const rootMultiplier = (1 + waterBonus) * rootBreakthroughMultiplier(entity);
   return clamp(base * rootMultiplier, 0.05, 0.95);
 }
 
@@ -871,14 +991,65 @@ function ensureProvinceState(state) {
 
 function breakthroughChanceFor(state, entity) {
   const sectName = entity.id === "player" ? state.sect.name : entity.sect;
-  return clamp(breakthroughChance(entity) + sectBreakthroughBonus(state, sectName), 0.05, 0.95);
+  return clamp(breakthroughChance(entity) * (1 + sectBreakthroughBonus(state, sectName)), 0.05, 0.95);
 }
 
 function breakthroughChanceParts(state, entity) {
+  const realmBase = baseBreakthroughChance(entity.realm || 0);
   const base = breakthroughChance(entity);
   const sectName = entity.id === "player" ? state.sect.name : entity.sect;
   const bonus = sectBreakthroughBonus(state, sectName);
-  return { base, bonus, total: clamp(base + bonus, 0.05, 0.95) };
+  const sectMultiplier = 1 + bonus;
+  return {
+    realmBase,
+    rootMultiplier: base / Math.max(0.0001, realmBase),
+    sectMultiplier,
+    base,
+    bonus,
+    total: clamp(base * sectMultiplier, 0.05, 0.95)
+  };
+}
+
+function xpPreviewParts(state, entity, baseXp = entity.id === "player" ? 0 : 100) {
+  const sectName = entity.id === "player" ? state.sect.name : entity.sect;
+  const rootMultiplier = xpGainMultiplier(entity);
+  const sectMultiplier = 1 + sectXpBonus(state, sectName);
+  const total = Math.floor(baseXp * rootMultiplier * sectMultiplier);
+  return {
+    baseXp,
+    rootMultiplier,
+    sectMultiplier,
+    total,
+    rootDelta: Math.floor(baseXp * rootMultiplier) - baseXp,
+    sectDelta: total - Math.floor(baseXp * rootMultiplier)
+  };
+}
+
+function personInsight(state, entity) {
+  return {
+    rootProfile: rootProfile(entity),
+    effectiveStats: effectiveStats(entity, state),
+    power: powerOf(entity, state),
+    tomorrowXp: xpPreviewParts(state, entity),
+    breakthrough: breakthroughChanceParts(state, entity)
+  };
+}
+
+function rootRulesCatalog() {
+  return {
+    cycle: rootCycle.map((key) => {
+      const root = rootByKey(key);
+      const target = rootByKey(rootCounterTarget(key));
+      return {
+        key,
+        name: root.name,
+        targetKey: target.key,
+        targetName: target.name,
+        text: `${root.name}克${target.name}`
+      };
+    }),
+    resonances: rootResonances
+  };
 }
 
 function addProvinceIncome(state, settlementDate) {
@@ -1204,12 +1375,32 @@ function trimDuelDays(records, currentDay) {
     .slice(0, Math.max(duelSeasonLength, 90));
 }
 
+function randomRootSet() {
+  const roll = Math.random();
+  const count = roll < 0.62 ? 1 : roll < 0.84 ? 2 : roll < 0.95 ? 3 : roll < 0.99 ? 4 : 5;
+  const picked = shuffle(roots).slice(0, count).map((root) => normalizeRoot(root));
+  return normalizeRootSet({ roots: picked, primaryRootKey: picked[0]?.key });
+}
+
+function rollInnateStats() {
+  return {
+    body: 7 + Math.floor(Math.random() * 7),
+    wisdom: 7 + Math.floor(Math.random() * 8),
+    chance: 4 + Math.floor(Math.random() * 8),
+    heartDemon: Math.floor(Math.random() * 8)
+  };
+}
+
+function rootSetNameLine(rootSet) {
+  return rootSet.roots.map((root) => root.key === rootSet.primaryRootKey ? `${root.name}（主）` : root.name).join("、");
+}
+
 function makeNpc(name, index) {
-  const root = normalizeRoot(pick(roots));
+  const rootSet = randomRootSet();
+  const root = rootSet.primaryRoot;
   const realm = 0;
   const stats = rollBirthStats(realm);
-  const body = 7 + Math.floor(Math.random() * 7);
-  const wisdom = 7 + Math.floor(Math.random() * 8);
+  const innate = rollInnateStats();
 
   return {
     id: `npc-${index}`,
@@ -1217,6 +1408,8 @@ function makeNpc(name, index) {
     gender: npcGenders[name] || "male",
     sect: sectForNpcIndex(index),
     root,
+    roots: rootSet.roots,
+    primaryRootKey: rootSet.primaryRootKey,
     realm,
     xp: 0,
     hp: effectiveMaxHp({ root, maxHp: stats.maxHp }),
@@ -1226,14 +1419,14 @@ function makeNpc(name, index) {
     skillId: randomSkillId(),
     spirit: 0,
     reputation: 0,
-    body,
-    wisdom,
+    body: innate.body,
+    wisdom: innate.wisdom,
     attack: stats.attack,
     defense: stats.defense,
     divineSense: stats.divineSense,
-    chance: 4 + Math.floor(Math.random() * 8),
+    chance: innate.chance,
     wealth: 0,
-    heartDemon: Math.floor(Math.random() * 8),
+    heartDemon: innate.heartDemon,
     mood: pick(["谨慎", "好斗", "闭关", "游历"]),
     duelWins: 0,
     duelLosses: 0,
@@ -1260,8 +1453,13 @@ function log(state, text, type = "") {
 }
 
 export function createDefaultState() {
-  const root = normalizeRoot(pick(roots));
+  const rootSet = randomRootSet();
+  const root = rootSet.primaryRoot;
   const stats = rollBirthStats();
+  const innate = rollInnateStats();
+  const openingLog = rootSet.roots.length > 1
+    ? `你在山脚租下一间小屋，翻开第一卷长生札记。本世灵根为${rootSetNameLine(rootSet)}。`
+    : `你在山脚租下一间小屋，翻开第一卷长生札记。本世灵根为${root.name}。`;
 
   return {
     day: 1,
@@ -1270,6 +1468,8 @@ export function createDefaultState() {
       name: "无名散修",
       gender: "male",
       root,
+      roots: rootSet.roots,
+      primaryRootKey: rootSet.primaryRootKey,
       realm: 0,
       xp: 0,
       hp: effectiveMaxHp({ root, maxHp: stats.maxHp }),
@@ -1279,14 +1479,14 @@ export function createDefaultState() {
       skillId: randomSkillId(),
       spirit: 80,
       reputation: 0,
-      body: 8,
-      wisdom: 8,
+      body: innate.body,
+      wisdom: innate.wisdom,
       attack: stats.attack,
       defense: stats.defense,
       divineSense: stats.divineSense,
-      chance: 5,
+      chance: innate.chance,
       wealth: 0,
-      heartDemon: 0,
+      heartDemon: innate.heartDemon,
       duelWins: 0,
       duelLosses: 0,
       duelSeason: defaultDuelSeason(),
@@ -1321,7 +1521,7 @@ export function createDefaultState() {
     duelDays: [],
     calendarStartDate: dateKey(),
     lastSettlementDate: dateKey(),
-    log: [{ text: "你在山脚租下一间小屋，翻开第一卷长生札记。", type: "", day: 1, date: dateKey(), time: "初入" }]
+    log: [{ text: openingLog, type: "", day: 1, date: dateKey(), time: "初入" }]
   };
 }
 
@@ -1409,6 +1609,9 @@ export function ensureStateShape(state) {
     state.player.root = normalizeRoot(state.player.root);
     changed = true;
   }
+  const playerRootShape = JSON.stringify({ roots: state.player.roots, primaryRootKey: state.player.primaryRootKey, root: state.player.root });
+  applyRootSet(state.player);
+  if (JSON.stringify({ roots: state.player.roots, primaryRootKey: state.player.primaryRootKey, root: state.player.root }) !== playerRootShape) changed = true;
   state.player.id ??= "player";
   changed = ensureField(state.player, "gender", "male") || changed;
   state.player.sect ??= state.sect?.name || "黄枫谷";
@@ -1471,6 +1674,9 @@ export function ensureStateShape(state) {
       full.root = normalizeRoot(full.root);
       changed = true;
     }
+    const npcRootShape = JSON.stringify({ roots: full.roots, primaryRootKey: full.primaryRootKey, root: full.root });
+    applyRootSet(full);
+    if (JSON.stringify({ roots: full.roots, primaryRootKey: full.primaryRootKey, root: full.root }) !== npcRootShape) changed = true;
     changed = ensureField(full, "name", npcNames[index] || `散修${index + 1}`) || changed;
     changed = ensureField(full, "gender", () => npcGenders[full.name] || "male") || changed;
     changed = ensureField(full, "sect", sectForNpcIndex(index)) || changed;
@@ -1549,13 +1755,14 @@ export function getPublicState(state) {
   return {
     ...state,
     equipment: state.equipment.map((item) => publicEquipment(item, state)),
-    catalog: { realms, realmStages, roots, dungeons, taskTemplates, itemCatalog, sects, combatSkills, provinces, equipmentSlots, equipmentTiers, equipmentCatalog, duelRanks },
+    catalog: { realms, realmStages, roots, rootRules: rootRulesCatalog(), dungeons, taskTemplates, itemCatalog, sects, combatSkills, provinces, equipmentSlots, equipmentTiers, equipmentCatalog, duelRanks },
     derived: {
       xpNeed: xpNeed(state.player.realm),
       currentRealmInfo,
       realmProgression: buildRealmProgression(state.player),
       playerPower: powerOf(state.player, state),
       effectiveStats: effectiveStats(state.player, state),
+      personInsights: Object.fromEntries(allCultivators(state).map(({ entity }) => [entity.id, personInsight(state, entity)])),
       equippedItems: Object.fromEntries(allCultivators(state).map(({ entity }) => [entity.id, equippedItemsFor(state, entity).map((item) => publicEquipment(item, state))])),
       duelSeason: {
         season: duelSeasonOfDay(state.day),
@@ -1676,7 +1883,8 @@ export function dailySettlement(state, options = {}) {
     const bonusXp = Math.max(0, totalXp - baseXp);
     npc.xp += totalXp;
 
-    const spirit = sectSpiritIncome(state, npc.sect);
+    const baseSpirit = sectSpiritIncome(state, npc.sect);
+    const spirit = Math.floor(baseSpirit * spiritIncomeMultiplier(npc));
     npc.spirit += spirit;
 
     let boughtXp = 0;
@@ -1730,8 +1938,15 @@ export function dailySettlement(state, options = {}) {
       bonusXp,
       boughtXp,
       spirit,
+      baseSpirit,
+      rootXpMultiplier: xpGainMultiplier(npc),
+      sectXpMultiplier: 1 + sectXpBonus(state, npc.sect),
+      rootCount: rootCount(npc),
       realm: realms[npc.realm],
       breakChance: chanceParts.total,
+      realmBaseBreakChance: chanceParts.realmBase,
+      rootBreakMultiplier: chanceParts.rootMultiplier,
+      sectBreakMultiplier: chanceParts.sectMultiplier,
       baseBreakChance: chanceParts.base,
       bonusBreakChance: chanceParts.bonus,
       note: breakthroughNote || (npc.realm > beforeRealm ? `突破至${realms[npc.realm]}` : "日常修炼")
@@ -1750,12 +1965,21 @@ export function dailySettlement(state, options = {}) {
   state.player.hp = clamp(state.player.hp + 10, 0, effectiveMaxHp(state.player, state));
   const beforeMana = state.player.mana;
   state.player.mana = clamp((state.player.mana || 0) + 8, 0, effectiveMaxMana(state.player, state));
+  const playerChanceParts = breakthroughChanceParts(state, state.player);
   state.player.dailyRecords.unshift({
     day: state.day,
     date: settlementDate,
     xp: 0,
+    baseXp: 0,
+    bonusXp: 0,
     spirit: 0,
     realm: realms[state.player.realm],
+    breakChance: playerChanceParts.total,
+    realmBaseBreakChance: playerChanceParts.realmBase,
+    rootBreakMultiplier: playerChanceParts.rootMultiplier,
+    sectBreakMultiplier: playerChanceParts.sectMultiplier,
+    baseBreakChance: playerChanceParts.base,
+    bonusBreakChance: playerChanceParts.bonus,
     note: `自然恢复：血量 +${state.player.hp - beforeHp}，法力 +${state.player.mana - beforeMana}`
   });
   state.player.dailyRecords = state.player.dailyRecords.slice(0, 14);
@@ -1858,6 +2082,7 @@ export function runDungeon(state, id) {
     divineSense: 10 + dungeon.min * 2,
     skillId: randomSkillId()
   };
+  applyRootSet(guardian);
   guardian.hp = effectiveMaxHp(guardian);
   guardian.mana = effectiveMaxMana(guardian);
 
@@ -1912,6 +2137,7 @@ export function sectWar(state) {
     divineSense: 10 + p.realm * 2,
     skillId: randomSkillId()
   };
+  applyRootSet(enemy);
   enemy.hp = effectiveMaxHp(enemy);
   enemy.mana = effectiveMaxMana(enemy);
   const battle = runTurnBattle(p, enemy, { maxRounds: 16, state });
@@ -1934,6 +2160,7 @@ export function sectWar(state) {
 }
 
 function entityRef(entity, kind) {
+  const profile = rootProfile(entity);
   return {
     kind,
     id: entity.id,
@@ -1941,6 +2168,9 @@ function entityRef(entity, kind) {
     realm: entity.realm,
     sect: kind === "player" ? entity.sect || "黄枫谷" : entity.sect,
     root: entity.root,
+    roots: profile.roots,
+    primaryRootKey: profile.primaryRootKey,
+    rootProfile: profile,
     skillId: entity.skillId
   };
 }
@@ -1957,7 +2187,9 @@ function buildReplay(left, right, battle, result, foughtAt, state) {
     left: {
       ...entityRef(leftBefore, leftBefore.id === "player" ? "player" : "npc"),
       power: powerOf(leftBefore, state),
-      stats: effectiveStats(leftBefore, state),
+      stats: battle.leftStart,
+      baseStats: effectiveStats(leftBefore, state),
+      rootCounterPenalty: battle.leftStart.rootCounterPenalty || 0,
       startHp: battle.leftStart.hp,
       startMana: battle.leftStart.mana,
       endHp: battle.leftHp,
@@ -1966,7 +2198,9 @@ function buildReplay(left, right, battle, result, foughtAt, state) {
     right: {
       ...entityRef(rightBefore, rightBefore.id === "player" ? "player" : "npc"),
       power: powerOf(rightBefore, state),
-      stats: effectiveStats(rightBefore, state),
+      stats: battle.rightStart,
+      baseStats: effectiveStats(rightBefore, state),
+      rootCounterPenalty: battle.rightStart.rootCounterPenalty || 0,
       startHp: battle.rightStart.hp,
       startMana: battle.rightStart.mana,
       endHp: battle.rightHp,
