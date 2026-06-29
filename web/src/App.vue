@@ -26,7 +26,7 @@
         </div>
         <div>
           <h1>长生札记</h1>
-          <p>Vue + SQLite 版单机文字修仙 RPG。现实任务换经验，NPC 每日成长，战斗与突破由后端规则结算。</p>
+          <p>第 {{ state?.day || 1 }} 日 · {{ currentDate }} · {{ realmName(player.realm) }}</p>
         </div>
       </section>
 
@@ -38,13 +38,19 @@
           <circle cx="735" cy="48" r="26" fill="#fef3c7" opacity=".88"/>
         </svg>
         <div class="hero-content">
-          <h2>以今日一事，换明日一境。</h2>
-          <p>完成现实任务获得经验、血量、法力和灵石。经验足够后尝试突破，水灵根会提高实际突破率。</p>
-          <div class="pill-grid" v-if="state">
-            <span class="pill">第 {{ state.day }} 日</span>
-            <span class="pill">当前 {{ realmName(player.realm) }}</span>
-            <span class="pill">灵石 {{ player.spirit }}</span>
-            <span class="pill">宗门声望 {{ state.sect.reputation }}</span>
+          <div class="hero-title-row">
+            <div>
+              <h2>{{ player.name || "修士" }} · {{ rootLine(player) }}</h2>
+              <p>{{ player.sect || "散修" }} · 战力 {{ derived.playerPower }} · 下一境界 {{ derived.nextRealm }}</p>
+            </div>
+            <CharacterPortrait :person="{ ...player, isPlayer: true }" size="lg" />
+          </div>
+          <div class="resource-strip" v-if="state">
+            <span v-for="item in hudResources" :key="item.label" :class="`resource-chip resource-${item.icon}`">
+              <StatIcon :name="item.icon" :size="17" />
+              <small>{{ item.label }}</small>
+              <strong>{{ item.value }}</strong>
+            </span>
           </div>
         </div>
       </section>
@@ -53,7 +59,7 @@
         <div class="settlement-card">
           <span>下次自动结算</span>
           <strong>{{ countdown }}</strong>
-          <small>每日 00:00 后由后端自动推进一天</small>
+          <small>子时换日，诸事结算</small>
         </div>
         <button class="secondary" :disabled="isActionPending('/api/day/advance')" @click="advanceDay">{{ isActionPending("/api/day/advance") ? "结算中..." : "推进一天" }}</button>
         <button class="danger" :disabled="isActionPending('/api/reset')" @click="resetGame">重开一世</button>
@@ -87,8 +93,11 @@
             tabindex="0"
             :aria-label="`${stat.label}：${stat.help}`"
           >
-            <b>{{ stat.value }}</b>
-            <span>{{ stat.label }}</span>
+            <StatIcon :name="stat.icon" :size="18" />
+            <div>
+              <b>{{ stat.value }}</b>
+              <span>{{ stat.label }}</span>
+            </div>
             <small class="stat-tip" role="tooltip">{{ stat.help }}</small>
           </div>
         </section>
@@ -112,6 +121,7 @@
             :class="{ active: activeTab === tab.id }"
             @click="switchTab(tab.id)"
           >
+            <component :is="tab.icon" :size="17" :stroke-width="2.3" aria-hidden="true" />
             {{ tab.label }}
           </button>
         </nav>
@@ -120,7 +130,7 @@
           <div class="grid">
             <div class="panel">
               <h3>角色设定</h3>
-              <p>开局资质会影响修炼速度、突破概率与战斗风格；只有水灵根会提高实际突破率。数据库保存当前唯一存档。</p>
+              <p>资质、灵根、天赋决定修炼节奏。</p>
               <div class="pill-grid">
                 <span class="pill">{{ player.root.name }}：{{ player.root.note }}</span>
                 <span class="pill">当前战力：{{ derived.playerPower }}</span>
@@ -129,7 +139,7 @@
             </div>
             <div class="panel">
               <h3>核心循环</h3>
-              <p>记录现实任务获得资源；每日结算由后端根据本地日期自动触发；NPC 成长、宗门局势和战斗结果写入 SQLite。</p>
+              <p>做任务，攒资源，破境，入副本。</p>
               <div class="timeline">
                 <div class="event">炼气：建立日常任务习惯，积累第一桶灵石。</div>
                 <div class="event gold">筑基：副本收益提升，宗门战开始成为主要声望来源。</div>
@@ -145,7 +155,7 @@
             <div class="section-head">
               <div>
                 <h3>属性说明</h3>
-                <p>主灵根决定战斗相克，多灵根会稀释各项加成，并降低经验获取与突破效率。</p>
+                <p>主灵根定相克，多灵根影响效率。</p>
               </div>
               <span class="tag">当前 {{ rootLine(player) }}</span>
             </div>
@@ -216,7 +226,7 @@
             <div class="section-head">
               <div>
                 <h3>境界总览</h3>
-                <p>先选大境界，再看每一层的经验门槛、基础突破率和按当前角色条件修正后的突破率。</p>
+                <p>经验门槛、突破率、成长范围。</p>
               </div>
               <span class="tag">当前 {{ realmName(player.realm) }}</span>
             </div>
@@ -274,7 +284,7 @@
         <section v-if="activeTab === 'tasks'" class="view active">
           <div class="panel">
             <h3>记录今日任务</h3>
-            <p>任务提交到后端结算收益，再写入 SQLite 存档。</p>
+            <p>今日行事，皆入修行。</p>
             <form class="task-form" @submit.prevent="submitTask">
               <label>任务
                 <input v-model="taskForm.name" placeholder="例如：跑步 30 分钟">
@@ -313,7 +323,7 @@
             <div class="section-head">
               <div>
                 <h3>本命技能</h3>
-                <p>每个角色天生随机拥有一个回合战技能，暂时无法更改；战斗中会按法力和冷却自动释放。</p>
+                <p>随战局自动释放。</p>
               </div>
               <span class="tag">{{ playerSkill.name }} · {{ playerSkill.cost }} 法力</span>
             </div>
@@ -373,11 +383,11 @@
               <section class="panel flat star-sea-monster-panel">
                 <div class="star-sea-monster-card">
                   <div class="star-sea-monster-head">
-                    <CharacterPortrait :person="starSeaMonsterPerson" size="lg" />
+                    <MonsterEmblem :monster="lastBattle.monster" size="lg" />
                     <div>
                       <span class="tag">妖物</span>
                       <h3>{{ lastBattle.monster?.name }}</h3>
-                      <p>{{ lastBattle.monster?.realm }} · {{ lastBattle.monster?.rootName || "妖气" }}</p>
+                    <p>{{ lastBattle.monster?.realm }} · {{ lastBattle.monster?.rootName || "妖气" }}</p>
                     </div>
                   </div>
                   <div class="star-sea-monster-stats">
@@ -499,7 +509,7 @@
           <div class="panel section-head">
             <div>
               <h3>副本闯关记录</h3>
-              <p>按日期查看每日自动副本，切换副本可查看对应闯关、宗门输出和乱星海贡献。</p>
+              <p>每日副本战报。</p>
             </div>
             <div class="dungeon-day-nav">
               <button class="secondary" type="button" :disabled="!canShowPreviousDungeonDay" @click="showPreviousDungeonDay">前一日</button>
@@ -525,7 +535,7 @@
             <div class="section-head compact">
               <div>
                 <h3>血色禁地</h3>
-                <p>查看每日洞窟妖兽属性和通关人数；个人通关明细在人物属性页查看。</p>
+                <p>洞窟战果 · 妖兽属性 · 掉落池</p>
               </div>
               <span class="tag">{{ bloodTrialClearCount }} 人次通关</span>
             </div>
@@ -533,6 +543,7 @@
               <article class="dungeon-cave-card" v-for="cave in selectedDungeonDay.bloodTrial?.caves || []" :key="cave.cave">
                 <div class="dungeon-monster-card">
                   <div>
+                    <MonsterEmblem :monster="cave.monster" />
                     <span class="tag">第 {{ cave.cave }} 关</span>
                     <span class="tag cave-clear-tag" tabindex="0">
                       通关 {{ cave.clears?.length || 0 }} 人
@@ -587,14 +598,14 @@
                 <div v-else class="empty compact-empty">无人进入此关。</div>
               </article>
             </div>
-            <div v-else class="empty">这一天是旧版副本记录，未保存洞窟妖兽明细。推进新的一天后会生成完整记录。</div>
+            <div v-else class="empty">旧日残卷，妖兽明细缺失。</div>
           </div>
 
           <div v-else-if="selectedDungeonDay && activeDungeonRecordTab === 'void'" class="panel dungeon-record-panel">
             <div class="section-head compact">
               <div>
                 <h3>虚天殿</h3>
-                <p>点击妖物查看车轮战列表；新记录可继续进入每一场 PK 回放。</p>
+                <p>宗门车轮战 · 妖物记录</p>
               </div>
               <span class="tag">{{ voidHallSuccessCount }} 宗通关</span>
             </div>
@@ -646,7 +657,7 @@
                 </button>
               </div>
               <button v-else-if="selectedVoidHallRecord.replay" class="event event-button void-overview-button" type="button" @click="openBattleReplay(selectedVoidHallRecord.replay)">
-                旧记录仅保存总览回放，点击查看虚天殿合战。
+                查看虚天殿合战。
               </button>
               <div v-else class="empty compact-empty">这条记录没有保存可回放战报。</div>
             </div>
@@ -663,6 +674,7 @@
                 <div class="attribute-list compact">
                   <button class="dungeon-monster-card compact void-monster-button" type="button" @click="openVoidHallRecord(record)">
                     <div>
+                      <MonsterEmblem :monster="{ name: record.monster, rootName: record.monsterStats?.rootName }" size="sm" />
                       <span class="tag">妖兽</span>
                       <h3>{{ record.monster }}</h3>
                       <p>{{ record.monsterRealm }} · {{ record.monsterStats?.rootName || "未知灵根" }}</p>
@@ -794,7 +806,7 @@
           </div>
 
           <div v-else class="panel empty">
-            暂无每日副本记录，点击「推进一天」后会自动结算所有人物的副本。
+            暂无副本战报。
           </div>
           </template>
 
@@ -982,7 +994,7 @@
             <div class="section-head compact">
               <div>
                 <h3>{{ selectedProvinceWar.provinceName }} 攻城详情</h3>
-                <p>{{ selectedProvinceWar.result }}。点击下方单场 PK 可看回放。</p>
+                <p>{{ selectedProvinceWar.result }}。</p>
               </div>
               <button class="primary" type="button" @click="closeProvinceWarDetail">返回今日总览</button>
             </div>
@@ -1032,7 +1044,7 @@
             <div class="section-head compact">
               <div>
                 <h3>每日攻城记录</h3>
-                <p v-if="selectedProvinceWarDayRecord">共 {{ selectedProvinceWarDayRecord.wars.length }} 场攻守，点击对战图查看每一场 PK。</p>
+                <p v-if="selectedProvinceWarDayRecord">共 {{ selectedProvinceWarDayRecord.wars.length }} 场攻守。</p>
                 <p v-else>这个日期还没有攻城记录。</p>
               </div>
               <div class="arena-toolbar compact">
@@ -1155,7 +1167,7 @@
             <div class="panel section-head compact">
               <div>
                 <h3>{{ selectedDuelDate }} 对阵</h3>
-                <p v-if="selectedDuelRecord">共 {{ selectedDuelRecord.matches.length }} 组结果，点击有战斗的对阵可查看回放。</p>
+                <p v-if="selectedDuelRecord">共 {{ selectedDuelRecord.matches.length }} 组对阵。</p>
                 <p v-else>这个日期还没有切磋记录。</p>
               </div>
               <span class="tag" v-if="selectedDuelRecord">{{ selectedDuelRecord.createdAt }}</span>
@@ -1209,7 +1221,7 @@
               </button>
             </div>
 
-            <div class="empty" v-else-if="selectedDuelDay === state.day">{{ currentDate }} 尚未开赛，点击“开始切磋”生成全员对阵。</div>
+            <div class="empty" v-else-if="selectedDuelDay === state.day">{{ currentDate }} 尚未开赛。</div>
             <div class="empty" v-else>没有找到 {{ selectedDuelDate }} 的切磋记录。</div>
           </div>
 
@@ -1291,7 +1303,7 @@
           <div class="grid">
             <div class="panel">
               <h3>丹房</h3>
-              <p>丹药购买和服用都由后端写库，不再依赖浏览器本地存储。</p>
+              <p>买丹、服丹、补足修行。</p>
               <div class="actions">
                 <button class="secondary" v-for="(item, kind) in catalog.itemCatalog" :key="kind" @click="act('/api/items/buy', { kind })">
                   购{{ item.name }} {{ item.price }} 灵石
@@ -1317,7 +1329,7 @@
             <div class="section-head">
               <div>
                 <h3>装备图鉴</h3>
-                <p>装备唯一存在；默认无归属。角色获得多件同部位装备时，自动穿戴评分最高的一件。</p>
+                <p>唯一装备 · 自动穿戴最优同部位。</p>
               </div>
               <span class="tag">{{ equipmentList.length }} 件</span>
             </div>
@@ -1628,7 +1640,7 @@
                   <div class="event" v-for="record in selectedPerson.dailyRecords" :key="`${record.day}-${record.note}`">
                     {{ displayDate(record) }}：{{ dailyXpText(record) }}，+{{ record.spirit }}灵石，{{ dailyChanceText(record) }}，{{ record.note }}
                   </div>
-                  <div v-if="!selectedPerson.dailyRecords.length" class="empty">暂无每日成长记录，下一次自动结算后会写入。</div>
+                  <div v-if="!selectedPerson.dailyRecords.length" class="empty">暂无成长记录。</div>
                 </div>
               </div>
               <div class="panel flat">
@@ -1760,15 +1772,26 @@
 
 <script setup>
 import {
+  Backpack,
   BadgeCent,
+  BookOpen,
   CircleUserRound,
   Cloud,
+  Crown,
+  Dumbbell,
   Flame,
   Gem,
+  House,
   Leaf,
   Mountain,
+  Package,
+  ScrollText,
+  Shield,
   Sprout,
   Sun,
+  Sword,
+  Swords,
+  Trophy,
   Waves,
   Zap
 } from "lucide-vue-next";
@@ -1778,22 +1801,23 @@ import CharacterPortrait from "./components/CharacterPortrait.vue";
 import EquipmentIcon from "./components/EquipmentIcon.vue";
 import LogPanel from "./components/LogPanel.vue";
 import Meter from "./components/Meter.vue";
+import MonsterEmblem from "./components/MonsterEmblem.vue";
 import StatIcon, { statIconComponent } from "./components/StatIcon.vue";
 import { equipmentCatalog as fallbackEquipmentCatalog, equipmentSlots as fallbackEquipmentSlots, equipmentTiers as fallbackEquipmentTiers } from "../../shared/equipmentData.mjs";
 import { duelLossScore, duelRanks, duelRankForScore, duelSeasonDay, duelSeasonLength, duelSeasonMaxScore, duelSeasonOfDay, duelWinScore } from "../../shared/duelSeasonData.mjs";
 
 const tabs = [
-  { id: "practice", label: "修炼" },
-  { id: "attributes", label: "属性" },
-  { id: "progression", label: "境界" },
-  { id: "skills", label: "技能" },
-  { id: "tasks", label: "现实任务" },
-  { id: "dungeon", label: "副本" },
-  { id: "sect", label: "宗门" },
-  { id: "arena", label: "切磋" },
-  { id: "market", label: "洞府" },
-  { id: "equipment", label: "装备" },
-  { id: "rank", label: "榜单" }
+  { id: "practice", label: "修炼", icon: Sprout },
+  { id: "attributes", label: "属性", icon: BadgeCent },
+  { id: "progression", label: "境界", icon: Mountain },
+  { id: "skills", label: "技能", icon: Zap },
+  { id: "tasks", label: "现实任务", icon: ScrollText },
+  { id: "dungeon", label: "副本", icon: Sword },
+  { id: "sect", label: "宗门", icon: Shield },
+  { id: "arena", label: "切磋", icon: Swords },
+  { id: "market", label: "洞府", icon: House },
+  { id: "equipment", label: "装备", icon: Package },
+  { id: "rank", label: "榜单", icon: Trophy }
 ];
 
 const rankBoards = [
@@ -2230,17 +2254,27 @@ const powerFormula = computed(() => {
   return `战斗力 = 攻击×2.8 + 防御×2 + 血量×0.42 + 神识×1.35 + 法力×0.55。当前为 ${effective.attack}×2.8 + ${effective.defense}×2 + ${effective.maxHp}×0.42 + ${effective.divineSense}×1.35 + ${effective.maxMana}×0.55。`;
 });
 
+const hudResources = computed(() => [
+  { label: "灵石", value: player.value.spirit, icon: "spirit" },
+  { label: "声望", value: gameState.value.sect?.reputation || 0, icon: "rank" },
+  { label: "气血", value: `${player.value.hp}/${player.value.maxHp}`, icon: "health" },
+  { label: "法力", value: `${player.value.mana || 0}/${player.value.maxMana || 0}`, icon: "mana" },
+  { label: "战力", value: derived.value.playerPower, icon: "power" }
+]);
+
 const stats = computed(() => [
-  { label: "战斗力", value: derived.value.playerPower, help: powerFormula.value },
-  { label: "血量", value: statWithBonus(derived.value.effectiveStats.maxHp, derived.value.effectiveStats.bonuses.maxHp), help: "切磋、副本、宗门战中归零即判负。" },
-  { label: "攻击", value: statWithBonus(derived.value.effectiveStats.attack, derived.value.effectiveStats.bonuses.attack), help: "实际伤害按自身攻击减去对方防御结算。" },
-  { label: "防御", value: statWithBonus(derived.value.effectiveStats.defense, derived.value.effectiveStats.bonuses.defense), help: "抵扣对方攻击，最低仍会受到少量伤害。" },
-  { label: "神识", value: statWithBonus(derived.value.effectiveStats.divineSense, derived.value.effectiveStats.bonuses.divineSense), help: "神识更高者优先出手，也会获得闪避机会。" },
-  { label: "法力", value: statWithBonus(derived.value.effectiveStats.maxMana, derived.value.effectiveStats.bonuses.maxMana), help: "用于释放技能，回合战中消耗法力加强攻击。" }
+  { label: "战斗力", icon: "power", value: derived.value.playerPower, help: powerFormula.value },
+  { label: "血量", icon: "health", value: statWithBonus(derived.value.effectiveStats.maxHp, derived.value.effectiveStats.bonuses.maxHp), help: "切磋、副本、宗门战中归零即判负。" },
+  { label: "攻击", icon: "attack", value: statWithBonus(derived.value.effectiveStats.attack, derived.value.effectiveStats.bonuses.attack), help: "实际伤害按自身攻击减去对方防御结算。" },
+  { label: "防御", icon: "defense", value: statWithBonus(derived.value.effectiveStats.defense, derived.value.effectiveStats.bonuses.defense), help: "抵扣对方攻击，最低仍会受到少量伤害。" },
+  { label: "神识", icon: "sense", value: statWithBonus(derived.value.effectiveStats.divineSense, derived.value.effectiveStats.bonuses.divineSense), help: "神识更高者优先出手，也会获得闪避机会。" },
+  { label: "法力", icon: "mana", value: statWithBonus(derived.value.effectiveStats.maxMana, derived.value.effectiveStats.bonuses.maxMana), help: "用于释放技能，回合战中消耗法力加强攻击。" }
 ]);
 
 function realmName(index) {
-  return catalog.value.realms[Math.min(index, catalog.value.realms.length - 1)];
+  const realmList = catalog.value.realms || [];
+  if (!realmList.length) return "凡人";
+  return realmList[Math.min(index, realmList.length - 1)];
 }
 
 function realmStageName(stage) {
@@ -3313,6 +3347,7 @@ function rootCounterText(person) {
 }
 
 function personInsight(person) {
+  const fallbackBreakthrough = fallbackPersonBreakthroughChance(person);
   return derived.value.personInsights?.[person?.id] || {
     rootProfile: {
       roots: [person?.root].filter(Boolean),
@@ -3328,12 +3363,16 @@ function personInsight(person) {
     effectiveStats: null,
     power: null,
     tomorrowXp: { baseXp: person?.isPlayer ? 0 : 100, rootMultiplier: 1, sectMultiplier: 1, total: person?.isPlayer ? 0 : 100 },
-    breakthrough: { realmBase: baseBreakthroughChance(person?.realm || 0), rootMultiplier: 1, sectMultiplier: 1, base: personBreakthroughChance(person), bonus: 0, total: personBreakthroughChance(person) }
+    breakthrough: { realmBase: baseBreakthroughChance(person?.realm || 0), rootMultiplier: 1, sectMultiplier: 1, base: fallbackBreakthrough, bonus: 0, total: fallbackBreakthrough }
   };
 }
 
 function personBreakthroughChance(person) {
-  return personInsight(person).breakthrough?.total ?? Math.max(0.05, Math.min(0.95, baseBreakthroughChance(person.realm || 0)));
+  return derived.value.personInsights?.[person?.id]?.breakthrough?.total ?? fallbackPersonBreakthroughChance(person);
+}
+
+function fallbackPersonBreakthroughChance(person) {
+  return Math.max(0.05, Math.min(0.95, baseBreakthroughChance(person?.realm || 0)));
 }
 
 function baseBreakthroughChance(realm) {
