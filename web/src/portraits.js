@@ -3,7 +3,7 @@ import * as adventurer from "@dicebear/adventurer";
 import * as adventurerNeutral from "@dicebear/adventurer-neutral";
 
 const portraitMap = {
-  "无名散修": "/portraits/generated-ai/player.svg",
+  "李昕纾": "/portraits/custom/lixinshu.jpg",
   "韩立": "/portraits/generated/han-li.png",
   "陈巧倩": "/portraits/generated-ai/npc-002.svg",
   "钟卫娘": "/portraits/generated-ai/npc-003.svg",
@@ -98,7 +98,6 @@ const portraitMap = {
   "吕洛": "/portraits/generated-ai/npc-092.svg",
   "慕沛灵": "/portraits/generated-ai/npc-093.svg",
   "银月": "/portraits/verified/%E9%93%B6%E6%9C%88.jpg",
-  "落云宗主": "/portraits/generated-ai/npc-095.svg",
   "白凤峰主": "/portraits/generated-ai/npc-096.svg",
   "青竹真人": "/portraits/generated-ai/npc-097.svg",
   "落霞道人": "/portraits/generated-ai/npc-098.svg",
@@ -208,6 +207,7 @@ const portraitMap = {
 
 export function portraitFor(person) {
   if (!person?.name) return "";
+  if (portraitMap[person.name]) return portraitMap[person.name];
   return dicebearPortraitFor(person);
 }
 

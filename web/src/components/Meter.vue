@@ -2,7 +2,7 @@
   <div class="meter">
     <div class="meter-head">
       <span class="meter-label">
-        <StatIcon v-if="icon" :name="icon" />
+        <StatIcon v-if="icon" :name="icon" :class="`detail-icon-${icon}`" />
         <span>{{ label }}</span>
       </span>
       <span>{{ Math.floor(value) }} / {{ max }}</span>

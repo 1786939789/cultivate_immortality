@@ -15,13 +15,13 @@ export const roots = [
 
 export const rootCycle = ["metal", "wood", "earth", "water", "fire", "heaven"];
 
-export const rootResonances = [
-  { id: "three_mountains", name: "三山成势", keys: ["metal", "wood", "earth"], effect: "defense", bonus: 0.03, note: "金、木、土齐备，防御提高 3%。" },
-  { id: "three_lights", name: "三光并照", keys: ["water", "fire", "heaven"], effect: "attack", bonus: 0.03, note: "水、火、天齐备，攻击提高 3%。" },
-  { id: "five_elements", name: "五行俱全", keys: ["metal", "wood", "water", "fire", "earth"], effect: "spirit", bonus: 0.05, note: "五行俱全，每日灵石收益提高 5%。" }
+export const specialRoots = [
+  { id: "thunder", name: "雷灵根", keys: ["metal", "wood", "earth"], note: "金、木、土齐备时自动转换；克金灵根、木灵根、土灵根，不被其他灵根相克。属性仍按子灵根加成和多灵根衰减计算。" },
+  { id: "wind", name: "风灵根", keys: ["water", "fire", "heaven"], note: "水、火、天齐备时自动转换；克水灵根、火灵根、天灵根，不被其他灵根相克。属性仍按子灵根加成和多灵根衰减计算。" },
+  { id: "hidden", name: "隐灵根", keys: ["metal", "wood", "water", "fire", "earth"], note: "金、木、水、火、土齐备时自动转换；克金灵根、木灵根、水灵根、火灵根、土灵根。属性仍按子灵根加成和多灵根衰减计算。" }
 ];
 
-export const rosterVersion = 4;
+export const rosterVersion = 5;
 
 export { duelLossScore, duelRanks, duelSeasonLength, duelSeasonMaxScore, duelSeasonOfDay, duelSeasonDay, duelWinScore, duelRankForScore } from "../shared/duelSeasonData.mjs";
 
@@ -35,7 +35,7 @@ export const sectRoster = [
   { region: "天南", name: "天阙堡", members: ["天阙堡主", "辛如音", "齐云霄", "云露侍者", "天阙长老", "阵符先生", "玉阙真人", "司阵童子", "白阙散人", "灵阙居士"] },
   { region: "天南", name: "鬼灵门", members: ["王蝉", "王天胜", "鬼灵老祖", "碎魂真人", "董萱儿", "鬼灵门主", "血侍", "阴罗使", "黑煞教主", "炼魂童子"] },
   { region: "天南", name: "合欢宗", members: ["合欢老魔", "田不缺", "云露老魔", "合欢宗主", "媚凝", "温夫人", "妙鹤仙子", "赤霞姬", "花影真人", "双修童子"] },
-  { region: "天南", name: "落云宗", members: ["程天坤", "吕洛", "慕沛灵", "银月", "落云宗主", "白凤峰主", "青竹真人", "落霞道人", "云梦仙子", "听松居士"] },
+  { region: "天南", name: "落云宗", members: ["程天坤", "吕洛", "慕沛灵", "银月", "白凤峰主", "青竹真人", "落霞道人", "云梦仙子", "听松居士"] },
   { region: "乱星海", name: "星宫", members: ["凌玉灵", "天星双圣", "温青", "凌啸风", "星宫长老", "白璧真人", "星璇使", "观星道人", "银辉仙子", "镇海法王"] },
   { region: "乱星海", name: "妙音门", members: ["紫灵", "汪凝", "范静梅", "卓如婷", "妙音门主", "曲魂", "碧音仙子", "听潮女修", "玉箫道人", "海棠夫人"] },
   { region: "乱星海", name: "六连殿", members: ["六连殿主", "苗长老", "古长老", "许云", "六连执事", "海灯道人", "碧波客", "青蛟使", "离岛散人", "金霞掌柜"] },
@@ -169,7 +169,7 @@ export const provinces = [
 
 export const dungeons = [
   { id: "blood_trial", name: "血色禁地", min: 0, power: 48, reward: "每日单人洞窟、灵石、装备", text: "每人每日自动闯入禁地洞窟，越往深处妖兽境界越高，奖励越厚。" },
-  { id: "void_hall", name: "虚天殿", min: 0, power: 120, reward: "宗门协作、灵石平分、装备归输出者", text: "全宗门合力挑战守殿妖王，妖王境界按宗门最高修士的下一大境界生成。" },
+  { id: "void_hall", name: "虚天殿", min: 0, power: 120, reward: "宗门协作、灵石平分、装备归输出者", text: "全宗门合力挑战守殿妖王：宗门最高修士不高于五层时生成本境界十层，高于五层时生成下一大境界一层，最高封顶真仙。" },
   { id: "star_sea", name: "乱星海猎妖", min: 0, power: 86, reward: "全员贡献、声望、稀有装备", text: "乱星海妖潮每日涌动，所有修士按贡献分润灵石，并争夺高阶装备。" }
 ];
 

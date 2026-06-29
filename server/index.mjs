@@ -20,6 +20,15 @@ import { mutateState, publicState, resetState } from "./store.mjs";
 const port = Number(process.env.PORT || 8787);
 const rootDir = fileURLToPath(new URL("../", import.meta.url));
 const distDir = join(rootDir, "dist");
+const liteActionRoutes = new Set([
+  "/api/tasks",
+  "/api/breakthrough",
+  "/api/rest",
+  "/api/day/advance",
+  "/api/sect/mission",
+  "/api/items/buy",
+  "/api/items/use"
+]);
 
 function sendJson(res, status, data) {
   const body = JSON.stringify(data);
@@ -69,7 +78,8 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "GET" && url.pathname === "/api/state") {
-    sendJson(res, 200, await publicState());
+    const scope = url.searchParams.get("scope") === "lite" ? "lite" : "full";
+    sendJson(res, 200, await publicState("default", { scope }));
     return;
   }
 
@@ -104,7 +114,9 @@ async function handleApi(req, res, url) {
     return;
   }
 
-  sendJson(res, 200, await mutateState(mutator));
+  const requestedScope = body.scope === "lite" || body.scope === "full" ? body.scope : "";
+  const scope = requestedScope || (liteActionRoutes.has(url.pathname) ? "lite" : "full");
+  sendJson(res, 200, await mutateState(mutator, "default", { publicOptions: { scope } }));
 }
 
 async function serveStatic(req, res, url) {

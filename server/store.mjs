@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import initSqlJs from "sql.js";
-import { clearProgressHistory, createDefaultState, ensureStateShape, getPublicState, settleIfNeeded } from "./gameLogic.mjs";
+import { clearProgressHistory, compactStateForStorage, createDefaultState, ensureStateShape, getPublicState, settleIfNeeded } from "./gameLogic.mjs";
 
 const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const dataDir = join(rootDir, "data");
@@ -57,6 +57,7 @@ export async function readState(id = "default") {
 
 export async function writeState(state, id = "default") {
   const db = await openDb();
+  compactStateForStorage(state);
   const statement = db.prepare(`
     INSERT INTO saves (id, state_json, updated_at)
     VALUES ($id, $state, datetime('now'))
@@ -69,11 +70,11 @@ export async function writeState(state, id = "default") {
   persist(db);
 }
 
-export async function mutateState(mutator, id = "default") {
+export async function mutateState(mutator, id = "default", options = {}) {
   const state = await readState(id);
   const result = mutator(state);
   await writeState(state, id);
-  const publicState = getPublicState(state);
+  const publicState = getPublicState(state, options.publicOptions);
   return result === undefined ? publicState : { state: publicState, result };
 }
 
@@ -89,7 +90,7 @@ export async function resetState(id = "default") {
   return getPublicState(state);
 }
 
-export async function publicState(id = "default") {
+export async function publicState(id = "default", options = {}) {
   const state = await readState(id);
-  return getPublicState(state);
+  return getPublicState(state, options);
 }
