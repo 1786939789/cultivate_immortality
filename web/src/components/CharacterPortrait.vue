@@ -15,7 +15,7 @@ const props = defineProps({
 });
 
 const imageFailed = ref(false);
-const imageSrc = computed(() => portraitFor(props.person));
+const imageSrc = computed(() => props.person?.portraitUrl || portraitFor(props.person));
 const initial = computed(() => props.person?.name?.slice(0, 1) || "?");
 const rankClass = computed(() => props.person?.duelSeason?.rankId ? `duel-frame-${props.person.duelSeason.rankId}` : "");
 const portraitStyle = computed(() => ({

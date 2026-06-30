@@ -765,6 +765,10 @@ button {
   gap: 12px;
 }
 
+.grid > * {
+  min-width: 0;
+}
+
 .panel {
   padding: 16px;
   box-shadow: none;
@@ -827,6 +831,125 @@ button {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   margin-top: 12px;
+}
+
+.home-dashboard {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.game-card {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  border-color: rgba(120, 91, 43, .24);
+  background: rgba(255, 253, 246, .82);
+}
+
+.scene-card,
+.duel-home {
+  grid-column: span 2;
+  min-height: 240px;
+  color: #fff7ed;
+  background-position: center;
+  background-size: cover;
+  box-shadow: inset 0 0 0 1px rgba(255, 247, 219, .16), 0 16px 34px rgba(23, 50, 74, .16);
+}
+
+.scene-card::before,
+.duel-home::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background:
+    linear-gradient(180deg, rgba(8, 18, 28, .2), rgba(8, 18, 28, .78)),
+    linear-gradient(90deg, rgba(8, 18, 28, .72), rgba(8, 18, 28, .2) 62%, rgba(8, 18, 28, .55));
+}
+
+.scene-card > *,
+.duel-home > * {
+  position: relative;
+  z-index: 1;
+}
+
+.scene-dungeon {
+  background:
+    linear-gradient(180deg, rgba(8, 18, 28, .2), rgba(8, 18, 28, .72)),
+    linear-gradient(90deg, rgba(8, 18, 28, .72), rgba(8, 18, 28, .18) 62%, rgba(8, 18, 28, .5)),
+    url("/assets/home-cards/dungeon-trial.png") center / cover no-repeat;
+}
+
+.scene-sect {
+  background:
+    linear-gradient(180deg, rgba(8, 18, 28, .16), rgba(8, 18, 28, .68)),
+    linear-gradient(90deg, rgba(8, 18, 28, .72), rgba(8, 18, 28, .16) 62%, rgba(8, 18, 28, .42)),
+    url("/assets/home-cards/sect-mission.png") center / cover no-repeat;
+}
+
+.duel-home {
+  background:
+    linear-gradient(180deg, rgba(8, 18, 28, .18), rgba(8, 18, 28, .72)),
+    linear-gradient(90deg, rgba(8, 18, 28, .72), rgba(8, 18, 28, .16) 62%, rgba(8, 18, 28, .48)),
+    url("/assets/home-cards/duel-arena.png") center / cover no-repeat;
+}
+
+.scene-card h3,
+.duel-home h3,
+.scene-card h4 {
+  color: #fff7ed;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, .42);
+}
+
+.scene-card p,
+.duel-home p {
+  color: rgba(255, 247, 237, .88);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, .46);
+}
+
+.scene-copy {
+  display: grid;
+  gap: 5px;
+  margin-top: auto;
+}
+
+.scene-copy h4 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.15;
+}
+
+.game-cta {
+  align-self: flex-start;
+}
+
+.duel-home .duel-mark {
+  position: absolute;
+  right: 16px;
+  bottom: 12px;
+  z-index: 1;
+  color: rgba(255, 247, 237, .18);
+  font-size: 70px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.equipment-home,
+.ranking-home {
+  grid-column: span 3;
+}
+
+.equipment-home {
+  grid-column: span 6;
+}
+
+.log-home {
+  grid-column: span 3;
 }
 
 .dungeon-day-nav {
@@ -2936,6 +3059,450 @@ button.event {
   gap: 6px;
 }
 
+.root-counter-map {
+  position: relative;
+  height: 292px;
+  margin-top: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(120, 91, 43, .2);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 247, 219, .82) 0 15%, rgba(236, 253, 245, .58) 16% 36%, transparent 37%),
+    repeating-linear-gradient(0deg, rgba(120, 91, 43, .06) 0 1px, transparent 1px 28px),
+    repeating-linear-gradient(90deg, rgba(120, 91, 43, .05) 0 1px, transparent 1px 28px),
+    linear-gradient(135deg, rgba(255, 253, 246, .86), rgba(236, 253, 245, .7));
+}
+
+.root-counter-map::before,
+.root-counter-map::after {
+  content: "";
+  position: absolute;
+  inset: 45px 88px;
+  border: 1px solid rgba(120, 91, 43, .16);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.root-counter-map::after {
+  inset: 82px 136px;
+  border-color: rgba(15, 118, 110, .18);
+}
+
+.root-counter-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  color: rgba(120, 91, 43, .52);
+}
+
+.root-counter-lines marker path {
+  fill: currentColor;
+}
+
+.root-counter-lines path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: .72;
+  marker-end: url(#rootArrow);
+  opacity: .58;
+}
+
+.root-counter-lines path.active {
+  stroke-width: 1.4;
+  opacity: .95;
+}
+
+.root-counter-lines path.incoming {
+  color: rgba(185, 28, 28, .82);
+}
+
+.root-counter-lines path.outgoing {
+  color: rgba(15, 118, 110, .9);
+}
+
+.root-counter-node {
+  --node-size: 76px;
+  position: absolute;
+  z-index: 2;
+  width: var(--node-size);
+  min-height: 72px;
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(120, 91, 43, .22);
+  border-radius: 8px;
+  background: rgba(255, 253, 246, .9);
+  color: var(--root-color, #0f766e);
+  padding: 7px 6px;
+  box-shadow: 0 10px 20px rgba(47, 36, 24, .12);
+}
+
+.root-counter-orb {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--root-color, #0f766e) 42%, #fff7ed);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 28%, rgba(255, 255, 255, .92), transparent 28%),
+    color-mix(in srgb, var(--root-color, #0f766e) 18%, #fff7ed);
+  box-shadow: inset 0 0 0 3px rgba(255, 255, 255, .42);
+}
+
+.root-counter-node strong {
+  color: #2f2418;
+  font-size: 13px;
+  line-height: 1.1;
+}
+
+.root-counter-node small {
+  max-width: 100%;
+  border-radius: 999px;
+  background: rgba(120, 91, 43, .09);
+  color: #6b5b45;
+  font-size: 11px;
+  line-height: 1.2;
+  padding: 2px 6px;
+  white-space: nowrap;
+}
+
+.root-counter-node.current {
+  border-color: rgba(212, 160, 47, .7);
+  background: #fff7db;
+  box-shadow:
+    0 0 0 3px rgba(212, 160, 47, .16),
+    0 14px 26px rgba(120, 91, 43, .18);
+}
+
+.root-counter-node.current small {
+  background: #92400e;
+  color: #fff7ed;
+}
+
+.root-counter-node.restrained {
+  border-color: rgba(185, 28, 28, .48);
+  background: #fff1f2;
+}
+
+.root-counter-node.restrained small {
+  background: rgba(185, 28, 28, .12);
+  color: #991b1b;
+}
+
+.root-counter-node.restrains {
+  border-color: rgba(15, 118, 110, .52);
+  background: #ecfdf5;
+}
+
+.root-counter-node.restrains small {
+  background: rgba(15, 118, 110, .12);
+  color: #0f766e;
+}
+
+.root-counter-focus {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.root-counter-focus div {
+  min-width: 0;
+  border: 1px solid rgba(120, 91, 43, .18);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, .48);
+  padding: 8px 10px;
+}
+
+.root-counter-focus span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.root-counter-focus strong {
+  display: block;
+  color: #38421f;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.root-special-counters {
+  display: grid;
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.root-special-counters div {
+  display: grid;
+  grid-template-columns: 30px minmax(58px, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(15, 118, 110, .18);
+  border-radius: 7px;
+  background: rgba(236, 253, 245, .5);
+  padding: 7px 9px;
+}
+
+.root-special-icon {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(255, 253, 246, .78);
+  color: var(--root-color, #0f766e);
+}
+
+.root-special-counters strong {
+  color: #134e4a;
+  font-size: 13px;
+}
+
+.root-special-counters small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.root-astrolabe-panel {
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(255, 253, 246, .92), rgba(236, 253, 245, .78)),
+    radial-gradient(circle at 50% 18%, rgba(36, 92, 141, .16), transparent 24rem);
+}
+
+.root-astrolabe-layout {
+  display: grid;
+  grid-template-columns: minmax(520px, 1.35fr) minmax(260px, .65fr);
+  gap: 14px;
+  align-items: stretch;
+  margin-top: 12px;
+}
+
+.root-astrolabe {
+  position: relative;
+  min-height: 560px;
+  overflow: hidden;
+  border: 1px solid rgba(15, 118, 110, .28);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(8, 20, 34, .12), rgba(8, 20, 34, .28)),
+    url("/assets/root-astrolabe-clean-bg.png") center / cover no-repeat,
+    #0f2434;
+  box-shadow: inset 0 0 0 1px rgba(255, 247, 219, .2), 0 18px 36px rgba(23, 50, 74, .18);
+}
+
+.root-astrolabe::before {
+  content: "";
+  position: absolute;
+  inset: 9%;
+  border: 1px solid rgba(191, 219, 254, .18);
+  border-radius: 50%;
+  box-shadow:
+    inset 0 0 36px rgba(125, 211, 252, .16),
+    0 0 46px rgba(253, 230, 138, .12);
+  pointer-events: none;
+}
+
+.root-astrolabe::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 47%, transparent 0 30%, rgba(5, 16, 28, .34) 70%);
+  pointer-events: none;
+}
+
+.root-astrolabe .root-counter-lines {
+  display: none;
+  z-index: 1;
+  color: rgba(198, 228, 255, .36);
+  filter: drop-shadow(0 0 8px rgba(125, 211, 252, .2));
+}
+
+.root-astrolabe .root-counter-lines path {
+  stroke-width: .45;
+  opacity: .46;
+}
+
+.root-astrolabe .root-counter-lines path.active {
+  stroke-width: 1.2;
+  opacity: .9;
+}
+
+.root-astrolabe .root-counter-node {
+  --node-size: 136px;
+  z-index: 3;
+  min-height: var(--node-size);
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--root-color, #0f766e);
+  padding: 0;
+  box-shadow: none;
+}
+
+.root-astrolabe .root-counter-node:hover,
+.root-astrolabe .root-counter-node:focus-visible {
+  z-index: 5;
+  outline: none;
+  transform: translate(-50%, -50%) scale(1.06);
+}
+
+.root-astrolabe .root-counter-node.special {
+  --node-size: 112px;
+  min-height: var(--node-size);
+}
+
+.root-astrolabe .root-counter-node.highlighted,
+.root-astrolabe .root-counter-node:hover,
+.root-astrolabe .root-counter-node:focus-visible {
+  background: transparent;
+  box-shadow:
+    0 0 30px color-mix(in srgb, var(--root-color, #0f766e) 72%, transparent);
+}
+
+.root-astrolabe .root-counter-node.owned:not(.primary) {
+  box-shadow: none;
+}
+
+.root-ring-art {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background-position: center;
+  background-size: contain;
+  background-repeat: no-repeat;
+  filter: drop-shadow(0 0 18px color-mix(in srgb, var(--root-color, #0f766e) 58%, transparent));
+  pointer-events: none;
+}
+
+.root-astrolabe .root-counter-orb {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 2;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  transform: translate(-50%, -50%);
+  border: 2px solid color-mix(in srgb, var(--root-color, #0f766e) 28%, #fff7ed);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 36% 25%, rgba(255, 255, 255, .38), transparent 27%),
+    color-mix(in srgb, var(--root-color, #0f766e) 78%, #1f2933);
+  color: #fff7ed;
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1;
+  font-family: "KaiTi", "STKaiti", "Microsoft YaHei", serif;
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, .16),
+    0 0 20px color-mix(in srgb, var(--root-color, #0f766e) 70%, transparent);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, .42);
+}
+
+.root-astrolabe .root-counter-node strong {
+  display: none;
+}
+
+.root-astrolabe .root-counter-node small {
+  display: none;
+}
+
+.root-detail-panel,
+.current-root-panel {
+  border-color: rgba(15, 118, 110, .22);
+  background:
+    linear-gradient(180deg, rgba(255, 253, 246, .9), rgba(236, 253, 245, .7));
+}
+
+.root-detail-panel {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  border: 1px solid rgba(120, 91, 43, .2);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.root-detail-kicker {
+  justify-self: start;
+  border: 1px solid rgba(15, 118, 110, .24);
+  border-radius: 999px;
+  background: rgba(236, 253, 245, .72);
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 4px 8px;
+}
+
+.root-detail-head {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.root-detail-icon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--root-color, #0f766e) 44%, #fff7ed);
+  background: color-mix(in srgb, var(--root-color, #0f766e) 16%, #fff7ed);
+  color: var(--root-color, #0f766e);
+}
+
+.root-detail-head h4 {
+  margin: 0;
+  color: #78350f;
+  font-size: 22px;
+}
+
+.root-detail-head p,
+.root-detail-panel > p {
+  margin: 0;
+  color: #5b4630;
+  line-height: 1.65;
+}
+
+.root-detail-stats {
+  display: grid;
+  gap: 8px;
+}
+
+.root-detail-stats div {
+  min-width: 0;
+  border: 1px solid rgba(120, 91, 43, .16);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, .5);
+  padding: 9px 10px;
+}
+
+.root-detail-stats span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.root-detail-stats strong {
+  display: block;
+  color: #38421f;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.current-root-panel {
+  margin-top: 12px;
+}
+
 .attribute-row {
   display: grid;
   grid-template-columns: 74px auto 1fr;
@@ -4460,6 +5027,7 @@ button.event {
   }
 
   .grid,
+  .home-dashboard,
   .cards,
   .task-form,
   .avatar,
@@ -4475,6 +5043,14 @@ button.event {
   .province-table-row,
   .war-battle-grid {
     grid-template-columns: 1fr;
+  }
+
+  .scene-card,
+  .duel-home,
+  .equipment-home,
+  .ranking-home,
+  .log-home {
+    grid-column: span 1;
   }
 
   .province-table-head {
@@ -4544,6 +5120,65 @@ button.event {
   .attribute-row,
   .realm-row {
     grid-template-columns: 1fr;
+  }
+
+  .root-counter-map {
+    width: 100%;
+    min-width: 0;
+    height: 360px;
+  }
+
+  .root-counter-map::before {
+    inset: 64px 44px;
+  }
+
+  .root-counter-map::after {
+    inset: 112px 88px;
+  }
+
+  .root-counter-node {
+    --node-size: 70px;
+  }
+
+  .root-astrolabe-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .root-astrolabe {
+    min-height: 520px;
+  }
+
+  .root-astrolabe .root-counter-node {
+    --node-size: 88px;
+    min-height: var(--node-size);
+    padding: 0;
+  }
+
+  .root-astrolabe .root-counter-node.special {
+    --node-size: 76px;
+  }
+
+  .root-astrolabe .root-counter-orb {
+    width: 34px;
+    height: 34px;
+    font-size: 16px;
+  }
+
+  .root-astrolabe .root-counter-node strong {
+    font-size: 12px;
+  }
+
+  .root-counter-focus,
+  .root-special-counters div {
+    grid-template-columns: 1fr;
+  }
+
+  .root-special-icon {
+    display: none;
+  }
+
+  .attributes-surface > .grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .blood-podium-card.rank-2,

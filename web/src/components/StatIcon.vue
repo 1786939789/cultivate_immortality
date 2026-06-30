@@ -10,29 +10,33 @@
 
 <script>
 import {
-  Activity,
+  Axe,
   BadgeCent,
+  Brain,
+  CalendarDays,
   Coins,
-  Eye,
+  Gauge,
   HeartPulse,
-  Shield,
+  Medal,
+  ShieldCheck,
   Sparkles,
-  Swords,
-  Trophy,
-  Zap
+  VenusAndMars,
+  WandSparkles
 } from "lucide-vue-next";
 
 export function statIconComponent(icon) {
   return {
-    attack: Swords,
-    defense: Shield,
+    attack: Axe,
+    defense: ShieldCheck,
+    day: CalendarDays,
+    gender: VenusAndMars,
     health: HeartPulse,
     hp: HeartPulse,
     mana: Sparkles,
-    power: Zap,
-    rank: Trophy,
-    sense: Eye,
-    skill: Activity,
+    power: Gauge,
+    rank: Medal,
+    sense: Brain,
+    skill: WandSparkles,
     spirit: Coins
   }[icon] || BadgeCent;
 }

@@ -3054,6 +3054,7 @@ function makeNpc(name, index) {
     dungeonClears: 0,
     bestDungeonPower: 0,
     bestDungeonName: "未入秘境",
+    portraitVariant: 0,
     dungeonHistory: [],
     dailyRecords: [],
     breakthroughs: [],
@@ -3255,6 +3256,7 @@ export function ensureStateShape(state) {
   state.player.duelWins ??= 0;
   state.player.duelLosses ??= 0;
   state.player.lastBreakthroughDay ??= 0;
+  state.player.portraitVariant ??= 0;
   state.player.duelSeasonHistory ??= [];
   changed = normalizeDuelSeason(state.player, state.day) || changed;
   state.player.dungeonClears ??= 0;
@@ -3772,6 +3774,7 @@ export function dailySettlement(state, options = {}) {
   state.player.hp = clamp(state.player.hp + 10, 0, effectiveMaxHp(state.player, state));
   const beforeMana = state.player.mana;
   state.player.mana = clamp((state.player.mana || 0) + 8, 0, effectiveMaxMana(state.player, state));
+  autoAttemptPlayerBreakthrough(state);
   runDailyDungeons(state, settlementDate);
   const playerDungeonEntries = (state.player.dungeonHistory || []).filter((record) => record.day === state.day);
   const playerSoloDungeon = playerDungeonEntries.find((record) => record.type === "solo");
@@ -3830,22 +3833,29 @@ export function addTask(state, payload) {
   state.tasks.unshift({ name, type: template.label, diff, xp: xpGain, day: state.day, date: stateDateForDay(state) });
   state.tasks = state.tasks.slice(0, 16);
   log(state, `完成「${name}」，获得 ${xpGain} 经验。${template.label}让你的道基更扎实。`, "gold");
+  autoAttemptPlayerBreakthrough(state);
 }
 
-export function attemptBreakthrough(state) {
+export function changePlayerPortrait(state, payload = {}) {
+  const variantCount = Math.max(1, Number(payload.count || 1));
+  const nextVariant = Number.isFinite(Number(payload.variant))
+    ? Number(payload.variant)
+    : Number(state.player.portraitVariant || 0) + 1;
+  state.player.portraitVariant = ((Math.trunc(nextVariant) % variantCount) + variantCount) % variantCount;
+  log(state, "你换上新的画像玉简。", "gold");
+}
+
+function autoAttemptPlayerBreakthrough(state) {
   const p = state.player;
   const need = xpNeed(p.realm);
   if (p.realm >= realms.length - 1) {
-    log(state, "前路被天地法则遮蔽，此版本暂未开放更高境界。");
-    return;
+    return false;
   }
   if (p.xp < need) {
-    log(state, `经验尚浅，还差 ${need - p.xp} 点经验才能冲击下一层。`, "bad");
-    return;
+    return false;
   }
   if (p.lastBreakthroughDay === state.day) {
-    log(state, "今日已经冲击过境界，道基尚需沉淀，明日再试。", "bad");
-    return;
+    return false;
   }
 
   const chance = breakthroughChanceFor(state, p);
@@ -3860,14 +3870,15 @@ export function attemptBreakthrough(state) {
     p.reputation += 6 + p.realm;
     p.breakthroughs.unshift({ day: state.day, date: stateDateForDay(state), from: realms[p.realm - 1], to: realms[p.realm], success: true, chance, growth });
     p.breakthroughs = p.breakthroughs.slice(0, recentRecordDays);
-    log(state, `灵气贯通周天，你成功突破至「${realms[p.realm]}」。`, "gold");
+    log(state, `经验圆满，灵气自发贯通周天，你自动突破至「${realms[p.realm]}」。`, "gold");
   } else {
     p.hp = clamp(p.hp - 26, 1, effectiveMaxHp(p, state));
     p.mana = clamp((p.mana || 0) - 18, 0, effectiveMaxMana(p, state));
     p.breakthroughs.unshift({ day: state.day, date: stateDateForDay(state), from: realms[p.realm], to: realms[p.realm + 1] || "未知境界", success: false, chance });
     p.breakthroughs = p.breakthroughs.slice(0, recentRecordDays);
-    log(state, "突破失败，灵力逆冲经脉。气息紊乱，需要调息或完成自律任务。", "bad");
+    log(state, "经验圆满后自动冲击境界失败，灵力逆冲经脉。今日不可再次突破。", "bad");
   }
+  return true;
 }
 
 export function rest(state) {

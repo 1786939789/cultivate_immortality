@@ -1,22 +1,6 @@
 <template>
   <div class="app">
     <header class="topbar">
-      <section class="loot-ticker" v-if="todayEquipmentDrops.length">
-        <span class="loot-ticker-label">今日掉落</span>
-        <div class="loot-ticker-track">
-          <div class="loot-ticker-content">
-            <span v-for="drop in todayEquipmentDrops" :key="`${drop.day}-${drop.winnerId}-${drop.itemId}-${equipmentDropKind(drop)}`">
-              <em class="loot-source">{{ equipmentDropSource(drop) }}</em>
-              <strong>{{ drop.winnerName }}</strong>
-              获得
-              <b>{{ drop.tierName }}「{{ drop.itemName }}」</b>
-              <template v-if="equipmentDropKind(drop) === 'steal' && drop.loserName">自 {{ drop.loserName }}</template>
-              · {{ equipmentDropSlotName(drop) }} · {{ equipmentDropStatName(drop) }} +{{ formatPercent(equipmentDropBonus(drop)) }}
-            </span>
-          </div>
-        </div>
-      </section>
-
       <section class="brand">
         <div class="sigil" aria-hidden="true">
           <svg viewBox="0 0 64 64" fill="none">
@@ -43,7 +27,7 @@
               <h2>{{ player.name || "修士" }} · {{ rootLine(player) }}</h2>
               <p>{{ player.sect || "散修" }} · 战力 {{ derived.playerPower }} · 下一境界 {{ derived.nextRealm }}</p>
             </div>
-            <CharacterPortrait :person="{ ...player, isPlayer: true }" size="lg" />
+            <CharacterPortrait :person="playerPortraitPerson" size="lg" />
           </div>
           <div class="resource-strip" v-if="state">
             <span v-for="item in hudResources" :key="item.label" :class="`resource-chip resource-${item.icon}`">
@@ -52,6 +36,18 @@
               <strong>{{ item.value }}</strong>
             </span>
           </div>
+          <section class="loot-ticker" v-if="dailyTickerItems.length" aria-label="今日修行播报">
+            <span class="loot-ticker-label">今日播报</span>
+            <div class="loot-ticker-track">
+              <div class="loot-ticker-content">
+                <span v-for="item in dailyTickerItems" :key="item.key">
+                  <em class="loot-source">{{ item.label }}</em>
+                  <strong>{{ item.name }}</strong>
+                  {{ item.text }}
+                </span>
+              </div>
+            </div>
+          </section>
         </div>
       </section>
 
@@ -66,24 +62,56 @@
       </section>
     </header>
 
-    <div v-if="loading" class="loading">正在读取洞府玉简...</div>
+    <div v-if="loading" class="loading">正在读取修行玉简...</div>
 
     <div v-else-if="state" class="layout">
       <aside class="sidebar">
-        <section class="avatar">
-          <CharacterPortrait :person="{ ...player, isPlayer: true }" size="xl" />
-          <div>
-            <div class="name-row">
-              <h2>{{ player.name }}</h2>
-              <span class="tag">{{ realmName(player.realm) }}</span>
-            </div>
-            <p>{{ player.root.name }}</p>
+        <section class="avatar hero-profile-card">
+          <CharacterPortrait :person="playerPortraitPerson" size="xl" />
+          <div class="name-plaque">
+            <span>{{ player.name }}</span>
           </div>
+          <button
+            class="portrait-change"
+            type="button"
+            @click="openPortraitPicker"
+            aria-label="从本地选择主人公头像"
+            title="更换头像"
+          >
+            <ImagePlus :size="16" :stroke-width="2.6" aria-hidden="true" />
+          </button>
+          <input ref="portraitInput" class="portrait-input" type="file" accept="image/*" @change="handlePortraitFile">
         </section>
 
-        <button class="meter-button" type="button" @click="openProgression" aria-label="查看每一层突破所需经验">
-          <Meter label="经验" :value="player.xp" :max="derived.xpNeed" />
-        </button>
+        <section class="profile-scroll">
+          <div class="profile-title-row">
+            <strong>{{ player.name }}</strong>
+          </div>
+
+          <div class="profile-info-list">
+            <div class="profile-info-item">
+              <Landmark :size="17" :stroke-width="2.4" aria-hidden="true" />
+              <span>宗门</span>
+              <strong>{{ player.sect || "散修" }}</strong>
+            </div>
+            <div class="profile-info-item">
+              <Orbit :size="17" :stroke-width="2.4" aria-hidden="true" />
+              <span>境界</span>
+              <strong>{{ realmName(player.realm) }}</strong>
+            </div>
+            <button class="profile-info-item profile-progress" type="button" @click="openProgression" aria-label="查看每一层突破所需经验">
+              <Route :size="17" :stroke-width="2.4" aria-hidden="true" />
+              <span>修为</span>
+              <Meter label="修为" :value="player.xp" :max="derived.xpNeed" />
+              <small>{{ Math.floor(player.xp) }} / {{ derived.xpNeed }}</small>
+            </button>
+            <div class="profile-info-item">
+              <component :is="rootIconComponent(player.primaryRootKey || player.root?.key)" :size="17" :stroke-width="2.4" aria-hidden="true" />
+              <span>灵根</span>
+              <strong>{{ profileRootText }}</strong>
+            </div>
+          </div>
+        </section>
 
         <section class="stats">
           <div
@@ -99,15 +127,6 @@
               <span>{{ stat.label }}</span>
             </div>
             <small class="stat-tip" role="tooltip">{{ stat.help }}</small>
-          </div>
-        </section>
-
-        <section class="panel">
-          <h3>道途</h3>
-          <p>{{ currentDate }}，战力 {{ derived.playerPower }}。基础突破率 {{ formatPercent(derived.baseBreakChance) }}，当前约 {{ formatPercent(derived.breakChance) }}。</p>
-          <div class="actions">
-            <button class="primary" :disabled="isActionPending('/api/breakthrough')" @click="act('/api/breakthrough')">尝试突破</button>
-            <button class="secondary" :disabled="isActionPending('/api/rest')" @click="act('/api/rest')">闭关调息</button>
           </div>
         </section>
       </aside>
@@ -127,101 +146,194 @@
         </nav>
 
         <section v-if="activeTab === 'practice'" class="view active">
-          <div class="grid">
-            <div class="panel">
-              <h3>角色设定</h3>
-              <p>资质、灵根、天赋决定修炼节奏。</p>
-              <div class="pill-grid">
-                <span class="pill">{{ player.root.name }}：{{ player.root.note }}</span>
-                <span class="pill">当前战力：{{ derived.playerPower }}</span>
-                <span class="pill">下一境界：{{ derived.nextRealm }}</span>
+          <div class="home-dashboard">
+            <article class="panel game-card scene-card scene-dungeon">
+              <div class="section-head compact">
+                <h3>历练副本</h3>
+                <span class="tag">{{ featuredDungeon.realm }}</span>
               </div>
-            </div>
-            <div class="panel">
-              <h3>核心循环</h3>
-              <p>做任务，攒资源，破境，入副本。</p>
-              <div class="timeline">
-                <div class="event">炼气：建立日常任务习惯，积累第一桶灵石。</div>
-                <div class="event gold">筑基：副本收益提升，宗门战开始成为主要声望来源。</div>
-                <div class="event bad">结丹：NPC 会更快追赶，突破失败惩罚显著提高。</div>
+              <div class="scene-copy">
+                <h4>{{ featuredDungeon.title }}</h4>
+                <p>血色禁地、虚天殿、乱星海记录。</p>
               </div>
-            </div>
+              <button class="primary game-cta" type="button" @click="switchTab('dungeon')">查看副本</button>
+            </article>
+
+            <article class="panel game-card scene-card scene-sect">
+              <div class="section-head compact">
+                <h3>宗门任务</h3>
+              </div>
+              <div class="scene-copy">
+                <h4>{{ player.sect || "落云宗" }}</h4>
+                <p>攻守城 {{ gameState.sect?.warWins || 0 }}胜{{ gameState.sect?.warLosses || 0 }}负</p>
+                <p>任务、攻守城、势力地图。</p>
+              </div>
+              <button class="primary game-cta" type="button" @click="switchTab('sect')">进入宗门</button>
+            </article>
+
+            <article class="panel game-card duel-home">
+              <div class="section-head compact">
+                <h3>斗法场</h3>
+              </div>
+              <p>我的排名：{{ playerRank }}</p>
+              <p>今日切磋：{{ todayDuelCount }} 场</p>
+              <p>挑战冷却：<strong>{{ countdown }}</strong></p>
+              <div class="duel-mark" aria-hidden="true">⚔</div>
+              <button class="primary game-cta" type="button" @click="switchTab('arena')">进入切磋</button>
+            </article>
+
+            <article class="panel game-card equipment-home">
+              <div class="section-head compact">
+                <h3>装备</h3>
+                <button class="link-button" type="button" @click="switchTab('equipment')">查看全部 ›</button>
+              </div>
+              <div class="equipment-showcase">
+                <div class="gear-slot" v-for="item in showcaseEquipment" :key="item.id" :class="`tier-${item.tier}`" :title="`${item.name} · ${item.statName} +${formatPercent(item.bonus)}`" :data-tooltip="`${item.name} · ${item.statName} +${formatPercent(item.bonus)}`" :aria-label="`${item.name}，${item.statName} +${formatPercent(item.bonus)}`">
+                  <EquipmentIcon :id="item.id" :name="item.name" :slot="item.slot" :tier="item.tier" />
+                  <span>+{{ Math.round((item.bonus || 0) * 100) }}</span>
+                </div>
+              </div>
+            </article>
+
+            <article class="panel game-card ranking-home">
+              <div class="section-head compact">
+                <h3>修士榜</h3>
+                <button class="link-button" type="button" @click="switchTab('rank')">查看全部 ›</button>
+              </div>
+              <div class="rank-podium" aria-label="修士榜前三">
+                <button
+                  v-for="item in homePodium"
+                  :key="item.id"
+                  class="rank-podium-card"
+                  :class="[`rank-${item.rank}`, { self: item.id === 'player' }]"
+                  type="button"
+                  @click="openPracticeRankItem(item)"
+                >
+                  <span class="rank-medal">{{ item.rank }}</span>
+                  <CharacterPortrait :person="rankPerson(item)" size="lg" />
+                  <b>{{ item.name }}</b>
+                  <em>{{ realmName(rankPerson(item)?.realm) }}</em>
+                  <strong>{{ formatCompact(item.value) }}</strong>
+                </button>
+              </div>
+              <div class="home-rank-list" aria-label="修士榜排行">
+                <button v-for="item in homeRankRows" :key="item.id" type="button" :class="{ self: item.id === 'player' }" @click="openPracticeRankItem(item)">
+                  <span>{{ item.rank }}</span>
+                  <b>{{ item.name }}</b>
+                  <em>{{ realmName(rankPerson(item)?.realm) }}</em>
+                  <strong>{{ formatCompact(item.value) }}</strong>
+                </button>
+              </div>
+            </article>
+
+            <article class="panel game-card log-home">
+              <div class="section-head compact">
+                <h3>战斗日志</h3>
+              </div>
+              <div class="battle-log-list">
+                <div v-for="entry in homeLogs" :key="`${entry.day}-${entry.text}`" :class="logTone(entry)">
+                  <b>{{ logTone(entry) === "loss" ? "败" : "胜" }}</b>
+                  <span>{{ entry.text }}</span>
+                  <time>{{ entry.date || currentDate }}</time>
+                </div>
+              </div>
+              <LogPanel class="home-log-fallback" :logs="mainLogs" />
+            </article>
           </div>
-          <LogPanel :logs="mainLogs" />
         </section>
 
-        <section v-if="activeTab === 'attributes'" class="view active">
-          <div class="panel">
+        <section v-if="activeTab === 'attributes'" class="view active cultivation-surface attributes-surface">
+          <div class="panel root-astrolabe-panel">
             <div class="section-head">
               <div>
-                <h3>属性说明</h3>
-                <p>主灵根定相克，多灵根影响效率。</p>
+                <h3>灵根说明</h3>
+                <p>九种灵根共鸣成盘，悬停可查看加成、组合与克制关系。</p>
               </div>
               <span class="tag">当前 {{ rootLine(player) }}</span>
             </div>
-            <div class="root-grid">
-              <article
-                class="root-card"
-                v-for="root in catalog.roots"
-                :key="root.key"
-                :class="{ active: rootKeys(player).includes(root.key), primary: primaryRoot(player).key === root.key }"
-              >
-                <span class="root-card-icon" :class="`root-icon-${root.key}`" aria-hidden="true">
-                  <component :is="rootIconComponent(root.key)" :size="22" :stroke-width="2.3" />
-                </span>
-                <div class="root-card-body">
-                  <strong>{{ root.name }}</strong>
-                  <span>{{ root.note }}</span>
+
+            <div class="root-astrolabe-layout">
+              <div class="root-astrolabe" aria-label="九灵根星盘">
+                <svg class="root-counter-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                  <defs>
+                    <marker id="rootArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+                      <path d="M 0 0 L 10 5 L 0 10 z" />
+                    </marker>
+                  </defs>
+                  <path
+                    v-for="edge in rootChartEdges"
+                    :key="`${edge.from}-${edge.to}`"
+                    :class="{ active: edge.active, incoming: edge.incoming, outgoing: edge.outgoing }"
+                    :d="`M ${edge.fromX} ${edge.fromY} L ${edge.toX} ${edge.toY}`"
+                  />
+                </svg>
+
+                <button
+                  v-for="node in rootAstrolabeNodes"
+                  :key="node.key"
+                  type="button"
+                  class="root-counter-node"
+                  :class="[
+                    { highlighted: node.highlighted, special: node.special },
+                    `root-icon-${node.key}`
+                  ]"
+                  :style="{ left: `${node.x}%`, top: `${node.y}%` }"
+                  @mouseenter="hoveredRootKey = node.key"
+                  @focus="hoveredRootKey = node.key"
+                  @mouseleave="hoveredRootKey = ''"
+                  @blur="hoveredRootKey = ''"
+                >
+                  <span class="root-ring-art" aria-hidden="true" :style="{ backgroundImage: `url(/assets/root-rings/${node.key}.png)` }"></span>
+                  <span class="root-counter-orb" aria-hidden="true">
+                    {{ node.shortName }}
+                  </span>
+                </button>
+              </div>
+
+              <aside class="root-detail-panel">
+                <span class="root-detail-kicker">{{ hoveredRootDetail.special ? "特殊灵根" : "基础灵根" }}</span>
+                <div class="root-detail-head">
+                  <span class="root-detail-icon" :class="`root-icon-${hoveredRootDetail.key}`" aria-hidden="true">
+                    <component :is="rootIconComponent(hoveredRootDetail.key)" :size="24" :stroke-width="2.4" />
+                  </span>
+                  <div>
+                    <h4>{{ hoveredRootDetail.name }}</h4>
+                    <p>{{ hoveredRootDetail.badge }}</p>
+                  </div>
                 </div>
-                <small v-if="primaryRoot(player).key === root.key">主灵根</small>
-              </article>
-              <article
-                class="root-card"
-                v-for="special in catalog.rootRules?.specialRoots || []"
-                :key="special.id"
-                :class="{ active: personInsight(player).rootProfile.specialRoot?.id === special.id }"
-              >
-                <span class="root-card-icon" :class="`root-icon-${special.id}`" aria-hidden="true">
-                  <component :is="rootIconComponent(special.id)" :size="22" :stroke-width="2.3" />
-                </span>
-                <div class="root-card-body">
-                  <strong>{{ special.name }}</strong>
-                  <span>{{ specialRootCompositionText(special) }}</span>
+                <p>{{ hoveredRootDetail.note }}</p>
+                <div class="root-detail-stats">
+                  <div>
+                    <span>灵根加成</span>
+                    <strong>{{ hoveredRootDetail.effectText }}</strong>
+                  </div>
+                  <div>
+                    <span>克制关系</span>
+                    <strong>{{ hoveredRootDetail.counterText }}</strong>
+                  </div>
+                  <div>
+                    <span>当前状态</span>
+                    <strong>{{ hoveredRootDetail.statusText }}</strong>
+                  </div>
                 </div>
-                <small v-if="personInsight(player).rootProfile.specialRoot?.id === special.id">已转换</small>
-              </article>
+                <p class="muted">战斗中被克者攻击、防御、神识最高降低 10%，跨大境界逐级减半。</p>
+              </aside>
             </div>
           </div>
 
-          <div class="grid">
-            <div class="panel">
-              <h3>当前灵根</h3>
-              <div class="attribute-hero">
-                <strong>{{ rootLine(player) }}</strong>
-                <span>{{ rootSummary(player) }}</span>
-                <span class="tag">经验效率 {{ formatPercent(personInsight(player).rootProfile.cultivationMultiplier) }}</span>
-                <span class="tag">突破效率 {{ formatPercent(personInsight(player).rootProfile.breakthroughMultiplier) }}</span>
-              </div>
-            </div>
-            <div class="panel">
-              <h3>灵根相克</h3>
-              <p class="muted">战斗中被克者攻击、防御、神识最高降低 10%，跨大境界逐级减半；特殊灵根不被其他灵根相克。</p>
-              <div class="attribute-list">
-                <div class="attribute-row" v-for="rule in catalog.rootRules?.cycle || []" :key="rule.key">
-                  <span>{{ rule.name }}</span>
-                  <strong>克 {{ rule.targetName }}</strong>
-                </div>
-                <div class="attribute-row" v-for="special in catalog.rootRules?.specialRoots || []" :key="special.id">
-                  <span>{{ special.name }}</span>
-                  <strong>克 {{ special.childNames?.join("、") || special.keys.map(rootName).join("、") }}</strong>
-                </div>
-              </div>
+          <div class="panel current-root-panel">
+            <h3>当前灵根</h3>
+            <div class="attribute-hero">
+              <strong>{{ rootLine(player) }}</strong>
+              <span>{{ rootSummary(player) }}</span>
+              <span class="tag">经验效率 {{ formatPercent(personInsight(player).rootProfile.cultivationMultiplier) }}</span>
+              <span class="tag">突破效率 {{ formatPercent(personInsight(player).rootProfile.breakthroughMultiplier) }}</span>
             </div>
           </div>
 
         </section>
 
-        <section v-if="activeTab === 'progression'" class="view active">
+        <section v-if="activeTab === 'progression'" class="view active cultivation-surface progression-surface">
           <div class="panel">
             <div class="section-head">
               <div>
@@ -281,7 +393,7 @@
           </section>
         </section>
 
-        <section v-if="activeTab === 'tasks'" class="view active">
+        <section v-if="activeTab === 'tasks'" class="view active cultivation-surface tasks-surface">
           <div class="panel">
             <h3>记录今日任务</h3>
             <p>今日行事，皆入修行。</p>
@@ -318,7 +430,7 @@
           </div>
         </section>
 
-        <section v-if="activeTab === 'skills'" class="view active">
+        <section v-if="activeTab === 'skills'" class="view active cultivation-surface skills-surface">
           <div class="panel">
             <div class="section-head">
               <div>
@@ -1140,7 +1252,7 @@
           </div>
         </teleport>
 
-        <section v-if="activeTab === 'arena'" class="view active">
+        <section v-if="activeTab === 'arena'" class="view active cultivation-surface arena-surface">
           <div v-if="!lastBattle" class="panel">
             <h3>人物切磋</h3>
             <p>第 {{ duelSeasonInfo.season }} 赛季 · 第 {{ duelSeasonInfo.seasonDay }} / {{ duelSeasonInfo.length }} 天。胜利 +{{ duelSeasonInfo.winScore }} 分，失败 {{ duelSeasonInfo.lossScore }} 分，积分范围 0-{{ duelSeasonInfo.maxScore }}。</p>
@@ -1299,32 +1411,7 @@
           </div>
         </section>
 
-        <section v-if="activeTab === 'market'" class="view active">
-          <div class="grid">
-            <div class="panel">
-              <h3>丹房</h3>
-              <p>买丹、服丹、补足修行。</p>
-              <div class="actions">
-                <button class="secondary" v-for="(item, kind) in catalog.itemCatalog" :key="kind" @click="act('/api/items/buy', { kind })">
-                  购{{ item.name }} {{ item.price }} 灵石
-                </button>
-              </div>
-            </div>
-            <div class="panel">
-              <h3>背包</h3>
-              <div class="bag-list">
-                <div class="row" v-for="(item, kind) in catalog.itemCatalog" :key="kind">
-                  <span class="tag">{{ state.bag[kind] }}</span>
-                  <div><strong>{{ item.name }}</strong><small>{{ item.text }}</small></div>
-                  <button class="secondary" @click="act('/api/items/use', { kind })">服用</button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-        </section>
-
-        <section v-if="activeTab === 'equipment'" class="view active">
+        <section v-if="activeTab === 'equipment'" class="view active cultivation-surface equipment-surface">
           <div class="panel equipment-panel">
             <div class="section-head">
               <div>
@@ -1357,10 +1444,12 @@
             </div>
             <div class="equipment-list">
               <article class="equipment-row" v-for="item in filteredEquipment" :key="item.id" :class="`tier-${item.tier}`">
-                <EquipmentIcon :id="item.id" :name="item.name" :slot="item.slot" :tier="item.tier" />
-                <div>
-                  <strong>{{ item.name }}</strong>
-                  <small>{{ item.tierName }} · 夺取率 {{ formatLootPercent(item.stealChance) }}</small>
+                <div class="equipment-main">
+                  <EquipmentIcon :id="item.id" :name="item.name" :slot="item.slot" :tier="item.tier" />
+                  <div>
+                    <strong>{{ item.name }}</strong>
+                    <small>{{ item.tierName }} · 夺取率 {{ formatLootPercent(item.stealChance) }}</small>
+                  </div>
                 </div>
                 <span>{{ item.slotName }}</span>
                 <span>{{ item.statName }} +{{ formatPercent(item.bonus) }}</span>
@@ -1373,7 +1462,7 @@
           </div>
         </section>
 
-        <section v-if="activeTab === 'rank'" class="view active">
+        <section v-if="activeTab === 'rank'" class="view active cultivation-surface rank-surface">
           <div v-if="lastBattle" class="battle-detail rank-battle-detail">
             <div class="panel battle-header">
               <div>
@@ -1497,7 +1586,7 @@
                 <span v-else class="tag rank-number">#{{ rankPageStart + index + 1 }}</span>
                 <CharacterPortrait v-if="item.kind === 'person'" :person="rankPerson(item)" size="sm" />
                 <div><strong>{{ item.name }}</strong><small>{{ item.subtitle }}</small></div>
-                <span>{{ item.value }}</span>
+                <span class="rank-value">{{ item.value }}</span>
                 <small class="rank-tip" role="tooltip">{{ item.help }}</small>
               </button>
               <div v-if="!pagedRanking.length" class="empty">没有找到匹配的榜单记录。</div>
@@ -1738,8 +1827,8 @@
                 </div>
               </div>
               <div class="panel flat">
-                <h3>宗门战绩</h3>
-                <p>{{ selectedSect.warWins || 0 }} 胜 {{ selectedSect.warLosses || 0 }} 负。敌对热度 {{ selectedSect.rivalHeat }}，物资 {{ selectedSect.supplies }}，声望 {{ selectedSect.reputation }}。</p>
+                <h3>攻守城战绩</h3>
+                <p>攻守城战绩：{{ selectedSect.warWins || 0 }} 胜 {{ selectedSect.warLosses || 0 }} 负。</p>
               </div>
               <div class="panel flat">
                 <h3>虚天殿记录</h3>
@@ -1772,27 +1861,27 @@
 
 <script setup>
 import {
-  Backpack,
   BadgeCent,
-  BookOpen,
   CircleUserRound,
   Cloud,
-  Crown,
-  Dumbbell,
+  Dna,
   Flame,
   Gem,
-  House,
+  ImagePlus,
+  Landmark,
   Leaf,
   Mountain,
+  Orbit,
   Package,
+  Route,
   ScrollText,
-  Shield,
   Sprout,
   Sun,
   Sword,
   Swords,
   Trophy,
   Waves,
+  WandSparkles,
   Zap
 } from "lucide-vue-next";
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from "vue";
@@ -1808,14 +1897,13 @@ import { duelLossScore, duelRanks, duelRankForScore, duelSeasonDay, duelSeasonLe
 
 const tabs = [
   { id: "practice", label: "修炼", icon: Sprout },
-  { id: "attributes", label: "属性", icon: BadgeCent },
-  { id: "progression", label: "境界", icon: Mountain },
-  { id: "skills", label: "技能", icon: Zap },
+  { id: "attributes", label: "灵根", icon: BadgeCent },
+  { id: "progression", label: "境界", icon: Orbit },
+  { id: "skills", label: "技能", icon: WandSparkles },
   { id: "tasks", label: "现实任务", icon: ScrollText },
   { id: "dungeon", label: "副本", icon: Sword },
-  { id: "sect", label: "宗门", icon: Shield },
+  { id: "sect", label: "宗门", icon: Landmark },
   { id: "arena", label: "切磋", icon: Swords },
-  { id: "market", label: "洞府", icon: House },
   { id: "equipment", label: "装备", icon: Package },
   { id: "rank", label: "榜单", icon: Trophy }
 ];
@@ -1897,11 +1985,14 @@ const battleReturnTarget = ref(null);
 const battleCursor = ref(0);
 const countdown = ref("--:--:--");
 const taskForm = reactive({ name: "", type: "study", diff: 3 });
+const portraitInput = ref(null);
+const customPortrait = ref("");
 const chinaMapRef = ref(null);
 const normalMapMount = ref(null);
 const fullscreenMapMount = ref(null);
 const mapFullscreen = ref(false);
 const hoveredMapSect = ref("");
+const hoveredRootKey = ref("");
 const fallbackSkill = {
   id: "basic_strike",
   name: "凝气一击",
@@ -1909,6 +2000,11 @@ const fallbackSkill = {
   cooldown: 0,
   text: "技能目录尚未加载时使用的基础攻击。"
 };
+const playerPortraitOptions = [
+  "/portraits/generated/han-li.png",
+  "/portraits/custom/lixinshu.jpg"
+];
+const customPortraitKey = "cultivate_immortality_player_portrait";
 
 const sectSubTabs = [
   { id: "map", label: "势力地图" },
@@ -1962,6 +2058,16 @@ const fallbackDuelRankMap = computed(() => {
   }]));
 });
 const currentDate = computed(() => dateForDay(gameState.value.day));
+const playerPortraitUrl = computed(() => {
+  if (customPortrait.value) return customPortrait.value;
+  const index = Number(player.value.portraitVariant || 0);
+  return playerPortraitOptions[((index % playerPortraitOptions.length) + playerPortraitOptions.length) % playerPortraitOptions.length];
+});
+const playerPortraitPerson = computed(() => ({
+  ...player.value,
+  isPlayer: true,
+  portraitUrl: playerPortraitUrl.value
+}));
 const combatSkills = computed(() => catalog.value.combatSkills?.length ? catalog.value.combatSkills : [fallbackSkill]);
 const playerSkill = computed(() => skillById(player.value.skillId));
 const sectSummaries = computed(() => derived.value.sects || []);
@@ -2072,6 +2178,74 @@ const todayEquipmentDrops = computed(() => {
     .filter((drop) => drop.day === today && drop.itemName)
     .slice(0, 12);
 });
+const todayBreakthroughs = computed(() => {
+  const today = gameState.value.day;
+  return cultivators.value.flatMap((person, personIndex) => (person.breakthroughs || [])
+    .map((record, recordIndex) => ({
+      person,
+      record,
+      personIndex,
+      recordIndex,
+      targetRealm: realmIndex(record.to)
+    }))
+    .filter((item) => item.record.day === today && item.record.success));
+});
+const todayBreakthroughHighlight = computed(() => [...todayBreakthroughs.value]
+  .sort((a, b) => b.targetRealm - a.targetRealm || a.personIndex - b.personIndex || a.recordIndex - b.recordIndex)[0] || null);
+const todaySpiritHighlight = computed(() => {
+  const today = gameState.value.day;
+  return cultivators.value
+    .map((person, personIndex) => {
+      const record = (person.dailyRecords || []).find((item) => item.day === today);
+      return {
+        person,
+        personIndex,
+        spirit: Number(record?.spirit || 0)
+      };
+    })
+    .filter((item) => item.spirit > 0)
+    .sort((a, b) => b.spirit - a.spirit || a.personIndex - b.personIndex)[0] || null;
+});
+const dailyTickerItems = computed(() => {
+  const items = [];
+  const drops = todayEquipmentDrops.value;
+  if (drops.length) {
+    items.push(...drops.slice(0, 6).map((drop) => ({
+      key: `equipment-${drop.winnerId || drop.winnerName}-${drop.itemId || drop.itemName}-${equipmentDropKind(drop)}`,
+      label: "装备",
+      name: drop.winnerName,
+      text: `在 ${equipmentDropSource(drop)} 获得${drop.tierName || "法器"}「${drop.itemName}」 · ${equipmentDropSlotName(drop)} · ${equipmentDropStatName(drop)} +${formatPercent(equipmentDropBonus(drop))}${equipmentDropKind(drop) === "steal" && drop.loserName ? ` · 来自 ${drop.loserName}` : ""}`
+    })));
+    if (drops.length > 6) {
+      items.push({
+        key: "equipment-more",
+        label: "装备",
+        name: "今日掉落",
+        text: `共 ${drops.length} 件法宝流转，更多可在装备记录查看`
+      });
+    }
+  }
+  if (todayBreakthroughHighlight.value) {
+    const { person, record } = todayBreakthroughHighlight.value;
+    const count = todayBreakthroughs.value.length;
+    items.push({
+      key: "breakthrough",
+      label: "突破",
+      name: person.name,
+      text: `突破至 ${record.to}，今日共 ${count} 人突破成功`
+    });
+  }
+  if (todaySpiritHighlight.value) {
+    const { person, spirit } = todaySpiritHighlight.value;
+    items.push({
+      key: "spirit",
+      label: "灵石",
+      name: person.name,
+      text: `今日获取最多，入账 ${spirit} 灵石`
+    });
+  }
+  return items;
+});
 const equipmentList = computed(() => {
   const catalogSource = catalog.value.equipmentCatalog?.length ? catalog.value.equipmentCatalog : fallbackEquipmentCatalog;
   const source = gameState.value.equipment?.length ? gameState.value.equipment : catalogSource;
@@ -2081,6 +2255,39 @@ const filteredEquipment = computed(() => equipmentList.value
   .filter((item) => !equipmentTierFilter.value || String(item.tier) === equipmentTierFilter.value)
   .filter((item) => !equipmentSlotFilter.value || item.slot === equipmentSlotFilter.value)
   .sort(compareEquipmentHighToLow));
+const showcaseEquipment = computed(() => filteredEquipment.value.slice(0, 10).map((item) => ({
+  ...item,
+  shortName: equipmentShortName(item.name)
+})));
+const featuredDungeon = computed(() => ({
+  title: selectedDungeonDay.value?.bloodTrial?.caves?.[0]?.name || "幽冥地宫 · 三层",
+  realm: derived.value.nextRealm || realmName(player.value.realm)
+}));
+const homeLogs = computed(() => mainLogs.value.slice(0, 6));
+const homeRanking = computed(() => {
+  const top = powerRanking.value.slice(0, 5).map((item, index) => ({ ...item, rank: index + 1 }));
+  if (top.some((item) => item.id === "player")) return top;
+  return [...top.slice(0, 4), {
+    id: "player",
+    kind: "person",
+    name: player.value.name,
+    value: derived.value.playerPower,
+    rank: playerRank.value
+  }];
+});
+const homePodium = computed(() => {
+  const top = homeRanking.value.slice(0, 3);
+  return [top[1], top[0], top[2]].filter(Boolean);
+});
+const homeRankRows = computed(() => homeRanking.value.slice(3));
+const playerRank = computed(() => {
+  const index = powerRanking.value.findIndex((item) => item.id === "player");
+  return index >= 0 ? index + 1 : "-";
+});
+const todayDuelCount = computed(() => todaysDuelRecord.value?.matches?.filter((match) => {
+  const ids = [match.left?.id, match.right?.id, match.winner?.id, match.loser?.id].filter(Boolean);
+  return ids.includes("player");
+}).length || 0);
 const provinceWarRecords = computed(() => gameState.value.provinceWars || []);
 const provinceTerritories = computed(() => {
   const owners = new Map((gameState.value.provinces || []).map((item) => [item.id, item]));
@@ -2255,26 +2462,28 @@ const powerFormula = computed(() => {
 });
 
 const hudResources = computed(() => [
-  { label: "灵石", value: player.value.spirit, icon: "spirit" },
-  { label: "声望", value: gameState.value.sect?.reputation || 0, icon: "rank" },
-  { label: "气血", value: `${player.value.hp}/${player.value.maxHp}`, icon: "health" },
-  { label: "法力", value: `${player.value.mana || 0}/${player.value.maxMana || 0}`, icon: "mana" },
-  { label: "战力", value: derived.value.playerPower, icon: "power" }
+  { label: "天数", value: `第 ${gameState.value.day || 1} 天`, icon: "day" },
+  { label: "灵石", value: player.value.spirit, icon: "spirit" }
 ]);
 
 const stats = computed(() => [
   { label: "战斗力", icon: "power", value: derived.value.playerPower, help: powerFormula.value },
-  { label: "血量", icon: "health", value: statWithBonus(derived.value.effectiveStats.maxHp, derived.value.effectiveStats.bonuses.maxHp), help: "切磋、副本、宗门战中归零即判负。" },
-  { label: "攻击", icon: "attack", value: statWithBonus(derived.value.effectiveStats.attack, derived.value.effectiveStats.bonuses.attack), help: "实际伤害按自身攻击减去对方防御结算。" },
-  { label: "防御", icon: "defense", value: statWithBonus(derived.value.effectiveStats.defense, derived.value.effectiveStats.bonuses.defense), help: "抵扣对方攻击，最低仍会受到少量伤害。" },
-  { label: "神识", icon: "sense", value: statWithBonus(derived.value.effectiveStats.divineSense, derived.value.effectiveStats.bonuses.divineSense), help: "神识更高者优先出手，也会获得闪避机会。" },
-  { label: "法力", icon: "mana", value: statWithBonus(derived.value.effectiveStats.maxMana, derived.value.effectiveStats.bonuses.maxMana), help: "用于释放技能，回合战中消耗法力加强攻击。" }
+  { label: "血量", icon: "health", value: statTotal(derived.value.effectiveStats.maxHp), help: "切磋、副本、宗门战中归零即判负。" },
+  { label: "攻击", icon: "attack", value: statTotal(derived.value.effectiveStats.attack), help: "实际伤害按自身攻击减去对方防御结算。" },
+  { label: "防御", icon: "defense", value: statTotal(derived.value.effectiveStats.defense), help: "抵扣对方攻击，最低仍会受到少量伤害。" },
+  { label: "神识", icon: "sense", value: statTotal(derived.value.effectiveStats.divineSense), help: "神识更高者优先出手，也会获得闪避机会。" },
+  { label: "法力", icon: "mana", value: statTotal(derived.value.effectiveStats.maxMana), help: "用于释放技能，回合战中消耗法力加强攻击。" }
 ]);
 
 function realmName(index) {
   const realmList = catalog.value.realms || [];
   if (!realmList.length) return "凡人";
   return realmList[Math.min(index, realmList.length - 1)];
+}
+
+function realmIndex(name) {
+  const index = (catalog.value.realms || []).findIndex((realm) => realm === name);
+  return index >= 0 ? index : -1;
 }
 
 function realmStageName(stage) {
@@ -2975,7 +3184,7 @@ const sectRanking = computed(() => sectSummaries.value
       sect: sect.name,
       subtitle: `${members.length}人 · 最强 ${sect.leader}`,
       value: sect.totalPower,
-      help: `宗门总战力 ${sect.totalPower}；成员 ${members.length} 人；最强修士 ${sect.leader}。声望 ${sect.reputation}，物资 ${sect.supplies}，宗门战 ${sect.warWins}胜${sect.warLosses}负。`
+      help: `宗门总战力 ${sect.totalPower}；成员 ${members.length} 人；最强修士 ${sect.leader}。攻守城 ${sect.warWins}胜${sect.warLosses}负。`
     };
   }));
 
@@ -3006,6 +3215,23 @@ function formatLootPercent(value) {
   const percent = value * 100;
   if (percent >= 1) return `${Math.round(percent)}%`;
   return `${Number(percent.toFixed(2))}%`;
+}
+
+function formatCompact(value) {
+  const number = Number(value || 0);
+  if (Math.abs(number) >= 100000000) return `${Number((number / 100000000).toFixed(2))}亿`;
+  if (Math.abs(number) >= 10000) return `${Number((number / 10000).toFixed(2))}万`;
+  return String(Math.floor(number));
+}
+
+function equipmentShortName(name = "") {
+  return String(name).replace(/[「」]/g, "").replace(/^(血煞|玄天|青冥|九幽|太乙|赤霄|天罡|坤元)/, "");
+}
+
+function logTone(entry) {
+  const text = entry?.text || "";
+  if (text.includes("失败") || text.includes("败") || text.includes("未能")) return "loss";
+  return "win";
 }
 
 function duelRankId(person) {
@@ -3153,10 +3379,29 @@ function closeBattleReplay() {
   clearInterval(battleTimer);
 }
 
+function resetTabHome(tabId) {
+  detailReturnStack.value = [];
+  if (tabId === "rank") {
+    detailView.value = "rank";
+    lastBattle.value = null;
+  }
+  if (tabId === "sect") {
+    activeSectSubTab.value = "map";
+    selectedProvinceWarId.value = "";
+  }
+  if (tabId === "dungeon") {
+    activeDungeonRecordTab.value = "blood";
+    selectedVoidHallSect.value = "";
+  }
+  if (tabId === "arena") {
+    selectedDuelDay.value = gameState.value.day;
+  }
+}
+
 function switchTab(tabId) {
-  if (activeTab.value === tabId && !lastBattle.value) return;
   closeBattleReplay();
   activeTab.value = tabId;
+  resetTabHome(tabId);
 }
 
 function openRankItem(item) {
@@ -3167,6 +3412,14 @@ function openRankItem(item) {
   }
   selectedPersonId.value = item.id;
   openDetailFromCurrent("person");
+}
+
+function openPracticeRankItem(item) {
+  if (item.kind !== "person") return;
+  closeBattleReplay();
+  selectedPersonId.value = item.id;
+  activeTab.value = "rank";
+  detailView.value = "person";
 }
 
 function rankSearchText(item) {
@@ -3263,6 +3516,155 @@ function rootName(key) {
   return catalog.value.roots.find((root) => root.key === key)?.name || key;
 }
 
+const rootCycleNodes = computed(() => {
+  const cycle = catalog.value.rootRules?.cycle || [];
+  const count = Math.max(1, cycle.length);
+
+  return cycle.map((rule, index) => {
+    const angle = -90 + (360 / count) * index;
+    const radians = angle * Math.PI / 180;
+    const shortName = String(rule.name || "").replace(/灵根$/, "");
+    let badge = "克 " + String(rule.targetName || "").replace(/灵根$/, "");
+
+    return {
+      ...rule,
+      x: 50 + Math.cos(radians) * 35,
+      y: 50 + Math.sin(radians) * 36,
+      shortName,
+      current: false,
+      restrains: false,
+      restrained: false,
+      badge,
+      help: `${rule.name} 克 ${rule.targetName}`
+    };
+  });
+});
+
+const rootAstrolabeNodes = computed(() => {
+  const profile = personInsight(player.value).rootProfile;
+  const ownedKeys = new Set(rootKeys(player.value));
+  const activeSpecialId = profile.specialRoot?.id || "";
+  const rootPositions = {
+    water: [50, 14],
+    fire: [78, 32],
+    earth: [78, 68],
+    heaven: [50, 86],
+    metal: [22, 68],
+    wood: [22, 32]
+  };
+  const specialPositions = {
+    thunder: [50, 38],
+    wind: [37, 61],
+    hidden: [63, 61]
+  };
+
+  const baseNodes = rootCycleNodes.value.map((node) => ({
+    ...node,
+    x: rootPositions[node.key]?.[0] ?? node.x,
+    y: rootPositions[node.key]?.[1] ?? node.y,
+    owned: ownedKeys.has(node.key),
+    primary: primaryRoot(player.value).key === node.key,
+    special: false,
+    highlighted: hoveredRootKey.value === node.key,
+    statusText: ownedKeys.has(node.key)
+      ? primaryRoot(player.value).key === node.key ? "主灵根" : "副灵根"
+      : "未拥有"
+  }));
+
+  const specialNodes = (catalog.value.rootRules?.specialRoots || []).map((special) => {
+    const active = activeSpecialId === special.id;
+    const [x, y] = specialPositions[special.id] || [50, 50];
+    return {
+      key: special.id,
+      id: special.id,
+      name: special.name,
+      shortName: String(special.name || "").replace(/灵根$/, ""),
+      note: special.note,
+      keys: special.keys || [],
+      childNames: special.childNames || [],
+      x,
+      y,
+      special: true,
+      owned: active,
+      primary: active,
+      current: false,
+      restrained: false,
+      restrains: false,
+      highlighted: hoveredRootKey.value === special.id,
+      badge: "特殊",
+      statusText: active ? "当前特殊灵根" : `需 ${special.keys.map(rootName).join("、")} 共鸣`
+    };
+  });
+
+  return [...baseNodes, ...specialNodes];
+});
+
+const rootChartEdges = computed(() => {
+  const nodes = rootAstrolabeNodes.value.filter((node) => !node.special);
+  const nodeMap = new Map(nodes.map((node) => [node.key, node]));
+  const hoverKey = hoveredRootKey.value;
+  return nodes
+    .map((node) => {
+      const target = nodeMap.get(node.targetKey);
+      if (!target) return null;
+      const outgoing = hoverKey === node.key;
+      const incoming = hoverKey === target.key;
+      return {
+        from: node.key,
+        to: target.key,
+        fromX: node.x,
+        fromY: node.y,
+        toX: target.x,
+        toY: target.y,
+        outgoing,
+        incoming,
+        active: outgoing || incoming
+      };
+    })
+    .filter(Boolean);
+});
+
+const hoveredRootDetail = computed(() => {
+  const fallbackKey = personInsight(player.value).rootProfile.specialRoot?.id || primaryRoot(player.value).key || rootAstrolabeNodes.value[0]?.key;
+  const key = hoveredRootKey.value || fallbackKey;
+  const node = rootAstrolabeNodes.value.find((item) => item.key === key) || rootAstrolabeNodes.value[0] || {};
+  if (node.special) {
+    const targets = node.childNames?.length ? node.childNames : (node.keys || []).map(rootName);
+    return {
+      ...node,
+      effectText: `由 ${targets.join("、")} 组成`,
+      counterText: `${node.name}克${targets.join("、")}，不受普通灵根相克`,
+      statusText: node.statusText || "特殊共鸣未激活"
+    };
+  }
+
+  const target = catalog.value.rootRules?.cycle?.find((rule) => rule.key === node.key);
+  const incoming = catalog.value.rootRules?.cycle?.find((rule) => rule.targetKey === node.key);
+  const root = catalog.value.roots.find((item) => item.key === node.key);
+  return {
+    ...node,
+    note: root?.note || node.note || "",
+    effectText: root?.note || node.note || "暂无加成说明",
+    counterText: `${node.name}克${target?.targetName || "未知"}，受${incoming?.name || "未知"}克`,
+    statusText: node.statusText || "未拥有"
+  };
+});
+
+const currentRootCounterSummary = computed(() => {
+  const profile = personInsight(player.value).rootProfile;
+  if (profile.combatRoot?.type === "special") {
+    const targets = (profile.restrainsList || []).map((root) => root.name).join("、") || "子灵根";
+    return {
+      counteredBy: "不被普通灵根克制",
+      restrains: targets
+    };
+  }
+  return {
+    counteredBy: profile.restrainedBy?.name || "未知",
+    restrains: profile.restrains?.name || "未知"
+  };
+});
+
 function rootIconComponent(key) {
   return {
     metal: Gem,
@@ -3273,7 +3675,7 @@ function rootIconComponent(key) {
     heaven: Sun,
     thunder: Zap,
     wind: Cloud,
-    hidden: Sprout
+    hidden: Dna
   }[key] || BadgeCent;
 }
 
@@ -3296,6 +3698,17 @@ function rootKeys(person) {
 function rootLine(person) {
   return rootList(person).map((root) => root.key === primaryRoot(person).key ? `${root.name}（主）` : root.name).join("、");
 }
+
+const profileRootText = computed(() => {
+  const roots = rootList(player.value);
+  if (roots.length <= 1) return roots[0]?.name || player.value.root?.name || "未知";
+  const primaryKey = primaryRoot(player.value).key;
+  return [...roots]
+    .sort((a, b) => Number(b.key === primaryKey) - Number(a.key === primaryKey))
+    .map((root) => String(root.name || "").replace(/灵根$/, ""))
+    .filter(Boolean)
+    .join("、");
+});
 
 function rootEffectiveBonus(person, root) {
   const count = Math.max(1, rootList(person).length);
@@ -3433,6 +3846,10 @@ function statWithBonus(total, bonus = 0) {
   return bonus > 0 ? `${total}（+${bonus}）` : `${total}`;
 }
 
+function statTotal(total) {
+  return Math.floor(total || 0);
+}
+
 function growthText(growth) {
   if (!growth) return "";
   return `成长：血量 +${growth.maxHp || 0}，攻击 +${growth.attack || 0}，防御 +${growth.defense || 0}，神识 +${growth.divineSense || 0}，法力 +${growth.maxMana || 0}`;
@@ -3451,10 +3868,7 @@ function sectStats(sect) {
   return [
     ["总战力", sect.totalPower],
     ["成员", members.length],
-    ["声望", sect.reputation],
-    ["物资", sect.supplies],
-    ["敌意", sect.rivalHeat],
-    ["宗门战", `${sect.warWins}胜${sect.warLosses}负`]
+    ["攻守城", `${sect.warWins}胜${sect.warLosses}负`]
   ];
 }
 
@@ -3704,7 +4118,7 @@ async function act(path, body = {}, options = {}) {
 }
 
 function shouldMarkFullStateStale(path) {
-  return ["/api/day/advance", "/api/breakthrough", "/api/items/buy", "/api/items/use"].includes(path);
+  return ["/api/day/advance", "/api/tasks"].includes(path);
 }
 
 function needsHeavyState(tab = activeTab.value) {
@@ -3793,6 +4207,38 @@ async function advanceDay() {
   await act("/api/day/advance");
 }
 
+function openPortraitPicker() {
+  portraitInput.value?.click();
+}
+
+function handlePortraitFile(event) {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  if (!file) return;
+  if (!file.type.startsWith("image/")) {
+    error.value = "请选择图片文件。";
+    return;
+  }
+  if (file.size > 2 * 1024 * 1024) {
+    error.value = "头像图片请控制在 2MB 以内。";
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    customPortrait.value = String(reader.result || "");
+    try {
+      localStorage.setItem(customPortraitKey, customPortrait.value);
+    } catch {
+      // Local portrait preview should still work even if persistence fails.
+    }
+    error.value = "";
+  };
+  reader.onerror = () => {
+    error.value = "头像读取失败，请换一张图片试试。";
+  };
+  reader.readAsDataURL(file);
+}
+
 async function resetGame() {
   if (!confirm("确定重开一世？将删除当前主角、NPC、成长、突破、切磋、闯关、宗门战等全部历史记录，并重新生成。")) return;
   clearCachedState();
@@ -3842,6 +4288,11 @@ async function loadMapRenderer() {
 }
 
 onMounted(async () => {
+  try {
+    customPortrait.value = localStorage.getItem(customPortraitKey) || "";
+  } catch {
+    customPortrait.value = "";
+  }
   updateCountdown();
   timer = setInterval(() => {
     updateCountdown();

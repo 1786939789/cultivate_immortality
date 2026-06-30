@@ -207,6 +207,7 @@ const portraitMap = {
 
 export function portraitFor(person) {
   if (!person?.name) return "";
+  if (person.id === "player" || person.isPlayer) return "/portraits/generated/han-li.png";
   if (portraitMap[person.name]) return portraitMap[person.name];
   return dicebearPortraitFor(person);
 }

@@ -1,0 +1,3014 @@
+:root {
+  --game-ink: #2f2418;
+  --game-muted: #75654f;
+  --game-paper: #f4ead5;
+  --game-paper-2: #ead9b9;
+  --game-line: #b69256;
+  --game-line-dark: #5f4526;
+  --game-gold: #d8b15c;
+  --game-jade: #285c4c;
+  --game-red: #a9362e;
+  --kenney: "/assets/kenney/ui-pack-rpg-expansion/PNG/";
+}
+
+/* Final xianxia game polish layer. Keep this at the end so list-heavy pages do not fall back to plain tables. */
+.view.active {
+  animation: view-reveal .22s ease-out;
+}
+
+@keyframes view-reveal {
+  from {
+    opacity: .76;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.view.active > .panel,
+.view.active > .grid > .panel,
+.view.active .panel.flat,
+.equipment-panel,
+.dungeon-record-panel,
+.realm-stage {
+  border-color: rgba(154, 112, 49, .38);
+  background:
+    linear-gradient(180deg, rgba(255, 250, 231, .88), rgba(231, 211, 166, .58)),
+    radial-gradient(circle at 86% 6%, rgba(38, 125, 100, .12), transparent 7rem),
+    radial-gradient(circle at 10% 96%, rgba(196, 139, 46, .12), transparent 8rem);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, .34),
+    0 10px 24px rgba(56, 37, 13, .11);
+}
+
+.view.active > .panel::after,
+.view.active > .grid > .panel::after,
+.view.active .panel.flat::after,
+.equipment-panel::after,
+.dungeon-record-panel::after,
+.realm-stage::after {
+  content: "";
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  width: 76px;
+  height: 76px;
+  pointer-events: none;
+  opacity: .16;
+  background:
+    conic-gradient(from 22deg, transparent 0 12%, rgba(91, 63, 26, .8) 12% 14%, transparent 14% 25%, rgba(91, 63, 26, .8) 25% 27%, transparent 27% 100%);
+  border: 1px solid rgba(91, 63, 26, .35);
+  border-radius: 50%;
+}
+
+.view.active .section-head h3,
+.view.active > .panel > h3:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #6a3f0e;
+  font-size: 22px;
+  letter-spacing: 0;
+}
+
+.view.active .section-head h3::before,
+.view.active > .panel > h3:first-child::before {
+  content: "";
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 242, 180, .95) 0 24%, transparent 25%),
+    conic-gradient(from 45deg, #91631f, #d6ad4c, #91631f, #d6ad4c, #91631f);
+  clip-path: polygon(50% 0, 62% 34%, 100% 50%, 62% 66%, 50% 100%, 38% 66%, 0 50%, 38% 34%);
+  filter: drop-shadow(0 1px 1px rgba(80, 52, 16, .25));
+}
+
+.view.active .section-head p,
+.view.active > .panel > p,
+.muted {
+  color: #725f42;
+}
+
+.view.active .card,
+.view.active .row,
+.view.active .event,
+.view.active .attribute-row,
+.view.active .realm-row,
+.view.active .skill-card,
+.view.active .root-card,
+.view.active .rank-row,
+.view.active .match-card,
+.view.active .war-matchup-card,
+.view.active .sect-territory-card,
+.view.active .war-day-card,
+.view.active .province-table-row,
+.view.active .equipment-row,
+.view.active .dungeon-cave-card,
+.view.active .sect-dungeon-card,
+.view.active .dungeon-clear-row,
+.view.active .duel-rank-cell,
+.view.active .equipment-slot-card,
+.view.active .sect-member-card,
+.view.active .battle-event {
+  border: 1px solid rgba(141, 103, 45, .26);
+  background:
+    linear-gradient(180deg, rgba(255, 252, 238, .86), rgba(235, 219, 180, .5)),
+    linear-gradient(90deg, rgba(34, 107, 83, .1), transparent 26%),
+    rgba(255, 255, 255, .54);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, .28),
+    0 5px 12px rgba(58, 39, 15, .07);
+}
+
+.view.active .card::before,
+.view.active .row::before,
+.view.active .event::before,
+.view.active .attribute-row::before,
+.view.active .realm-row::before,
+.view.active .skill-card::before,
+.view.active .root-card::before,
+.view.active .rank-row::before,
+.view.active .match-card::before,
+.view.active .war-matchup-card::before,
+.view.active .equipment-row::before,
+.view.active .battle-event::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 4px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #d6a743, #28765e);
+  opacity: .8;
+}
+
+.view.active .card:hover,
+.view.active .row:hover,
+.view.active .attribute-row:hover,
+.view.active .realm-row:hover,
+.view.active .skill-card:hover,
+.view.active .root-card:hover,
+.view.active .rank-row:hover,
+.view.active .match-card:hover,
+.view.active .war-matchup-card:hover,
+.view.active .equipment-row:hover,
+.view.active .sect-member-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(33, 121, 91, .48);
+  background:
+    linear-gradient(180deg, rgba(255, 250, 224, .94), rgba(218, 235, 196, .62)),
+    linear-gradient(90deg, rgba(25, 128, 96, .16), transparent 32%),
+    rgba(255, 255, 255, .66);
+}
+
+.view.active .attribute-row,
+.view.active .realm-row,
+.view.active .equipment-row,
+.view.active .rank-row,
+.view.active .province-table-row {
+  min-height: 48px;
+  border-radius: 5px;
+  padding-inline: 12px;
+}
+
+.view.active .attribute-row strong,
+.view.active .realm-row strong,
+.view.active .card h3,
+.view.active .rank-row strong,
+.view.active .skill-title strong,
+.view.active .root-card strong,
+.view.active .equipment-row strong,
+.view.active .match-person strong,
+.view.active .war-matchup-head strong {
+  color: #30200f;
+}
+
+.view.active .attribute-row span,
+.view.active .realm-row small,
+.view.active .row small,
+.view.active .card .meta,
+.view.active .rank-row small,
+.view.active .equipment-row small,
+.view.active .match-person small,
+.view.active .war-matchup-card small {
+  color: #806744;
+}
+
+.view.active .attribute-list,
+.view.active .timeline,
+.view.active .rank-list,
+.view.active .equipment-list,
+.view.active .match-list,
+.view.active .war-day-list,
+.view.active .sect-territory-list,
+.view.active .battle-feed,
+.view.active .realm-grid {
+  gap: 11px;
+}
+
+.view.active .task-form,
+.view.active .rank-tools,
+.view.active .arena-toolbar,
+.view.active .equipment-tools,
+.view.active .dungeon-day-nav,
+.view.active .map-toolbar {
+  border: 1px solid rgba(141, 103, 45, .22);
+  border-radius: 7px;
+  background:
+    linear-gradient(180deg, rgba(255, 251, 232, .72), rgba(224, 205, 158, .38));
+  padding: 10px;
+}
+
+.view.active input,
+.view.active select {
+  border-color: rgba(141, 103, 45, .4);
+  background:
+    linear-gradient(180deg, rgba(255, 253, 246, .98), rgba(246, 236, 210, .9));
+  box-shadow: inset 0 1px 2px rgba(80, 54, 18, .08);
+}
+
+.view.active input:focus,
+.view.active select:focus {
+  outline: 2px solid rgba(34, 121, 92, .24);
+  border-color: rgba(34, 121, 92, .58);
+}
+
+.view.active .skill-card,
+.view.active .root-card {
+  min-height: 128px;
+  border-radius: 7px;
+}
+
+.view.active .skill-card::after,
+.view.active .root-card::after,
+.view.active .equipment-row::after {
+  content: "";
+  position: absolute;
+  right: -22px;
+  top: -22px;
+  width: 82px;
+  height: 82px;
+  border: 1px solid rgba(141, 103, 45, .16);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(218, 166, 61, .12), transparent 62%);
+  pointer-events: none;
+}
+
+.view.active .skill-card.legendary,
+.view.active .skill-card.rare,
+.view.active .equipment-row.tier-5,
+.view.active .equipment-row.tier-6,
+.view.active .equipment-slot-card.tier-4,
+.view.active .equipment-slot-card.tier-5,
+.view.active .equipment-slot-card.tier-6 {
+  border-color: rgba(185, 122, 28, .54);
+  background:
+    linear-gradient(180deg, rgba(255, 243, 191, .86), rgba(244, 222, 162, .54)),
+    radial-gradient(circle at 15% 50%, rgba(185, 28, 28, .12), transparent 5rem);
+}
+
+.view.active .realm-table-head {
+  border-radius: 5px;
+  background: rgba(91, 63, 26, .08);
+  color: #6a5131;
+  padding-block: 8px;
+}
+
+.view.active .realm-row.current {
+  border-color: rgba(34, 121, 92, .58);
+  background:
+    linear-gradient(90deg, rgba(203, 225, 177, .76), rgba(255, 251, 235, .8));
+}
+
+.view.active .match-result {
+  border: 1px solid rgba(155, 88, 26, .24);
+  background:
+    radial-gradient(circle at 50% 42%, rgba(255, 240, 166, .8), rgba(155, 88, 26, .18));
+  border-radius: 999px;
+}
+
+.view.active .battle-line.live,
+.view.active .fighter,
+.view.active .star-sea-monster-card,
+.view.active .star-sea-round-summary > div {
+  border-color: rgba(141, 103, 45, .26);
+  background:
+    linear-gradient(180deg, rgba(255, 251, 235, .84), rgba(231, 215, 176, .5));
+}
+
+.view.active .battle-event {
+  border-left-width: 0;
+  padding-left: 14px;
+}
+
+.view.active .battle-event.skill {
+  background:
+    linear-gradient(90deg, rgba(var(--skill-rgb, 180, 83, 9), .16), rgba(255, 251, 235, .86));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .view.active {
+    animation: none;
+  }
+
+  .view.active .card:hover,
+  .view.active .row:hover,
+  .view.active .attribute-row:hover,
+  .view.active .realm-row:hover,
+  .view.active .skill-card:hover,
+  .view.active .root-card:hover,
+  .view.active .rank-row:hover,
+  .view.active .match-card:hover,
+  .view.active .war-matchup-card:hover,
+  .view.active .equipment-row:hover,
+  .view.active .sect-member-card:hover {
+    transform: none;
+  }
+}
+
+/* Game-wide ornament pass: turns plain records into cultivator-game artifacts without changing behavior. */
+.view > .panel,
+.view > .grid > .panel,
+.detail-sections > .panel,
+.equipment-panel,
+.dungeon-record-panel,
+.realm-stage,
+.battle-header {
+  position: relative;
+  overflow: hidden;
+}
+
+.view > .panel::before,
+.view > .grid > .panel::before,
+.detail-sections > .panel::before,
+.equipment-panel::before,
+.dungeon-record-panel::before,
+.realm-stage::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 12% 14%, rgba(222, 178, 84, .12), transparent 7.5rem),
+    radial-gradient(circle at 88% 8%, rgba(38, 125, 100, .1), transparent 7rem),
+    linear-gradient(135deg, transparent 0 42%, rgba(120, 91, 43, .05) 42% 43%, transparent 43% 100%);
+  opacity: .9;
+}
+
+.view > .panel > *,
+.view > .grid > .panel > *,
+.detail-sections > .panel > *,
+.equipment-panel > *,
+.dungeon-record-panel > *,
+.realm-stage > * {
+  position: relative;
+  z-index: 1;
+}
+
+.section-head,
+.panel > h3:first-child {
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(141, 103, 45, .18);
+}
+
+.section-head h3,
+.panel > h3:first-child {
+  color: #6b4314;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, .7);
+}
+
+.tag,
+.segment,
+.rank-number,
+.duel-season-badge,
+.rank-tag {
+  border-color: rgba(143, 104, 42, .34);
+  background:
+    linear-gradient(180deg, rgba(255, 248, 220, .9), rgba(222, 198, 141, .48)),
+    rgba(255, 255, 255, .42);
+  color: #684411;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .32);
+}
+
+.segment.active,
+.realm-stage-button.active,
+.realm-stage-button.current,
+.root-card.active,
+.skill-card.active {
+  border-color: rgba(218, 166, 61, .62);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 242, 166, .5),
+    0 8px 18px rgba(96, 67, 22, .14),
+    0 0 0 1px rgba(218, 166, 61, .18);
+}
+
+.card,
+.row,
+.event,
+.attribute-row,
+.realm-row,
+.skill-card,
+.root-card,
+.rank-row,
+.match-card,
+.war-matchup-card,
+.sect-territory-card,
+.war-day-card,
+.province-table-row,
+.equipment-row,
+.dungeon-cave-card,
+.sect-dungeon-card,
+.dungeon-clear-row,
+.battle-event,
+.duel-rank-cell,
+.equipment-slot-card,
+.sect-member-card {
+  position: relative;
+  overflow: hidden;
+  border-color: rgba(141, 103, 45, .24);
+  background:
+    linear-gradient(180deg, rgba(255, 251, 235, .78), rgba(235, 219, 179, .44)),
+    radial-gradient(circle at 8% 50%, rgba(18, 116, 93, .1), transparent 4.6rem),
+    rgba(255, 253, 246, .58);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, .26),
+    0 4px 10px rgba(65, 43, 16, .06);
+}
+
+.card::before,
+.row::before,
+.event::before,
+.attribute-row::before,
+.realm-row::before,
+.skill-card::before,
+.root-card::before,
+.rank-row::before,
+.match-card::before,
+.war-matchup-card::before,
+.equipment-row::before,
+.battle-event::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 4px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #d9a541, #1e7b5f);
+  opacity: .75;
+}
+
+.card:hover,
+.row:hover,
+.event:hover,
+.attribute-row:hover,
+.realm-row:hover,
+.skill-card:hover,
+.root-card:hover,
+.rank-row:hover,
+.match-card:hover,
+.war-matchup-card:hover,
+.equipment-row:hover,
+.sect-member-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(30, 123, 95, .44);
+  background:
+    linear-gradient(180deg, rgba(255, 249, 221, .9), rgba(223, 235, 202, .55)),
+    radial-gradient(circle at 10% 50%, rgba(28, 147, 110, .16), transparent 5rem),
+    rgba(255, 253, 246, .72);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, .35),
+    0 10px 20px rgba(47, 32, 12, .1);
+}
+
+.attribute-row,
+.realm-row,
+.rank-row,
+.equipment-row,
+.province-table-row {
+  border-radius: 5px;
+}
+
+.attribute-row span,
+.realm-row small,
+.row small,
+.card .meta,
+.rank-row small,
+.equipment-row small,
+.match-person small,
+.war-matchup-card small,
+.battle-event span {
+  color: #806747;
+}
+
+.attribute-row strong,
+.realm-row strong,
+.row strong,
+.card h3,
+.rank-row strong,
+.skill-title strong,
+.root-card strong,
+.equipment-row strong,
+.match-person strong,
+.war-matchup-head strong,
+.battle-event p {
+  color: #2f2415;
+}
+
+.attribute-list,
+.timeline,
+.rank-list,
+.equipment-list,
+.match-list,
+.war-day-list,
+.sect-territory-list,
+.battle-feed,
+.realm-grid {
+  gap: 10px;
+}
+
+.task-form {
+  border: 1px solid rgba(141, 103, 45, .22);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 251, 235, .72), rgba(232, 215, 174, .36)),
+    rgba(255, 255, 255, .36);
+  padding: 12px;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.25);
+}
+
+input,
+select {
+  border-color: rgba(141, 103, 45, .38);
+  background:
+    linear-gradient(180deg, rgba(255, 253, 246, .98), rgba(245, 235, 208, .88));
+  box-shadow: inset 0 1px 2px rgba(95, 67, 23, .08);
+}
+
+input:focus,
+select:focus {
+  outline: 2px solid rgba(30, 123, 95, .26);
+  border-color: rgba(30, 123, 95, .55);
+}
+
+.skill-grid {
+  gap: 12px;
+}
+
+.skill-card {
+  min-height: 150px;
+  border-radius: 7px;
+}
+
+.skill-card::after,
+.root-card::after,
+.equipment-row::after {
+  content: "";
+  position: absolute;
+  right: -24px;
+  top: -24px;
+  width: 88px;
+  height: 88px;
+  border: 1px solid rgba(141, 103, 45, .18);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, rgba(218, 166, 61, .1), transparent 60%);
+  pointer-events: none;
+}
+
+.skill-card.legendary,
+.skill-card.rare,
+.equipment-row.tier-5,
+.equipment-row.tier-6,
+.equipment-slot-card.tier-4,
+.equipment-slot-card.tier-5,
+.equipment-slot-card.tier-6 {
+  border-color: rgba(185, 122, 28, .5);
+  background:
+    linear-gradient(180deg, rgba(255, 244, 190, .78), rgba(246, 229, 171, .48)),
+    radial-gradient(circle at 16% 50%, rgba(185, 28, 28, .1), transparent 5rem),
+    rgba(255, 253, 246, .65);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 245, 190, .45),
+    0 8px 20px rgba(117, 77, 20, .12);
+}
+
+.root-grid {
+  gap: 12px;
+}
+
+.root-card {
+  min-height: 108px;
+  border-radius: 7px;
+}
+
+.realm-stage-picker {
+  gap: 10px;
+}
+
+.realm-stage-button {
+  position: relative;
+  overflow: hidden;
+  border-radius: 6px;
+  background:
+    linear-gradient(180deg, rgba(255, 250, 229, .78), rgba(230, 211, 165, .46)),
+    rgba(255,255,255,.42);
+}
+
+.realm-table-head {
+  border-radius: 5px;
+  background: rgba(87, 62, 26, .08);
+  color: #6b5132;
+  padding-block: 8px;
+}
+
+.realm-row.current {
+  border-color: rgba(30, 123, 95, .56);
+  background:
+    linear-gradient(90deg, rgba(200, 224, 177, .72), rgba(255, 251, 235, .78)),
+    rgba(236, 253, 245, .56);
+}
+
+.realm-row.passed {
+  opacity: .82;
+}
+
+.match-card,
+.war-matchup-card {
+  border-radius: 7px;
+}
+
+.match-result {
+  position: relative;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(255, 240, 166, .75), rgba(155, 88, 26, .18));
+  border: 1px solid rgba(155, 88, 26, .22);
+}
+
+.battle-line.live,
+.fighter,
+.star-sea-monster-card,
+.star-sea-round-summary > div {
+  border-color: rgba(141, 103, 45, .24);
+  background:
+    linear-gradient(180deg, rgba(255, 251, 235, .8), rgba(231, 215, 176, .44)),
+    rgba(255,255,255,.45);
+}
+
+.battle-event {
+  border-left-width: 0;
+  padding-left: 14px;
+}
+
+.battle-event.skill {
+  background:
+    linear-gradient(90deg, rgba(var(--skill-rgb, 180, 83, 9), .14), rgba(255, 251, 235, .82)),
+    rgba(255,255,255,.55);
+}
+
+.rank-tools,
+.arena-toolbar,
+.equipment-tools,
+.dungeon-day-nav,
+.map-toolbar {
+  border: 1px solid rgba(141, 103, 45, .16);
+  border-radius: 7px;
+  background: rgba(255, 251, 235, .45);
+  padding: 8px;
+}
+
+body {
+  color: var(--game-ink);
+  background:
+    linear-gradient(180deg, rgba(8, 8, 7, .92), rgba(8, 8, 7, .76) 76px, rgba(232, 219, 192, .12) 77px),
+    url("/assets/xianxia/world-mist.svg") center top / cover fixed,
+    radial-gradient(circle at 20% 0%, rgba(218, 181, 103, .14), transparent 24rem),
+    linear-gradient(180deg, rgba(9, 11, 10, .96), rgba(25, 20, 13, .96) 72px, #d8c29a 73px, #ecdfc6 100%);
+  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: .18;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 42px, rgba(255,255,255,.05) 43px 44px),
+    radial-gradient(circle at 72% 18%, rgba(255, 232, 174, .2), transparent 16rem);
+  mix-blend-mode: soft-light;
+}
+
+.app {
+  width: min(1900px, 100%);
+  padding: 10px 10px 0;
+}
+
+.topbar {
+  min-height: 78px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: -10px -10px 8px;
+  padding: 10px 18px;
+  border-bottom: 1px solid rgba(218, 177, 92, .32);
+  background:
+    linear-gradient(180deg, rgba(26, 24, 20, .98), rgba(10, 10, 9, .96)),
+    radial-gradient(circle at 3% 0%, rgba(218, 177, 92, .24), transparent 16rem);
+  box-shadow: 0 12px 24px rgba(0,0,0,.34);
+}
+
+.loot-ticker {
+  position: relative;
+  z-index: 1;
+  order: 0;
+  flex: 1 1 auto;
+  min-width: 220px;
+  height: 40px;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 5px 12px;
+  border: 1px solid rgba(195, 151, 75, .4);
+  border-radius: 999px;
+  color: #f7ecd2;
+  background:
+    linear-gradient(90deg, rgba(39, 30, 18, .82), rgba(20, 18, 15, .62)),
+    radial-gradient(circle at 16px 50%, rgba(214, 170, 84, .26), transparent 38px);
+  box-shadow: inset 0 1px 0 rgba(255, 243, 205, .14);
+  overflow: hidden;
+}
+
+.loot-ticker-track {
+  min-width: 0;
+}
+
+.loot-ticker-label {
+  color: #f1d78d;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.loot-ticker-content {
+  gap: 44px;
+  animation-duration: 32s;
+}
+
+.brand {
+  flex: 0 0 292px;
+  min-height: 56px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.brand .sigil {
+  display: none;
+}
+
+.brand h1 {
+  margin: 0;
+  color: #ead9b8;
+  font-size: 45px;
+  line-height: 1;
+  font-weight: 900;
+  text-shadow: 0 2px 0 #070604, 0 0 16px rgba(238, 205, 135, .28);
+}
+
+.brand h1::after {
+  content: "荒明";
+  display: inline-grid;
+  place-items: center;
+  width: 23px;
+  height: 36px;
+  margin-left: 8px;
+  border-radius: 10px;
+  color: #fff4d8;
+  background: #8c2b21;
+  font: 700 11px/1 "Microsoft YaHei", sans-serif;
+  writing-mode: vertical-rl;
+  vertical-align: middle;
+}
+
+.brand p {
+  display: none;
+}
+
+.hero {
+  flex: 1 1 auto;
+  min-height: 54px;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.mountains,
+.hero-title-row {
+  display: none;
+}
+
+.hero-content {
+  min-width: 0;
+  height: 43px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.resource-strip {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.resource-chip {
+  min-width: 136px;
+  height: 43px;
+  display: grid;
+  grid-template-columns: 30px auto 1fr;
+  grid-template-rows: 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 11px 5px 7px;
+  border: 1px solid rgba(195, 151, 75, .54);
+  border-radius: 999px;
+  color: #f4ead2;
+  background:
+    linear-gradient(180deg, rgba(39, 32, 23, .96), rgba(16, 14, 12, .94)),
+    radial-gradient(circle at 24px 50%, rgba(58, 128, 103, .45), transparent 34px);
+  box-shadow: inset 0 1px 0 rgba(255, 243, 205, .18), 0 2px 6px rgba(0,0,0,.28);
+}
+
+.resource-chip .stat-icon {
+  grid-row: auto;
+  width: 27px;
+  height: 27px;
+  padding: 5px;
+  border-radius: 50%;
+  color: #f6d67d;
+  background: radial-gradient(circle, rgba(47, 117, 91, .9), rgba(11, 49, 40, .92));
+  filter: drop-shadow(0 0 5px rgba(96, 205, 157, .36));
+}
+
+.resource-chip small {
+  color: #f2e6ca;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.resource-chip strong {
+  color: #fff8df;
+  font: 800 17px/1.1 Georgia, serif;
+  text-align: right;
+}
+
+.resource-chip::after {
+  content: none;
+}
+
+.quick {
+  flex: 0 0 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.quick .settlement-card {
+  display: none;
+}
+
+.quick button {
+  width: 43px;
+  height: 43px;
+  min-height: 43px;
+  padding: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  color: transparent;
+  border-color: rgba(211, 169, 91, .55);
+  background:
+    url("/assets/kenney/ui-pack-rpg-expansion/PNG/buttonRound_brown.png") center / 100% 100%,
+    radial-gradient(circle, rgba(79, 61, 36, .9), rgba(17, 15, 12, .98));
+}
+
+.quick button::before {
+  color: #ead8ad;
+  font: 900 19px/1 "Microsoft YaHei", sans-serif;
+}
+
+.quick .secondary::before {
+  content: "✉";
+}
+
+.quick .danger::before {
+  content: "⚙";
+}
+
+.layout {
+  grid-template-columns: clamp(330px, 27vw, 420px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  min-height: calc(100vh - 86px);
+}
+
+.sidebar,
+.main {
+  border: 2px solid var(--game-line);
+  border-radius: 4px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(255, 248, 219, .55), transparent 18rem),
+    linear-gradient(180deg, rgba(246, 237, 216, .96), rgba(230, 211, 174, .96)),
+    repeating-linear-gradient(45deg, rgba(126, 91, 43, .05) 0 2px, transparent 2px 8px);
+  box-shadow: inset 0 0 0 2px rgba(255, 251, 230, .62), 0 10px 26px rgba(22, 15, 7, .35);
+}
+
+.sidebar {
+  position: sticky;
+  top: 88px;
+  align-self: start;
+  height: fit-content;
+  max-height: calc(100vh - 104px);
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.sidebar .stats,
+.sidebar > .panel {
+  flex: 0 0 auto;
+}
+
+.sidebar > .panel {
+  max-height: 138px;
+  overflow: auto;
+}
+
+.avatar {
+  position: relative;
+  min-height: 365px;
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background:
+    radial-gradient(circle at 34% 18%, rgba(255, 247, 209, .84) 0 42px, transparent 43px),
+    url("/assets/xianxia/world-mist.svg") center / cover,
+    linear-gradient(135deg, rgba(28, 41, 37, .2), transparent 36%),
+    linear-gradient(180deg, #e7dbc0, #c7b28a);
+}
+
+.avatar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(244, 234, 206, .3), transparent 26%, transparent 74%, rgba(93, 61, 26, .22)),
+    linear-gradient(180deg, transparent 68%, rgba(45, 32, 17, .4));
+  pointer-events: none;
+}
+
+.avatar .character-portrait {
+  --portrait-size: 100%;
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.avatar .character-portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 18%;
+  filter: saturate(.92) contrast(1.04);
+}
+
+.name-plaque {
+  position: absolute;
+  right: 24px;
+  top: 48px;
+  z-index: 2;
+  width: 44px;
+  min-height: 118px;
+  display: grid;
+  place-items: center;
+  padding: 15px 6px 20px;
+  color: #5f3f1e;
+  background:
+    radial-gradient(circle at 50% 13px, rgba(126, 87, 36, .26) 0 3px, transparent 4px),
+    linear-gradient(180deg, rgba(255, 251, 231, .98), rgba(230, 206, 157, .96)),
+    repeating-linear-gradient(90deg, rgba(150, 110, 54, .12) 0 1px, transparent 1px 7px);
+  border: 1px solid rgba(142, 99, 43, .56);
+  box-shadow: inset 0 0 0 2px rgba(255, 246, 216, .72), 0 7px 16px rgba(39, 25, 10, .22);
+  clip-path: polygon(0 0, 100% 0, 100% 88%, 50% 100%, 0 88%);
+}
+
+.name-plaque::before {
+  content: "";
+  position: absolute;
+  top: -50px;
+  left: 50%;
+  width: 10px;
+  height: 52px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(83, 60, 30, .46);
+  border-top: 0;
+  border-bottom: 0;
+  border-radius: 999px;
+  background:
+    linear-gradient(90deg, rgba(255,255,255,.28), transparent 45%, rgba(73, 48, 19, .22)),
+    linear-gradient(180deg, #b98c48, #6f4c22);
+  box-shadow: inset 0 0 0 1px rgba(255, 236, 170, .24), 0 2px 6px rgba(40, 23, 8, .18);
+}
+
+.name-plaque::after {
+  content: "";
+  position: absolute;
+  top: 9px;
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, #815923 0 2px, #f9e5ad 3px, #91642b 4px);
+}
+
+.name-plaque span {
+  writing-mode: vertical-rl;
+  letter-spacing: .12em;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.portrait-change {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  z-index: 3;
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(128, 89, 38, .64);
+  color: #5b3c1b;
+  background: linear-gradient(180deg, #fff5dc, #d9bb7d);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.78), 0 5px 12px rgba(45, 30, 12, .22);
+  font-weight: 900;
+}
+
+.portrait-input {
+  display: none;
+}
+
+.portrait-change:hover,
+.portrait-change:focus-visible {
+  transform: translateY(-1px);
+  filter: brightness(1.04);
+}
+
+.profile-scroll {
+  position: relative;
+  padding: 14px 16px 13px;
+  border-top: 2px solid rgba(143, 102, 48, .48);
+  background:
+    linear-gradient(90deg, rgba(133, 96, 47, .08), transparent 18%, transparent 82%, rgba(133, 96, 47, .08)),
+    linear-gradient(180deg, rgba(247, 237, 214, .98), rgba(229, 210, 172, .96));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.7);
+}
+
+.profile-title-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.profile-title-row strong {
+  color: #24180d;
+  font-size: 25px;
+  font-weight: 900;
+}
+
+.profile-title-row span {
+  color: #2d8bb6;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.profile-info-list {
+  display: grid;
+  gap: 7px;
+}
+
+.profile-info-item {
+  width: 100%;
+  min-height: 33px;
+  display: grid;
+  grid-template-columns: 24px 46px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid rgba(151, 111, 59, .25);
+  border-radius: 5px;
+  color: #4a3823;
+  background: rgba(255, 248, 230, .66);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.58);
+}
+
+.profile-info-item svg {
+  color: #7b5d31;
+}
+
+.profile-info-item span {
+  color: #6c5636;
+  font-weight: 900;
+}
+
+.profile-info-item strong {
+  justify-self: end;
+  min-width: 0;
+  color: #3d2b18;
+  font-weight: 900;
+  text-align: right;
+}
+
+.profile-progress {
+  position: relative;
+  border-color: rgba(126, 95, 49, .28);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.profile-progress:hover,
+.profile-progress:focus-visible {
+  background: rgba(255, 252, 240, .9);
+}
+
+.profile-progress .meter {
+  grid-column: 3;
+  min-width: 0;
+  align-self: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.profile-progress .meter-head {
+  display: none;
+}
+
+.profile-progress .bar {
+  height: 8px;
+  margin: 0;
+}
+
+.profile-progress small {
+  position: absolute;
+  right: 8px;
+  bottom: calc(100% + 4px);
+  z-index: 20;
+  display: block;
+  padding: 4px 8px;
+  border: 1px solid rgba(129, 91, 41, .38);
+  border-radius: 4px;
+  color: #4b351a;
+  background: rgba(255, 248, 225, .98);
+  box-shadow: 0 6px 14px rgba(51, 32, 12, .18);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(3px);
+  transition: opacity .16s ease, transform .16s ease;
+  white-space: nowrap;
+}
+
+.profile-progress small::after {
+  content: "";
+  position: absolute;
+  right: 16px;
+  bottom: -5px;
+  width: 8px;
+  height: 8px;
+  transform: rotate(45deg);
+  border-right: 1px solid rgba(129, 91, 41, .38);
+  border-bottom: 1px solid rgba(129, 91, 41, .38);
+  background: rgba(255, 248, 225, .98);
+}
+
+.profile-progress:hover small,
+.profile-progress:focus-visible small {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.stats {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px 16px 16px;
+  background: rgba(244, 234, 210, .95);
+}
+
+.stat {
+  min-height: 38px;
+  grid-template-columns: 24px minmax(0, 1fr);
+  padding: 6px 10px;
+  border-radius: 5px;
+  border-color: rgba(146, 112, 61, .28);
+  background: rgba(255, 250, 235, .58);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.5);
+}
+
+.stat > .stat-icon {
+  width: 20px;
+  height: 20px;
+  padding: 2px;
+  color: #6b542f;
+  background: transparent;
+}
+
+.stat div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.stat span {
+  color: #5e4b31;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.stat b {
+  color: #4a3822;
+  font: 800 16px/1.2 Georgia, serif;
+}
+
+.main {
+  min-width: 0;
+  padding: 15px 16px 18px;
+}
+
+.tabs {
+  display: grid;
+  grid-template-columns: repeat(11, minmax(72px, 1fr));
+  gap: 0;
+  margin: -1px -1px 14px;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid rgba(159, 120, 61, .32);
+  border-radius: 0;
+  background:
+    linear-gradient(90deg, rgba(255,255,255,.2), transparent 40%, rgba(255,255,255,.16)),
+    linear-gradient(180deg, #f7edd7, #ead8b8);
+}
+
+.tab {
+  min-height: 70px;
+  border: 0;
+  border-right: 1px solid rgba(150, 112, 58, .2);
+  border-radius: 0;
+  color: #5b4c36;
+  background: transparent;
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.tab svg {
+  width: 24px;
+  height: 24px;
+  color: #6d604a;
+  filter: drop-shadow(0 1px 0 #fff7dd);
+}
+
+.tab.active {
+  color: #4e3512;
+  background: linear-gradient(180deg, rgba(255, 249, 230, .96), rgba(238, 219, 179, .94));
+  border-bottom: 4px solid #8b642c;
+  box-shadow: inset 0 2px 0 #fff8dc;
+}
+
+.tab.active svg {
+  color: #8b642c;
+}
+
+.grid {
+  grid-template-columns: 1.2fr 1fr;
+  gap: 14px;
+}
+
+.panel,
+.card,
+.log {
+  border: 1px solid rgba(151, 113, 58, .44);
+  border-radius: 4px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(255, 252, 235, .48), transparent 16rem),
+    linear-gradient(180deg, rgba(250, 243, 224, .92), rgba(235, 220, 190, .88)),
+    repeating-linear-gradient(0deg, rgba(96, 65, 31, .035) 0 1px, transparent 1px 6px);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.7);
+}
+
+.panel h3,
+.card h3 {
+  color: #6a4218;
+  font-size: 22px;
+}
+
+.timeline .event,
+.battle-event,
+.row,
+.rank-row,
+.equipment-row {
+  border-radius: 5px;
+  border-color: rgba(148, 109, 52, .22);
+}
+
+.primary,
+.secondary,
+.danger,
+.segment,
+.game-cta {
+  border-radius: 4px;
+  min-height: 38px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.primary {
+  color: #fff4c9;
+  border-color: #b98a42;
+  background:
+    linear-gradient(180deg, rgba(63, 123, 104, .88), rgba(33, 79, 67, .9)),
+    url("/assets/kenney/ui-pack-rpg-expansion/PNG/buttonLong_brown.png") center / 100% 100%;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.32), 0 3px 0 #17362e;
+}
+
+.secondary {
+  color: #5d3f19;
+  border-color: #b99154;
+  background:
+    linear-gradient(180deg, rgba(255, 246, 221, .76), rgba(227, 207, 166, .84)),
+    url("/assets/kenney/ui-pack-rpg-expansion/PNG/buttonLong_beige.png") center / 100% 100%;
+}
+
+.danger {
+  color: #7d241d;
+  border-color: #b77554;
+  background: linear-gradient(180deg, #ffe6d8, #e7c0a8);
+}
+
+.home-dashboard {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.scene-card {
+  grid-column: span 2;
+}
+
+.duel-home {
+  grid-column: span 2;
+}
+
+.game-card {
+  position: relative;
+  overflow: hidden;
+  min-height: 205px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto 1fr auto;
+  align-content: start;
+  padding: 14px;
+}
+
+.game-card .section-head {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  justify-self: stretch;
+}
+
+.game-card h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.scene-card h3,
+.duel-home h3 {
+  color: #fff7df;
+  text-shadow:
+    0 2px 8px rgba(0,0,0,.84),
+    0 0 2px rgba(0,0,0,.95);
+}
+
+.scene-card .tag,
+.duel-home .tag {
+  color: #5b3709;
+  background: rgba(255, 240, 190, .82);
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.42),
+    0 2px 8px rgba(0,0,0,.24);
+}
+
+.game-card h3::before {
+  content: "✥";
+  color: #8b642c;
+  font-size: 19px;
+}
+
+.scene-card {
+  color: #fff7ed;
+  border-color: rgba(158, 117, 55, .48);
+  background: url("/assets/home-cards/dungeon-trial.png") center / cover no-repeat;
+}
+
+.scene-sect {
+  background: url("/assets/home-cards/sect-mission.png") center / cover no-repeat;
+}
+
+.scene-card::after {
+  content: none;
+}
+
+.scene-card::before,
+.duel-home::before {
+  content: none;
+  pointer-events: none;
+}
+
+.scene-copy {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  gap: 9px;
+  max-width: 62%;
+  margin-top: 10px;
+  padding-bottom: 18px;
+}
+
+.scene-copy h4 {
+  margin: 0;
+  color: #fff7df;
+  font-size: 24px;
+  text-shadow:
+    0 2px 8px rgba(0,0,0,.82),
+    0 0 2px rgba(0,0,0,.9);
+}
+
+.scene-copy p {
+  margin: 0;
+  color: #fff2cd;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.55;
+  text-shadow:
+    0 2px 6px rgba(0,0,0,.82),
+    0 0 2px rgba(0,0,0,.9);
+}
+
+.scene-copy b {
+  display: inline-flex;
+  margin-right: 8px;
+  color: #2c6d5a;
+}
+
+.game-cta {
+  position: relative;
+  z-index: 3;
+  align-self: end;
+  width: max-content;
+  margin-top: auto;
+  min-width: 140px;
+}
+
+.mini-progress {
+  width: min(250px, 100%);
+  height: 9px;
+  border: 1px solid rgba(255, 238, 190, .5);
+  border-radius: 999px;
+  background: rgba(20, 21, 16, .58);
+  overflow: hidden;
+}
+
+.mini-progress span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #4fbd74, #b5de81);
+}
+
+.duel-home {
+  color: #fff7ed;
+  background: url("/assets/home-cards/duel-arena.png") center / cover no-repeat;
+}
+
+.duel-home p {
+  margin: 13px 0;
+  color: #fff2cd;
+  font-size: 18px;
+  font-weight: 800;
+  text-shadow:
+    0 2px 7px rgba(0,0,0,.82),
+    0 0 2px rgba(0,0,0,.9);
+}
+
+.duel-home strong {
+  color: #8ff2ba;
+  text-shadow: 0 2px 7px rgba(0,0,0,.82);
+}
+
+.duel-mark {
+  position: absolute;
+  right: 30px;
+  top: 56px;
+  width: 128px;
+  height: 128px;
+  display: grid;
+  place-items: center;
+  color: rgba(142, 100, 40, .32);
+  border: 3px solid rgba(142, 100, 40, .18);
+  border-radius: 50%;
+  font-size: 72px;
+}
+
+.equipment-home {
+  grid-column: 1 / -1;
+  min-height: 172px;
+}
+
+.equipment-showcase {
+  width: 100%;
+  grid-column: 1 / -1;
+  justify-self: stretch;
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 12px;
+  align-items: stretch;
+  padding: 16px 24px 8px;
+}
+
+.gear-slot {
+  position: relative;
+  display: grid;
+  grid-template-rows: 72px;
+  justify-items: center;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  padding: 0 6px;
+}
+
+.gear-slot .equipment-icon {
+  grid-row: 1;
+}
+
+.gear-slot > span {
+  position: absolute;
+  right: 3px;
+  top: 2px;
+  color: #fff6cd;
+  text-shadow: 0 2px 2px rgba(0,0,0,.7);
+  font: 900 17px/1 Georgia, serif;
+}
+
+.gear-slot::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  z-index: 30;
+  width: max-content;
+  max-width: 220px;
+  padding: 7px 10px;
+  border: 1px solid rgba(119, 82, 33, .42);
+  border-radius: 4px;
+  color: #4b2f0c;
+  background: rgba(255, 246, 217, .96);
+  box-shadow: 0 8px 20px rgba(69, 46, 18, .22);
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.35;
+  text-align: center;
+  white-space: normal;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 4px);
+  transition: opacity .16s ease, transform .16s ease;
+}
+
+.gear-slot::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 3px);
+  z-index: 31;
+  width: 10px;
+  height: 10px;
+  border-right: 1px solid rgba(119, 82, 33, .42);
+  border-bottom: 1px solid rgba(119, 82, 33, .42);
+  background: rgba(255, 246, 217, .96);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 4px) rotate(45deg);
+  transition: opacity .16s ease, transform .16s ease;
+}
+
+.gear-slot:hover::before,
+.gear-slot:focus-within::before,
+.gear-slot:hover::after,
+.gear-slot:focus-within::after {
+  opacity: 1;
+  transform: translate(-50%, 0) rotate(45deg);
+}
+
+.gear-slot:hover::after,
+.gear-slot:focus-within::after {
+  transform: translate(-50%, 0);
+}
+
+.ranking-home,
+.log-home {
+  min-height: 310px;
+}
+
+.ranking-home {
+  grid-column: span 3;
+  min-height: 325px;
+  grid-template-rows: auto minmax(164px, auto) 1fr;
+}
+
+.log-home {
+  grid-column: span 3;
+  grid-template-rows: auto 1fr;
+}
+
+.rank-podium {
+  position: relative;
+  width: 100%;
+  grid-column: 1 / -1;
+  justify-self: stretch;
+  display: grid;
+  grid-template-columns: 1fr 1.16fr 1fr;
+  align-items: end;
+  gap: 10px;
+  min-height: 166px;
+  margin-top: 2px;
+  padding: 2px 0 0;
+}
+
+.rank-podium::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(127, 92, 44, .36), transparent);
+}
+
+.rank-podium-card {
+  position: relative;
+  display: grid;
+  grid-template-rows: 54px 18px 16px 16px;
+  justify-items: center;
+  align-content: start;
+  min-width: 0;
+  align-self: end;
+  height: 136px;
+  min-height: 0;
+  padding: 22px 6px 8px;
+  border: 0;
+  border-radius: 6px 6px 2px 2px;
+  color: #4a3822;
+  background:
+    linear-gradient(180deg, rgba(255, 252, 236, .72), rgba(218, 202, 168, .56)),
+    linear-gradient(90deg, transparent 0 8%, rgba(137, 101, 49, .2) 8% 10%, transparent 10% 90%, rgba(137, 101, 49, .2) 90% 92%, transparent 92%),
+    rgba(244, 234, 207, .48);
+  box-shadow: inset 0 0 0 1px rgba(153, 112, 56, .24);
+  text-align: center;
+  cursor: pointer;
+}
+
+.rank-podium-card.rank-1 {
+  grid-template-rows: 68px 20px 17px 17px;
+  height: 162px;
+  min-height: 0;
+  padding-top: 24px;
+  background:
+    linear-gradient(180deg, rgba(255, 248, 221, .92), rgba(226, 197, 126, .42)),
+    linear-gradient(90deg, transparent 0 7%, rgba(151, 101, 31, .25) 7% 9%, transparent 9% 91%, rgba(151, 101, 31, .25) 91% 93%, transparent 93%),
+    rgba(249, 237, 203, .7);
+  box-shadow: inset 0 0 0 1px rgba(176, 127, 48, .42), 0 5px 12px rgba(107, 74, 28, .12);
+}
+
+.rank-podium-card.rank-2,
+.rank-podium-card.rank-3 {
+  transform: none;
+}
+
+.rank-podium-card .character-portrait,
+.rank-podium-card .character-portrait.lg {
+  --portrait-size: 52px;
+  grid-row: 1;
+  border-width: 3px;
+  box-shadow: 0 4px 10px rgba(76, 51, 22, .22), inset 0 0 0 2px rgba(255,255,255,.4);
+}
+
+.rank-podium-card.rank-1 .character-portrait,
+.rank-podium-card.rank-1 .character-portrait.lg {
+  --portrait-size: 66px;
+  border-color: #d5a237;
+}
+
+.rank-medal {
+  position: absolute;
+  top: -5px;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  color: #67400c;
+  background:
+    radial-gradient(circle at 50% 36%, #fff6bf, #e2ad32 58%, #93610d 100%);
+  clip-path: polygon(50% 0, 62% 20%, 85% 16%, 81% 40%, 100% 52%, 78% 64%, 84% 88%, 60% 82%, 50% 100%, 40% 82%, 16% 88%, 22% 64%, 0 52%, 19% 40%, 15% 16%, 38% 20%);
+  box-shadow: 0 2px 4px rgba(87, 55, 18, .25);
+  font: 900 13px/1 Georgia, serif;
+  transform: translateX(-50%);
+}
+
+.rank-podium-card.rank-2 .rank-medal,
+.rank-podium-card.rank-3 .rank-medal {
+  color: #4f5056;
+  background:
+    radial-gradient(circle at 50% 36%, #ffffff, #cfd3d9 58%, #7c838d 100%);
+}
+
+.rank-podium-card.rank-3 .rank-medal {
+  color: #6a3b19;
+  background:
+    radial-gradient(circle at 50% 36%, #ffe1bf, #c47a3d 58%, #7a411e 100%);
+}
+
+.rank-podium-card b,
+.rank-podium-card em,
+.rank-podium-card strong {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rank-podium-card b {
+  grid-row: 2;
+  align-self: end;
+  margin-top: 0;
+  color: #3f2c17;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.rank-podium-card em {
+  grid-row: 3;
+  align-self: center;
+  margin-top: 0;
+  color: #77634a;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.rank-podium-card strong {
+  grid-row: 4;
+  align-self: center;
+  margin-top: 0;
+  color: #7b5520;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.home-rank-list {
+  width: 100%;
+  grid-column: 1 / -1;
+  justify-self: stretch;
+  display: grid;
+  gap: 0;
+  margin-top: 8px;
+  border-top: 1px solid rgba(137, 101, 49, .18);
+}
+
+.home-rank-list button,
+.battle-log-list > div {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) minmax(78px, auto) minmax(74px, auto);
+  align-items: center;
+  gap: 9px;
+  min-height: 40px;
+  border: 0;
+  border-bottom: 1px solid rgba(137, 101, 49, .16);
+  color: #4f3d27;
+  background: rgba(255,255,255,.18);
+  text-align: left;
+}
+
+.home-rank-list button {
+  width: 100%;
+  padding: 0 10px;
+}
+
+.home-rank-list button > span {
+  color: #6d614f;
+  font: 900 16px/1 Georgia, serif;
+}
+
+.home-rank-list b,
+.home-rank-list em,
+.home-rank-list strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-rank-list b {
+  color: #3c2b18;
+}
+
+.home-rank-list strong {
+  color: #795014;
+  text-align: right;
+}
+
+.home-rank-list .self,
+.battle-log-list > div.win {
+  background: rgba(204, 222, 174, .72);
+}
+
+.home-rank-list em {
+  color: #806d52;
+  font-style: normal;
+}
+
+.battle-log-list {
+  width: 100%;
+  grid-column: 1 / -1;
+  justify-self: stretch;
+  display: grid;
+  grid-auto-rows: minmax(40px, 1fr);
+  align-content: stretch;
+  gap: 3px;
+  margin-top: 8px;
+}
+
+.battle-log-list > div {
+  width: 100%;
+  grid-template-columns: 34px minmax(0, 1fr) minmax(92px, auto);
+  padding: 0 10px;
+}
+
+.battle-log-list b {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  color: #f4f0d2;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #3b9869, #1f6547);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.25);
+  font-size: 15px;
+}
+
+.battle-log-list .loss b {
+  background: linear-gradient(180deg, #b84a3c, #78281f);
+}
+
+.battle-log-list span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.battle-log-list time {
+  color: #897963;
+  text-align: right;
+}
+
+.home-log-fallback {
+  display: none;
+}
+
+.link-button {
+  border: 0;
+  color: #6c4c1c;
+  background: transparent;
+  font-weight: 900;
+}
+
+.equipment-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 4px;
+  color: #f5d46e;
+  background:
+    linear-gradient(180deg, rgba(185, 136, 50, .72), rgba(91, 55, 15, .86)),
+    radial-gradient(circle at 50% 38%, rgba(255, 236, 150, .35), transparent 42%),
+    linear-gradient(135deg, #93641e, #301b08);
+  border: 2px solid #d4aa4b;
+  box-shadow: inset 0 0 0 2px rgba(255,255,255,.14), 0 4px 9px rgba(63, 38, 8, .25);
+}
+
+.equipment-icon img {
+  width: 72%;
+  height: 72%;
+  filter: drop-shadow(0 2px 2px rgba(0,0,0,.45));
+}
+
+.equipment-row {
+  background: rgba(255, 248, 229, .65);
+}
+
+.equipment-table-head,
+.equipment-row {
+  grid-template-columns: minmax(360px, 1.75fr) .58fr .72fr .58fr .82fr .68fr;
+}
+
+.equipment-main {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.equipment-main > div {
+  min-width: 0;
+}
+
+.equipment-main .equipment-icon {
+  grid-column: auto;
+  grid-row: auto;
+}
+
+.equipment-row .equipment-main > .equipment-icon + div {
+  grid-column: auto;
+  grid-row: auto;
+  padding-left: 0;
+}
+
+.equipment-main strong,
+.equipment-main small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.equipment-row > .equipment-icon,
+.equipment-row > .equipment-icon + div {
+  grid-column: auto;
+  grid-row: auto;
+  padding-left: 0;
+}
+
+.equipment-row > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.equipment-row > span:nth-child(4) {
+  color: #1f7651;
+  font-weight: 900;
+}
+
+.rank-row:hover,
+.equipment-row:hover,
+.card:hover {
+  background: rgba(218, 232, 190, .55);
+}
+
+.character-portrait {
+  border-radius: 50%;
+  border-color: #b78b45;
+  background:
+    radial-gradient(circle at 38% 24%, rgba(255, 242, 190, .95), transparent 18%),
+    linear-gradient(150deg, #2d594d, #87621e);
+}
+
+.character-portrait.lg {
+  --portrait-size: 82px;
+}
+
+.cards {
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+}
+
+.toast {
+  border-radius: 4px;
+  border-color: #be8c54;
+  background: #f9ead2;
+}
+
+@media (max-width: 1040px) {
+  .topbar {
+    flex-wrap: wrap;
+  }
+
+  .brand {
+    flex-basis: 100%;
+  }
+
+  .hero {
+    flex-basis: 100%;
+  }
+
+  .hero-content {
+    width: 100%;
+  }
+
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: static;
+    max-height: none;
+  }
+
+  .tabs {
+    grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+  }
+
+  .home-dashboard {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .scene-card,
+  .duel-home {
+    min-height: 220px;
+  }
+
+  .equipment-showcase {
+    grid-template-columns: repeat(5, minmax(92px, 1fr));
+    padding-inline: 18px;
+  }
+
+  .ranking-home,
+  .log-home {
+    grid-column: span 1;
+  }
+
+  .equipment-table-head,
+  .equipment-row {
+    grid-template-columns: minmax(280px, 1.5fr) .58fr .72fr .58fr .78fr .68fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .app {
+    padding: 8px;
+  }
+
+  .topbar {
+    margin: -8px -8px 8px;
+    padding: 10px;
+  }
+
+  .brand h1 {
+    font-size: 36px;
+  }
+
+  .resource-strip {
+    width: 100%;
+    max-width: calc(100vw - 30px);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    padding-bottom: 3px;
+  }
+
+  .hero-content {
+    height: auto;
+    flex-wrap: wrap;
+  }
+
+  .loot-ticker {
+    flex-basis: 100%;
+    min-width: 0;
+  }
+
+  .resource-chip {
+    min-width: 138px;
+  }
+
+  .avatar {
+    min-height: 330px;
+  }
+
+  .name-plaque {
+    top: 40px;
+    right: 14px;
+    width: 42px;
+    min-height: 112px;
+  }
+
+  .name-plaque span {
+    font-size: 17px;
+  }
+
+  .portrait-change {
+    right: 10px;
+    bottom: 10px;
+  }
+
+  .profile-info-item {
+    grid-template-columns: 22px 42px minmax(0, 1fr);
+  }
+
+  .main {
+    padding: 10px;
+  }
+
+  .tab {
+    min-height: 58px;
+    font-size: 16px;
+  }
+
+  .home-dashboard {
+    grid-template-columns: 1fr;
+  }
+
+  .scene-copy {
+    max-width: 74%;
+  }
+
+  .equipment-showcase {
+    grid-template-columns: repeat(2, minmax(112px, 1fr));
+    padding-inline: 8px;
+  }
+
+  .ranking-home,
+  .log-home,
+  .equipment-home {
+    grid-column: auto;
+  }
+
+  .rank-podium {
+    gap: 4px;
+    min-height: 150px;
+    padding-inline: 0;
+  }
+
+  .rank-podium-card {
+    grid-template-rows: 48px 17px 15px 15px;
+    height: 124px;
+    min-height: 0;
+    padding-inline: 4px;
+  }
+
+  .rank-podium-card.rank-1 {
+    grid-template-rows: 58px 18px 16px 16px;
+    height: 148px;
+    min-height: 0;
+  }
+
+  .rank-podium-card .character-portrait,
+  .rank-podium-card .character-portrait.lg {
+    --portrait-size: 46px;
+  }
+
+  .rank-podium-card.rank-1 .character-portrait,
+  .rank-podium-card.rank-1 .character-portrait.lg {
+    --portrait-size: 56px;
+  }
+
+  .rank-podium-card b {
+    font-size: 14px;
+  }
+
+  .rank-podium-card em,
+  .rank-podium-card strong {
+    font-size: 12px;
+  }
+
+  .home-rank-list button {
+    grid-template-columns: 34px minmax(0, 1fr) minmax(64px, auto) minmax(58px, auto);
+  }
+
+  .home-rank-list em {
+    display: block;
+  }
+
+  .battle-log-list > div {
+    grid-template-columns: 30px minmax(0, 1fr);
+    min-height: 48px;
+  }
+
+  .battle-log-list time {
+    display: none;
+  }
+
+  .equipment-table-head {
+    display: none;
+  }
+
+  .equipment-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 10px;
+    align-items: start;
+  }
+
+  .equipment-main {
+    grid-column: 1 / -1;
+  }
+
+  .equipment-row > span {
+    padding: 5px 8px;
+    border: 1px solid rgba(153, 112, 56, .18);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, .22);
+  }
+}
+
+/* Qingyun client pass: stronger xianxia game surfaces inspired by ink-parchment RPG and sect sim interfaces. */
+.cultivation-surface {
+  position: relative;
+  isolation: isolate;
+  padding: 14px;
+  border: 1px solid rgba(42, 32, 20, .28);
+  border-radius: 10px;
+  background:
+    linear-gradient(135deg, rgba(28, 48, 43, .12), transparent 30%),
+    radial-gradient(circle at 92% 7%, rgba(218, 173, 75, .18), transparent 11rem),
+    radial-gradient(circle at 5% 105%, rgba(36, 103, 83, .18), transparent 12rem),
+    linear-gradient(180deg, rgba(244, 233, 204, .8), rgba(211, 185, 128, .34));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 248, 222, .5),
+    inset 0 0 42px rgba(72, 45, 14, .08);
+}
+
+.cultivation-surface::before {
+  content: "";
+  position: absolute;
+  inset: 7px;
+  z-index: -1;
+  border: 1px solid rgba(105, 76, 35, .18);
+  border-radius: 7px;
+  background-image:
+    linear-gradient(90deg, rgba(64, 45, 18, .045) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(64, 45, 18, .035) 1px, transparent 1px);
+  background-size: 26px 26px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, .95), rgba(0, 0, 0, .55));
+  pointer-events: none;
+}
+
+.cultivation-surface > .panel,
+.cultivation-surface > .grid > .panel,
+.cultivation-surface .equipment-panel,
+.cultivation-surface .realm-stage {
+  border: 2px solid rgba(70, 47, 23, .58);
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(72, 42, 18, .1), transparent 16%, transparent 84%, rgba(72, 42, 18, .1)),
+    linear-gradient(180deg, rgba(255, 247, 218, .96), rgba(230, 207, 159, .86));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 253, 236, .68),
+    inset 0 -14px 26px rgba(91, 58, 24, .08),
+    0 12px 28px rgba(50, 35, 16, .15);
+}
+
+.cultivation-surface > .panel::before,
+.cultivation-surface > .grid > .panel::before,
+.cultivation-surface .equipment-panel::before,
+.cultivation-surface .realm-stage::before {
+  content: "";
+  position: absolute;
+  inset: -6px 18px auto;
+  height: 10px;
+  border: 1px solid rgba(83, 51, 21, .45);
+  border-radius: 99px;
+  background: linear-gradient(90deg, #5a3518, #d5a852 18%, #7e5424 50%, #d5a852 82%, #5a3518);
+  box-shadow: 0 2px 6px rgba(55, 35, 14, .18);
+}
+
+.cultivation-surface .section-head {
+  border-bottom: 1px solid rgba(115, 79, 34, .24);
+  padding-bottom: 10px;
+}
+
+.cultivation-surface .section-head h3,
+.cultivation-surface > .panel > h3:first-child {
+  font-family: "KaiTi", "STKaiti", "Microsoft YaHei", serif;
+  font-size: 25px;
+  color: #4d2f12;
+  text-shadow: 0 1px 0 rgba(255, 243, 205, .9);
+}
+
+.cultivation-surface .tag,
+.cultivation-surface .segment,
+.cultivation-surface .rank-count {
+  border-color: rgba(100, 70, 31, .38);
+  background: linear-gradient(180deg, rgba(255, 244, 203, .92), rgba(218, 177, 93, .34));
+  color: #553714;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 235, .45);
+}
+
+.attributes-surface .root-grid {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+  gap: 14px;
+  padding: 18px;
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(34, 104, 82, .14), transparent 34%),
+    conic-gradient(from 0deg, rgba(151, 111, 45, .15), transparent 15%, rgba(31, 107, 83, .14), transparent 34%, rgba(151, 111, 45, .15)),
+    rgba(255, 251, 229, .38);
+  overflow: hidden;
+}
+
+.attributes-surface .root-grid::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(52vw, 420px);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(109, 79, 35, .2);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, transparent 0 34%, rgba(109, 79, 35, .12) 35% 36%, transparent 37% 58%, rgba(109, 79, 35, .1) 59% 60%, transparent 61%),
+    conic-gradient(from 18deg, transparent 0 11%, rgba(35, 107, 82, .12) 11% 12%, transparent 12% 24%, rgba(178, 130, 49, .16) 24% 25%, transparent 25%);
+  pointer-events: none;
+}
+
+.attributes-surface .root-card {
+  min-height: 138px;
+  padding: 15px;
+  border-radius: 8px;
+  background:
+    linear-gradient(145deg, rgba(255, 252, 232, .92), rgba(230, 212, 166, .74)),
+    radial-gradient(circle at 18% 12%, rgba(255, 242, 173, .55), transparent 4rem);
+}
+
+.attributes-surface .root-card.active {
+  border-color: rgba(30, 120, 91, .72);
+  box-shadow:
+    inset 0 0 0 1px rgba(244, 231, 168, .75),
+    0 0 0 2px rgba(30, 120, 91, .12),
+    0 12px 24px rgba(39, 88, 69, .18);
+}
+
+.attributes-surface .root-card.primary {
+  background:
+    linear-gradient(145deg, rgba(255, 248, 213, .98), rgba(202, 229, 196, .72)),
+    radial-gradient(circle at 18% 18%, rgba(220, 169, 62, .42), transparent 5rem);
+}
+
+.attribute-hero {
+  position: relative;
+  min-height: 158px;
+  padding: 22px 22px 20px 96px;
+  border: 1px solid rgba(112, 78, 31, .26);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 52px 52px, rgba(36, 104, 83, .24), transparent 42px),
+    linear-gradient(135deg, rgba(255, 250, 224, .96), rgba(225, 205, 158, .68));
+}
+
+.attribute-hero::before {
+  content: "灵";
+  position: absolute;
+  left: 22px;
+  top: 28px;
+  width: 54px;
+  height: 72px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(139, 39, 33, .48);
+  border-radius: 4px;
+  background: linear-gradient(180deg, rgba(168, 52, 42, .92), rgba(108, 31, 27, .9));
+  color: #ffe9b1;
+  font: 900 31px "KaiTi", "Microsoft YaHei", serif;
+  box-shadow: 0 8px 14px rgba(80, 31, 19, .2);
+}
+
+.tasks-surface {
+  display: grid;
+  grid-template-columns: minmax(320px, .9fr) minmax(360px, 1.1fr);
+  gap: 14px;
+}
+
+.tasks-surface > .panel {
+  min-height: 338px;
+}
+
+.tasks-surface .task-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 18px;
+  border-width: 2px;
+  background:
+    linear-gradient(90deg, rgba(86, 49, 20, .08), transparent 14%, transparent 86%, rgba(86, 49, 20, .08)),
+    linear-gradient(180deg, rgba(255, 248, 221, .94), rgba(224, 200, 150, .62));
+}
+
+.tasks-surface .task-form label {
+  color: #5b3a18;
+  font-weight: 900;
+}
+
+.tasks-surface .cards {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  padding: 2px;
+}
+
+.tasks-surface .card {
+  position: relative;
+  min-height: 74px;
+  padding: 14px 16px 14px 54px;
+  border-radius: 6px;
+  background:
+    linear-gradient(90deg, rgba(127, 34, 29, .13), transparent 68px),
+    linear-gradient(180deg, rgba(255, 251, 232, .95), rgba(229, 207, 160, .72));
+}
+
+.tasks-surface .card::after {
+  content: "札";
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  width: 28px;
+  height: 42px;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  border-radius: 3px;
+  background: #8d3029;
+  color: #f8df9b;
+  font: 900 18px "KaiTi", "Microsoft YaHei", serif;
+}
+
+.skills-surface .skill-hero {
+  position: relative;
+  min-height: 154px;
+  padding: 24px 24px 20px 136px;
+  border: 2px solid rgba(93, 62, 25, .42);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 68px 50%, rgba(36, 105, 84, .22), transparent 58px),
+    linear-gradient(145deg, rgba(255, 250, 224, .96), rgba(218, 196, 148, .74));
+}
+
+.skills-surface .skill-hero::before {
+  content: "";
+  position: absolute;
+  left: 28px;
+  top: 24px;
+  width: 78px;
+  height: 106px;
+  border: 2px solid rgba(50, 88, 72, .72);
+  border-radius: 34px 34px 7px 7px;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, .18), transparent 38%),
+    linear-gradient(180deg, #2f7f64, #174737);
+  box-shadow: inset 0 0 0 6px rgba(223, 188, 91, .22), 0 10px 18px rgba(32, 64, 51, .18);
+}
+
+.skills-surface .skill-hero::after {
+  content: "诀";
+  position: absolute;
+  left: 53px;
+  top: 56px;
+  color: #f9e5a5;
+  font: 900 34px "KaiTi", "Microsoft YaHei", serif;
+}
+
+.skills-surface .skill-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.skills-surface .skill-card {
+  min-height: 166px;
+  padding: 16px 16px 14px;
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(38, 103, 83, .15), transparent 74px),
+    linear-gradient(180deg, rgba(255, 251, 232, .96), rgba(220, 200, 153, .7));
+}
+
+.skills-surface .skill-card::before {
+  left: 14px;
+  top: auto;
+  bottom: 14px;
+  width: 42px;
+  height: 58px;
+  border-radius: 5px;
+  background:
+    linear-gradient(180deg, rgba(45, 121, 94, .95), rgba(24, 72, 56, .95));
+}
+
+.skills-surface .skill-card p,
+.skills-surface .skill-card small {
+  margin-left: 54px;
+}
+
+.arena-surface .duel-rank-table {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(136px, 1fr));
+  gap: 10px;
+}
+
+.arena-surface .duel-rank-cell {
+  min-height: 92px;
+  border-radius: 7px;
+  background:
+    linear-gradient(180deg, rgba(50, 74, 67, .9), rgba(31, 42, 38, .92));
+  color: #f6e3b0;
+}
+
+.arena-surface .duel-rank-cell span,
+.arena-surface .duel-rank-cell small {
+  color: rgba(255, 236, 184, .78);
+}
+
+.arena-surface .arena-toolbar {
+  margin-top: 14px;
+  border-width: 2px;
+}
+
+.arena-surface .match-list {
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+}
+
+.arena-surface .match-card {
+  min-height: 116px;
+  padding: 14px;
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(151, 44, 36, .1), transparent 42%),
+    linear-gradient(90deg, rgba(44, 86, 70, .16), transparent 45%, rgba(133, 46, 37, .14)),
+    linear-gradient(180deg, rgba(255, 249, 226, .96), rgba(224, 202, 156, .72));
+}
+
+.arena-surface .match-result {
+  min-width: 58px;
+  border: 1px solid rgba(136, 44, 37, .34);
+  border-radius: 4px;
+  background: linear-gradient(180deg, rgba(160, 50, 41, .94), rgba(95, 31, 27, .94));
+  color: #ffe6a9;
+}
+
+.equipment-surface .equipment-tools,
+.rank-surface .rank-tools {
+  margin-bottom: 14px;
+}
+
+.equipment-surface .equipment-table-head,
+.equipment-surface .equipment-row {
+  grid-template-columns: minmax(270px, 1.35fr) .56fr .78fr .56fr .8fr .68fr;
+}
+
+.equipment-surface .equipment-row {
+  min-height: 72px;
+  border-radius: 7px;
+  background:
+    linear-gradient(90deg, rgba(45, 70, 63, .16), transparent 82px),
+    linear-gradient(180deg, rgba(255, 251, 231, .96), rgba(222, 201, 154, .72));
+}
+
+.equipment-surface .equipment-main {
+  gap: 12px;
+}
+
+.equipment-surface .equipment-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 239, 183, .45),
+    0 6px 12px rgba(39, 28, 14, .16);
+}
+
+.rank-surface .rank-list {
+  display: grid;
+  gap: 10px;
+}
+
+.rank-surface .rank-row {
+  display: grid;
+  grid-template-columns: 44px 44px minmax(0, 1fr) minmax(72px, auto);
+  align-items: center;
+  gap: 10px;
+  min-height: 66px;
+  padding: 10px 14px;
+  border-radius: 7px;
+  background:
+    linear-gradient(90deg, rgba(108, 35, 29, .1), transparent 86px),
+    linear-gradient(180deg, rgba(255, 251, 231, .98), rgba(226, 204, 156, .76));
+}
+
+.rank-surface .rank-row:not(.person-rank-row) {
+  grid-template-columns: 44px minmax(0, 1fr) minmax(72px, auto);
+}
+
+.rank-surface .rank-row > .rank-medal,
+.rank-surface .rank-row > .rank-number {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: center;
+}
+
+.rank-surface .rank-row.person-rank-row > .character-portrait {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: center;
+}
+
+.rank-surface .rank-row.person-rank-row > div {
+  grid-column: 3;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.rank-surface .rank-row:not(.person-rank-row) > div {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.rank-surface .rank-row > span:last-of-type:not(.rank-medal):not(.rank-number) {
+  justify-self: end;
+}
+
+.rank-surface .top-rank-row {
+  border-color: rgba(187, 134, 38, .58);
+  background:
+    linear-gradient(90deg, rgba(213, 165, 67, .22), transparent 112px),
+    linear-gradient(180deg, rgba(255, 248, 217, .98), rgba(224, 197, 137, .82));
+}
+
+.rank-surface .rank-medal {
+  border-radius: 5px;
+  box-shadow: inset 0 0 0 1px rgba(255, 248, 200, .55), 0 4px 8px rgba(65, 44, 18, .16);
+}
+
+.progression-surface .realm-stage-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(142px, 1fr));
+  gap: 10px;
+}
+
+.progression-surface .realm-stage-button {
+  min-height: 86px;
+  border: 1px solid rgba(107, 75, 32, .3);
+  border-radius: 7px;
+  background:
+    linear-gradient(180deg, rgba(255, 250, 225, .94), rgba(224, 200, 151, .68));
+}
+
+.progression-surface .realm-stage-button.current,
+.progression-surface .realm-stage-button.active {
+  border-color: rgba(31, 116, 89, .65);
+  box-shadow: inset 0 0 0 1px rgba(239, 215, 132, .55), 0 8px 18px rgba(35, 94, 73, .13);
+}
+
+.progression-surface .realm-row {
+  background:
+    linear-gradient(90deg, rgba(42, 102, 82, .12), transparent 22%),
+    linear-gradient(180deg, rgba(255, 251, 231, .96), rgba(225, 204, 158, .72));
+}
+
+@media (max-width: 980px) {
+  .tasks-surface {
+    grid-template-columns: 1fr;
+  }
+
+  .equipment-surface .equipment-table-head,
+  .equipment-surface .equipment-row {
+    grid-template-columns: minmax(240px, 1.3fr) .6fr .8fr .6fr .8fr .7fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .cultivation-surface {
+    padding: 10px;
+  }
+
+  .attributes-surface .root-grid {
+    padding: 12px;
+  }
+
+  .attribute-hero,
+  .skills-surface .skill-hero {
+    padding: 18px;
+  }
+
+  .attribute-hero::before,
+  .skills-surface .skill-hero::before,
+  .skills-surface .skill-hero::after {
+    display: none;
+  }
+
+  .skills-surface .skill-card p,
+  .skills-surface .skill-card small {
+    margin-left: 0;
+  }
+
+  .arena-surface .match-list {
+    grid-template-columns: 1fr;
+  }
+
+  .equipment-surface .equipment-row {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Readability and alignment fixes for rank, equipment, and character-detail surfaces. */
+.rank-surface .rank-row {
+  position: relative;
+  grid-template-columns: 50px minmax(0, 1fr) minmax(100px, auto);
+  min-height: 72px;
+  padding: 12px 18px 12px 78px;
+  font-size: 15px;
+}
+
+.rank-surface .rank-row:not(.person-rank-row) {
+  grid-template-columns: minmax(0, 1fr) minmax(100px, auto);
+}
+
+.rank-surface .rank-row > .rank-medal,
+.rank-surface .rank-row > .rank-number {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  grid-column: auto;
+  justify-self: auto;
+  transform: translateY(-50%);
+}
+
+.rank-surface .rank-row.person-rank-row > .character-portrait {
+  grid-column: 1;
+  justify-self: start;
+}
+
+.rank-surface .rank-row.person-rank-row > div {
+  grid-column: 2;
+  min-width: 0;
+}
+
+.rank-surface .rank-row:not(.person-rank-row) > div {
+  grid-column: 1;
+  min-width: 0;
+}
+
+.rank-surface .rank-row .rank-value {
+  grid-column: 3;
+  justify-self: end;
+  color: #5f3a08;
+  font: 900 18px/1.1 Georgia, serif;
+}
+
+.rank-surface .rank-row:not(.person-rank-row) .rank-value {
+  grid-column: 2;
+}
+
+.rank-surface .rank-row strong {
+  font-size: 16px;
+}
+
+.rank-surface .rank-row small,
+.rank-surface .rank-count,
+.rank-surface .rank-search {
+  font-size: 13px;
+}
+
+.rank-surface .rank-medal-1 {
+  --medal-main: #e2ad27;
+  --medal-dark: #764600;
+  --medal-light: #fff0a8;
+}
+
+.rank-surface .rank-medal-2 {
+  --medal-main: #9fb4c8;
+  --medal-dark: #475b72;
+  --medal-light: #f4fbff;
+}
+
+.rank-surface .rank-medal-3 {
+  --medal-main: #c96f32;
+  --medal-dark: #6d3217;
+  --medal-light: #ffd2a3;
+}
+
+.rank-podium-card.rank-1 .rank-medal {
+  color: #fff8cf;
+  background: radial-gradient(circle at 50% 36%, #fff4a8, #d99c17 58%, #7f4d00 100%);
+}
+
+.rank-podium-card.rank-2 .rank-medal {
+  color: #20364b;
+  background: radial-gradient(circle at 50% 36%, #ffffff, #b6c7d6 58%, #5e748a 100%);
+}
+
+.rank-podium-card.rank-3 .rank-medal {
+  color: #fff0df;
+  background: radial-gradient(circle at 50% 36%, #ffd6ad, #c46c30 58%, #743210 100%);
+}
+
+.equipment-surface .equipment-row {
+  font-size: 15px;
+}
+
+.equipment-surface .equipment-row strong {
+  font-size: 16px;
+}
+
+.equipment-surface .equipment-row small,
+.equipment-surface .equipment-row > span {
+  font-size: 13px;
+}
+
+.root-chip {
+  color: #4e2b05;
+  font-size: 14px;
+}
+
+.root-chip small {
+  color: #60431f;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.root-summary-list {
+  color: #4f3820;
+  font-size: 13px;
+}
+
+.rank-surface .detail-sections > .panel {
+  background:
+    linear-gradient(180deg, rgba(255, 251, 231, .96), rgba(229, 209, 166, .72)),
+    rgba(255, 255, 255, .72);
+}
+
+.rank-surface .detail-sections .timeline.detail-scroll {
+  display: grid;
+  gap: 8px;
+  max-height: 315px;
+  padding-right: 6px;
+}
+
+.rank-surface .detail-sections .event,
+.rank-surface .detail-sections .event-button,
+.rank-surface .detail-sections .duel-record {
+  width: 100%;
+  display: grid;
+  gap: 4px;
+  min-height: 46px;
+  border: 1px solid rgba(135, 96, 42, .28);
+  border-left: 4px solid #876027;
+  border-radius: 6px;
+  color: #3f2a12;
+  background: rgba(255, 248, 225, .82);
+  padding: 9px 11px;
+  font-size: 14px;
+  line-height: 1.55;
+  text-align: left;
+}
+
+.rank-surface .detail-sections .event strong,
+.rank-surface .detail-sections .event-button strong,
+.rank-surface .detail-sections .duel-record strong {
+  color: #2c1b09;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.rank-surface .detail-sections .event span,
+.rank-surface .detail-sections .event-button span,
+.rank-surface .detail-sections .duel-record span,
+.rank-surface .detail-sections .event small,
+.rank-surface .detail-sections .event-button small {
+  color: #5d421e;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.rank-surface .detail-sections .event.gold,
+.rank-surface .detail-sections .event-button.gold,
+.rank-surface .detail-sections .duel-record.gold {
+  border-left-color: #b9851f;
+  background: rgba(255, 241, 190, .92);
+}
+
+.rank-surface .detail-sections .event.bad,
+.rank-surface .detail-sections .event-button.bad,
+.rank-surface .detail-sections .duel-record.bad {
+  border-left-color: #a94735;
+  background: rgba(255, 232, 218, .82);
+}
+
+.duel-rank-cell,
+.duel-season-badge,
+.rank-tag {
+  color: color-mix(in srgb, var(--rank-color) 82%, #1f160c);
+  font-size: 13px;
+}
+
+.duel-rank-cell span,
+.duel-rank-cell small {
+  color: color-mix(in srgb, var(--rank-color) 70%, #3a2a17);
+  font-size: 12px;
+}
+
+.arena-surface .duel-rank-cell {
+  color: #fff2c6;
+}
+
+.arena-surface .duel-rank-cell span,
+.arena-surface .duel-rank-cell small {
+  color: #f2dba6;
+}
+
+.view.active.rank-surface .rank-row {
+  position: relative;
+  grid-template-columns: 50px minmax(0, 1fr) minmax(100px, auto);
+  min-height: 72px;
+  padding: 12px 18px 12px 78px;
+}
+
+.view.active.rank-surface .rank-row:not(.person-rank-row) {
+  grid-template-columns: minmax(0, 1fr) minmax(100px, auto);
+}
+
+.view.active.rank-surface .rank-row > .rank-medal,
+.view.active.rank-surface .rank-row > .rank-number {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  grid-column: auto;
+  transform: translateY(-50%);
+}
+
+.view.active.rank-surface .rank-row.person-rank-row > .character-portrait {
+  grid-column: 1;
+  justify-self: start;
+}
+
+.view.active.rank-surface .rank-row.person-rank-row > div {
+  grid-column: 2;
+  min-width: 0;
+}
+
+.view.active.rank-surface .rank-row:not(.person-rank-row) > div {
+  grid-column: 1;
+  min-width: 0;
+}
+
+.view.active.rank-surface .rank-row .rank-value {
+  grid-column: 3;
+  justify-self: end;
+}
+
+.view.active.rank-surface .rank-row:not(.person-rank-row) .rank-value {
+  grid-column: 2;
+}

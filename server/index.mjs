@@ -4,8 +4,8 @@ import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   addTask,
-  attemptBreakthrough,
   buyItem,
+  changePlayerPortrait,
   dailySettlement,
   duel,
   rest,
@@ -22,7 +22,7 @@ const rootDir = fileURLToPath(new URL("../", import.meta.url));
 const distDir = join(rootDir, "dist");
 const liteActionRoutes = new Set([
   "/api/tasks",
-  "/api/breakthrough",
+  "/api/player/portrait",
   "/api/rest",
   "/api/day/advance",
   "/api/sect/mission",
@@ -96,7 +96,7 @@ async function handleApi(req, res, url) {
   const body = await readJson(req);
   const routes = {
     "/api/tasks": (state) => addTask(state, body),
-    "/api/breakthrough": (state) => attemptBreakthrough(state),
+    "/api/player/portrait": (state) => changePlayerPortrait(state, body),
     "/api/rest": (state) => rest(state),
     "/api/day/advance": (state) => dailySettlement(state, { manual: true }),
     "/api/dungeons/run": (state) => runDungeon(state, body.id),
