@@ -384,38 +384,41 @@
 
         <section v-if="activeTab === 'tasks'" class="view active cultivation-surface tasks-surface">
           <div class="panel">
-            <h3>记录今日任务</h3>
-            <p>今日行事，皆入修行。</p>
+            <div class="section-head">
+              <div>
+                <h3>记录今日任务</h3>
+                <p>今日完成 {{ todayTaskSummary.count }} 项，获得 {{ todayTaskSummary.xp }} 经验与 {{ todayTaskSummary.spirit }} 灵石。</p>
+              </div>
+              <span class="tag">{{ currentDate }}</span>
+            </div>
             <form class="task-form" @submit.prevent="submitTask">
               <label>任务
-                <input v-model="taskForm.name" placeholder="例如：跑步 30 分钟">
-              </label>
-              <label>类型
-                <select v-model="taskForm.type">
-                  <option value="body">锻炼：攻击与血量</option>
-                  <option value="study">学习：防御与法力</option>
-                  <option value="work">工作：经验与灵石</option>
-                  <option value="craft">创作：经验与神识</option>
-                  <option value="discipline">自律：经验与法力</option>
+                <select v-model="taskForm.taskId">
+                  <option v-for="task in enabledTaskDefinitions" :key="task.id" :value="task.id">{{ task.name }}</option>
                 </select>
               </label>
-              <label>难度
-                <select v-model.number="taskForm.diff">
-                  <option v-for="n in 5" :key="n" :value="n">{{ n }} 星 · {{ n * 1000 }} 经验</option>
-                </select>
+              <label v-if="selectedTaskDefinition?.type === 'measurable'">完成量
+                <input v-model.number="taskForm.completedAmount" type="number" min="0" step="0.01" :placeholder="`标准 ${selectedTaskDefinition.targetAmount}${selectedTaskDefinition.unitName}`">
               </label>
-              <button class="primary" :disabled="isActionPending('/api/tasks')">{{ isActionPending("/api/tasks") ? "结算中..." : "完成" }}</button>
+              <div v-if="selectedTaskDefinition" class="task-preview">
+                <strong>+{{ taskRewardPreview.xp }} 经验</strong>
+                <strong>+{{ taskRewardPreview.spirit }} 灵石</strong>
+              </div>
+              <button class="primary" :disabled="isActionPending('/api/tasks') || !selectedTaskDefinition">{{ isActionPending("/api/tasks") ? "结算中..." : "完成" }}</button>
             </form>
           </div>
           <div class="cards">
-            <article class="card" v-for="task in state.tasks" :key="`${task.day}-${task.name}-${task.xp}`">
+            <article class="card" v-for="task in todayTaskCompletions" :key="task.id || `${task.day}-${task.name}-${task.xp}`">
               <div>
                 <h3>{{ task.name }}</h3>
-                <p class="meta">{{ displayDate(task) }} · {{ task.type }} · {{ task.diff }} 星</p>
+                <p class="meta">
+                  {{ displayDate(task) }} · {{ task.category || task.type }}
+                  <template v-if="task.type === 'measurable'"> · {{ task.completedAmount }} / {{ task.targetAmount }} {{ task.unitName }}</template>
+                </p>
               </div>
-              <span class="tag">+{{ task.xp }} 经验</span>
+              <span class="tag">+{{ task.xp }} 经验 · +{{ task.spirit || 0 }} 灵石</span>
             </article>
-            <div v-if="!state.tasks.length" class="empty">{{ currentDate }} 还没有记录任务。完成一件小事，也算向长生路迈一步。</div>
+            <div v-if="!todayTaskCompletions.length" class="empty">{{ currentDate }} 还没有记录任务。完成一件小事，也算向长生路迈一步。</div>
           </div>
         </section>
 
@@ -1938,11 +1941,12 @@
               <div class="admin-head-actions">
                 <label class="admin-search">
                   <span>搜索</span>
-                  <input v-model.trim="adminSearch" :placeholder="adminMode === 'cultivators' ? '人物名或宗门名' : '宗门名'">
+                  <input v-model.trim="adminSearch" :placeholder="adminMode === 'cultivators' ? '人物名或宗门名' : adminMode === 'sects' ? '宗门名' : '任务名或分类'">
                 </label>
                 <div class="segmented">
                   <button class="segment" :class="{ active: adminMode === 'cultivators' }" type="button" @click="adminMode = 'cultivators'">角色</button>
                   <button class="segment" :class="{ active: adminMode === 'sects' }" type="button" @click="adminMode = 'sects'">宗门</button>
+                  <button class="segment" :class="{ active: adminMode === 'tasks' }" type="button" @click="adminMode = 'tasks'">现实任务</button>
                 </div>
               </div>
             </div>
@@ -2003,7 +2007,7 @@
               <div v-else class="admin-editor empty">换个名字或宗门再搜一下。</div>
             </div>
 
-            <div v-else class="admin-layout">
+            <div v-else-if="adminMode === 'sects'" class="admin-layout">
               <div class="admin-list" role="list" aria-label="宗门列表">
                 <button
                   v-for="sect in filteredAdminSects"
@@ -2038,6 +2042,93 @@
                     <input type="file" accept="image/*" @change="openImageEditor($event, 'sect')">
                   </label>
                   <button class="primary" type="submit" :disabled="isActionPending('/api/admin/sect')">保存宗门</button>
+                </div>
+              </form>
+            </div>
+
+            <div v-else class="admin-layout">
+              <div class="admin-list" role="list" aria-label="现实任务列表">
+                <button
+                  v-for="task in filteredAdminTasks"
+                  :key="task.id"
+                  class="admin-list-row"
+                  :class="{ active: adminSelectedTaskId === task.id, muted: task.enabled === false }"
+                  type="button"
+                  @click="selectAdminTask(task.id)"
+                >
+                  <span class="sect-avatar task-category-avatar">
+                    <component :is="taskCategoryIcon(task.category)" :size="16" aria-hidden="true" />
+                  </span>
+                  <span>
+                    <strong>{{ task.name }}</strong>
+                    <small>{{ task.category }} · {{ task.xpReward }} 经验 · {{ task.spiritReward }} 灵石</small>
+                  </span>
+                </button>
+                <div v-if="!filteredAdminTasks.length" class="empty">没有找到匹配的现实任务。</div>
+              </div>
+
+              <form class="admin-editor" @submit.prevent="saveTaskDefinition">
+                <div class="admin-editor-head">
+                  <span class="sect-avatar xl task-category-avatar">
+                    <component :is="taskCategoryIcon(adminTaskDraft.category)" :size="22" aria-hidden="true" />
+                  </span>
+                  <div>
+                    <strong>{{ adminTaskDraft.name || "新增现实任务" }}</strong>
+                    <small>{{ adminTaskDraft.type === "measurable" ? "按完成量折算奖励" : "完整完成后获得奖励" }}</small>
+                  </div>
+                </div>
+                <div class="admin-form-grid">
+                  <label>
+                    <span>任务名</span>
+                    <input v-model.trim="adminTaskDraft.name" maxlength="40" required>
+                  </label>
+                  <label>
+                    <span>分类</span>
+                    <select v-model="adminTaskDraft.category">
+                      <option v-for="category in taskCategoryOptions" :key="category.id" :value="category.id">{{ category.label }}</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>类型</span>
+                    <select v-model="adminTaskDraft.type">
+                      <option value="complete">完整完成</option>
+                      <option value="measurable">量化任务</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>单位</span>
+                    <input v-model.trim="adminTaskDraft.unitName" maxlength="10" :disabled="adminTaskDraft.type === 'complete'">
+                  </label>
+                  <label>
+                    <span>标准数量</span>
+                    <input v-model.number="adminTaskDraft.targetAmount" type="number" min="0.01" step="0.01" :disabled="adminTaskDraft.type === 'complete'">
+                  </label>
+                  <label>
+                    <span>最高倍数</span>
+                    <input v-model.number="adminTaskDraft.maxMultiplier" type="number" min="0.01" step="0.01" :disabled="adminTaskDraft.type === 'complete'">
+                  </label>
+                  <label>
+                    <span>经验</span>
+                    <input v-model.number="adminTaskDraft.xpReward" type="number" min="0" step="1">
+                  </label>
+                  <label>
+                    <span>灵石</span>
+                    <input v-model.number="adminTaskDraft.spiritReward" type="number" min="0" step="1">
+                  </label>
+                </div>
+                <label>
+                  <span>任务详细</span>
+                  <textarea v-model.trim="adminTaskDraft.detail" maxlength="180" rows="4"></textarea>
+                </label>
+                <label class="admin-check">
+                  <input v-model="adminTaskDraft.enabled" type="checkbox">
+                  <span>启用任务</span>
+                </label>
+                <div class="admin-actions">
+                  <button class="secondary" type="button" @click="resetAdminTaskDraft">新增</button>
+                  <button class="secondary" type="button" :disabled="!adminTaskDraft.id" @click="toggleAdminTask()">{{ adminTaskDraft.enabled ? "停用" : "启用" }}</button>
+                  <button class="danger" type="button" :disabled="!adminTaskDraft.id" @click="deleteAdminTask()">删除</button>
+                  <button class="primary" type="submit" :disabled="isActionPending(adminTaskDraft.id ? '/api/task-definitions/update' : '/api/task-definitions')">保存任务</button>
                 </div>
               </form>
             </div>
@@ -2077,6 +2168,7 @@ import {
   CircleUserRound,
   Cloud,
   Dna,
+  Dumbbell,
   Flame,
   Gem,
   ImagePlus,
@@ -2120,6 +2212,12 @@ const tabs = [
   { id: "equipment", label: "装备", icon: Package },
   { id: "rank", label: "榜单", icon: Trophy },
   { id: "admin", label: "后台", icon: Settings }
+];
+
+const taskCategoryOptions = [
+  { id: "生活", label: "生活", icon: Leaf },
+  { id: "工作", label: "工作", icon: Landmark },
+  { id: "运动", label: "运动", icon: Dumbbell }
 ];
 
 const rankBoards = [
@@ -2168,6 +2266,8 @@ const emptyState = {
   sect: { reputation: 0 },
   npcs: [],
   tasks: [],
+  taskDefinitions: [],
+  taskCompletions: [],
   log: [],
   equipment: [],
   equipmentTransfers: [],
@@ -2251,13 +2351,27 @@ const lastBattle = ref(null);
 const battleReturnTarget = ref(null);
 const battleCursor = ref(0);
 const countdown = ref("--:--:--");
-const taskForm = reactive({ name: "", type: "study", diff: 3 });
+const taskForm = reactive({ taskId: "", completedAmount: 1 });
 const adminMode = ref("cultivators");
 const adminSearch = ref("");
 const adminSelectedCultivatorId = ref("player");
 const adminSelectedSectName = ref("");
+const adminSelectedTaskId = ref("");
 const adminCultivatorDraft = reactive({ id: "player", name: "", gender: "unknown", rootKeys: [], portraitUrl: "" });
 const adminSectDraft = reactive({ oldName: "", name: "", portraitUrl: "" });
+const adminTaskDraft = reactive({
+  id: "",
+  name: "",
+  detail: "",
+  type: "complete",
+  category: "生活",
+  unitName: "次",
+  targetAmount: 1,
+  xpReward: 100,
+  spiritReward: 10,
+  maxMultiplier: 4,
+  enabled: true
+});
 const cropCanvas = ref(null);
 const imageEditor = reactive({
   open: false,
@@ -2338,6 +2452,29 @@ const fallbackDuelRankMap = computed(() => {
   }]));
 });
 const currentDate = computed(() => dateForDay(gameState.value.day));
+const taskDefinitions = computed(() => gameState.value.taskDefinitions || []);
+const enabledTaskDefinitions = computed(() => taskDefinitions.value.filter((task) => task.enabled !== false));
+const selectedTaskDefinition = computed(() => enabledTaskDefinitions.value.find((task) => task.id === taskForm.taskId) || enabledTaskDefinitions.value[0] || null);
+const taskCompletions = computed(() => gameState.value.taskCompletions?.length ? gameState.value.taskCompletions : gameState.value.tasks || []);
+const todayTaskCompletions = computed(() => taskCompletions.value.filter((task) => task.day === gameState.value.day));
+const todayTaskSummary = computed(() => todayTaskCompletions.value.reduce((summary, task) => ({
+  count: summary.count + 1,
+  xp: summary.xp + (Number(task.xp) || 0),
+  spirit: summary.spirit + (Number(task.spirit) || 0)
+}), { count: 0, xp: 0, spirit: 0 }));
+const taskRewardPreview = computed(() => {
+  const task = selectedTaskDefinition.value;
+  if (!task) return { xp: 0, spirit: 0, multiplier: 0 };
+  const amount = task.type === "measurable" ? Math.max(0, Number(taskForm.completedAmount) || 0) : 1;
+  const target = Math.max(0.01, Number(task.targetAmount) || 1);
+  const maxMultiplier = Math.max(0.01, Number(task.maxMultiplier) || 1);
+  const multiplier = task.type === "measurable" ? Math.min(amount / target, maxMultiplier) : 1;
+  return {
+    xp: Math.floor((Number(task.xpReward) || 0) * multiplier),
+    spirit: Math.floor((Number(task.spiritReward) || 0) * multiplier),
+    multiplier
+  };
+});
 const playerPortraitUrl = computed(() => {
   if (player.value.portraitUrl) return player.value.portraitUrl;
   const index = Number(player.value.portraitVariant || 0);
@@ -2384,6 +2521,18 @@ const filteredAdminSects = computed(() => {
     sect.leader
   ].filter(Boolean).join(" ").toLowerCase().includes(keyword));
 });
+const filteredAdminTasks = computed(() => {
+  const keyword = normalizedAdminSearch.value;
+  if (!keyword) return taskDefinitions.value;
+  return taskDefinitions.value.filter((task) => [
+    task.name,
+    task.detail,
+    task.category,
+    task.type === "measurable" ? "量化" : "完整",
+    task.unitName
+  ].filter(Boolean).join(" ").toLowerCase().includes(keyword));
+});
+const adminTaskDefinition = computed(() => taskDefinitions.value.find((task) => task.id === adminSelectedTaskId.value) || null);
 const dungeonRecordTabs = [
   { id: "blood", label: "血色禁地" },
   { id: "void", label: "虚天殿" },
@@ -2824,6 +2973,17 @@ function realmStageName(stage) {
 
 function skillById(id) {
   return combatSkills.value.find((skill) => skill.id === id) || combatSkills.value[0];
+}
+
+function normalizedTaskCategory(category) {
+  if (taskCategoryOptions.some((option) => option.id === category)) return category;
+  if (["运动", "锻炼", "健身", "修行", "body"].includes(category)) return "运动";
+  if (["工作", "加班", "职业", "work"].includes(category)) return "工作";
+  return "生活";
+}
+
+function taskCategoryIcon(category) {
+  return taskCategoryOptions.find((option) => option.id === normalizedTaskCategory(category))?.icon || Leaf;
 }
 
 function skillName(id) {
@@ -4053,6 +4213,50 @@ function selectAdminSect(name) {
   syncAdminSectDraft(name);
 }
 
+function resetAdminTaskDraft() {
+  adminSelectedTaskId.value = "";
+  Object.assign(adminTaskDraft, {
+    id: "",
+    name: "",
+    detail: "",
+    type: "complete",
+    category: "生活",
+    unitName: "次",
+    targetAmount: 1,
+    xpReward: 100,
+    spiritReward: 10,
+    maxMultiplier: 4,
+    enabled: true
+  });
+}
+
+function syncAdminTaskDraft(task = adminTaskDefinition.value || filteredAdminTasks.value[0] || null) {
+  if (!task) {
+    resetAdminTaskDraft();
+    return;
+  }
+  adminSelectedTaskId.value = task.id;
+  Object.assign(adminTaskDraft, {
+    id: task.id,
+    name: task.name || "",
+    detail: task.detail || "",
+    type: task.type || "complete",
+    category: taskCategoryOptions.some((option) => option.id === task.category) ? task.category : "生活",
+    unitName: task.unitName || "次",
+    targetAmount: Number(task.targetAmount) || 1,
+    xpReward: Number(task.xpReward) || 0,
+    spiritReward: Number(task.spiritReward) || 0,
+    maxMultiplier: Number(task.maxMultiplier) || 1,
+    enabled: task.enabled !== false
+  });
+}
+
+function selectAdminTask(id) {
+  const task = taskDefinitions.value.find((item) => item.id === id);
+  if (!task) return;
+  syncAdminTaskDraft(task);
+}
+
 async function saveCultivatorProfile() {
   if (!adminCultivatorDraft.id) return;
   await act("/api/admin/cultivator", {
@@ -4075,6 +4279,25 @@ async function saveSectProfile() {
   await ensureFullState();
   adminSelectedSectName.value = adminSectDraft.name;
   syncAdminSectDraft(adminSectDraft.name);
+}
+
+async function saveTaskDefinition() {
+  const path = adminTaskDraft.id ? "/api/task-definitions/update" : "/api/task-definitions";
+  const saved = await act(path, { ...adminTaskDraft }, { scope: "lite", markStale: true });
+  if (saved?.id) syncAdminTaskDraft(saved);
+}
+
+async function toggleAdminTask(task = adminTaskDefinition.value) {
+  if (!task?.id) return;
+  const updated = await act("/api/task-definitions/toggle", { id: task.id, enabled: task.enabled === false }, { scope: "lite", markStale: true });
+  if (updated?.id) syncAdminTaskDraft(updated);
+}
+
+async function deleteAdminTask(task = adminTaskDefinition.value) {
+  if (!task?.id) return;
+  if (!confirm(`确定删除现实任务「${task.name}」？历史完成记录会保留。`)) return;
+  await act("/api/task-definitions/delete", { id: task.id }, { scope: "lite", markStale: true });
+  resetAdminTaskDraft();
 }
 
 function openRankItem(item) {
@@ -4461,7 +4684,7 @@ function personInsight(person) {
     },
     effectiveStats: null,
     power: null,
-    tomorrowXp: { baseXp: person?.isPlayer ? 0 : 100, rootMultiplier: 1, sectMultiplier: 1, total: person?.isPlayer ? 0 : 100 },
+    tomorrowXp: { baseXp: person?.isPlayer ? 10 : 100, rootMultiplier: 1, sectMultiplier: 1, total: person?.isPlayer ? 10 : 100 },
     breakthrough: { realmBase: baseBreakthroughChance(person?.realm || 0), rootMultiplier: 1, sectMultiplier: 1, base: fallbackBreakthrough, bonus: 0, total: fallbackBreakthrough }
   };
 }
@@ -4739,8 +4962,17 @@ function setActionPending(path, value) {
   pendingActions.value = next;
 }
 
-function mergeGameState(current, incoming) {
+function mergeGameState(current, incoming, options = {}) {
   if (!incoming) return current || null;
+  if (options.replace) {
+    const { __scope, ...incomingState } = incoming;
+    return {
+      ...emptyState,
+      ...incomingState,
+      catalog: incomingState.catalog || current?.catalog || {},
+      derived: incomingState.derived || {}
+    };
+  }
   if (incoming.__scope !== "lite" || !current) {
     const { __scope, ...fullState } = incoming;
     return fullState;
@@ -4757,6 +4989,9 @@ function mergeGameState(current, incoming) {
       ...(current.sect || {}),
       ...(incoming.sect || {})
     },
+    tasks: incoming.tasks || current.tasks || [],
+    taskDefinitions: incoming.taskDefinitions || current.taskDefinitions || [],
+    taskCompletions: incoming.taskCompletions || current.taskCompletions || [],
     catalog: current.catalog || {},
     derived: {
       ...(current.derived || {}),
@@ -4765,10 +5000,11 @@ function mergeGameState(current, incoming) {
   };
 }
 
-function applyState(nextState) {
-  state.value = mergeGameState(state.value, nextState);
+function applyState(nextState, options = {}) {
+  state.value = mergeGameState(state.value, nextState, options);
   if (state.value) saveCachedState(state.value);
   if (nextState?.__scope !== "lite") fullStateStale.value = false;
+  else if (options.markStale) fullStateStale.value = true;
 }
 
 function syncSelectedDays() {
@@ -4807,11 +5043,11 @@ async function act(path, body = {}, options = {}) {
   try {
     const response = await postAction(path, body, options);
     const nextState = response.state || response;
-    applyState(nextState);
+    applyState(nextState, options);
     syncSelectedDays();
-    if (nextState?.__scope === "lite" && shouldMarkFullStateStale(path)) {
+    if (nextState?.__scope === "lite" && (options.markStale || shouldMarkFullStateStale(path))) {
       fullStateStale.value = true;
-      if (needsHeavyState(activeTab.value)) ensureFullState();
+      if (!options.deferFullRefresh && needsHeavyState(activeTab.value)) ensureFullState();
     }
     error.value = "";
     return response.result;
@@ -4935,8 +5171,16 @@ async function startDailyDuels() {
 }
 
 async function submitTask() {
-  await act("/api/tasks", { ...taskForm });
-  taskForm.name = "";
+  const task = selectedTaskDefinition.value;
+  if (!task) {
+    error.value = "请先在后台新增一个可用的现实任务。";
+    return;
+  }
+  await act("/api/tasks", {
+    taskId: task.id,
+    completedAmount: task.type === "measurable" ? taskForm.completedAmount : 1
+  });
+  taskForm.completedAmount = task.type === "measurable" ? task.targetAmount : 1;
 }
 
 async function advanceDay() {
@@ -5033,8 +5277,8 @@ async function saveActiveAdminDraftBeforeReset() {
 async function resetGame() {
   if (!confirm("确定重开一世？将删除当前主角、NPC、成长、突破、切磋、闯关、宗门战等全部历史记录，并重新生成。")) return;
   await saveActiveAdminDraftBeforeReset();
-  clearCachedState();
-  await act("/api/reset", {}, { scope: "full" });
+  const result = await act("/api/reset", {}, { scope: "lite", replace: true, markStale: true, deferFullRefresh: true });
+  if (result === null) return;
   activeTab.value = "practice";
   activeRankBoard.value = "power";
   detailView.value = "rank";
@@ -5046,6 +5290,8 @@ async function resetGame() {
   selectedProvinceWarDay.value = gameState.value.day;
   selectedProvinceWarId.value = "";
   clearBattleReplay();
+  clearCachedState();
+  saveCachedState(state.value);
 }
 
 let timer;
@@ -5122,8 +5368,9 @@ watch(activeTab, () => {
     ensureFullState();
   }
   if (activeTab.value === "admin") {
-    syncAdminCultivatorDraft(adminCultivatorPerson.value);
-    syncAdminSectDraft(adminSelectedSectName.value);
+    if (adminMode.value === "cultivators") syncAdminCultivatorDraft(adminCultivatorPerson.value);
+    if (adminMode.value === "sects") syncAdminSectDraft(adminSelectedSectName.value);
+    if (adminMode.value === "tasks") syncAdminTaskDraft(adminTaskDefinition.value || filteredAdminTasks.value[0]);
   }
 });
 
@@ -5138,7 +5385,29 @@ watch([filteredAdminSects, adminSects], () => {
 watch([adminSearch, adminMode], () => {
   if (activeTab.value !== "admin") return;
   if (adminMode.value === "cultivators") syncAdminCultivatorDraft(adminCultivatorPerson.value);
-  else syncAdminSectDraft(adminSelectedSectName.value);
+  else if (adminMode.value === "sects") syncAdminSectDraft(adminSelectedSectName.value);
+  else syncAdminTaskDraft(adminTaskDefinition.value || filteredAdminTasks.value[0]);
+});
+
+watch(enabledTaskDefinitions, () => {
+  if (!enabledTaskDefinitions.value.length) {
+    taskForm.taskId = "";
+    return;
+  }
+  const selected = enabledTaskDefinitions.value.find((task) => task.id === taskForm.taskId) || enabledTaskDefinitions.value[0];
+  if (taskForm.taskId !== selected.id) taskForm.taskId = selected.id;
+}, { immediate: true });
+
+watch(() => taskForm.taskId, () => {
+  const task = selectedTaskDefinition.value;
+  if (!task) return;
+  taskForm.completedAmount = task.type === "measurable" ? Number(task.targetAmount) || 1 : 1;
+});
+
+watch([filteredAdminTasks, taskDefinitions], () => {
+  if (activeTab.value === "admin" && adminMode.value === "tasks" && adminSelectedTaskId.value && !adminTaskDefinition.value) {
+    syncAdminTaskDraft(filteredAdminTasks.value[0] || null);
+  }
 });
 
 watch([activeTab, activeSectSubTab, selectedProvinceWarDay], () => {

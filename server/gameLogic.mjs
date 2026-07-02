@@ -40,6 +40,16 @@ const stageXpBudgets = [
   220000
 ];
 const xpModeVersion = 2;
+const playerDailyBaseXp = 10;
+const taskDefinitionLimit = 80;
+const taskCompletionLimit = 120;
+const taskCategories = ["生活", "工作", "运动"];
+const defaultTaskDefinitions = [
+  { id: "task-work-hour", name: "加班", detail: "按实际投入时间记录额外工作。", type: "measurable", category: "工作", unitName: "小时", targetAmount: 1, xpReward: 100, spiritReward: 10, maxMultiplier: 4, enabled: true },
+  { id: "task-reading-pages", name: "看书", detail: "读完指定页数，沉淀现实里的悟性。", type: "measurable", category: "生活", unitName: "页", targetAmount: 10, xpReward: 50, spiritReward: 5, maxMultiplier: 5, enabled: true },
+  { id: "task-fitness", name: "运动一次", detail: "完整完成一次计划内运动。", type: "complete", category: "运动", unitName: "次", targetAmount: 1, xpReward: 80, spiritReward: 6, maxMultiplier: 1, enabled: true },
+  { id: "task-writing", name: "写作一段", detail: "完成一段可交付的创作或复盘。", type: "complete", category: "生活", unitName: "次", targetAmount: 1, xpReward: 120, spiritReward: 8, maxMultiplier: 1, enabled: true }
+];
 
 function stageXpBudget(stage) {
   const known = stageXpBudgets[stage];
@@ -2757,11 +2767,11 @@ function breakthroughChanceParts(state, entity) {
   };
 }
 
-function xpPreviewParts(state, entity, baseXp = entity.id === "player" ? 0 : 100) {
+function xpPreviewParts(state, entity, baseXp = entity.id === "player" ? playerDailyBaseXp : 100) {
   const sectName = entity.id === "player" ? state.sect.name : entity.sect;
-  const rootMultiplier = xpGainMultiplier(entity);
-  const sectMultiplier = 1 + sectXpBonus(state, sectName);
-  const total = Math.floor(baseXp * rootMultiplier * sectMultiplier);
+  const rootMultiplier = entity.id === "player" ? 1 : xpGainMultiplier(entity);
+  const sectMultiplier = entity.id === "player" ? 1 : 1 + sectXpBonus(state, sectName);
+  const total = entity.id === "player" ? baseXp : Math.floor(baseXp * rootMultiplier * sectMultiplier);
   return {
     baseXp,
     rootMultiplier,
@@ -3215,6 +3225,61 @@ function log(state, text, type = "") {
   state.log = state.log.slice(0, 80);
 }
 
+function makeId(prefix = "id") {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function normalizeTaskCategory(value) {
+  const text = String(value || "").trim();
+  if (taskCategories.includes(text)) return text;
+  if (["工作", "加班", "职业"].includes(text)) return "工作";
+  if (["运动", "锻炼", "健身", "修行", "body"].includes(text)) return "运动";
+  return "生活";
+}
+
+function normalizeTaskDefinition(definition = {}, fallback = {}) {
+  const type = definition.type === "measurable" ? "measurable" : "complete";
+  const targetAmount = type === "measurable"
+    ? Math.max(0.01, Number(definition.targetAmount ?? fallback.targetAmount ?? 1) || 1)
+    : 1;
+  const maxMultiplier = type === "measurable"
+    ? Math.max(0.01, Number(definition.maxMultiplier ?? fallback.maxMultiplier ?? 4) || 4)
+    : 1;
+  return {
+    id: String(definition.id || fallback.id || makeId("task")).slice(0, 48),
+    name: String(definition.name || fallback.name || "未命名任务").trim().slice(0, 40) || "未命名任务",
+    detail: String(definition.detail ?? fallback.detail ?? "").trim().slice(0, 180),
+    type,
+    category: normalizeTaskCategory(definition.category || fallback.category),
+    unitName: String(definition.unitName || fallback.unitName || (type === "measurable" ? "单位" : "次")).trim().slice(0, 10) || "次",
+    targetAmount,
+    xpReward: Math.max(0, Math.floor(Number(definition.xpReward ?? fallback.xpReward ?? 0) || 0)),
+    spiritReward: Math.max(0, Math.floor(Number(definition.spiritReward ?? fallback.spiritReward ?? 0) || 0)),
+    maxMultiplier,
+    enabled: definition.enabled ?? fallback.enabled ?? true
+  };
+}
+
+function defaultRealityTasks() {
+  return defaultTaskDefinitions.map((definition) => normalizeTaskDefinition(definition));
+}
+
+function ensureTaskSystem(state) {
+  let changed = false;
+  if (!Array.isArray(state.taskDefinitions) || !state.taskDefinitions.length) {
+    state.taskDefinitions = defaultRealityTasks();
+    changed = true;
+  } else {
+    state.taskDefinitions = state.taskDefinitions.map((definition) => normalizeTaskDefinition(definition)).slice(0, taskDefinitionLimit);
+  }
+  if (!Array.isArray(state.taskCompletions)) {
+    state.taskCompletions = Array.isArray(state.tasks) ? [...state.tasks] : [];
+    changed = true;
+  }
+  state.tasks ??= [];
+  return changed;
+}
+
 export function createDefaultState() {
   const rootSet = randomRootSet();
   const root = rootSet.primaryRoot;
@@ -3272,6 +3337,8 @@ export function createDefaultState() {
     starSeaCycle: null,
     rosterVersion,
     tasks: [],
+    taskDefinitions: defaultRealityTasks(),
+    taskCompletions: [],
     npcs: npcNames.map((name, index) => makeNpc(name, index)),
     sectNameMap: {},
     sect: {
@@ -3324,6 +3391,8 @@ export function clearProgressHistory(state) {
   state.dungeonDays = [];
   state.starSeaCycle = null;
   state.tasks = [];
+  state.taskDefinitions = defaultRealityTasks();
+  state.taskCompletions = [];
   state.player.sect = state.sect?.name || "落云宗";
   state.sect.warWins = 0;
   state.sect.warLosses = 0;
@@ -3514,6 +3583,10 @@ export function ensureStateShape(state) {
   }
   if (Array.isArray(state.tasks)) {
     for (const task of state.tasks) changed = ensureDatedRecord(task) || changed;
+  }
+  changed = ensureTaskSystem(state) || changed;
+  if (Array.isArray(state.taskCompletions)) {
+    for (const task of state.taskCompletions) changed = ensureDatedRecord(task) || changed;
   }
   if (Array.isArray(state.duelDays)) {
     for (const record of state.duelDays) changed = ensureDatedRecord(record) || changed;
@@ -3734,6 +3807,8 @@ export function compactStateForStorage(state) {
   state.equipmentTransfers = (state.equipmentTransfers || []).filter((record) => (state.day || 1) - (record.day || 1) < recentRecordDays).slice(0, recentRecordDays);
   state.log = (state.log || []).slice(0, 80);
   state.tasks = (state.tasks || []).slice(0, 16);
+  state.taskCompletions = (state.taskCompletions || []).slice(0, taskCompletionLimit);
+  state.taskDefinitions = (state.taskDefinitions || []).slice(0, taskDefinitionLimit);
   return state;
 }
 
@@ -3805,6 +3880,8 @@ export function getPublicState(state, options = {}) {
       player: publicCultivator(state.player, state, { includeRecentReplays: true }),
       sect: state.sect,
       tasks: state.tasks,
+      taskDefinitions: state.taskDefinitions,
+      taskCompletions: state.taskCompletions,
       log: state.log,
       bag: state.bag,
       equipmentTransfers: state.equipmentTransfers,
@@ -4336,6 +4413,7 @@ export function dailySettlement(state, options = {}) {
   state.player.hp = clamp(state.player.hp + 10, 0, effectiveMaxHp(state.player, state));
   const beforeMana = state.player.mana;
   state.player.mana = clamp((state.player.mana || 0) + 8, 0, effectiveMaxMana(state.player, state));
+  state.player.xp += playerDailyBaseXp;
   autoAttemptPlayerBreakthrough(state);
   runDailyDungeons(state, settlementDate);
   const playerDungeonEntries = (state.player.dungeonHistory || []).filter((record) => record.day === state.day);
@@ -4346,9 +4424,10 @@ export function dailySettlement(state, options = {}) {
   state.player.dailyRecords.unshift({
     day: state.day,
     date: settlementDate,
-    xp: 0,
-    baseXp: 0,
+    xp: playerDailyBaseXp,
+    baseXp: playerDailyBaseXp,
     bonusXp: 0,
+    passiveXp: playerDailyBaseXp,
     spirit: playerDungeonSpirit + playerDuelSeasonReward,
     duelSeasonReward: playerDuelSeasonReward,
     realm: realms[state.player.realm],
@@ -4358,7 +4437,7 @@ export function dailySettlement(state, options = {}) {
     sectBreakMultiplier: playerChanceParts.sectMultiplier,
     baseBreakChance: playerChanceParts.base,
     bonusBreakChance: playerChanceParts.bonus,
-    note: `自然恢复：血量 +${state.player.hp - beforeHp}，法力 +${state.player.mana - beforeMana}；副本：${playerSoloDungeon?.name || "今日历练"} ${playerSoloDungeon?.result || ""}${playerDuelSeasonReward ? `；切磋赛季奖励 +${playerDuelSeasonReward} 灵石` : ""}`
+    note: `每日修行：经验 +${playerDailyBaseXp}，血量 +${state.player.hp - beforeHp}，法力 +${state.player.mana - beforeMana}；副本：${playerSoloDungeon?.name || "今日历练"} ${playerSoloDungeon?.result || ""}${playerDuelSeasonReward ? `；切磋赛季奖励 +${playerDuelSeasonReward} 灵石` : ""}`
   });
   state.player.dailyRecords = state.player.dailyRecords.slice(0, recentRecordDays);
   runDailyDuels(state);
@@ -4371,40 +4450,68 @@ export function dailySettlement(state, options = {}) {
 }
 
 export function addTask(state, payload) {
-  const type = payload.type || "study";
-  const diff = clamp(Number(payload.diff || 3), 1, 5);
-  const template = taskTemplates[type];
-  if (!template) throw new Error("未知任务类型");
-
-  const name = String(payload.name || template.label).trim().slice(0, 40);
-  const p = state.player;
-  const baseXpGain = 1000 * diff;
-  const xpGain = applyXpGain(p, baseXpGain, 1 + sectXpBonus(state, state.sect.name));
-
-  p.hp = clamp(p.hp + template.hp * diff, 0, effectiveMaxHp(p, state));
-  p.mana = clamp((p.mana || 0) + template.mana * diff, 0, effectiveMaxMana(p, state));
-  p.spirit += template.spirit * diff;
-
-  if (type === "body") {
-    p.attack += Math.ceil(diff / 2);
+  ensureTaskSystem(state);
+  const taskId = payload.taskId || payload.id;
+  let definition = state.taskDefinitions.find((item) => item.id === taskId);
+  if (!definition && payload.name) {
+    definition = normalizeTaskDefinition({
+      name: payload.name,
+      detail: "",
+      type: "complete",
+      category: payload.type || "生活",
+      xpReward: Math.max(0, Math.floor(Number(payload.xpReward ?? 1000 * clamp(Number(payload.diff || 1), 1, 5)) || 0)),
+      spiritReward: Math.max(0, Math.floor(Number(payload.spiritReward ?? 0) || 0))
+    });
   }
-  if (type === "study") p.defense += Math.ceil(diff / 2);
-  if (type === "craft") p.divineSense += Math.ceil(diff / 2);
-  if (type === "discipline") p.maxMana += diff;
+  if (!definition) throw new Error("未知现实任务");
+  if (!definition.enabled) throw new Error("该现实任务已停用");
 
-  state.tasks.unshift({ name, type: template.label, diff, xp: xpGain, day: state.day, date: stateDateForDay(state) });
+  const p = state.player;
+  const completedAmount = definition.type === "measurable"
+    ? Math.max(0, Number(payload.completedAmount ?? payload.amount ?? definition.targetAmount) || 0)
+    : 1;
+  if (completedAmount <= 0) throw new Error("完成量必须大于 0");
+  const rawMultiplier = definition.type === "measurable" ? completedAmount / definition.targetAmount : 1;
+  const multiplier = definition.type === "measurable" ? clamp(rawMultiplier, 0, definition.maxMultiplier) : 1;
+  const baseXpGain = Math.floor(definition.xpReward * multiplier);
+  const spiritGain = Math.floor(definition.spiritReward * multiplier);
+  const xpGain = baseXpGain;
+  p.xp += xpGain;
+  p.spirit += spiritGain;
+
+  const completion = {
+    id: makeId("task-done"),
+    taskId: definition.id,
+    name: definition.name,
+    detail: definition.detail,
+    type: definition.type,
+    category: definition.category,
+    unitName: definition.unitName,
+    completedAmount,
+    targetAmount: definition.targetAmount,
+    multiplier,
+    xp: xpGain,
+    baseXp: baseXpGain,
+    spirit: spiritGain,
+    day: state.day,
+    date: stateDateForDay(state)
+  };
+  state.taskCompletions.unshift(completion);
+  state.taskCompletions = state.taskCompletions.slice(0, taskCompletionLimit);
+  state.tasks.unshift(completion);
   state.tasks = state.tasks.slice(0, 16);
   addTaskXpToDailyRecord(state, {
     xpGain,
     baseXpGain,
-    taskName: name,
-    taskType: template.label
+    taskName: definition.name,
+    taskType: definition.category,
+    spiritGain
   });
-  log(state, `完成「${name}」，获得 ${xpGain} 经验。${template.label}让你的道基更扎实。`, "gold");
+  log(state, `完成「${definition.name}」，获得 ${xpGain} 经验与 ${spiritGain} 灵石。`, "gold");
   autoAttemptPlayerBreakthrough(state);
 }
 
-function addTaskXpToDailyRecord(state, { xpGain, baseXpGain, taskName, taskType }) {
+function addTaskXpToDailyRecord(state, { xpGain, baseXpGain, taskName, taskType, spiritGain = 0 }) {
   const player = state.player;
   const today = state.day;
   const todayDate = stateDateForDay(state);
@@ -4435,9 +4542,11 @@ function addTaskXpToDailyRecord(state, { xpGain, baseXpGain, taskName, taskType 
   record.xp = (Number(record.xp) || 0) + xpGain;
   record.baseXp = (Number(record.baseXp) || 0) + baseXpGain;
   record.bonusXp = (Number(record.bonusXp) || 0) + bonusXp;
+  record.spirit = (Number(record.spirit) || 0) + spiritGain;
   record.taskXp = (Number(record.taskXp) || 0) + xpGain;
   record.taskBaseXp = (Number(record.taskBaseXp) || 0) + baseXpGain;
   record.taskBonusXp = (Number(record.taskBonusXp) || 0) + bonusXp;
+  record.taskSpirit = (Number(record.taskSpirit) || 0) + spiritGain;
   record.taskCount = (Number(record.taskCount) || 0) + 1;
   record.taskNames = [taskName, ...(record.taskNames || [])].slice(0, 5);
   record.taskTypes = Array.from(new Set([taskType, ...(record.taskTypes || [])])).slice(0, 5);
@@ -4446,6 +4555,43 @@ function addTaskXpToDailyRecord(state, { xpGain, baseXpGain, taskName, taskType 
   player.dailyRecords = player.dailyRecords
     .sort((a, b) => (b.day || 0) - (a.day || 0))
     .slice(0, recentRecordDays);
+}
+
+export function createTaskDefinition(state, payload = {}) {
+  ensureTaskSystem(state);
+  const definition = normalizeTaskDefinition({ ...payload, id: makeId("task") });
+  state.taskDefinitions.unshift(definition);
+  state.taskDefinitions = state.taskDefinitions.slice(0, taskDefinitionLimit);
+  log(state, `后台新增现实任务「${definition.name}」。`, "gold");
+  return definition;
+}
+
+export function updateTaskDefinition(state, payload = {}) {
+  ensureTaskSystem(state);
+  const index = state.taskDefinitions.findIndex((definition) => definition.id === payload.id);
+  if (index < 0) throw new Error("未知现实任务");
+  const next = normalizeTaskDefinition({ ...state.taskDefinitions[index], ...payload }, state.taskDefinitions[index]);
+  state.taskDefinitions[index] = next;
+  log(state, `后台更新现实任务「${next.name}」。`, "gold");
+  return next;
+}
+
+export function deleteTaskDefinition(state, payload = {}) {
+  ensureTaskSystem(state);
+  const index = state.taskDefinitions.findIndex((definition) => definition.id === payload.id);
+  if (index < 0) throw new Error("未知现实任务");
+  const [removed] = state.taskDefinitions.splice(index, 1);
+  log(state, `后台删除现实任务「${removed.name}」。`, "bad");
+  return removed;
+}
+
+export function toggleTaskDefinition(state, payload = {}) {
+  ensureTaskSystem(state);
+  const definition = state.taskDefinitions.find((item) => item.id === payload.id);
+  if (!definition) throw new Error("未知现实任务");
+  definition.enabled = payload.enabled === undefined ? !definition.enabled : Boolean(payload.enabled);
+  log(state, `后台${definition.enabled ? "启用" : "停用"}现实任务「${definition.name}」。`, definition.enabled ? "gold" : "bad");
+  return definition;
 }
 
 export function changePlayerPortrait(state, payload = {}) {
@@ -4686,7 +4832,6 @@ export function runDungeon(state, id) {
   p.mana = battle.leftMana;
 
   if (battle.winner === "left") {
-    const xp = applyXpGain(p, Math.floor(dungeon.power * 0.48 + Math.random() * 35), 1 + sectXpBonus(state, state.sect.name));
     const spirit = Math.floor(24 + Math.random() * 30);
     p.spirit += spirit;
     p.dungeonClears += 1;
@@ -4694,24 +4839,22 @@ export function runDungeon(state, id) {
       p.bestDungeonPower = dungeon.power;
       p.bestDungeonName = dungeon.name;
     }
-    log(state, `你通关${dungeon.name}，回合战损失 ${beforeHp - p.hp} 血量，获得 ${xp} 经验与 ${spirit} 灵石。`, "gold");
+    log(state, `你通关${dungeon.name}，回合战损失 ${beforeHp - p.hp} 血量，获得 ${spirit} 灵石。`, "gold");
   } else {
     p.hp = Math.max(1, p.hp);
-    applyXpGain(p, Math.floor(dungeon.power * 0.12), 1 + sectXpBonus(state, state.sect.name));
-    log(state, `${dungeon.name}险象环生，你血量见底后撤出，只带回少量感悟。`, "bad");
+    log(state, `${dungeon.name}险象环生，你血量见底后撤出。`, "bad");
   }
 }
 
 export function sectMission(state) {
   const p = state.player;
-  const xp = applyXpGain(p, 32 + p.realm * 7, 1 + sectXpBonus(state, state.sect.name));
   const rep = 5 + Math.floor(Math.random() * 6);
   p.reputation += rep;
   p.spirit += 16;
   state.sect.reputation += rep;
   state.sect.supplies += 10;
   p.hp = clamp(p.hp - 6, 1, effectiveMaxHp(p, state));
-  log(state, `完成${state.sect.name}任务，获得 ${xp} 经验、${rep} 声望与 16 灵石。`, "gold");
+  log(state, `完成${state.sect.name}任务，获得 ${rep} 声望与 16 灵石。`, "gold");
 }
 
 export function sectWar(state) {
@@ -4985,8 +5128,7 @@ export function useItem(state, kind) {
     log(state, "服下养血丹，血量回升。");
   }
   if (kind === "insight") {
-    applyXpGain(p, 55, 1 + sectXpBonus(state, state.sect.name));
     p.divineSense += 1;
-    log(state, "饮下悟道茶，数处疑难豁然贯通。", "gold");
+    log(state, "饮下悟道茶，神识更见通明。", "gold");
   }
 }

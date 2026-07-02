@@ -174,11 +174,11 @@ export const dungeons = [
 ];
 
 export const taskTemplates = {
-  body: { label: "锻炼", xp: 18, hp: 8, mana: 0, spirit: 0, stat: "attack" },
-  study: { label: "学习", xp: 20, hp: -2, mana: 4, spirit: 0, stat: "defense" },
-  work: { label: "工作", xp: 22, hp: -4, mana: -3, spirit: 12, stat: "spirit" },
-  craft: { label: "创作", xp: 19, hp: -2, mana: 5, spirit: 5, stat: "divineSense" },
-  discipline: { label: "自律", xp: 16, hp: 0, mana: 8, spirit: 0, stat: "mana" }
+  body: { label: "锻炼" },
+  study: { label: "学习" },
+  work: { label: "工作" },
+  craft: { label: "创作" },
+  discipline: { label: "自律" }
 };
 
 export const combatSkills = [
@@ -209,5 +209,5 @@ export { equipmentCatalog, equipmentSlots, equipmentTiers } from "../shared/equi
 export const itemCatalog = {
   focus: { name: "凝神散", price: 30, text: "神识 +2，法力 +12" },
   blood: { name: "养血丹", price: 35, text: "血量 +45" },
-  insight: { name: "悟道茶", price: 60, text: "经验 +55" }
+  insight: { name: "悟道茶", price: 60, text: "神识 +1" }
 };

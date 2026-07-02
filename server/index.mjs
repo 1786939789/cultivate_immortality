@@ -6,7 +6,9 @@ import {
   addTask,
   buyItem,
   changePlayerPortrait,
+  createTaskDefinition,
   dailySettlement,
+  deleteTaskDefinition,
   duel,
   getDuelReplay,
   getDuelReplayId,
@@ -16,7 +18,9 @@ import {
   runDungeon,
   sectMission,
   sectWar,
+  toggleTaskDefinition,
   updateCultivatorProfile,
+  updateTaskDefinition,
   updateSectProfile,
   useItem
 } from "./gameLogic.mjs";
@@ -27,6 +31,10 @@ const rootDir = fileURLToPath(new URL("../", import.meta.url));
 const distDir = join(rootDir, "dist");
 const liteActionRoutes = new Set([
   "/api/tasks",
+  "/api/task-definitions",
+  "/api/task-definitions/update",
+  "/api/task-definitions/delete",
+  "/api/task-definitions/toggle",
   "/api/player/portrait",
   "/api/rest",
   "/api/day/advance",
@@ -114,7 +122,9 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "POST" && url.pathname === "/api/reset") {
-    sendJson(res, 200, await resetState());
+    const body = await readJson(req);
+    const scope = body.scope === "lite" ? "lite" : "full";
+    sendJson(res, 200, await resetState("default", { publicOptions: { scope } }));
     return;
   }
 
@@ -126,6 +136,10 @@ async function handleApi(req, res, url) {
   const body = await readJson(req);
   const routes = {
     "/api/tasks": (state) => addTask(state, body),
+    "/api/task-definitions": (state) => createTaskDefinition(state, body),
+    "/api/task-definitions/update": (state) => updateTaskDefinition(state, body),
+    "/api/task-definitions/delete": (state) => deleteTaskDefinition(state, body),
+    "/api/task-definitions/toggle": (state) => toggleTaskDefinition(state, body),
     "/api/player/portrait": (state) => changePlayerPortrait(state, body),
     "/api/rest": (state) => rest(state),
     "/api/day/advance": (state) => dailySettlement(state, { manual: true }),

@@ -182,7 +182,7 @@ export async function mutateState(mutator, id = "default", options = {}) {
   return result === undefined ? publicState : { state: publicState, result };
 }
 
-export async function resetState(id = "default") {
+export async function resetState(id = "default", options = {}) {
   let previousState = null;
   try {
     previousState = await readState(id);
@@ -202,7 +202,7 @@ export async function resetState(id = "default") {
 
   const state = preserveProfilesForReset(clearProgressHistory(createDefaultState()), previousState);
   await writeState(state, id);
-  return getPublicState(state);
+  return getPublicState(state, options.publicOptions);
 }
 
 export async function publicState(id = "default", options = {}) {
