@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import initSqlJs from "sql.js";
-import { clearProgressHistory, compactStateForStorage, createDefaultState, ensureStateShape, getPublicState, settleIfNeeded } from "./gameLogic.mjs";
+import { clearProgressHistory, compactStateForStorage, createDefaultState, ensureStateShape, getPublicState, preserveProfilesForReset, settleIfNeeded } from "./gameLogic.mjs";
 
 const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const dataDir = join(rootDir, "data");
@@ -183,6 +183,13 @@ export async function mutateState(mutator, id = "default", options = {}) {
 }
 
 export async function resetState(id = "default") {
+  let previousState = null;
+  try {
+    previousState = await readState(id);
+  } catch {
+    previousState = null;
+  }
+
   const db = await openDb();
   const statement = db.prepare("DELETE FROM saves WHERE id = $id");
   statement.run({ $id: id });
@@ -193,7 +200,7 @@ export async function resetState(id = "default") {
   stateCache.delete(id);
   persist(db);
 
-  const state = clearProgressHistory(createDefaultState());
+  const state = preserveProfilesForReset(clearProgressHistory(createDefaultState()), previousState);
   await writeState(state, id);
   return getPublicState(state);
 }

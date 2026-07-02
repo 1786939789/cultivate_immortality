@@ -3330,6 +3330,102 @@ export function clearProgressHistory(state) {
   return state;
 }
 
+function copyCultivatorProfile(target, source) {
+  if (!target || !source) return;
+  if (source.name) target.name = source.name;
+  if (source.gender) target.gender = source.gender;
+  if (source.sect) target.sect = source.sect;
+  if (source.portraitUrl !== undefined) target.portraitUrl = source.portraitUrl;
+  if (source.portraitVariant !== undefined) target.portraitVariant = source.portraitVariant;
+  if (Array.isArray(source.roots) && source.roots.length) {
+    target.roots = source.roots.map((root) => ({ ...root }));
+    target.primaryRootKey = source.primaryRootKey || target.roots[0]?.key;
+    target.root = { ...(target.roots.find((root) => root.key === target.primaryRootKey) || target.roots[0]) };
+    applyRootSet(target);
+  } else if (source.root?.key) {
+    target.root = { ...source.root };
+    target.roots = [{ ...source.root }];
+    target.primaryRootKey = source.primaryRootKey || source.root.key;
+    applyRootSet(target);
+  }
+}
+
+function resetOpeningLogForProfile(state) {
+  const roots = normalizeRootSet(state.player);
+  const rootText = roots.roots.length > 1 ? rootSetNameLine(roots) : roots.primaryRoot?.name || state.player.root?.name || "未知灵根";
+  state.log = [{
+    text: `你在山脚租下一间小屋，翻开第一卷长生札记。本世灵根为${rootText}。`,
+    type: "",
+    day: 1,
+    date: dateKey(),
+    time: "初入"
+  }];
+}
+
+function rebuildSectProfilesForReset(state, previousState) {
+  state.sectNameMap = { ...(previousState?.sectNameMap || {}) };
+  state.sectProfiles = {};
+  const previousProfiles = previousState?.sectProfiles || {};
+
+  for (const [index, baseName] of sects.entries()) {
+    const currentName = currentSectName(state, baseName);
+    if (baseName !== currentName && state.sectRivals[baseName]) {
+      state.sectRivals[currentName] = { ...state.sectRivals[baseName], name: currentName };
+      delete state.sectRivals[baseName];
+    }
+    if (!state.sectRivals[currentName] && currentName !== state.sect.name) {
+      state.sectRivals[currentName] = makeSectStatus(currentName, index);
+    }
+    state.sectProfiles[currentName] = {
+      name: currentName,
+      portraitUrl: previousProfiles[currentName]?.portraitUrl || previousProfiles[baseName]?.portraitUrl || ""
+    };
+  }
+
+  for (const [name, profile] of Object.entries(previousProfiles)) {
+    if (!name) continue;
+    state.sectProfiles[name] = {
+      name,
+      portraitUrl: profile?.portraitUrl || ""
+    };
+  }
+}
+
+export function preserveProfilesForReset(state, previousState) {
+  if (!previousState) return state;
+
+  rebuildSectProfilesForReset(state, previousState);
+
+  state.sect = {
+    ...state.sect,
+    name: previousState.sect?.name || state.sect.name,
+    warWins: 0,
+    warLosses: 0
+  };
+  state.sectProfiles[state.sect.name] = {
+    name: state.sect.name,
+    portraitUrl: previousState.sectProfiles?.[state.sect.name]?.portraitUrl || state.sectProfiles[state.sect.name]?.portraitUrl || ""
+  };
+
+  copyCultivatorProfile(state.player, previousState.player);
+  state.player.sect = state.sect.name;
+
+  const previousNpcMap = new Map((previousState.npcs || []).map((npc) => [npc.id, npc]));
+  for (const npc of state.npcs || []) {
+    const previousNpc = previousNpcMap.get(npc.id);
+    copyCultivatorProfile(npc, previousNpc);
+    if (npc.sect && !state.sectProfiles[npc.sect]) {
+      state.sectProfiles[npc.sect] = {
+        name: npc.sect,
+        portraitUrl: previousState.sectProfiles?.[npc.sect]?.portraitUrl || ""
+      };
+    }
+  }
+
+  resetOpeningLogForProfile(state);
+  return state;
+}
+
 function migrateRoster(state) {
   state.rosterVersion = rosterVersion;
   state.sect = {
