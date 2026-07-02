@@ -4062,6 +4062,7 @@ async function saveCultivatorProfile() {
     rootKeys: adminCultivatorDraft.rootKeys,
     portraitUrl: adminCultivatorDraft.portraitUrl
   }, { scope: "full" });
+  await ensureFullState();
 }
 
 async function saveSectProfile() {
@@ -4071,6 +4072,7 @@ async function saveSectProfile() {
     name: adminSectDraft.name,
     portraitUrl: adminSectDraft.portraitUrl
   }, { scope: "full" });
+  await ensureFullState();
   adminSelectedSectName.value = adminSectDraft.name;
   syncAdminSectDraft(adminSectDraft.name);
 }
@@ -5017,8 +5019,20 @@ function closeImageEditor() {
   imageEditor.sourceUrl = "";
 }
 
+async function saveActiveAdminDraftBeforeReset() {
+  if (activeTab.value !== "admin") return;
+  if (adminMode.value === "cultivators" && adminCultivatorPerson.value && adminCultivatorDraft.id) {
+    await saveCultivatorProfile();
+    return;
+  }
+  if (adminMode.value === "sects" && adminSectDraft.oldName) {
+    await saveSectProfile();
+  }
+}
+
 async function resetGame() {
   if (!confirm("确定重开一世？将删除当前主角、NPC、成长、突破、切磋、闯关、宗门战等全部历史记录，并重新生成。")) return;
+  await saveActiveAdminDraftBeforeReset();
   clearCachedState();
   await act("/api/reset", {}, { scope: "full" });
   activeTab.value = "practice";

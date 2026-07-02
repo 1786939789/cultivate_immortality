@@ -3350,6 +3350,47 @@ function copyCultivatorProfile(target, source) {
   }
 }
 
+function ensureAdminProfiles(state) {
+  state.adminProfiles ??= {};
+  state.adminProfiles.cultivators ??= {};
+  state.adminProfiles.sects ??= {};
+  state.adminProfiles.sectNameMap ??= {};
+  return state.adminProfiles;
+}
+
+function cultivatorProfileSnapshot(entity) {
+  if (!entity) return null;
+  return {
+    id: entity.id,
+    name: entity.name,
+    gender: entity.gender,
+    sect: entity.sect,
+    portraitUrl: entity.portraitUrl || "",
+    portraitVariant: entity.portraitVariant || 0,
+    root: entity.root ? { ...entity.root } : null,
+    roots: (entity.roots || []).map((root) => ({ ...root })),
+    primaryRootKey: entity.primaryRootKey || entity.root?.key || ""
+  };
+}
+
+function rememberCultivatorProfile(state, entity) {
+  const snapshot = cultivatorProfileSnapshot(entity);
+  if (!snapshot?.id) return;
+  ensureAdminProfiles(state).cultivators[snapshot.id] = snapshot;
+}
+
+function rememberSectProfiles(state) {
+  const profiles = ensureAdminProfiles(state);
+  profiles.sectNameMap = { ...(state.sectNameMap || {}) };
+  profiles.playerSect = state.sect?.name || profiles.playerSect || "";
+  for (const [name, profile] of Object.entries(state.sectProfiles || {})) {
+    profiles.sects[name] = {
+      name,
+      portraitUrl: profile?.portraitUrl || ""
+    };
+  }
+}
+
 function resetOpeningLogForProfile(state) {
   const roots = normalizeRootSet(state.player);
   const rootText = roots.roots.length > 1 ? rootSetNameLine(roots) : roots.primaryRoot?.name || state.player.root?.name || "未知灵根";
@@ -3363,9 +3404,10 @@ function resetOpeningLogForProfile(state) {
 }
 
 function rebuildSectProfilesForReset(state, previousState) {
-  state.sectNameMap = { ...(previousState?.sectNameMap || {}) };
+  const adminProfiles = previousState?.adminProfiles || {};
+  state.sectNameMap = { ...(previousState?.sectNameMap || {}), ...(adminProfiles.sectNameMap || {}) };
   state.sectProfiles = {};
-  const previousProfiles = previousState?.sectProfiles || {};
+  const previousProfiles = { ...(previousState?.sectProfiles || {}), ...(adminProfiles.sects || {}) };
 
   for (const [index, baseName] of sects.entries()) {
     const currentName = currentSectName(state, baseName);
@@ -3394,11 +3436,12 @@ function rebuildSectProfilesForReset(state, previousState) {
 export function preserveProfilesForReset(state, previousState) {
   if (!previousState) return state;
 
+  const previousAdminProfiles = previousState.adminProfiles || {};
   rebuildSectProfilesForReset(state, previousState);
 
   state.sect = {
     ...state.sect,
-    name: previousState.sect?.name || state.sect.name,
+    name: previousAdminProfiles.playerSect || previousState.sect?.name || state.sect.name,
     warWins: 0,
     warLosses: 0
   };
@@ -3407,13 +3450,15 @@ export function preserveProfilesForReset(state, previousState) {
     portraitUrl: previousState.sectProfiles?.[state.sect.name]?.portraitUrl || state.sectProfiles[state.sect.name]?.portraitUrl || ""
   };
 
-  copyCultivatorProfile(state.player, previousState.player);
+  copyCultivatorProfile(state.player, previousAdminProfiles.cultivators?.player || previousState.player);
   state.player.sect = state.sect.name;
+  rememberCultivatorProfile(state, state.player);
 
   const previousNpcMap = new Map((previousState.npcs || []).map((npc) => [npc.id, npc]));
   for (const npc of state.npcs || []) {
-    const previousNpc = previousNpcMap.get(npc.id);
+    const previousNpc = previousAdminProfiles.cultivators?.[npc.id] || previousNpcMap.get(npc.id);
     copyCultivatorProfile(npc, previousNpc);
+    rememberCultivatorProfile(state, npc);
     if (npc.sect && !state.sectProfiles[npc.sect]) {
       state.sectProfiles[npc.sect] = {
         name: npc.sect,
@@ -3422,6 +3467,7 @@ export function preserveProfilesForReset(state, previousState) {
     }
   }
 
+  rememberSectProfiles(state);
   resetOpeningLogForProfile(state);
   return state;
 }
@@ -3566,7 +3612,6 @@ export function ensureStateShape(state) {
       state.sectProfiles[name].portraitUrl ??= "";
     }
   }
-
   state.npcs = state.npcs.map((npc, index) => {
     const full = { ...npc };
     full.id ??= `npc-${index}`;
@@ -3633,6 +3678,22 @@ export function ensureStateShape(state) {
     full.mana = Math.min(full.mana, effectiveMaxMana(full, state));
     return full;
   });
+  const adminProfiles = ensureAdminProfiles(state);
+  adminProfiles.playerSect ||= state.sect.name;
+  if (!adminProfiles.cultivators.player) {
+    rememberCultivatorProfile(state, state.player);
+    changed = true;
+  }
+  for (const npc of state.npcs || []) {
+    if (!adminProfiles.cultivators[npc.id]) {
+      rememberCultivatorProfile(state, npc);
+      changed = true;
+    }
+  }
+  if (!Object.keys(adminProfiles.sects).length) {
+    rememberSectProfiles(state);
+    changed = true;
+  }
   changed = repairDuelSeasonFromRecords(state) || changed;
   if (state.duelDays.length) {
     syncDuelDayRecords(state);
@@ -4528,6 +4589,8 @@ export function updateCultivatorProfile(state, payload = {}) {
     if (id === "player") entity.portraitVariant = 0;
   }
   if (id === "player") state.player.sect = state.sect.name;
+  rememberCultivatorProfile(state, entity);
+  rememberSectProfiles(state);
   log(state, `后台已更新${entity.name}的资料。`, "gold");
 }
 
@@ -4543,6 +4606,8 @@ export function updateSectProfile(state, payload = {}) {
     name: newName,
     portraitUrl: portraitUrl !== undefined ? portraitUrl : state.sectProfiles[newName]?.portraitUrl || ""
   };
+  rememberSectProfiles(state);
+  for (const { entity } of allCultivators(state)) rememberCultivatorProfile(state, entity);
   log(state, `后台已更新宗门「${newName}」。`, "gold");
 }
 
