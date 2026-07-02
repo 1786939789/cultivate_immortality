@@ -5658,6 +5658,26 @@ button.event {
   overflow: visible;
 }
 
+.admin-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+  justify-content: flex-end;
+}
+
+.admin-search {
+  display: grid;
+  gap: 5px;
+  min-width: 220px;
+  color: #5f4a34;
+  font-weight: 700;
+}
+
+.admin-search input {
+  min-height: 34px;
+}
+
 .admin-layout {
   display: grid;
   grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
@@ -5854,6 +5874,15 @@ button.event {
 
   .admin-list {
     max-height: 280px;
+  }
+
+  .admin-head-actions {
+    justify-content: stretch;
+  }
+
+  .admin-search {
+    min-width: 0;
+    width: 100%;
   }
 
   .admin-actions {

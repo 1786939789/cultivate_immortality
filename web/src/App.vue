@@ -1935,16 +1935,22 @@
                 <h3>后台管理</h3>
                 <p>角色、头像与宗门资料会保存到本地存档。</p>
               </div>
-              <div class="segmented">
-                <button class="segment" :class="{ active: adminMode === 'cultivators' }" type="button" @click="adminMode = 'cultivators'">角色</button>
-                <button class="segment" :class="{ active: adminMode === 'sects' }" type="button" @click="adminMode = 'sects'">宗门</button>
+              <div class="admin-head-actions">
+                <label class="admin-search">
+                  <span>搜索</span>
+                  <input v-model.trim="adminSearch" :placeholder="adminMode === 'cultivators' ? '人物名或宗门名' : '宗门名'">
+                </label>
+                <div class="segmented">
+                  <button class="segment" :class="{ active: adminMode === 'cultivators' }" type="button" @click="adminMode = 'cultivators'">角色</button>
+                  <button class="segment" :class="{ active: adminMode === 'sects' }" type="button" @click="adminMode = 'sects'">宗门</button>
+                </div>
               </div>
             </div>
 
             <div v-if="adminMode === 'cultivators'" class="admin-layout">
               <div class="admin-list" role="list" aria-label="角色列表">
                 <button
-                  v-for="person in adminCultivators"
+                  v-for="person in filteredAdminCultivators"
                   :key="person.id"
                   class="admin-list-row"
                   :class="{ active: adminSelectedCultivatorId === person.id }"
@@ -1954,9 +1960,10 @@
                   <CharacterPortrait :person="person" size="sm" />
                   <span><strong>{{ person.name }}</strong><small>{{ person.sect }} · {{ realmName(person.realm) }}</small></span>
                 </button>
+                <div v-if="!filteredAdminCultivators.length" class="empty">没有找到匹配的人物。</div>
               </div>
 
-              <form class="admin-editor" @submit.prevent="saveCultivatorProfile">
+              <form v-if="adminCultivatorPerson" class="admin-editor" @submit.prevent="saveCultivatorProfile">
                 <div class="admin-editor-head" v-if="adminCultivatorPerson">
                   <CharacterPortrait :person="{ ...adminCultivatorPerson, portraitUrl: adminCultivatorDraft.portraitUrl }" size="xl" />
                   <div>
@@ -1993,12 +2000,13 @@
                   <button class="primary" type="submit" :disabled="isActionPending('/api/admin/cultivator')">保存角色</button>
                 </div>
               </form>
+              <div v-else class="admin-editor empty">换个名字或宗门再搜一下。</div>
             </div>
 
             <div v-else class="admin-layout">
               <div class="admin-list" role="list" aria-label="宗门列表">
                 <button
-                  v-for="sect in adminSects"
+                  v-for="sect in filteredAdminSects"
                   :key="sect.id"
                   class="admin-list-row"
                   :class="{ active: adminSelectedSectName === sect.name }"
@@ -2008,6 +2016,7 @@
                   <span class="sect-avatar" :style="sectAvatarStyle(sect)"></span>
                   <span><strong>{{ sect.name }}</strong><small>{{ sectMemberCount(sect.name) }} 人 · 总战力 {{ sectTotalPower(sect.name) }}</small></span>
                 </button>
+                <div v-if="!filteredAdminSects.length" class="empty">没有找到匹配的宗门。</div>
               </div>
 
               <form class="admin-editor" @submit.prevent="saveSectProfile">
@@ -2244,6 +2253,7 @@ const battleCursor = ref(0);
 const countdown = ref("--:--:--");
 const taskForm = reactive({ name: "", type: "study", diff: 3 });
 const adminMode = ref("cultivators");
+const adminSearch = ref("");
 const adminSelectedCultivatorId = ref("player");
 const adminSelectedSectName = ref("");
 const adminCultivatorDraft = reactive({ id: "player", name: "", gender: "unknown", rootKeys: [], portraitUrl: "" });
@@ -2343,7 +2353,19 @@ const playerSkill = computed(() => skillById(player.value.skillId));
 const sectSummaries = computed(() => derived.value.sects || []);
 const catalogRoots = computed(() => catalog.value.roots?.length ? catalog.value.roots : []);
 const adminCultivators = computed(() => cultivators.value);
-const adminCultivatorPerson = computed(() => adminCultivators.value.find((person) => person.id === adminSelectedCultivatorId.value) || adminCultivators.value[0] || null);
+const normalizedAdminSearch = computed(() => adminSearch.value.trim().toLowerCase());
+const filteredAdminCultivators = computed(() => {
+  const keyword = normalizedAdminSearch.value;
+  if (!keyword) return adminCultivators.value;
+  return adminCultivators.value.filter((person) => [
+    person.name,
+    person.sect,
+    genderLabel(person.gender),
+    realmName(person.realm),
+    rootLine(person)
+  ].filter(Boolean).join(" ").toLowerCase().includes(keyword));
+});
+const adminCultivatorPerson = computed(() => filteredAdminCultivators.value.find((person) => person.id === adminSelectedCultivatorId.value) || filteredAdminCultivators.value[0] || adminCultivators.value[0] || null);
 const adminSects = computed(() => {
   const summaries = new Map(sectSummaries.value.map((sect) => [sect.name, sect]));
   const profiles = new Map((gameState.value.sectProfiles || []).map((sect) => [sect.name, sect]));
@@ -2352,6 +2374,15 @@ const adminSects = computed(() => {
     .filter((sect) => sect?.name)
     .map((sect) => ({ ...sect, totalPower: summaries.get(sect.name)?.totalPower || sect.totalPower || 0 }))
     .sort((a, b) => sectTotalPower(b.name) - sectTotalPower(a.name) || a.name.localeCompare(b.name, "zh-Hans-CN"));
+});
+const filteredAdminSects = computed(() => {
+  const keyword = normalizedAdminSearch.value;
+  if (!keyword) return adminSects.value;
+  return adminSects.value.filter((sect) => [
+    sect.name,
+    sect.id,
+    sect.leader
+  ].filter(Boolean).join(" ").toLowerCase().includes(keyword));
 });
 const dungeonRecordTabs = [
   { id: "blood", label: "血色禁地" },
@@ -4010,7 +4041,7 @@ function toggleAdminRoot(key) {
 }
 
 function syncAdminSectDraft(name = adminSelectedSectName.value) {
-  const sect = adminSects.value.find((item) => item.name === name) || adminSects.value[0];
+  const sect = filteredAdminSects.value.find((item) => item.name === name) || filteredAdminSects.value[0] || adminSects.value[0];
   if (!sect) return;
   adminSelectedSectName.value = sect.name;
   adminSectDraft.oldName = sect.name;
@@ -5086,8 +5117,14 @@ watch([adminCultivatorPerson, () => player.value.portraitUrl], () => {
   if (activeTab.value === "admin" && adminMode.value === "cultivators") syncAdminCultivatorDraft(adminCultivatorPerson.value);
 });
 
-watch(adminSects, () => {
+watch([filteredAdminSects, adminSects], () => {
   if (activeTab.value === "admin" && adminMode.value === "sects") syncAdminSectDraft(adminSelectedSectName.value);
+});
+
+watch([adminSearch, adminMode], () => {
+  if (activeTab.value !== "admin") return;
+  if (adminMode.value === "cultivators") syncAdminCultivatorDraft(adminCultivatorPerson.value);
+  else syncAdminSectDraft(adminSelectedSectName.value);
 });
 
 watch([activeTab, activeSectSubTab, selectedProvinceWarDay], () => {
