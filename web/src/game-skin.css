@@ -410,6 +410,17 @@
     0 0 0 1px rgba(218, 166, 61, .18);
 }
 
+.rank-surface .segment.active,
+.rank-surface .segment[aria-pressed="true"] {
+  border-color: rgba(20, 82, 74, .74);
+  background:
+    linear-gradient(180deg, rgba(25, 96, 84, .96), rgba(15, 65, 59, .96));
+  color: #fff8e7;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 245, 185, .35),
+    0 8px 18px rgba(20, 57, 48, .2);
+}
+
 .card,
 .row,
 .event,
@@ -2659,7 +2670,7 @@ body::before {
 
 .arena-surface .duel-rank-cell span,
 .arena-surface .duel-rank-cell small {
-  color: color-mix(in srgb, var(--rank-color) 76%, #49321a);
+  color: #4d3217;
 }
 
 .arena-surface .arena-toolbar {
@@ -3107,7 +3118,7 @@ body::before {
 
 .duel-rank-cell span,
 .duel-rank-cell small {
-  color: color-mix(in srgb, var(--rank-color) 70%, #3a2a17);
+  color: #4d3217;
   font-size: 12px;
 }
 
@@ -3117,12 +3128,7 @@ body::before {
 
 .arena-surface .duel-rank-cell span,
 .arena-surface .duel-rank-cell small {
-  color: color-mix(in srgb, var(--rank-color) 74%, #3f2c17);
-}
-
-.arena-surface .duel-rank-cell span,
-.arena-surface .duel-rank-cell small {
-  color: #f2dba6;
+  color: #3f2a16;
 }
 
 .view.active.rank-surface .rank-row {

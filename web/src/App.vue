@@ -75,12 +75,11 @@
             class="portrait-change"
             type="button"
             @click="openPortraitPicker"
-            aria-label="从本地选择主人公头像"
-            title="更换头像"
+            aria-label="打开后台更换主人公头像"
+            title="后台管理头像"
           >
             <ImagePlus :size="16" :stroke-width="2.6" aria-hidden="true" />
           </button>
-          <input ref="portraitInput" class="portrait-input" type="file" accept="image/*" @change="handlePortraitFile">
         </section>
 
         <section class="profile-scroll">
@@ -703,7 +702,7 @@
                     type="button"
                     v-for="(entry, index) in bloodCaveEntries(cave)"
                     :key="`${cave.cave}-${entry.id}-${entry.rank}`"
-                    :disabled="!entry.replay"
+                    :disabled="!hasReplay(entry)"
                     @click="openBloodCaveReplay(entry)"
                   >
                     <span class="podium-rank" aria-hidden="true">{{ podiumRankIcon(entry.rank) }}</span>
@@ -768,8 +767,8 @@
                   type="button"
                   v-for="battle in voidHallBattles(selectedVoidHallRecord)"
                   :key="`${selectedVoidHallRecord.sect}-${battle.order}`"
-                  :disabled="!battle.replay"
-                  @click="openBattleReplay(battle.replay)"
+                  :disabled="!hasReplay(battle)"
+                  @click="openReplay(battle)"
                 >
                   <span class="war-battle-order">第 {{ battle.order }} 战</span>
                   <strong class="war-battle-name left">{{ battle.challenger?.name || battle.name || "参战修士" }}</strong>
@@ -778,7 +777,7 @@
                   <small class="war-battle-summary">输出 {{ battle.damage || 0 }}<span v-if="battle.winnerName"> · 胜者：{{ battle.winnerName }}</span></small>
                 </button>
               </div>
-              <button v-else-if="selectedVoidHallRecord.replay" class="event event-button void-overview-button" type="button" @click="openBattleReplay(selectedVoidHallRecord.replay)">
+              <button v-else-if="hasReplay(selectedVoidHallRecord)" class="event event-button void-overview-button" type="button" @click="openReplay(selectedVoidHallRecord)">
                 查看虚天殿合战。
               </button>
               <div v-else class="empty compact-empty">这条记录没有保存可回放战报。</div>
@@ -909,7 +908,7 @@
               <div class="panel flat sea-team-rank">
                 <h3>队伍排名</h3>
                 <div class="timeline compact-list">
-                  <button class="event event-button" type="button" v-for="team in starSeaTeamRanking" :key="team.id || team.name" @click="openBattleReplay(team.replay || selectedDungeonDay.public?.replay)">
+                  <button class="event event-button" type="button" v-for="team in starSeaTeamRanking" :key="team.id || team.name" :disabled="!hasReplay(team) && !hasReplay(selectedDungeonDay.public)" @click="openReplay(team, selectedDungeonDay.public)">
                     <strong>{{ team.rank }}. {{ team.name }}</strong>
                     <span>评分 {{ team.score }} · 输出 {{ team.damage }} · {{ team.success ? `${team.rounds} 回合击杀` : "未击杀" }} · 队伍 +{{ team.spirit }} 灵石</span>
                   </button>
@@ -918,7 +917,7 @@
               <div class="panel flat sea-personal-rank">
                 <h3>个人输出</h3>
                 <div class="timeline compact-list">
-                  <button class="event event-button" type="button" v-for="entry in selectedDungeonDay.public?.top || []" :key="entry.id" @click="openBattleReplay(selectedDungeonDay.public?.replay)">
+                  <button class="event event-button" type="button" v-for="entry in selectedDungeonDay.public?.top || []" :key="entry.id" :disabled="!hasReplay(selectedDungeonDay.public)" @click="openReplay(selectedDungeonDay.public)">
                     <strong>{{ entry.name }}</strong>
                     <span>{{ entry.teamName || entry.sect }} · 输出 {{ entry.damage }} · +{{ entry.spirit }} 灵石</span>
                   </button>
@@ -1595,7 +1594,9 @@
                   :key="board.id"
                   class="segment"
                   :class="{ active: activeRankBoard === board.id }"
-                  @click="activeRankBoard = board.id"
+                  type="button"
+                  :aria-pressed="activeRankBoard === board.id"
+                  @click="selectRankBoard(board.id)"
                 >
                   {{ board.label }}
                 </button>
@@ -1606,6 +1607,17 @@
                 <span>搜索</span>
                 <input v-model.trim="rankSearch" placeholder="输入姓名、宗门、境界或关键词">
               </label>
+              <div v-if="activeRankBoard === 'power'" class="rank-sort-controls" aria-label="个人战力排序">
+                <label>
+                  <span>排序</span>
+                  <select v-model="powerSortKey">
+                    <option v-for="option in powerSortOptions" :key="option.id" :value="option.id">{{ option.label }}</option>
+                  </select>
+                </label>
+                <button class="secondary rank-sort-direction" type="button" @click="powerSortDirection = powerSortDirection === 'desc' ? 'asc' : 'desc'">
+                  {{ powerSortDirection === "desc" ? "降序" : "升序" }}
+                </button>
+              </div>
               <span class="rank-count">共 {{ filteredRanking.length }} 条</span>
             </div>
             <div v-if="activeRankBoard === 'duel'" class="duel-rank-table compact" aria-label="切磋段位分数表">
@@ -1622,6 +1634,7 @@
                 v-for="(item, index) in pagedRanking"
                 :key="`${activeRankBoard}-${item.name}-${item.sect}`"
                 type="button"
+                :disabled="item.kind === 'realmStats'"
                 :aria-label="`${item.name}：${item.help}`"
                 @click="openRankItem(item)"
               >
@@ -1636,7 +1649,7 @@
                 <span v-else class="tag rank-number">#{{ rankPageStart + index + 1 }}</span>
                 <CharacterPortrait v-if="item.kind === 'person'" :person="rankPerson(item)" size="sm" />
                 <div><strong>{{ item.name }}</strong><small>{{ item.subtitle }}</small></div>
-                <span class="rank-value">{{ item.value }}</span>
+                <span class="rank-value">{{ activeRankBoard === "power" ? item.sortLabel : item.value }}</span>
                 <small class="rank-tip" role="tooltip">{{ item.help }}</small>
               </button>
               <div v-if="!pagedRanking.length" class="empty">没有找到匹配的榜单记录。</div>
@@ -1644,6 +1657,10 @@
             <div class="rank-pager" v-if="rankPageCount > 1">
               <button class="secondary" type="button" :disabled="rankPage <= 1" @click="changeRankPage(-1)">上一页</button>
               <span>第 {{ rankPage }} / {{ rankPageCount }} 页</span>
+              <form class="rank-page-jump" @submit.prevent="jumpRankPage">
+                <input v-model="rankPageInput" type="number" min="1" :max="rankPageCount" aria-label="跳转页码">
+                <button class="secondary" type="submit">跳转</button>
+              </form>
               <button class="secondary" type="button" :disabled="rankPage >= rankPageCount" @click="changeRankPage(1)">下一页</button>
             </div>
           </div>
@@ -1795,15 +1812,15 @@
                 <div class="timeline detail-scroll">
                   <button
                     class="event duel-record"
-                    :class="{ bad: record.result === '负', gold: record.result === '胜', replayable: record.replay }"
+                    :class="{ bad: record.result === '负', gold: record.result === '胜', replayable: hasReplay(record) }"
                     v-for="record in selectedPerson.duelHistory"
                     :key="`${record.foughtAt || record.day}-${record.opponent}-${record.result}`"
                     type="button"
-                    :disabled="!record.replay"
+                    :disabled="!hasReplay(record)"
                     @click="openDuelReplay(record)"
                   >
                     <strong>{{ duelRecordTitle(record) }}</strong>
-                    <span>{{ record.replay ? "可回放" : "无回放" }}</span>
+                    <span>{{ hasReplay(record) ? "可回放" : "无回放" }}</span>
                   </button>
                   <div v-if="!selectedPerson.duelHistory?.length" class="empty">暂无切磋明细。</div>
                 </div>
@@ -1816,8 +1833,8 @@
                     v-for="record in selectedPerson.dungeonHistory || []"
                     :key="`${record.day}-${record.type}-${record.name}-${record.result}`"
                     type="button"
-                    :disabled="!record.replay"
-                    @click="openBattleReplay(record.replay)"
+                    :disabled="!hasReplay(record)"
+                    @click="openReplay(record)"
                   >
                     <strong>{{ dungeonRecordTitle(record) }}</strong>
                     <span>{{ dungeonRecordMetaText(record) }}</span>
@@ -1897,7 +1914,7 @@
                     v-for="record in sectDungeonRecords(selectedSect)"
                     :key="`${selectedSect.name}-${record.day}`"
                     type="button"
-                    :disabled="!record.replay"
+                    :disabled="false"
                     @click="openSectVoidHallRecord(record)"
                   >
                     <strong>{{ shortDisplayDate(record) }} · {{ record.success ? "通关" : "未通关" }} · {{ record.monster }}</strong>
@@ -1910,7 +1927,135 @@
             </div>
           </div>
         </section>
+
+        <section v-if="activeTab === 'admin'" class="view active cultivation-surface admin-surface">
+          <div class="panel">
+            <div class="section-head">
+              <div>
+                <h3>后台管理</h3>
+                <p>角色、头像与宗门资料会保存到本地存档。</p>
+              </div>
+              <div class="segmented">
+                <button class="segment" :class="{ active: adminMode === 'cultivators' }" type="button" @click="adminMode = 'cultivators'">角色</button>
+                <button class="segment" :class="{ active: adminMode === 'sects' }" type="button" @click="adminMode = 'sects'">宗门</button>
+              </div>
+            </div>
+
+            <div v-if="adminMode === 'cultivators'" class="admin-layout">
+              <div class="admin-list" role="list" aria-label="角色列表">
+                <button
+                  v-for="person in adminCultivators"
+                  :key="person.id"
+                  class="admin-list-row"
+                  :class="{ active: adminSelectedCultivatorId === person.id }"
+                  type="button"
+                  @click="selectAdminCultivator(person.id)"
+                >
+                  <CharacterPortrait :person="person" size="sm" />
+                  <span><strong>{{ person.name }}</strong><small>{{ person.sect }} · {{ realmName(person.realm) }}</small></span>
+                </button>
+              </div>
+
+              <form class="admin-editor" @submit.prevent="saveCultivatorProfile">
+                <div class="admin-editor-head" v-if="adminCultivatorPerson">
+                  <CharacterPortrait :person="{ ...adminCultivatorPerson, portraitUrl: adminCultivatorDraft.portraitUrl }" size="xl" />
+                  <div>
+                    <strong>{{ adminCultivatorDraft.name || adminCultivatorPerson.name }}</strong>
+                    <small>{{ realmName(adminCultivatorPerson.realm) }} · {{ rootLine(adminCultivatorPerson) }}</small>
+                  </div>
+                </div>
+                <div class="admin-form-grid">
+                  <label>
+                    <span>名字</span>
+                    <input v-model.trim="adminCultivatorDraft.name" maxlength="24">
+                  </label>
+                  <label>
+                    <span>性别</span>
+                    <select v-model="adminCultivatorDraft.gender">
+                      <option value="male">男</option>
+                      <option value="female">女</option>
+                      <option value="unknown">未知</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="admin-root-grid" aria-label="灵根选择">
+                  <label v-for="root in catalogRoots" :key="`admin-root-${root.key}`" class="admin-check">
+                    <input type="checkbox" :checked="adminCultivatorDraft.rootKeys.includes(root.key)" @change="toggleAdminRoot(root.key)">
+                    <span>{{ root.name }}</span>
+                  </label>
+                </div>
+                <div class="admin-actions">
+                  <label class="secondary admin-upload-button">
+                    <ImagePlus :size="16" aria-hidden="true" />
+                    上传头像
+                    <input type="file" accept="image/*" @change="openImageEditor($event, 'cultivator')">
+                  </label>
+                  <button class="primary" type="submit" :disabled="isActionPending('/api/admin/cultivator')">保存角色</button>
+                </div>
+              </form>
+            </div>
+
+            <div v-else class="admin-layout">
+              <div class="admin-list" role="list" aria-label="宗门列表">
+                <button
+                  v-for="sect in adminSects"
+                  :key="sect.id"
+                  class="admin-list-row"
+                  :class="{ active: adminSelectedSectName === sect.name }"
+                  type="button"
+                  @click="selectAdminSect(sect.name)"
+                >
+                  <span class="sect-avatar" :style="sectAvatarStyle(sect)"></span>
+                  <span><strong>{{ sect.name }}</strong><small>{{ sectMemberCount(sect.name) }} 人 · 总战力 {{ sectTotalPower(sect.name) }}</small></span>
+                </button>
+              </div>
+
+              <form class="admin-editor" @submit.prevent="saveSectProfile">
+                <div class="admin-editor-head" v-if="adminSectDraft.oldName">
+                  <span class="sect-avatar xl" :style="sectAvatarStyle(adminSectDraft)"></span>
+                  <div>
+                    <strong>{{ adminSectDraft.name }}</strong>
+                    <small>{{ sectMemberCount(adminSectDraft.oldName) }} 名修士</small>
+                  </div>
+                </div>
+                <label>
+                  <span>宗门名</span>
+                  <input v-model.trim="adminSectDraft.name" maxlength="24">
+                </label>
+                <div class="admin-actions">
+                  <label class="secondary admin-upload-button">
+                    <ImagePlus :size="16" aria-hidden="true" />
+                    上传宗门头像
+                    <input type="file" accept="image/*" @change="openImageEditor($event, 'sect')">
+                  </label>
+                  <button class="primary" type="submit" :disabled="isActionPending('/api/admin/sect')">保存宗门</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </section>
       </main>
+    </div>
+
+    <div v-if="imageEditor.open" class="modal-backdrop" @click.self="closeImageEditor">
+      <section class="image-cropper modal-panel" role="dialog" aria-modal="true" aria-label="头像裁剪">
+        <div class="section-head compact">
+          <h3>裁剪头像</h3>
+          <button class="secondary" type="button" @click="closeImageEditor">取消</button>
+        </div>
+        <div class="crop-preview-wrap">
+          <canvas ref="cropCanvas" class="crop-preview" width="256" height="256"></canvas>
+        </div>
+        <div class="crop-controls">
+          <label><span>缩放</span><input v-model.number="imageEditor.zoom" type="range" min="1" max="3" step="0.01" @input="drawCropPreview"></label>
+          <label><span>横向</span><input v-model.number="imageEditor.offsetX" type="range" min="-1" max="1" step="0.01" @input="drawCropPreview"></label>
+          <label><span>纵向</span><input v-model.number="imageEditor.offsetY" type="range" min="-1" max="1" step="0.01" @input="drawCropPreview"></label>
+        </div>
+        <div class="actions">
+          <button class="secondary" type="button" @click="closeImageEditor">取消</button>
+          <button class="primary" type="button" @click="applyCroppedImage">使用裁剪图</button>
+        </div>
+      </section>
     </div>
 
     <div v-if="error" class="toast">{{ error }}</div>
@@ -1933,6 +2078,7 @@ import {
   Package,
   Route,
   ScrollText,
+  Settings,
   Sprout,
   Sun,
   Sword,
@@ -1943,7 +2089,7 @@ import {
   Zap
 } from "lucide-vue-next";
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from "vue";
-import { clearCachedState, getCachedState, getDuelReplay, getState, postAction, saveCachedState } from "./api";
+import { clearCachedState, getBattleReplay, getCachedState, getDuelReplay, getState, postAction, saveCachedState } from "./api";
 import CharacterPortrait from "./components/CharacterPortrait.vue";
 import EquipmentIcon from "./components/EquipmentIcon.vue";
 import LogPanel from "./components/LogPanel.vue";
@@ -1963,14 +2109,26 @@ const tabs = [
   { id: "sect", label: "宗门", icon: Landmark },
   { id: "arena", label: "切磋", icon: Swords },
   { id: "equipment", label: "装备", icon: Package },
-  { id: "rank", label: "榜单", icon: Trophy }
+  { id: "rank", label: "榜单", icon: Trophy },
+  { id: "admin", label: "后台", icon: Settings }
 ];
 
 const rankBoards = [
   { id: "power", label: "个人战力" },
   { id: "duel", label: "切磋段位" },
   { id: "sect", label: "宗门战力" },
-  { id: "dungeon", label: "副本闯关" }
+  { id: "dungeon", label: "副本闯关" },
+  { id: "realmStats", label: "境界统计" }
+];
+
+const powerSortOptions = [
+  { id: "power", label: "战力" },
+  { id: "realm", label: "境界" },
+  { id: "maxHp", label: "血量" },
+  { id: "attack", label: "攻击" },
+  { id: "defense", label: "防御" },
+  { id: "divineSense", label: "神识" },
+  { id: "maxMana", label: "法力" }
 ];
 
 const emptyState = {
@@ -2008,6 +2166,7 @@ const emptyState = {
   provinceWars: [],
   duelDays: [],
   dungeonDays: [],
+  sectProfiles: [],
   catalog: {},
   derived: {}
 };
@@ -2057,7 +2216,10 @@ const activeSectSubTab = ref("map");
 const activeRankBoard = ref("power");
 const rankSearch = ref("");
 const rankPage = ref(1);
+const rankPageInput = ref("1");
 const rankPageSize = 10;
+const powerSortKey = ref("power");
+const powerSortDirection = ref("desc");
 const equipmentTierFilter = ref("");
 const equipmentSlotFilter = ref("");
 const equipmentOwnedFilter = ref("");
@@ -2081,8 +2243,21 @@ const battleReturnTarget = ref(null);
 const battleCursor = ref(0);
 const countdown = ref("--:--:--");
 const taskForm = reactive({ name: "", type: "study", diff: 3 });
-const portraitInput = ref(null);
-const customPortrait = ref("");
+const adminMode = ref("cultivators");
+const adminSelectedCultivatorId = ref("player");
+const adminSelectedSectName = ref("");
+const adminCultivatorDraft = reactive({ id: "player", name: "", gender: "unknown", rootKeys: [], portraitUrl: "" });
+const adminSectDraft = reactive({ oldName: "", name: "", portraitUrl: "" });
+const cropCanvas = ref(null);
+const imageEditor = reactive({
+  open: false,
+  target: "",
+  sourceUrl: "",
+  image: null,
+  zoom: 1,
+  offsetX: 0,
+  offsetY: 0
+});
 const chinaMapRef = ref(null);
 const normalMapMount = ref(null);
 const fullscreenMapMount = ref(null);
@@ -2100,7 +2275,6 @@ const playerPortraitOptions = [
   "/portraits/generated/han-li.png",
   "/portraits/custom/lixinshu.jpg"
 ];
-const customPortraitKey = "cultivate_immortality_player_portrait";
 
 const sectSubTabs = [
   { id: "map", label: "势力地图" },
@@ -2155,7 +2329,7 @@ const fallbackDuelRankMap = computed(() => {
 });
 const currentDate = computed(() => dateForDay(gameState.value.day));
 const playerPortraitUrl = computed(() => {
-  if (customPortrait.value) return customPortrait.value;
+  if (player.value.portraitUrl) return player.value.portraitUrl;
   const index = Number(player.value.portraitVariant || 0);
   return playerPortraitOptions[((index % playerPortraitOptions.length) + playerPortraitOptions.length) % playerPortraitOptions.length];
 });
@@ -2167,6 +2341,18 @@ const playerPortraitPerson = computed(() => ({
 const combatSkills = computed(() => catalog.value.combatSkills?.length ? catalog.value.combatSkills : [fallbackSkill]);
 const playerSkill = computed(() => skillById(player.value.skillId));
 const sectSummaries = computed(() => derived.value.sects || []);
+const catalogRoots = computed(() => catalog.value.roots?.length ? catalog.value.roots : []);
+const adminCultivators = computed(() => cultivators.value);
+const adminCultivatorPerson = computed(() => adminCultivators.value.find((person) => person.id === adminSelectedCultivatorId.value) || adminCultivators.value[0] || null);
+const adminSects = computed(() => {
+  const summaries = new Map(sectSummaries.value.map((sect) => [sect.name, sect]));
+  const profiles = new Map((gameState.value.sectProfiles || []).map((sect) => [sect.name, sect]));
+  for (const sect of sectSummaries.value) profiles.set(sect.name, { ...profiles.get(sect.name), ...sect });
+  return [...profiles.values()]
+    .filter((sect) => sect?.name)
+    .map((sect) => ({ ...sect, totalPower: summaries.get(sect.name)?.totalPower || sect.totalPower || 0 }))
+    .sort((a, b) => sectTotalPower(b.name) - sectTotalPower(a.name) || a.name.localeCompare(b.name, "zh-Hans-CN"));
+});
 const dungeonRecordTabs = [
   { id: "blood", label: "血色禁地" },
   { id: "void", label: "虚天殿" },
@@ -2880,7 +3066,7 @@ function bloodEntryPerson(entry) {
 }
 
 function openBloodCaveReplay(entry) {
-  if (entry?.replay) openBattleReplay(entry.replay);
+  openReplay(entry);
 }
 
 function skillForEvent(event) {
@@ -3323,6 +3509,7 @@ const activeRanking = computed(() => {
   if (activeRankBoard.value === "duel") return duelRanking.value;
   if (activeRankBoard.value === "sect") return sectRanking.value;
   if (activeRankBoard.value === "dungeon") return dungeonRanking.value;
+  if (activeRankBoard.value === "realmStats") return realmStatsRanking.value;
   return powerRanking.value;
 });
 
@@ -3340,16 +3527,21 @@ const rankPageStart = computed(() => (safeRankPage.value - 1) * rankPageSize);
 const pagedRanking = computed(() => filteredRanking.value.slice(rankPageStart.value, rankPageStart.value + rankPageSize));
 
 const powerRanking = computed(() => cultivators.value
-  .map((item) => ({
+  .map((item) => {
+    const effective = personEffectiveStats(item);
+    return {
     name: item.name,
     id: item.id,
     kind: "person",
     sect: item.sect,
     subtitle: `${item.sect} · ${genderLabel(item.gender)} · ${item.mood} · ${realmName(item.realm)}`,
     value: item.power,
-    help: `战力 ${item.power}。性别：${genderLabel(item.gender)}；境界：${realmName(item.realm)}；经验：${Math.floor(item.xp)}；灵根 ${rootLine(item)}；攻击 ${personEffectiveStats(item).attack}，防御 ${personEffectiveStats(item).defense}，神识 ${personEffectiveStats(item).divineSense}，法力 ${personEffectiveStats(item).maxMana}。`
-  }))
-  .sort((a, b) => b.value - a.value));
+    sortValue: powerSortValue(item, effective),
+    sortLabel: powerSortLabel(item, effective),
+    help: `战力 ${item.power}。性别：${genderLabel(item.gender)}；境界：${realmName(item.realm)}；经验：${Math.floor(item.xp)}；灵根 ${rootLine(item)}；血量 ${effective.maxHp}，攻击 ${effective.attack}，防御 ${effective.defense}，神识 ${effective.divineSense}，法力 ${effective.maxMana}。`
+    };
+  })
+  .sort(comparePowerRankItems));
 
 const duelRanking = computed(() => cultivators.value
   .map((item) => {
@@ -3396,6 +3588,60 @@ const dungeonRanking = computed(() => cultivators.value
     help: `最高副本：${item.bestDungeonName || "未入秘境"}；副本评分 ${item.bestDungeonPower || 0}；累计通关 ${item.dungeonClears || 0} 次。`
   }))
   .sort((a, b) => b.value - a.value));
+
+const realmStatsRanking = computed(() => {
+  const groups = new Map();
+  for (const person of cultivators.value) {
+    const realm = Number(person.realm || 0);
+    const key = String(realm);
+    const current = groups.get(key) || {
+      name: realmName(realm),
+      id: key,
+      kind: "realmStats",
+      sect: "",
+      realm,
+      count: 0,
+      totalPower: 0,
+      topPower: 0,
+      examples: []
+    };
+    current.count += 1;
+    current.totalPower += person.power || 0;
+    current.topPower = Math.max(current.topPower, person.power || 0);
+    if (current.examples.length < 3) current.examples.push(person.name);
+    groups.set(key, current);
+  }
+  return [...groups.values()]
+    .sort((a, b) => b.realm - a.realm)
+    .map((item) => ({
+      ...item,
+      subtitle: `${realmStageName(Math.floor(item.realm / 10))} · ${item.examples.join("、") || "暂无代表"}`,
+      value: `${item.count} 人`,
+      help: `${item.name}共有 ${item.count} 人；最高战力 ${item.topPower}；平均战力 ${Math.round(item.totalPower / Math.max(1, item.count))}。`
+    }));
+});
+
+function powerSortValue(person, effective = personEffectiveStats(person)) {
+  if (powerSortKey.value === "realm") return Number(person.realm || 0);
+  if (powerSortKey.value === "maxHp") return Number(effective.maxHp || 0);
+  if (powerSortKey.value === "attack") return Number(effective.attack || 0);
+  if (powerSortKey.value === "defense") return Number(effective.defense || 0);
+  if (powerSortKey.value === "divineSense") return Number(effective.divineSense || 0);
+  if (powerSortKey.value === "maxMana") return Number(effective.maxMana || 0);
+  return Number(person.power || 0);
+}
+
+function powerSortLabel(person, effective = personEffectiveStats(person)) {
+  const option = powerSortOptions.find((item) => item.id === powerSortKey.value)?.label || "战力";
+  return `${option} ${powerSortValue(person, effective)}`;
+}
+
+function comparePowerRankItems(a, b) {
+  const direction = powerSortDirection.value === "asc" ? 1 : -1;
+  const valueDelta = ((a.sortValue || 0) - (b.sortValue || 0)) * direction;
+  if (valueDelta) return valueDelta;
+  return (b.value || 0) - (a.value || 0) || a.name.localeCompare(b.name, "zh-Hans-CN");
+}
 
 function isNpcBreakthroughLog(entry) {
   if (!entry?.text?.includes("突破至")) return false;
@@ -3661,6 +3907,32 @@ function openBattleReplay(replay, target = captureBattleReturn()) {
   playBattle();
 }
 
+function hasReplay(record) {
+  return Boolean(record?.replay || record?.replayId || record?.hasReplay);
+}
+
+async function openReplay(record, fallbackRecord = null, target = captureBattleReturn()) {
+  const source = hasReplay(record) ? record : fallbackRecord;
+  if (!source || !hasReplay(source)) return;
+  if (source.replay) {
+    openBattleReplay(source.replay, target);
+    return;
+  }
+  if (!source.replayId) return;
+  setActionPending("/api/battles/replay", true);
+  try {
+    const response = await getBattleReplay(source.replayId);
+    if (!response?.replay) return;
+    source.replay = response.replay;
+    openBattleReplay(response.replay, target);
+    error.value = "";
+  } catch (err) {
+    error.value = err.message;
+  } finally {
+    setActionPending("/api/battles/replay", false);
+  }
+}
+
 function returnFromBattle() {
   const target = battleReturnTarget.value;
   closeBattleReplay();
@@ -3707,6 +3979,71 @@ function switchTab(tabId) {
   resetTabHome(tabId);
 }
 
+function syncAdminCultivatorDraft(person = adminCultivatorPerson.value) {
+  if (!person) return;
+  adminSelectedCultivatorId.value = person.id;
+  adminCultivatorDraft.id = person.id;
+  adminCultivatorDraft.name = person.name || "";
+  adminCultivatorDraft.gender = person.gender || "unknown";
+  adminCultivatorDraft.rootKeys = rootKeys(person).slice(0, 5);
+  adminCultivatorDraft.portraitUrl = person.portraitUrl || "";
+}
+
+function selectAdminCultivator(id) {
+  const person = adminCultivators.value.find((item) => item.id === id);
+  if (!person) return;
+  syncAdminCultivatorDraft(person);
+}
+
+function toggleAdminRoot(key) {
+  const roots = adminCultivatorDraft.rootKeys;
+  if (roots.includes(key)) {
+    if (roots.length <= 1) return;
+    adminCultivatorDraft.rootKeys = roots.filter((item) => item !== key);
+    return;
+  }
+  if (roots.length >= 5) {
+    error.value = "最多选择五种灵根。";
+    return;
+  }
+  adminCultivatorDraft.rootKeys = [...roots, key];
+}
+
+function syncAdminSectDraft(name = adminSelectedSectName.value) {
+  const sect = adminSects.value.find((item) => item.name === name) || adminSects.value[0];
+  if (!sect) return;
+  adminSelectedSectName.value = sect.name;
+  adminSectDraft.oldName = sect.name;
+  adminSectDraft.name = sect.name;
+  adminSectDraft.portraitUrl = sect.portraitUrl || "";
+}
+
+function selectAdminSect(name) {
+  syncAdminSectDraft(name);
+}
+
+async function saveCultivatorProfile() {
+  if (!adminCultivatorDraft.id) return;
+  await act("/api/admin/cultivator", {
+    id: adminCultivatorDraft.id,
+    name: adminCultivatorDraft.name,
+    gender: adminCultivatorDraft.gender,
+    rootKeys: adminCultivatorDraft.rootKeys,
+    portraitUrl: adminCultivatorDraft.portraitUrl
+  }, { scope: "full" });
+}
+
+async function saveSectProfile() {
+  if (!adminSectDraft.oldName) return;
+  await act("/api/admin/sect", {
+    oldName: adminSectDraft.oldName,
+    name: adminSectDraft.name,
+    portraitUrl: adminSectDraft.portraitUrl
+  }, { scope: "full" });
+  adminSelectedSectName.value = adminSectDraft.name;
+  syncAdminSectDraft(adminSectDraft.name);
+}
+
 function openRankItem(item) {
   if (item.kind === "sect") {
     selectedSectName.value = item.id;
@@ -3740,8 +4077,21 @@ function rankSearchText(item) {
     .toLowerCase();
 }
 
+function selectRankBoard(id) {
+  activeRankBoard.value = id;
+  rankPage.value = 1;
+  rankPageInput.value = "1";
+}
+
 function changeRankPage(offset) {
   rankPage.value = Math.max(1, Math.min(rankPageCount.value, rankPage.value + offset));
+  rankPageInput.value = String(rankPage.value);
+}
+
+function jumpRankPage() {
+  const page = Math.max(1, Math.min(rankPageCount.value, Number(rankPageInput.value) || 1));
+  rankPage.value = page;
+  rankPageInput.value = String(page);
 }
 
 function openPersonById(id) {
@@ -4166,6 +4516,26 @@ function sectMembers(sect) {
   return Array.isArray(sect?.members) ? sect.members : [];
 }
 
+function sectByName(name) {
+  return sectSummaries.value.find((sect) => sect.name === name) || null;
+}
+
+function sectMemberCount(name) {
+  return sectByName(name)?.members?.length || cultivators.value.filter((person) => person.sect === name).length;
+}
+
+function sectTotalPower(name) {
+  return sectByName(name)?.totalPower || 0;
+}
+
+function sectAvatarStyle(sect) {
+  const name = sect?.name || sect?.oldName || "";
+  const portraitUrl = sect?.portraitUrl || "";
+  return portraitUrl
+    ? { backgroundImage: `url(${portraitUrl})`, backgroundColor: sectColor(name) }
+    : { background: sectColor(name) };
+}
+
 function sectStats(sect) {
   const members = sectMembers(sect);
   return [
@@ -4425,7 +4795,7 @@ function shouldMarkFullStateStale(path) {
 }
 
 function needsHeavyState(tab = activeTab.value) {
-  return ["dungeon", "sect", "arena", "equipment", "rank"].includes(tab);
+  return ["dungeon", "sect", "arena", "equipment", "rank", "admin"].includes(tab);
 }
 
 function playBattle() {
@@ -4450,17 +4820,21 @@ function clearBattleReplay() {
   clearInterval(battleTimer);
 }
 
-function openDuelReplay(record) {
-  if (!record?.replay) return;
-  openBattleReplay(record.replay);
+async function openDuelReplay(record) {
+  if (!hasReplay(record)) return;
+  await openReplay(record);
   activeTab.value = "arena";
   detailView.value = "rank";
 }
 
 async function openMatchReplay(match, dayRecord) {
-  if (!match || !(match.replay || match.hasReplay)) return;
+  if (!match || !hasReplay(match)) return;
   if (match.replay) {
     openBattleReplay(match.replay);
+    return;
+  }
+  if (match.replayId) {
+    await openReplay(match);
     return;
   }
   setActionPending("/api/duels/replay", true);
@@ -4478,8 +4852,8 @@ async function openMatchReplay(match, dayRecord) {
 }
 
 function openProvinceBattle(battle) {
-  if (!battle?.replay) return;
-  openBattleReplay(battle.replay);
+  if (!hasReplay(battle)) return;
+  openReplay(battle);
   detailView.value = "rank";
 }
 
@@ -4537,10 +4911,12 @@ async function advanceDay() {
 }
 
 function openPortraitPicker() {
-  portraitInput.value?.click();
+  switchTab("admin");
+  adminMode.value = "cultivators";
+  syncAdminCultivatorDraft(player.value);
 }
 
-function handlePortraitFile(event) {
+function openImageEditor(event, target) {
   const file = event.target.files?.[0];
   event.target.value = "";
   if (!file) return;
@@ -4548,24 +4924,66 @@ function handlePortraitFile(event) {
     error.value = "请选择图片文件。";
     return;
   }
-  if (file.size > 2 * 1024 * 1024) {
-    error.value = "头像图片请控制在 2MB 以内。";
+  if (file.size > 12 * 1024 * 1024) {
+    error.value = "图片过大，请选择 12MB 以内的图片。";
     return;
   }
-  const reader = new FileReader();
-  reader.onload = () => {
-    customPortrait.value = String(reader.result || "");
-    try {
-      localStorage.setItem(customPortraitKey, customPortrait.value);
-    } catch {
-      // Local portrait preview should still work even if persistence fails.
-    }
-    error.value = "";
+  const image = new Image();
+  const url = URL.createObjectURL(file);
+  image.onload = () => {
+    if (imageEditor.sourceUrl) URL.revokeObjectURL(imageEditor.sourceUrl);
+    imageEditor.open = true;
+    imageEditor.target = target;
+    imageEditor.sourceUrl = url;
+    imageEditor.image = image;
+    imageEditor.zoom = 1;
+    imageEditor.offsetX = 0;
+    imageEditor.offsetY = 0;
+    nextTick(drawCropPreview);
   };
-  reader.onerror = () => {
+  image.onerror = () => {
+    URL.revokeObjectURL(url);
     error.value = "头像读取失败，请换一张图片试试。";
   };
-  reader.readAsDataURL(file);
+  image.src = url;
+}
+
+function drawCropPreview() {
+  const canvas = cropCanvas.value;
+  const image = imageEditor.image;
+  if (!canvas || !image) return;
+  const size = 256;
+  const context = canvas.getContext("2d");
+  context.clearRect(0, 0, size, size);
+  context.fillStyle = "#f7edd7";
+  context.fillRect(0, 0, size, size);
+  const baseScale = Math.max(size / image.width, size / image.height);
+  const scale = baseScale * Math.max(1, Number(imageEditor.zoom) || 1);
+  const drawWidth = image.width * scale;
+  const drawHeight = image.height * scale;
+  const maxOffsetX = Math.max(0, (drawWidth - size) / 2);
+  const maxOffsetY = Math.max(0, (drawHeight - size) / 2);
+  const x = (size - drawWidth) / 2 + maxOffsetX * Number(imageEditor.offsetX || 0);
+  const y = (size - drawHeight) / 2 + maxOffsetY * Number(imageEditor.offsetY || 0);
+  context.drawImage(image, x, y, drawWidth, drawHeight);
+}
+
+function applyCroppedImage() {
+  drawCropPreview();
+  const canvas = cropCanvas.value;
+  if (!canvas) return;
+  const dataUrl = canvas.toDataURL("image/webp", 0.82);
+  if (imageEditor.target === "sect") adminSectDraft.portraitUrl = dataUrl;
+  else adminCultivatorDraft.portraitUrl = dataUrl;
+  closeImageEditor();
+}
+
+function closeImageEditor() {
+  imageEditor.open = false;
+  imageEditor.target = "";
+  imageEditor.image = null;
+  if (imageEditor.sourceUrl) URL.revokeObjectURL(imageEditor.sourceUrl);
+  imageEditor.sourceUrl = "";
 }
 
 async function resetGame() {
@@ -4617,11 +5035,6 @@ async function loadMapRenderer() {
 }
 
 onMounted(async () => {
-  try {
-    customPortrait.value = localStorage.getItem(customPortraitKey) || "";
-  } catch {
-    customPortrait.value = "";
-  }
   updateCountdown();
   timer = setInterval(() => {
     updateCountdown();
@@ -4663,6 +5076,18 @@ watch(activeTab, () => {
   if (needsHeavyState(activeTab.value) && state.value && fullStateStale.value) {
     ensureFullState();
   }
+  if (activeTab.value === "admin") {
+    syncAdminCultivatorDraft(adminCultivatorPerson.value);
+    syncAdminSectDraft(adminSelectedSectName.value);
+  }
+});
+
+watch([adminCultivatorPerson, () => player.value.portraitUrl], () => {
+  if (activeTab.value === "admin" && adminMode.value === "cultivators") syncAdminCultivatorDraft(adminCultivatorPerson.value);
+});
+
+watch(adminSects, () => {
+  if (activeTab.value === "admin" && adminMode.value === "sects") syncAdminSectDraft(adminSelectedSectName.value);
 });
 
 watch([activeTab, activeSectSubTab, selectedProvinceWarDay], () => {
@@ -4673,12 +5098,18 @@ watch([activeTab, activeSectSubTab, selectedProvinceWarDay], () => {
   if (selectedProvinceWarId.value && !selectedProvinceWar.value) selectedProvinceWarId.value = "";
 });
 
-watch([activeRankBoard, rankSearch], () => {
+watch([activeRankBoard, rankSearch, powerSortKey, powerSortDirection], () => {
   rankPage.value = 1;
+  rankPageInput.value = "1";
 });
 
 watch(rankPageCount, () => {
   if (rankPage.value > rankPageCount.value) rankPage.value = rankPageCount.value;
+  rankPageInput.value = String(rankPage.value);
+});
+
+watch(rankPage, () => {
+  rankPageInput.value = String(rankPage.value);
 });
 
 watch(dungeonDays, () => {

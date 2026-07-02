@@ -57,6 +57,11 @@ export function getDuelReplay(day, matchId) {
   return request(`/api/duels/replay?${params.toString()}`);
 }
 
+export function getBattleReplay(replayId) {
+  const params = new URLSearchParams({ id: replayId });
+  return request(`/api/battles/replay?${params.toString()}`);
+}
+
 export function postAction(path, body = {}, options = {}) {
   return request(path, { method: "POST", body: { ...body, ...options } });
 }

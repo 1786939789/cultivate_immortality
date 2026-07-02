@@ -9,14 +9,18 @@ import {
   dailySettlement,
   duel,
   getDuelReplay,
+  getDuelReplayId,
+  getPublicReplay,
   rest,
   runDailyDuels,
   runDungeon,
   sectMission,
   sectWar,
+  updateCultivatorProfile,
+  updateSectProfile,
   useItem
 } from "./gameLogic.mjs";
-import { mutateState, publicState, readState, resetState } from "./store.mjs";
+import { mutateState, publicState, readBattleReplay, readState, resetState } from "./store.mjs";
 
 const port = Number(process.env.PORT || 8787);
 const rootDir = fileURLToPath(new URL("../", import.meta.url));
@@ -85,10 +89,27 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "GET" && url.pathname === "/api/duels/replay") {
-    const state = await readState("default");
+    const replayId = url.searchParams.get("id");
+    if (replayId) {
+      sendJson(res, 200, { replay: getPublicReplay(await readBattleReplay(replayId)) });
+      return;
+    }
     const day = url.searchParams.get("day");
     const match = url.searchParams.get("match");
+    const state = await readState("default");
+    const existingReplayId = getDuelReplayId(state, day, match);
+    if (existingReplayId) {
+      sendJson(res, 200, { replay: getPublicReplay(await readBattleReplay(existingReplayId)) });
+      return;
+    }
     sendJson(res, 200, { replay: getDuelReplay(state, day, match) });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/battles/replay") {
+    const replayId = url.searchParams.get("id");
+    if (!replayId) throw new Error("缺少战斗回放 ID");
+    sendJson(res, 200, { replay: getPublicReplay(await readBattleReplay(replayId)) });
     return;
   }
 
@@ -114,7 +135,9 @@ async function handleApi(req, res, url) {
     "/api/duel": (state) => duel(state, body.index),
     "/api/duels/day": (state) => runDailyDuels(state),
     "/api/items/buy": (state) => buyItem(state, body.kind),
-    "/api/items/use": (state) => useItem(state, body.kind)
+    "/api/items/use": (state) => useItem(state, body.kind),
+    "/api/admin/cultivator": (state) => updateCultivatorProfile(state, body),
+    "/api/admin/sect": (state) => updateSectProfile(state, body)
   };
 
   const mutator = routes[url.pathname];

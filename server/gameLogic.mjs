@@ -207,6 +207,24 @@ function applyRootSet(entity) {
   return entity;
 }
 
+function rootSetFromKeys(keys, fallbackEntity) {
+  const source = Array.isArray(keys) ? keys : [keys].filter(Boolean);
+  const seen = new Set();
+  const picked = [];
+  for (const key of source) {
+    const base = roots.find((item) => item.key === key);
+    if (!base || seen.has(base.key)) continue;
+    seen.add(base.key);
+    const previous = normalizeRootSet(fallbackEntity || {}).roots.find((root) => root.key === base.key);
+    picked.push(normalizeRoot(previous || base));
+    if (picked.length >= 5) break;
+  }
+  if (!picked.length) {
+    return normalizeRootSet(fallbackEntity || { root: roots[0] });
+  }
+  return normalizeRootSet({ roots: picked, primaryRootKey: picked[0].key });
+}
+
 export function needsRootMigration(root) {
   const canonical = root?.key ? roots.find((item) => item.key === root.key) : null;
   return !canonical || typeof root?.bonus !== "number" || root.name !== canonical.name || root.effect !== canonical.effect;
@@ -1125,6 +1143,18 @@ function makeSectStatus(name, index) {
   };
 }
 
+function currentSectName(state, name) {
+  return state?.sectNameMap?.[name] || name;
+}
+
+function activeSectNames(state) {
+  const names = new Set(sects.map((name) => currentSectName(state, name)));
+  if (state?.sect?.name) names.add(state.sect.name);
+  for (const name of Object.keys(state?.sectRivals || {})) names.add(name);
+  for (const npc of state?.npcs || []) if (npc.sect) names.add(npc.sect);
+  return [...names].filter(Boolean);
+}
+
 function provinceTier(province) {
   if ((province.rank || 99) <= 5) return 1;
   if ((province.rank || 99) <= 12) return 0.82;
@@ -1162,10 +1192,10 @@ function provinceEffect(province) {
   return effect;
 }
 
-function createProvinceState() {
+function createProvinceState(state = null) {
   return provinces.map((province, index) => ({
     id: province.id,
-    owner: index < sects.length * 2 ? sects[index % sects.length] : null,
+    owner: index < sects.length * 2 ? currentSectName(state, sects[index % sects.length]) : null,
     defenders: []
   }));
 }
@@ -2574,7 +2604,7 @@ function runDailyDungeons(state, date) {
         .slice(0, 12)
     }))
   };
-  const sectRecords = sects
+  const sectRecords = activeSectNames(state)
     .map((sectName) => runSectDungeon(state, sectName, membersForSect(state, sectName), date))
     .filter(Boolean);
   settleVoidHallRewards(state, sectRecords);
@@ -2633,9 +2663,9 @@ function provinceRankOf(territory) {
 }
 
 function enforceProvinceOccupationLimits(state) {
-  state.provinces ??= createProvinceState();
+  state.provinces ??= createProvinceState(state);
   let changed = false;
-  for (const sectName of sects) {
+  for (const sectName of activeSectNames(state)) {
     const limit = membersForSect(state, sectName).length;
     const owned = state.provinces
       .filter((item) => item.owner === sectName)
@@ -2651,7 +2681,7 @@ function enforceProvinceOccupationLimits(state) {
 }
 
 function assignProvinceDefenders(state) {
-  state.provinces ??= createProvinceState();
+  state.provinces ??= createProvinceState(state);
   let changed = false;
   const setDefenders = (territory, defenders) => {
     const previous = territory.defenders || [];
@@ -2661,7 +2691,7 @@ function assignProvinceDefenders(state) {
     }
   };
   for (const territory of state.provinces) setDefenders(territory, []);
-  for (const sectName of sects) {
+  for (const sectName of activeSectNames(state)) {
     const owned = state.provinces
       .filter((item) => item.owner === sectName)
       .sort((a, b) => provinceRankOf(a) - provinceRankOf(b));
@@ -2684,7 +2714,7 @@ function ensureProvinceState(state) {
   let changed = false;
   if (state.provinceVersion !== provinceVersion || !Array.isArray(state.provinces)) {
     const previous = new Map((state.provinces || []).map((item) => [item.id, item]));
-    state.provinces = createProvinceState().map((item) => ({
+    state.provinces = createProvinceState(state).map((item) => ({
       ...item,
       owner: previous.get(item.id)?.owner ?? item.owner,
       defenders: Array.isArray(previous.get(item.id)?.defenders) ? previous.get(item.id).defenders : item.defenders
@@ -2880,7 +2910,7 @@ function runProvinceSieges(state, settlementDate) {
   state.provinceWars ??= [];
   const targeted = new Set();
   const wars = [];
-  for (const attackerSect of shuffle(sects)) {
+  for (const attackerSect of shuffle(activeSectNames(state))) {
     if (provinceIdsForSect(state, attackerSect).length >= membersForSect(state, attackerSect).length) continue;
     const candidates = shuffle((state.provinces || []).filter((item) => item.owner !== attackerSect && !targeted.has(item.id)));
     const target = candidates[0];
@@ -2951,7 +2981,7 @@ function sectForNpcIndex(index) {
     if (index < cursor + sect.members.length) return sect.name;
     cursor += sect.members.length;
   }
-  return sects[index % sects.length];
+  return currentSectName(null, sects[index % sects.length]);
 }
 
 function shuffle(list) {
@@ -3053,8 +3083,8 @@ function duelSeasonStatsFromRecords(state) {
     .sort((a, b) => (a.day || 0) - (b.day || 0));
   for (const record of records) {
     for (const match of record.matches || []) {
-      const winnerId = match.winner?.id || (match.replay?.winner === "left" ? match.replay?.left?.id : match.replay?.right?.id);
-      const loserId = match.loser?.id || (winnerId === match.replay?.left?.id ? match.replay?.right?.id : match.replay?.left?.id);
+      const winnerId = match.winner?.id;
+      const loserId = match.loser?.id;
       const winner = stats.get(winnerId);
       if (winner) {
         winner.score = Math.min(duelSeasonMaxScore, winner.score + duelWinScore);
@@ -3243,6 +3273,7 @@ export function createDefaultState() {
     rosterVersion,
     tasks: [],
     npcs: npcNames.map((name, index) => makeNpc(name, index)),
+    sectNameMap: {},
     sect: {
       name: "落云宗",
       reputation: 20,
@@ -3252,6 +3283,7 @@ export function createDefaultState() {
       warLosses: 0
     },
     sectRivals: Object.fromEntries(sects.map((name, index) => [name, makeSectStatus(name, index)])),
+    sectProfiles: Object.fromEntries(sects.map((name) => [name, { name, portraitUrl: "" }])),
     provinceVersion,
     provinces: createNeutralProvinceState(),
     provinceWars: [],
@@ -3313,6 +3345,8 @@ function migrateRoster(state) {
   state.player.gender = "female";
   state.npcs = npcNames.map((name, index) => makeNpc(name, index));
   state.sectRivals = Object.fromEntries(sects.map((name, index) => [name, makeSectStatus(name, index)]));
+  state.sectNameMap ??= {};
+  state.sectProfiles = Object.fromEntries(sects.map((name) => [name, { name, portraitUrl: state.sectProfiles?.[name]?.portraitUrl || "" }]));
   clearProgressHistory(state);
 }
 
@@ -3357,15 +3391,17 @@ export function ensureStateShape(state) {
   applyRootSet(state.player);
   if (JSON.stringify({ roots: state.player.roots, primaryRootKey: state.player.primaryRootKey, root: state.player.root }) !== playerRootShape) changed = true;
   state.player.id ??= "player";
-  if (state.player.name !== "李昕纾") {
-    state.player.name = "李昕纾";
-    changed = true;
-  }
-  if (state.player.gender !== "female") {
-    state.player.gender = "female";
-    changed = true;
-  }
-  state.player.sect = "落云宗";
+  changed = ensureField(state.player, "name", "李昕纾") || changed;
+  changed = ensureField(state.player, "gender", "female") || changed;
+  state.sect ??= {
+    name: state.player.sect || "落云宗",
+    reputation: 20,
+    supplies: 80,
+    rivalHeat: 18,
+    warWins: 0,
+    warLosses: 0
+  };
+  state.player.sect = state.sect.name || state.player.sect || "落云宗";
   state.player.duelWins ??= 0;
   state.player.duelLosses ??= 0;
   state.player.lastBreakthroughDay ??= 0;
@@ -3414,11 +3450,24 @@ export function ensureStateShape(state) {
   state.sect.warLosses ??= 0;
   state.duelDays ??= [];
   state.duelDays = trimDuelDays(state.duelDays, state.day);
+  state.sectNameMap ??= {};
   state.sectRivals ??= {};
   for (const [index, name] of sects.entries()) {
-    if (!state.sectRivals[name]) {
-      state.sectRivals[name] = makeSectStatus(name, index);
+    const currentName = currentSectName(state, name);
+    if (!state.sectRivals[currentName] && currentName !== state.sect.name) {
+      state.sectRivals[currentName] = makeSectStatus(currentName, index);
       changed = true;
+    }
+  }
+  state.sectProfiles ??= {};
+  for (const name of new Set([...sects.map((item) => currentSectName(state, item)), state.sect.name, ...Object.keys(state.sectRivals)])) {
+    if (!name) continue;
+    if (!state.sectProfiles[name]) {
+      state.sectProfiles[name] = { name, portraitUrl: "" };
+      changed = true;
+    } else {
+      state.sectProfiles[name].name = name;
+      state.sectProfiles[name].portraitUrl ??= "";
     }
   }
 
@@ -3603,6 +3652,7 @@ export function getPublicState(state, options = {}) {
       bag: state.bag,
       equipmentTransfers: state.equipmentTransfers,
       provinces: state.provinces,
+      sectProfiles: publicSectProfiles(state),
       derived: derivedBase
     };
   }
@@ -3615,6 +3665,7 @@ export function getPublicState(state, options = {}) {
     duelDays: publicDuelDays(state.duelDays || []),
     provinceWars: publicProvinceWars(state.provinceWars || []),
     dungeonDays: publicDungeonDays(state.dungeonDays || []),
+    sectProfiles: publicSectProfiles(state),
     catalog: { realms, realmStages, roots, rootRules: rootRulesCatalog(), dungeons, taskTemplates, itemCatalog, sects, combatSkills, provinces, equipmentSlots, equipmentTiers, equipmentCatalog, duelRanks },
     derived: {
       ...derivedBase,
@@ -3638,7 +3689,8 @@ function publicCultivator(entity, state, options = {}) {
 function publicDungeonHistory(records) {
   return records.map((record) => ({
     ...record,
-    hasReplay: Boolean(record.replay),
+    replayId: record.replayId || "",
+    hasReplay: Boolean(record.replay || record.replayId),
     replay: null
   }));
 }
@@ -3647,6 +3699,8 @@ function publicDuelHistory(records, options = {}) {
   const replayLimit = options.includeRecentReplays ? 5 : 0;
   return records.map((record, index) => ({
     ...record,
+    replayId: record.replayId || "",
+    hasReplay: Boolean(record.replay || record.replayId),
     replay: index < replayLimit ? publicReplay(record.replay) : null
   }));
 }
@@ -3660,7 +3714,8 @@ function publicDuelDays(records) {
       right: publicEntityRef(match.right),
       winner: publicEntityRef(match.winner),
       loser: publicEntityRef(match.loser),
-      hasReplay: Boolean(match.replay),
+      replayId: match.replayId || "",
+      hasReplay: Boolean(match.replay || match.replayId),
       replay: null
     }))
   }));
@@ -3708,7 +3763,8 @@ function publicBloodEntry(entry) {
     bonusSpirit: entry.bonusSpirit || 0,
     item: entry.item || "",
     tierName: entry.tierName || "",
-    hasReplay: Boolean(entry.replay),
+    replayId: entry.replayId || "",
+    hasReplay: Boolean(entry.replay || entry.replayId),
     replay: null
   };
 }
@@ -3716,7 +3772,8 @@ function publicBloodEntry(entry) {
 function publicDungeonHistoryEntry(record) {
   return {
     ...record,
-    hasReplay: Boolean(record.replay),
+    replayId: record.replayId || "",
+    hasReplay: Boolean(record.replay || record.replayId),
     replay: null
   };
 }
@@ -3750,13 +3807,15 @@ function publicSectDungeonRecord(record) {
       challenger: publicEntityRef(battle.challenger),
       damage: battle.damage,
       winnerName: battle.winnerName,
-      hasReplay: Boolean(battle.replay),
+      replayId: battle.replayId || "",
+      hasReplay: Boolean(battle.replay || battle.replayId),
       replay: null
     })),
     item: record.item || "",
     itemOwner: record.itemOwner || "",
     tierName: record.tierName || "",
-    hasReplay: Boolean(record.replay),
+    replayId: record.replayId || "",
+    hasReplay: Boolean(record.replay || record.replayId),
     replay: null
   };
 }
@@ -3786,7 +3845,8 @@ function publicStarSeaRecord(record) {
     tierName: record.tierName || "",
     itemValue: record.itemValue || 0,
     auctionDividend: record.auctionDividend || 0,
-    hasReplay: Boolean(record.replay),
+    replayId: record.replayId || "",
+    hasReplay: Boolean(record.replay || record.replayId),
     replay: null
   };
 }
@@ -3810,7 +3870,8 @@ function publicStarSeaTeam(record) {
     itemOwner: record.itemOwner || "",
     itemValue: record.itemValue || 0,
     auctionDividend: record.auctionDividend || 0,
-    hasReplay: Boolean(record.replay),
+    replayId: record.replayId || "",
+    hasReplay: Boolean(record.replay || record.replayId),
     replay: null
   };
 }
@@ -3842,6 +3903,16 @@ export function getDuelReplay(state, day, matchId) {
   return publicReplay(match.replay);
 }
 
+export function getDuelReplayId(state, day, matchId) {
+  ensureStateShape(state);
+  const numericDay = Number(day);
+  const record = (state.duelDays || []).find((item) => Number(item.day) === numericDay);
+  if (!record) throw new Error("未找到该日切磋记录");
+  const match = (record.matches || []).find((item) => item.id === matchId);
+  if (!match || match.type !== "battle") throw new Error("未找到该场切磋");
+  return match.replayId || "";
+}
+
 function publicProvinceWars(records) {
   return records.map((record, recordIndex) => ({
     ...record,
@@ -3849,7 +3920,9 @@ function publicProvinceWars(records) {
       ...battle,
       attacker: publicEntityRef(battle.attacker),
       defender: publicEntityRef(battle.defender),
-      replay: publicReplay(battle.replay)
+      replayId: battle.replayId || "",
+      hasReplay: Boolean(battle.replay || battle.replayId),
+      replay: null
     }))
   }));
 }
@@ -3859,8 +3932,13 @@ function publicReplay(replay) {
   const eventLimit = replay.kind === "starSeaTeam" ? 80 : 40;
   return {
     ...replay,
+    replayId: replay.replayId || `battle-${timestampKey()}`,
     events: (replay.events || []).slice(0, eventLimit)
   };
+}
+
+export function getPublicReplay(replay) {
+  return publicReplay(replay);
 }
 
 function publicEntityRef(ref) {
@@ -3873,6 +3951,30 @@ function publicEntityRef(ref) {
     sect: ref.sect,
     skillId: ref.skillId
   };
+}
+
+function publicSectProfiles(state) {
+  const profileMap = new Map();
+  const add = (name, profile = {}) => {
+    if (!name) return;
+    const current = profileMap.get(name) || { id: name, name, portraitUrl: "" };
+    profileMap.set(name, {
+      ...current,
+      ...profile,
+      id: name,
+      name: profile.name || name,
+      portraitUrl: profile.portraitUrl || current.portraitUrl || ""
+    });
+  };
+  for (const sectName of sects) {
+    const currentName = currentSectName(state, sectName);
+    add(currentName, state.sectProfiles?.[currentName] || state.sectProfiles?.[sectName]);
+  }
+  for (const key of Object.keys(state.sectRivals || {})) add(key, state.sectProfiles?.[key]);
+  add(state.sect?.name, state.sectProfiles?.[state.sect?.name]);
+  for (const npc of state.npcs || []) add(npc.sect, state.sectProfiles?.[npc.sect]);
+  for (const territory of state.provinces || []) add(territory.owner, state.sectProfiles?.[territory.owner]);
+  return [...profileMap.values()].sort((a, b) => a.name.localeCompare(b.name, "zh-Hans-CN"));
 }
 
 function buildSectSummaries(state) {
@@ -3905,6 +4007,7 @@ function buildSectSummaries(state) {
     };
     const current = groups.get(member.sect) || {
       name: member.sect,
+      portraitUrl: state.sectProfiles?.[member.sect]?.portraitUrl || "",
       reputation: sectStatus.reputation,
       supplies: sectStatus.supplies,
       rivalHeat: sectStatus.rivalHeat,
@@ -3918,9 +4021,15 @@ function buildSectSummaries(state) {
     current.members.push({
       id: member.id,
       name: member.name,
+      gender: member.gender,
+      sect: member.sect,
       realm: member.realm,
       mood: member.mood,
+      root: member.root,
+      roots: member.roots,
+      primaryRootKey: member.primaryRootKey,
       skillId: member.skillId,
+      portraitUrl: member.portraitUrl || "",
       power: member.power,
       isPlayer: member.isPlayer
     });
@@ -4191,6 +4300,156 @@ export function changePlayerPortrait(state, payload = {}) {
   log(state, "你换上新的画像玉简。", "gold");
 }
 
+function normalizeProfileName(value, fallback = "未命名") {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (!text) return fallback;
+  return text.slice(0, 24);
+}
+
+function normalizeGender(value) {
+  return ["male", "female", "unknown"].includes(value) ? value : "unknown";
+}
+
+function normalizePortraitUrl(value) {
+  if (value === null) return "";
+  if (value === undefined) return undefined;
+  const text = String(value || "").trim();
+  if (!text) return "";
+  if (!/^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+/=]+$/i.test(text)) {
+    throw new Error("头像必须是压缩后的图片数据。");
+  }
+  if (Buffer.byteLength(text, "utf8") > 240_000) {
+    throw new Error("头像数据仍然过大，请裁剪或压缩后再保存。");
+  }
+  return text;
+}
+
+function renameValue(value, oldName, newName) {
+  return value === oldName ? newName : value;
+}
+
+function renameEntityRef(ref, oldName, newName) {
+  if (ref && ref.sect === oldName) ref.sect = newName;
+}
+
+function renameReplaySects(replay, oldName, newName) {
+  if (!replay) return;
+  renameEntityRef(replay.left, oldName, newName);
+  renameEntityRef(replay.right, oldName, newName);
+}
+
+function renameSectEverywhere(state, oldName, newName) {
+  if (!oldName || !newName || oldName === newName) return;
+  if (state.sect?.name === oldName) {
+    state.sect.name = newName;
+    state.player.sect = newName;
+  }
+  for (const npc of state.npcs || []) npc.sect = renameValue(npc.sect, oldName, newName);
+  if (state.sectRivals?.[oldName]) {
+    state.sectRivals[newName] = { ...state.sectRivals[oldName], name: newName };
+    delete state.sectRivals[oldName];
+  }
+  if (state.sectProfiles?.[oldName]) {
+    state.sectProfiles[newName] = { ...state.sectProfiles[oldName], name: newName };
+    delete state.sectProfiles[oldName];
+  }
+  state.sectNameMap ??= {};
+  for (const baseName of sects) {
+    if (currentSectName(state, baseName) === oldName || baseName === oldName) state.sectNameMap[baseName] = newName;
+  }
+  for (const territory of state.provinces || []) territory.owner = renameValue(territory.owner, oldName, newName);
+  for (const item of state.equipment || []) item.ownerSect = renameValue(item.ownerSect, oldName, newName);
+  for (const record of state.equipmentTransfers || []) {
+    record.winnerSect = renameValue(record.winnerSect, oldName, newName);
+    record.loserSect = renameValue(record.loserSect, oldName, newName);
+  }
+  for (const record of state.dungeonDays || []) {
+    for (const entry of record.solo || []) entry.sect = renameValue(entry.sect, oldName, newName);
+    for (const sectRecord of record.sects || []) {
+      sectRecord.sect = renameValue(sectRecord.sect, oldName, newName);
+      for (const battle of sectRecord.battles || []) {
+        renameEntityRef(battle.challenger, oldName, newName);
+        renameReplaySects(battle.replay, oldName, newName);
+      }
+    }
+    for (const cave of record.bloodTrial?.caves || []) {
+      for (const entry of [...(cave.clears || []), ...(cave.challengers || [])]) entry.sect = renameValue(entry.sect, oldName, newName);
+    }
+    if (record.public) {
+      for (const entry of record.public.top || []) entry.sect = renameValue(entry.sect, oldName, newName);
+      for (const team of record.public.teams || []) {
+        for (const member of team.members || []) member.sect = renameValue(member.sect, oldName, newName);
+        for (const member of team.top || []) member.sect = renameValue(member.sect, oldName, newName);
+        renameReplaySects(team.replay, oldName, newName);
+      }
+      renameReplaySects(record.public.replay, oldName, newName);
+    }
+  }
+  for (const day of state.duelDays || []) {
+    for (const match of day.matches || []) {
+      for (const key of ["left", "right", "winner", "loser"]) renameEntityRef(match[key], oldName, newName);
+      renameReplaySects(match.replay, oldName, newName);
+    }
+  }
+  for (const war of state.provinceWars || []) {
+    war.attacker = renameValue(war.attacker, oldName, newName);
+    war.defender = renameValue(war.defender, oldName, newName);
+    for (const member of war.attackerLineup || []) renameEntityRef(member, oldName, newName);
+    for (const member of war.defenderLineup || []) renameEntityRef(member, oldName, newName);
+    for (const battle of war.battles || []) {
+      renameEntityRef(battle.attacker, oldName, newName);
+      renameEntityRef(battle.defender, oldName, newName);
+      renameReplaySects(battle.replay, oldName, newName);
+    }
+  }
+  for (const { entity } of allCultivators(state)) {
+    for (const record of entity.duelHistory || []) {
+      record.sect = renameValue(record.sect, oldName, newName);
+      renameReplaySects(record.replay, oldName, newName);
+    }
+    for (const record of entity.dungeonHistory || []) {
+      record.sect = renameValue(record.sect, oldName, newName);
+      renameReplaySects(record.replay, oldName, newName);
+    }
+  }
+  assignProvinceDefenders(state);
+}
+
+export function updateCultivatorProfile(state, payload = {}) {
+  ensureStateShape(state);
+  const id = String(payload.id || "");
+  const entity = cultivatorById(state, id);
+  if (!entity) throw new Error("未找到该角色。");
+  entity.name = normalizeProfileName(payload.name, entity.name || "未命名");
+  entity.gender = normalizeGender(payload.gender);
+  const rootSet = rootSetFromKeys(payload.rootKeys || payload.roots, entity);
+  entity.roots = rootSet.roots;
+  entity.primaryRootKey = rootSet.primaryRootKey;
+  entity.root = rootSet.primaryRoot;
+  const portraitUrl = normalizePortraitUrl(payload.portraitUrl);
+  if (portraitUrl !== undefined) {
+    entity.portraitUrl = portraitUrl;
+    if (id === "player") entity.portraitVariant = 0;
+  }
+  if (id === "player") state.player.sect = state.sect.name;
+  log(state, `后台已更新${entity.name}的资料。`, "gold");
+}
+
+export function updateSectProfile(state, payload = {}) {
+  ensureStateShape(state);
+  const oldName = normalizeProfileName(payload.oldName || payload.id || payload.name, "");
+  if (!oldName) throw new Error("缺少宗门名称。");
+  const newName = normalizeProfileName(payload.name, oldName);
+  const portraitUrl = normalizePortraitUrl(payload.portraitUrl);
+  renameSectEverywhere(state, oldName, newName);
+  state.sectProfiles ??= {};
+  state.sectProfiles[newName] = {
+    name: newName,
+    portraitUrl: portraitUrl !== undefined ? portraitUrl : state.sectProfiles[newName]?.portraitUrl || ""
+  };
+  log(state, `后台已更新宗门「${newName}」。`, "gold");
+}
+
 function autoAttemptPlayerBreakthrough(state) {
   const p = state.player;
   const need = xpNeed(p.realm);
@@ -4411,11 +4670,13 @@ function runDuelMatch(state, left, right, options = {}) {
   right.mana = effectiveMaxMana(right, state);
 
   const replay = buildReplay(leftBefore, rightBefore, battle, result, foughtAt, state);
+  const replayId = `duel-${state.day}-${left.id}-${right.id}-${foughtAt}`;
+  replay.replayId = replayId;
   const transfer = tryTransferEquipment(state, winner, loser, "每日切磋");
   if (transfer) replay.equipmentTransfer = transfer;
 
-  left.duelHistory.unshift({ foughtAt, opponent: right.name, result: leftResult, replay });
-  right.duelHistory.unshift({ foughtAt, opponent: left.name, result: rightResult, replay });
+  left.duelHistory.unshift({ foughtAt, opponent: right.name, result: leftResult, replayId, replay });
+  right.duelHistory.unshift({ foughtAt, opponent: left.name, result: rightResult, replayId, replay });
   left.duelHistory = left.duelHistory.slice(0, recentRecordDays);
   right.duelHistory = right.duelHistory.slice(0, recentRecordDays);
 
@@ -4447,13 +4708,21 @@ function syncDuelDayRecords(state) {
   for (const record of records) {
     for (const match of record.matches || []) {
       if (match.type === "bye") continue;
-      if (!match.replay) continue;
-      const left = map.get(match.replay.left?.id);
-      const right = map.get(match.replay.right?.id);
+      const leftRef = match.left || match.replay?.left;
+      const rightRef = match.right || match.replay?.right;
+      const left = map.get(leftRef?.id);
+      const right = map.get(rightRef?.id);
       if (!left || !right) continue;
+      const foughtAt = match.replay?.foughtAt || record.createdAt;
+      const leftWon = match.winner?.id === left.id || (match.replay && replayResultFor(match.replay, left.id) === "胜");
+      const replayInfo = {
+        replay: match.replay || null,
+        replayId: match.replayId || "",
+        hasReplay: Boolean(match.replay || match.replayId)
+      };
 
-      left.duelHistory.unshift({ foughtAt: match.replay.foughtAt || record.createdAt, opponent: right.name, result: replayResultFor(match.replay, left.id), replay: match.replay });
-      right.duelHistory.unshift({ foughtAt: match.replay.foughtAt || record.createdAt, opponent: left.name, result: replayResultFor(match.replay, right.id), replay: match.replay });
+      left.duelHistory.unshift({ foughtAt, opponent: right.name, result: leftWon ? "胜" : "负", ...replayInfo });
+      right.duelHistory.unshift({ foughtAt, opponent: left.name, result: leftWon ? "负" : "胜", ...replayInfo });
     }
   }
 

@@ -2772,6 +2772,7 @@ button.event {
   justify-content: space-between;
   gap: 12px;
   margin: 12px 0;
+  flex-wrap: wrap;
 }
 
 .rank-search {
@@ -2783,6 +2784,35 @@ button.event {
 }
 
 .rank-search input {
+  min-height: 38px;
+}
+
+.rank-sort-controls {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.rank-sort-controls label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.rank-sort-controls select {
+  min-height: 38px;
+  min-width: 116px;
+  border: 1px solid rgba(120, 91, 43, .24);
+  border-radius: 7px;
+  background: rgba(255, 253, 246, .88);
+  color: var(--ink);
+  font: inherit;
+  padding: 0 10px;
+}
+
+.rank-sort-direction {
   min-height: 38px;
 }
 
@@ -2955,6 +2985,7 @@ button.event {
   margin-top: 12px;
   color: var(--muted);
   font-size: 13px;
+  flex-wrap: wrap;
 }
 
 .rank-pager button {
@@ -2964,6 +2995,18 @@ button.event {
 .rank-pager button:disabled {
   cursor: not-allowed;
   opacity: .52;
+}
+
+.rank-page-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rank-page-jump input {
+  width: 72px;
+  min-height: 34px;
+  text-align: center;
 }
 
 .back-button {
@@ -4583,15 +4626,15 @@ button.event {
 
 .duel-rank-cell span {
   justify-self: end;
-  color: color-mix(in srgb, var(--rank-color) 78%, #352414);
-  font-weight: 700;
+  color: #3a2b1b;
+  font-weight: 900;
 }
 
 .duel-rank-cell small {
   grid-column: 1 / -1;
-  color: color-mix(in srgb, var(--rank-color) 72%, #4c351f);
+  color: #5a3715;
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 900;
   white-space: nowrap;
 }
 
@@ -5608,5 +5651,216 @@ button.event {
 
   .sect-member-card {
     grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+}
+
+.admin-surface .panel {
+  overflow: visible;
+}
+
+.admin-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.admin-list {
+  display: grid;
+  gap: 8px;
+  max-height: 640px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.admin-list-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  min-height: 58px;
+  padding: 9px 10px;
+  border: 1px solid rgba(92, 64, 35, .18);
+  border-radius: 8px;
+  background: rgba(255, 251, 239, .78);
+  color: #2f2418;
+  text-align: left;
+}
+
+.admin-list-row.active {
+  border-color: rgba(29, 94, 82, .65);
+  background: rgba(229, 244, 236, .95);
+  box-shadow: inset 0 0 0 1px rgba(29, 94, 82, .16);
+}
+
+.admin-list-row strong,
+.admin-list-row small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-list-row small {
+  color: #6d5a44;
+  font-size: 12px;
+}
+
+.admin-editor {
+  display: grid;
+  gap: 16px;
+}
+
+.admin-editor-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  padding: 14px;
+  border-radius: 8px;
+  background: rgba(255, 250, 236, .72);
+  border: 1px solid rgba(92, 64, 35, .14);
+}
+
+.admin-editor-head strong,
+.admin-editor-head small {
+  display: block;
+}
+
+.admin-editor-head strong {
+  font-size: 20px;
+  color: #2f2418;
+}
+
+.admin-editor-head small {
+  color: #6d5a44;
+}
+
+.admin-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.admin-editor label,
+.crop-controls label {
+  display: grid;
+  gap: 6px;
+  color: #5f4a34;
+  font-weight: 700;
+}
+
+.admin-root-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(116px, 1fr));
+  gap: 8px;
+}
+
+.admin-check {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  padding: 9px 10px;
+  border: 1px solid rgba(92, 64, 35, .16);
+  border-radius: 8px;
+  background: rgba(255, 251, 239, .78);
+}
+
+.admin-check input {
+  width: 16px;
+  height: 16px;
+}
+
+.admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.admin-upload-button {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  cursor: pointer;
+}
+
+.admin-upload-button input {
+  display: none;
+}
+
+.sect-avatar {
+  display: inline-block;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  border: 2px solid rgba(255, 248, 226, .9);
+  box-shadow: 0 6px 14px rgba(47, 36, 24, .16);
+  background-size: cover;
+  background-position: center;
+}
+
+.sect-avatar.xl {
+  width: 76px;
+  height: 76px;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(35, 28, 18, .48);
+}
+
+.modal-panel {
+  width: min(520px, 100%);
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+  border-radius: 8px;
+  background: #fff9e9;
+  border: 1px solid rgba(92, 64, 35, .22);
+  box-shadow: 0 24px 70px rgba(35, 28, 18, .28);
+  padding: 18px;
+}
+
+.crop-preview-wrap {
+  display: grid;
+  place-items: center;
+  padding: 14px;
+}
+
+.crop-preview {
+  width: 256px;
+  height: 256px;
+  border-radius: 8px;
+  border: 1px solid rgba(92, 64, 35, .24);
+  box-shadow: 0 12px 28px rgba(47, 36, 24, .16);
+}
+
+.crop-controls {
+  display: grid;
+  gap: 12px;
+}
+
+@media (max-width: 720px) {
+  .admin-layout,
+  .admin-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-list {
+    max-height: 280px;
+  }
+
+  .admin-actions {
+    justify-content: stretch;
+  }
+
+  .admin-actions > * {
+    flex: 1 1 160px;
   }
 }
