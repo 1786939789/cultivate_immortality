@@ -964,6 +964,12 @@ button {
   margin-top: 12px;
 }
 
+.dungeon-loot-toggle {
+  display: flex;
+  justify-content: flex-end;
+  margin: 8px 0 0;
+}
+
 .loot-pool {
   display: grid;
   gap: 8px;
@@ -1175,61 +1181,95 @@ button {
   --icon-a: #a16207;
   --icon-b: #fef3c7;
   --icon-c: #713f12;
+  --icon-glow: rgba(161, 98, 7, .28);
   width: 42px;
   height: 42px;
   display: inline-grid;
   place-items: center;
   flex: 0 0 auto;
-  border: 1px solid color-mix(in srgb, var(--icon-a) 45%, transparent);
+  position: relative;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--icon-a) 64%, #fff4cc);
   border-radius: 8px;
   background:
-    radial-gradient(circle at 32% 24%, rgba(255, 255, 255, .82), transparent 22px),
-    linear-gradient(145deg, color-mix(in srgb, var(--icon-b) 86%, white), color-mix(in srgb, var(--icon-a) 18%, white));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .75), 0 8px 16px rgba(47, 36, 24, .08);
+    radial-gradient(circle at 34% 25%, rgba(255, 255, 255, .78), transparent 20px),
+    radial-gradient(circle at 65% 76%, var(--icon-glow), transparent 28px),
+    linear-gradient(145deg, color-mix(in srgb, var(--icon-b) 82%, white), color-mix(in srgb, var(--icon-a) 34%, #3f2d16));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .78),
+    inset 0 -10px 18px color-mix(in srgb, var(--icon-c) 18%, transparent),
+    0 8px 16px rgba(47, 36, 24, .08);
+}
+
+.equipment-icon::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border: 1px solid rgba(255, 244, 204, .6);
+  border-radius: 6px;
+  pointer-events: none;
 }
 
 .equipment-icon img {
-  width: 32px;
-  height: 32px;
+  width: 38px;
+  height: 38px;
   display: block;
-  color: var(--icon-a);
-  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, .62)) drop-shadow(0 2px 4px rgba(47, 36, 24, .18));
+  object-fit: contain;
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 2px 2px rgba(24, 18, 12, .35));
+}
+
+.equipment-icon-fallback {
+  position: relative;
+  z-index: 1;
+  color: color-mix(in srgb, var(--icon-c) 82%, #28150a);
+  font-family: "Noto Serif SC", serif;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .equipment-icon.tier-1 {
   --icon-a: #a16207;
   --icon-b: #f5ead2;
   --icon-c: #713f12;
+  --icon-glow: rgba(161, 98, 7, .24);
 }
 
 .equipment-icon.tier-2 {
   --icon-a: #16a34a;
   --icon-b: #dcfce7;
   --icon-c: #14532d;
+  --icon-glow: rgba(22, 163, 74, .28);
 }
 
 .equipment-icon.tier-3 {
   --icon-a: #2563eb;
   --icon-b: #dbeafe;
   --icon-c: #1e3a8a;
+  --icon-glow: rgba(37, 99, 235, .3);
 }
 
 .equipment-icon.tier-4 {
   --icon-a: #7c3aed;
   --icon-b: #ede9fe;
   --icon-c: #4c1d95;
+  --icon-glow: rgba(124, 58, 237, .32);
 }
 
 .equipment-icon.tier-5 {
   --icon-a: #ca8a04;
   --icon-b: #fef3c7;
   --icon-c: #713f12;
+  --icon-glow: rgba(250, 204, 21, .38);
 }
 
 .equipment-icon.tier-6 {
   --icon-a: #dc2626;
   --icon-b: #ffedd5;
   --icon-c: #7f1d1d;
+  --icon-glow: rgba(220, 38, 38, .36);
 }
 
 .loot-pool-item {
@@ -1344,7 +1384,8 @@ button {
 .dungeon-cave-list,
 .sect-dungeon-list {
   display: grid;
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr));
+  gap: 10px;
   margin-top: 12px;
 }
 
@@ -1354,7 +1395,7 @@ button {
   border: 1px solid rgba(120, 91, 43, .18);
   border-radius: 7px;
   background: rgba(255, 255, 255, .42);
-  padding: 12px;
+  padding: 10px;
 }
 
 .sect-dungeon-card.success {
@@ -1365,11 +1406,11 @@ button {
 .dungeon-monster-card {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(180px, .8fr) minmax(0, 1.2fr);
-  gap: 12px;
+  grid-template-columns: minmax(132px, .78fr) minmax(0, 1.22fr);
+  gap: 8px;
   align-items: start;
-  margin-bottom: 10px;
-  padding: 10px;
+  margin-bottom: 7px;
+  padding: 8px;
   border-radius: 8px;
   background: linear-gradient(135deg, rgba(255, 248, 232, .72), rgba(236, 253, 245, .42));
 }
@@ -1378,12 +1419,13 @@ button {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .dungeon-monster-card > div:first-child h3,
 .dungeon-monster-card > div:first-child p {
   flex-basis: 100%;
+  margin: 0;
 }
 
 .cave-clear-tag {
@@ -1426,7 +1468,7 @@ button {
 }
 
 .dungeon-monster-card.compact {
-  grid-template-columns: minmax(160px, .7fr) minmax(0, 1.3fr);
+  grid-template-columns: minmax(128px, .78fr) minmax(0, 1.22fr);
   padding: 8px;
   border: 1px solid rgba(120, 91, 43, .16);
   border-radius: 7px;
@@ -1496,13 +1538,15 @@ button {
 }
 
 .dungeon-monster-card h3 {
-  margin-top: 6px;
+  margin-top: 2px;
+  font-size: 15px;
+  line-height: 1.25;
 }
 
 .monster-stats {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
 }
 
 .monster-stats span {
@@ -1512,11 +1556,11 @@ button {
   align-items: center;
   gap: 6px;
   border: 1px solid rgba(120, 91, 43, .16);
-  border-radius: 7px;
+  border-radius: 6px;
   background: rgba(255, 253, 246, .72);
-  padding: 6px 8px;
+  padding: 4px 6px;
   color: #5b4630;
-  font-size: 12px;
+  font-size: 11px;
   overflow-wrap: anywhere;
 }
 
@@ -1532,38 +1576,38 @@ button {
 
 .blood-podium {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 116px));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   justify-content: center;
-  gap: 10px;
-  align-items: end;
-  margin-top: 12px;
-  padding: 8px 0 6px;
+  gap: 6px;
+  align-items: stretch;
+  margin-top: 8px;
+  padding: 4px 0 2px;
 }
 
 .blood-podium-card {
   position: relative;
   min-width: 0;
-  min-height: 114px;
+  min-height: 96px;
   display: grid;
   justify-items: center;
   align-content: start;
-  gap: 3px;
+  gap: 2px;
   border: 1px solid rgba(120, 91, 43, .22);
   border-radius: 8px;
   background:
     linear-gradient(180deg, rgba(255, 251, 235, .86), rgba(255, 247, 237, .68)),
     radial-gradient(circle at 50% 18%, rgba(217, 119, 6, .18), transparent 38%);
   color: var(--ink);
-  padding: 12px 6px 8px;
+  padding: 10px 5px 7px;
   text-align: center;
   box-shadow: inset 0 -18px 32px rgba(120, 91, 43, .05);
 }
 
 .blood-podium-card.rank-1 {
-  min-height: 126px;
+  min-height: 104px;
   grid-column: 2;
   grid-row: 1;
-  transform: translateY(-8px);
+  transform: translateY(-4px);
   border-color: rgba(180, 83, 9, .45);
   background:
     linear-gradient(180deg, rgba(254, 243, 199, .94), rgba(255, 251, 235, .72)),
@@ -1589,19 +1633,19 @@ button {
 }
 
 .blood-podium-card .character-portrait.lg {
-  --portrait-size: 46px;
+  --portrait-size: 34px;
 }
 
 .blood-podium-card.rank-1 .character-portrait.lg {
-  --portrait-size: 52px;
+  --portrait-size: 38px;
 }
 
 .podium-rank {
   position: absolute;
   top: 6px;
   left: 6px;
-  min-width: 24px;
-  height: 22px;
+  min-width: 20px;
+  height: 18px;
   display: grid;
   place-items: center;
   border-radius: 999px;
@@ -1623,7 +1667,7 @@ button {
 .blood-podium-card strong {
   margin-top: 2px;
   line-height: 1.2;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .blood-podium-card small {
@@ -1644,11 +1688,30 @@ button {
 }
 
 .void-podium {
-  margin-top: 14px;
+  margin-top: 8px;
 }
 
 .void-podium .blood-podium-card {
   pointer-events: none;
+}
+
+.sect-dungeon-card .attribute-list.compact {
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 6px;
+}
+
+.sect-dungeon-card .attribute-list.compact .void-monster-button {
+  grid-column: 1 / -1;
+}
+
+.sect-dungeon-card .attribute-list.compact > .attribute-row {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+.sect-dungeon-card .attribute-row {
+  min-height: 0;
+  padding: 7px 8px;
 }
 
 .void-hall-detail {
@@ -1685,7 +1748,50 @@ button {
 
 .dungeon-sea-grid {
   margin-top: 12px;
-  grid-template-columns: .8fr .9fr 1.1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.star-sea-overview-panel {
+  grid-column: 1 / -1;
+}
+
+.star-sea-overview-line {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.4fr) repeat(4, minmax(130px, .75fr));
+  gap: 8px;
+  align-items: stretch;
+}
+
+.compact-monster-strip {
+  margin: 0;
+}
+
+.compact-monster-strip .monster-chip,
+.star-sea-summary-chip {
+  min-height: 74px;
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  border: 1px solid rgba(120, 91, 43, .16);
+  border-radius: 7px;
+  background: rgba(255, 253, 246, .66);
+  padding: 8px;
+}
+
+.star-sea-summary-chip span,
+.star-sea-summary-chip small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.star-sea-summary-chip b {
+  color: var(--ink);
+}
+
+.sea-team-rank,
+.sea-personal-rank {
+  min-width: 0;
 }
 
 .card {
@@ -1865,8 +1971,8 @@ select {
 }
 
 .equipment-slot-card .equipment-icon img {
-  width: 29px;
-  height: 29px;
+  width: 34px;
+  height: 34px;
 }
 
 .equipment-slot-card span,
@@ -3587,12 +3693,77 @@ button.event {
 }
 
 .skill-hero {
+  position: relative;
+  overflow: hidden;
   display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
   gap: 8px;
   margin-top: 12px;
+  border: 1px solid rgba(15, 118, 110, .18);
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(10, 36, 34, .1), rgba(255, 253, 246, .72)),
+    rgba(255, 255, 255, .46);
+  padding: 10px;
+}
+
+.skill-hero::after {
+  content: "";
+  position: absolute;
+  inset: -22% -8% -34% auto;
+  width: min(48%, 300px);
+  opacity: .2;
+  background: var(--skill-image) center / cover no-repeat;
+  filter: saturate(1.2);
+  pointer-events: none;
+}
+
+.skill-hero > div {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.skill-hero-art,
+.skill-card-icon {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  flex: 0 0 auto;
+  border: 1px solid rgba(15, 118, 110, .26);
+  background:
+    radial-gradient(circle at 50% 42%, rgba(255, 255, 255, .2), transparent 54%),
+    #0d2423;
+  color: #e0f2fe;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, .12),
+    0 8px 20px rgba(15, 118, 110, .16);
+  font-family: serif;
+  font-weight: 900;
+}
+
+.skill-hero-art {
+  width: 78px;
+  height: 78px;
+  border-radius: 8px;
+  font-size: 30px;
+}
+
+.skill-hero-art img,
+.skill-card-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(1.08);
 }
 
 .skill-hero strong {
+  display: block;
   color: #78350f;
   font-size: 24px;
 }
@@ -3605,12 +3776,26 @@ button.event {
 }
 
 .skill-card {
+  position: relative;
+  overflow: hidden;
   border: 1px solid rgba(120, 91, 43, .22);
   background: rgba(255, 255, 255, .46);
   border-radius: 7px;
   padding: 10px;
   display: grid;
   gap: 8px;
+}
+
+.skill-card::after {
+  content: "";
+  position: absolute;
+  inset: auto -18px -32px auto;
+  width: 118px;
+  height: 118px;
+  opacity: .12;
+  background: var(--skill-image) center / cover no-repeat;
+  transform: rotate(-8deg);
+  pointer-events: none;
 }
 
 .skill-card.active {
@@ -3627,6 +3812,8 @@ button.event {
 }
 
 .skill-title {
+  position: relative;
+  z-index: 1;
   display: flex;
   justify-content: space-between;
   gap: 8px;
@@ -3634,12 +3821,23 @@ button.event {
 }
 
 .skill-title strong {
+  min-width: 0;
+  flex: 1 1 auto;
   color: #78350f;
+}
+
+.skill-card-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 7px;
+  font-size: 20px;
 }
 
 .skill-card p,
 .skill-card small,
 .skill-hero span {
+  position: relative;
+  z-index: 1;
   color: var(--muted);
   font-size: 12px;
   line-height: 1.55;
@@ -3904,13 +4102,26 @@ button.event {
   flex-direction: column;
 }
 
+.detail-sections.record-sections > .panel {
+  height: 286px;
+}
+
 .sect-detail-sections {
   grid-template-columns: 1fr;
+}
+
+.detail-sections.sect-record-sections > .panel {
+  height: 286px;
 }
 
 .detail-sections > .sect-member-panel {
   height: auto;
   min-height: 238px;
+  overflow: visible;
+}
+
+.detail-sections.sect-record-sections > .sect-member-panel {
+  height: auto;
   overflow: visible;
 }
 
@@ -4016,6 +4227,43 @@ button.event {
 .detail-scroll {
   overflow-y: auto;
   padding-right: 4px;
+}
+
+.record-sections .event,
+.record-sections .event-button,
+.record-sections .duel-record {
+  gap: 3px;
+  height: auto;
+  min-height: 56px;
+  overflow: visible;
+}
+
+.record-sections .event strong,
+.record-sections .event-button strong,
+.record-sections .duel-record strong,
+.record-sections .event span,
+.record-sections .event-button span,
+.record-sections .duel-record span,
+.record-sections .event small,
+.record-sections .event-button small {
+  overflow-wrap: anywhere;
+}
+
+.sect-record-sections .sect-war-event,
+.sect-record-sections .sect-dungeon-event {
+  height: auto;
+  min-height: 86px;
+  overflow: visible;
+  align-content: start;
+}
+
+.sect-record-sections .sect-war-event strong,
+.sect-record-sections .sect-dungeon-event strong,
+.sect-record-sections .sect-war-event span,
+.sect-record-sections .sect-dungeon-event span,
+.sect-record-sections .sect-war-event small,
+.sect-record-sections .sect-dungeon-event small {
+  overflow-wrap: anywhere;
 }
 
 .flat {
@@ -4774,6 +5022,47 @@ button.event {
   z-index: 2;
 }
 
+.skill-cast-art {
+  position: absolute;
+  right: -8px;
+  top: -44px;
+  width: min(46%, 260px);
+  height: calc(100% + 88px);
+  object-fit: cover;
+  opacity: .86;
+  filter: saturate(1.18) contrast(1.06) drop-shadow(0 0 16px rgba(var(--skill-rgb, 245, 158, 11), .28));
+  mix-blend-mode: screen;
+  transform: rotate(-4deg) scale(1.08);
+  animation: skill-art-flare 1.65s ease both;
+}
+
+.skill-cast i.has-art {
+  right: 18px;
+  top: 18px;
+  width: 54px;
+  height: 54px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: rgba(10, 18, 18, .74);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, .16),
+    0 0 18px rgba(var(--skill-rgb, 245, 158, 11), .28);
+}
+
+.skill-cast i.has-art::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 42% 34%, rgba(255, 255, 255, .18), transparent 48%);
+}
+
+.skill-cast-icon {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(1.16);
+}
+
 .skill-cast::before {
   right: 82px;
   bottom: 12px;
@@ -4915,6 +5204,20 @@ button.event {
   }
 }
 
+@keyframes skill-art-flare {
+  from {
+    opacity: 0;
+    transform: translateX(42px) rotate(-12deg) scale(.92);
+  }
+  36% {
+    opacity: .98;
+  }
+  to {
+    opacity: .74;
+    transform: translateX(0) rotate(-4deg) scale(1.08);
+  }
+}
+
 .pill-grid {
   display: flex;
   flex-wrap: wrap;
@@ -4980,6 +5283,10 @@ button.event {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .star-sea-overview-line {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .realm-table-head {
     display: none;
   }
@@ -5042,6 +5349,10 @@ button.event {
   .province-table-head,
   .province-table-row,
   .war-battle-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .star-sea-overview-line {
     grid-template-columns: 1fr;
   }
 
@@ -5122,6 +5433,17 @@ button.event {
     grid-template-columns: 1fr;
   }
 
+  .dungeon-cave-list,
+  .sect-dungeon-list,
+  .dungeon-monster-card,
+  .dungeon-monster-card.compact {
+    grid-template-columns: 1fr;
+  }
+
+  .blood-podium {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .root-counter-map {
     width: 100%;
     min-width: 0;
@@ -5179,16 +5501,6 @@ button.event {
 
   .attributes-surface > .grid {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .blood-podium-card.rank-2,
-  .blood-podium-card.rank-3 {
-    grid-column: 1;
-    transform: none;
-  }
-
-  .blood-podium-card.rank-1 {
-    grid-column: 1;
   }
 
   .realm-row > span {

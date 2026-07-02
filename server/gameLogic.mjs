@@ -28,8 +28,53 @@ function timestampKey(date = new Date()) {
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 }
 
+const stageXpBudgets = [
+  1200,
+  3800,
+  15000,
+  20000,
+  32000,
+  52000,
+  84000,
+  136000,
+  220000
+];
+const xpModeVersion = 2;
+
+function stageXpBudget(stage) {
+  const known = stageXpBudgets[stage];
+  if (known) return known;
+  const last = stageXpBudgets[stageXpBudgets.length - 1];
+  return Math.round(last * Math.pow(1.45, stage - stageXpBudgets.length + 1));
+}
+
 export function xpNeed(realm) {
-  return Math.floor(100 * Math.pow(1.34, realm));
+  const safeRealm = Math.max(0, Math.floor(Number(realm) || 0));
+  return xpRequiredBeforeRealm(safeRealm + 1);
+}
+
+function levelXpNeed(realm) {
+  const safeRealm = Math.max(0, Math.floor(Number(realm) || 0));
+  const stage = Math.floor(safeRealm / 10);
+  const level = safeRealm % 10;
+  const budget = stageXpBudget(stage);
+  const curve = 1.16;
+  const before = Math.round(budget * Math.pow(level / 10, curve));
+  const after = Math.round(budget * Math.pow((level + 1) / 10, curve));
+  return Math.max(1, after - before);
+}
+
+function xpRequiredBeforeRealm(realm) {
+  const safeRealm = Math.max(0, Math.floor(Number(realm) || 0));
+  let total = 0;
+  for (let index = 0; index < safeRealm; index += 1) total += levelXpNeed(index);
+  return total;
+}
+
+function migrateEntityTotalXp(entity) {
+  const realm = Math.max(0, Math.floor(Number(entity?.realm) || 0));
+  const currentLevelXp = Math.max(0, Math.floor(Number(entity?.xp) || 0));
+  entity.xp = xpRequiredBeforeRealm(realm) + currentLevelXp;
 }
 
 export const birthStatRanges = {
@@ -702,8 +747,8 @@ function ensureField(object, key, value) {
 
 const equipmentSlotMap = Object.fromEntries(equipmentSlots.map((slot) => [slot.id, slot]));
 const equipmentTierMap = Object.fromEntries(equipmentTiers.map((tier) => [tier.id, tier]));
-const equipmentVersion = 2;
-const dungeonRecordVersion = 2;
+const equipmentVersion = 3;
+const dungeonRecordVersion = 3;
 const starSeaTeamSize = 10;
 const starSeaCycleLength = 10;
 const starSeaMaxRounds = 100;
@@ -722,7 +767,7 @@ const monsterNamesByStage = [
 ];
 const monsterNames = monsterNamesByStage.flat();
 const sharedDungeonItemIds = equipmentCatalog.map((item) => item.id);
-const recentRecordDays = 7;
+const recentRecordDays = 30;
 const dungeonLootRules = {
   blood_trial: {
     name: "血色禁地",
@@ -753,8 +798,8 @@ const dungeonLootRules = {
     contexts: ["血色禁地", "虚天殿", "乱星海猎妖"],
     itemIds: sharedDungeonItemIds,
     spiritRange: ({ stage = 0, killed = 0 } = {}) => ({
-      min: Math.floor(120 + stage * 96 + killed * 54),
-      max: Math.floor(209 + stage * 96 + killed * 54)
+      min: Math.floor(240 + stage * 140 + killed * 90),
+      max: Math.floor(380 + stage * 180 + killed * 120)
     }),
     sourceText: "全副本共享装备池；乱星海猎妖结算时贡献最高者优先获得"
   }
@@ -1236,7 +1281,7 @@ function fightMonster(state, entity, monster, maxRounds = 18, start = {}) {
 }
 
 function ensureDungeonState(state) {
-  state.dungeonRecordVersion ??= dungeonRecordVersion;
+  const previousDungeonRecordVersion = Number(state.dungeonRecordVersion || 1);
   state.dungeonDays ??= [];
   state.dungeonDays = [...state.dungeonDays]
     .filter((record) => (state.day || 1) - (record.day || 1) < recentRecordDays)
@@ -1248,6 +1293,10 @@ function ensureDungeonState(state) {
   for (const { entity } of allCultivators(state)) {
     entity.dungeonHistory ??= [];
     entity.dungeonHistory = entity.dungeonHistory.slice(0, recentRecordDays);
+  }
+  if (previousDungeonRecordVersion < dungeonRecordVersion) {
+    migrateStarSeaSpiritRewards(state);
+    state.dungeonRecordVersion = dungeonRecordVersion;
   }
 }
 
@@ -2175,6 +2224,7 @@ function runStarSeaTeamBattle(state, team, monster) {
 
 function distributeStarSeaTeamSpirit(teamRecord, teamSpirit) {
   const members = teamRecord.members || [];
+  for (const member of members) member.spirit = 0;
   if (!members.length || teamSpirit <= 0) return;
   const basePool = Math.floor(teamSpirit * 0.2);
   const outputPool = teamSpirit - basePool;
@@ -2193,30 +2243,91 @@ function distributeStarSeaTeamSpirit(teamRecord, teamSpirit) {
   }
 }
 
-function settleStarSeaSpirit(state, teamRecords, pool) {
+function assignStarSeaSpiritShares(teamRecords, pool) {
   if (!teamRecords.length) return;
-  const weights = teamRecords.map((_, index) => teamRecords.length - index);
-  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
-  let remaining = pool;
-  teamRecords.forEach((record, index) => {
-    const share = index === teamRecords.length - 1 ? remaining : Math.max(10, Math.floor(pool * weights[index] / totalWeight));
-    record.spirit = Math.max(10, share);
-    remaining -= record.spirit;
+  const minimumShare = 6;
+  const basePool = Math.min(pool, teamRecords.length * minimumShare);
+  const baseShare = Math.floor(basePool / teamRecords.length);
+  let remainder = pool - baseShare * teamRecords.length;
+  for (const record of teamRecords) record.spirit = baseShare;
+
+  const podium = teamRecords.slice(0, 3);
+  const podiumWeights = [9, 5, 3].slice(0, podium.length);
+  const podiumWeightTotal = podiumWeights.reduce((sum, weight) => sum + weight, 0);
+  const podiumPool = Math.floor(remainder * 0.58);
+  let podiumAssigned = 0;
+  podium.forEach((record, index) => {
+    const share = index === podium.length - 1 ? podiumPool - podiumAssigned : Math.floor(podiumPool * podiumWeights[index] / podiumWeightTotal);
+    record.spirit += Math.max(0, share);
+    podiumAssigned += Math.max(0, share);
   });
-  if (remaining < 0) {
-    for (const record of [...teamRecords].reverse()) {
-      const take = Math.min(record.spirit - 10, -remaining);
-      if (take > 0) {
-        record.spirit -= take;
-        remaining += take;
+  remainder -= podiumAssigned;
+
+  const rankWeights = teamRecords.map((_, index) => Math.pow(teamRecords.length - index, 1.15));
+  const rankWeightTotal = rankWeights.reduce((sum, weight) => sum + weight, 0);
+  let rankAssigned = 0;
+  teamRecords.forEach((record, index) => {
+    const share = index === teamRecords.length - 1 ? remainder - rankAssigned : Math.floor(remainder * rankWeights[index] / rankWeightTotal);
+    record.spirit += Math.max(0, share);
+    rankAssigned += Math.max(0, share);
+  });
+
+  for (const record of teamRecords) distributeStarSeaTeamSpirit(record, record.spirit);
+}
+
+function starSeaSpiritRangeForRecord(publicRecord) {
+  const monsters = publicRecord?.monsters?.length ? publicRecord.monsters : [publicRecord?.monster].filter(Boolean);
+  const stage = monsters.length ? Math.max(...monsters.map((monster) => stageIndexOfRealm(monster.realmIndex || 0))) : 0;
+  return dungeonLootRules.star_sea.spiritRange({ stage, killed: publicRecord?.killed || 0 });
+}
+
+function migrateStarSeaSpiritPool(publicRecord) {
+  const newRange = starSeaSpiritRangeForRecord(publicRecord);
+  const oldRange = publicRecord.spiritPoolRange;
+  const oldPool = Number(publicRecord.spiritPool || 0);
+  const oldSpread = Math.max(1, Number(oldRange?.max || 0) - Number(oldRange?.min || 0));
+  const ratio = oldRange ? clamp((oldPool - Number(oldRange.min || 0)) / oldSpread, 0, 1) : 0.5;
+  const newPool = Math.round(newRange.min + (newRange.max - newRange.min) * ratio);
+  publicRecord.spiritPoolRange = newRange;
+  publicRecord.spiritPool = Math.max((publicRecord.teams || []).length * 6, newPool);
+}
+
+function migrateStarSeaSpiritRewards(state) {
+  for (const dayRecord of state.dungeonDays || []) {
+    const publicRecord = dayRecord.public;
+    if (!publicRecord?.teams?.length) continue;
+
+    migrateStarSeaSpiritPool(publicRecord);
+    const previousMemberSpirit = new Map();
+    for (const team of publicRecord.teams) {
+      for (const member of team.members || []) previousMemberSpirit.set(member.id, Number(member.spirit || 0));
+    }
+
+    assignStarSeaSpiritShares(publicRecord.teams, Number(publicRecord.spiritPool || 0));
+    publicRecord.top = publicRecord.teams
+      .flatMap((record) => (record.members || []).map((member) => ({ ...member, teamName: record.name, teamRank: record.rank })))
+      .sort((a, b) => b.damage - a.damage)
+      .slice(0, 10);
+
+    for (const team of publicRecord.teams) {
+      for (const member of team.members || []) {
+        const previous = previousMemberSpirit.get(member.id) || 0;
+        const current = Number(member.spirit || 0);
+        const delta = current - previous;
+        const entity = cultivatorById(state, member.id);
+        if (!entity) continue;
+        entity.spirit = Math.max(0, Math.floor(Number(entity.spirit) || 0) + delta);
+        const history = (entity.dungeonHistory || []).find((record) => record.type === "public" && record.day === dayRecord.day && record.teamName === team.name);
+        if (history) history.spirit = current;
       }
-      if (remaining >= 0) break;
     }
   }
-  if (remaining > 0) teamRecords[0].spirit += remaining;
+}
+
+function settleStarSeaSpirit(state, teamRecords, pool) {
+  assignStarSeaSpiritShares(teamRecords, pool);
 
   for (const record of teamRecords) {
-    distributeStarSeaTeamSpirit(record, record.spirit);
     for (const member of record.members || []) {
       const entity = cultivatorById(state, member.id);
       if (entity) entity.spirit += member.spirit || 0;
@@ -3084,6 +3195,7 @@ export function createDefaultState() {
 
   return {
     day: 1,
+    xpModeVersion,
     player: {
       id: "player",
       name: "李昕纾",
@@ -3378,6 +3490,12 @@ export function ensureStateShape(state) {
   changed = repairDuelSeasonFromRecords(state) || changed;
   if (state.duelDays.length) {
     syncDuelDayRecords(state);
+    changed = true;
+  }
+  if (state.xpModeVersion !== xpModeVersion) {
+    migrateEntityTotalXp(state.player);
+    for (const npc of state.npcs || []) migrateEntityTotalXp(npc);
+    state.xpModeVersion = xpModeVersion;
     changed = true;
   }
   changed = ensureProvinceState(state) || changed;
@@ -3707,11 +3825,9 @@ export function dailySettlement(state, options = {}) {
     if (npc.xp >= xpNeed(npc.realm) && npc.realm < realms.length - 1) {
       const fromRealm = npc.realm;
       const targetRealm = npc.realm + 1;
-      const need = xpNeed(npc.realm);
       const success = Math.random() < chanceParts.total;
       let growth = null;
       if (success) {
-        npc.xp -= need;
         npc.realm = targetRealm;
         growth = applyBreakthroughGrowth(npc, fromRealm);
         npc.hp = effectiveMaxHp(npc, state);
@@ -3832,8 +3948,58 @@ export function addTask(state, payload) {
 
   state.tasks.unshift({ name, type: template.label, diff, xp: xpGain, day: state.day, date: stateDateForDay(state) });
   state.tasks = state.tasks.slice(0, 16);
+  addTaskXpToDailyRecord(state, {
+    xpGain,
+    baseXpGain,
+    taskName: name,
+    taskType: template.label
+  });
   log(state, `完成「${name}」，获得 ${xpGain} 经验。${template.label}让你的道基更扎实。`, "gold");
   autoAttemptPlayerBreakthrough(state);
+}
+
+function addTaskXpToDailyRecord(state, { xpGain, baseXpGain, taskName, taskType }) {
+  const player = state.player;
+  const today = state.day;
+  const todayDate = stateDateForDay(state);
+  player.dailyRecords ??= [];
+  let record = player.dailyRecords.find((item) => item.day === today);
+  if (!record) {
+    const chanceParts = breakthroughChanceParts(state, player);
+    record = {
+      day: today,
+      date: todayDate,
+      xp: 0,
+      baseXp: 0,
+      bonusXp: 0,
+      spirit: 0,
+      realm: realms[player.realm],
+      breakChance: chanceParts.total,
+      realmBaseBreakChance: chanceParts.realmBase,
+      rootBreakMultiplier: chanceParts.rootMultiplier,
+      sectBreakMultiplier: chanceParts.sectMultiplier,
+      baseBreakChance: chanceParts.base,
+      bonusBreakChance: chanceParts.bonus,
+      note: "现实任务"
+    };
+    player.dailyRecords.unshift(record);
+  }
+
+  const bonusXp = Math.max(0, xpGain - baseXpGain);
+  record.xp = (Number(record.xp) || 0) + xpGain;
+  record.baseXp = (Number(record.baseXp) || 0) + baseXpGain;
+  record.bonusXp = (Number(record.bonusXp) || 0) + bonusXp;
+  record.taskXp = (Number(record.taskXp) || 0) + xpGain;
+  record.taskBaseXp = (Number(record.taskBaseXp) || 0) + baseXpGain;
+  record.taskBonusXp = (Number(record.taskBonusXp) || 0) + bonusXp;
+  record.taskCount = (Number(record.taskCount) || 0) + 1;
+  record.taskNames = [taskName, ...(record.taskNames || [])].slice(0, 5);
+  record.taskTypes = Array.from(new Set([taskType, ...(record.taskTypes || [])])).slice(0, 5);
+  record.date ||= todayDate;
+  record.realm = realms[player.realm];
+  player.dailyRecords = player.dailyRecords
+    .sort((a, b) => (b.day || 0) - (a.day || 0))
+    .slice(0, recentRecordDays);
 }
 
 export function changePlayerPortrait(state, payload = {}) {
@@ -3862,7 +4028,6 @@ function autoAttemptPlayerBreakthrough(state) {
   p.lastBreakthroughDay = state.day;
   if (Math.random() < chance) {
     const fromRealm = p.realm;
-    p.xp -= need;
     p.realm += 1;
     const growth = applyBreakthroughGrowth(p, fromRealm);
     p.hp = effectiveMaxHp(p, state);
