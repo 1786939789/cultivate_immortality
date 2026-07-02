@@ -4563,20 +4563,35 @@ button.event {
 }
 
 .duel-rank-cell {
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: auto auto;
+  align-content: center;
+  justify-content: stretch;
+  gap: 4px 8px;
   border-radius: 7px;
-  min-height: 36px;
+  min-height: 52px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--rank-color) 30%, #fff7ed), rgba(255, 255, 255, .88));
+  color: color-mix(in srgb, var(--rank-color) 86%, #21170f);
+  padding: 8px 10px;
+}
+
+.duel-rank-cell strong {
+  color: color-mix(in srgb, var(--rank-color) 88%, #1f160e);
+  font-size: 13px;
 }
 
 .duel-rank-cell span {
-  color: color-mix(in srgb, var(--rank-color) 60%, #5b4630);
+  justify-self: end;
+  color: color-mix(in srgb, var(--rank-color) 78%, #352414);
   font-weight: 700;
 }
 
 .duel-rank-cell small {
-  color: color-mix(in srgb, var(--rank-color) 48%, #7c6b58);
+  grid-column: 1 / -1;
+  color: color-mix(in srgb, var(--rank-color) 72%, #4c351f);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 800;
   white-space: nowrap;
 }
 
@@ -4626,7 +4641,7 @@ button.event {
 .match-card {
   width: 100%;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   align-items: center;
   border: 1px solid rgba(120, 91, 43, .24);
@@ -4671,7 +4686,16 @@ button.event {
   padding-left: 8px;
 }
 
-.match-person strong,
+.match-person strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .match-person small {
   display: block;
   overflow: hidden;
@@ -4683,23 +4707,60 @@ button.event {
   color: var(--muted);
 }
 
+.match-realm-line {
+  margin-top: 2px;
+}
+
 .match-person.winner {
   border-left-color: var(--jade);
 }
 
+.match-outcome {
+  flex: 0 0 auto;
+  border: 1px solid rgba(120, 91, 43, .18);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  padding: 3px 7px;
+}
+
+.match-outcome.win {
+  border-color: rgba(15, 118, 110, .38);
+  background: rgba(236, 253, 245, .78);
+  color: #0f766e;
+}
+
+.match-outcome.loss {
+  border-color: rgba(185, 28, 28, .26);
+  background: rgba(254, 242, 242, .72);
+  color: #b91c1c;
+}
+
 .match-result {
   display: grid;
-  gap: 2px;
+  gap: 3px;
   justify-items: center;
-  min-width: 54px;
+  min-width: 76px;
   color: var(--cinnabar);
   font-weight: 800;
 }
 
+.match-result span {
+  color: #0f766e;
+}
+
 .match-result small {
+  color: #b91c1c;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.match-result em {
   color: var(--muted);
   font-size: 11px;
-  font-weight: 500;
+  font-style: normal;
+  font-weight: 600;
 }
 
 .skill-chip {

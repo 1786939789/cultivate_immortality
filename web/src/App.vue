@@ -1302,30 +1302,34 @@
             <div class="match-list" v-if="selectedDuelRecord">
               <button
                 class="match-card"
-                :class="{ bye: match.type === 'bye', replayable: match.replay }"
+                :class="{ bye: match.type === 'bye', replayable: match.hasReplay || match.replay }"
                 v-for="match in selectedDuelRecord.matches"
                 :key="match.id"
                 type="button"
-                :disabled="match.type === 'bye' || !match.replay"
-                @click="openMatchReplay(match)"
+                :disabled="match.type === 'bye' || !(match.hasReplay || match.replay)"
+                @click="openMatchReplay(match, selectedDuelRecord)"
               >
                 <template v-if="match.type === 'battle'">
                   <div class="match-person" :class="{ winner: match.winner.id === match.left.id }">
                     <CharacterPortrait :person="matchPerson(match.left)" size="sm" />
                     <div>
-                      <strong>{{ match.left.name }}</strong>
-                      <small>{{ duelRankText(matchPerson(match.left)) }} · {{ realmName(match.left.realm) }} · {{ match.left.sect }}</small>
+                      <strong>
+                        {{ match.left.name }}
+                        <span class="match-outcome" :class="match.winner.id === match.left.id ? 'win' : 'loss'">{{ match.winner.id === match.left.id ? "胜" : "负" }}</span>
+                      </strong>
+                      <small>{{ duelRankText(matchPerson(match.left)) }}</small>
+                      <small class="match-realm-line">{{ realmName(match.left.realm) }} · {{ match.left.sect }}</small>
                     </div>
-                  </div>
-                  <div class="match-result">
-                    <span>{{ match.winner.id === match.left.id ? "胜" : "负" }}</span>
-                    <small>{{ match.replay ? "回放" : "未保存" }}</small>
                   </div>
                   <div class="match-person" :class="{ winner: match.winner.id === match.right.id }">
                     <CharacterPortrait :person="matchPerson(match.right)" size="sm" />
                     <div>
-                      <strong>{{ match.right.name }}</strong>
-                      <small>{{ duelRankText(matchPerson(match.right)) }} · {{ realmName(match.right.realm) }} · {{ match.right.sect }}</small>
+                      <strong>
+                        {{ match.right.name }}
+                        <span class="match-outcome" :class="match.winner.id === match.right.id ? 'win' : 'loss'">{{ match.winner.id === match.right.id ? "胜" : "负" }}</span>
+                      </strong>
+                      <small>{{ duelRankText(matchPerson(match.right)) }}</small>
+                      <small class="match-realm-line">{{ realmName(match.right.realm) }} · {{ match.right.sect }}</small>
                     </div>
                   </div>
                 </template>
@@ -1939,7 +1943,7 @@ import {
   Zap
 } from "lucide-vue-next";
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from "vue";
-import { clearCachedState, getCachedState, getState, postAction, saveCachedState } from "./api";
+import { clearCachedState, getCachedState, getDuelReplay, getState, postAction, saveCachedState } from "./api";
 import CharacterPortrait from "./components/CharacterPortrait.vue";
 import EquipmentIcon from "./components/EquipmentIcon.vue";
 import LogPanel from "./components/LogPanel.vue";
@@ -2967,7 +2971,7 @@ function provinceEffect(province) {
     return { type: province.type, value, text: `经验获取 +${Math.round(value * 100)}%` };
   }
   if (province.type === "breakthrough") {
-    const value = Number((0.05 + 0.05 * tier).toFixed(3));
+    const value = Number((0.025 + 0.035 * tier).toFixed(3));
     return { type: province.type, value, text: `突破概率 +${Math.round(value * 100)}%` };
   }
   const value = 10 + Math.round(10 * tier);
@@ -4084,17 +4088,17 @@ function personBreakthroughChance(person) {
 }
 
 function fallbackPersonBreakthroughChance(person) {
-  return Math.max(0.05, Math.min(0.95, baseBreakthroughChance(person?.realm || 0)));
+  return Math.max(0.04, Math.min(0.88, baseBreakthroughChance(person?.realm || 0)));
 }
 
 function baseBreakthroughChance(realm) {
   const safeRealm = realm || 0;
   const stageIndex = Math.floor(safeRealm / 10);
   const level = (safeRealm % 10) + 1;
-  const levelPenalty = (level - 1) * 0.018;
-  const stagePenalty = stageIndex * 0.045;
-  const bottleneckPenalty = level === 10 ? 0.12 + stageIndex * 0.012 : 0;
-  return Math.max(0.08, Math.min(0.9, 0.86 - levelPenalty - stagePenalty - bottleneckPenalty));
+  const levelPenalty = (level - 1) * 0.024;
+  const stagePenalty = stageIndex * 0.058;
+  const bottleneckPenalty = level === 10 ? 0.18 + stageIndex * 0.024 : 0;
+  return Math.max(0.04, Math.min(0.86, 0.76 - levelPenalty - stagePenalty - bottleneckPenalty));
 }
 
 function rootBonus(root, fallback = 0) {
@@ -4453,9 +4457,24 @@ function openDuelReplay(record) {
   detailView.value = "rank";
 }
 
-function openMatchReplay(match) {
-  if (!match?.replay) return;
-  openBattleReplay(match.replay);
+async function openMatchReplay(match, dayRecord) {
+  if (!match || !(match.replay || match.hasReplay)) return;
+  if (match.replay) {
+    openBattleReplay(match.replay);
+    return;
+  }
+  setActionPending("/api/duels/replay", true);
+  try {
+    const response = await getDuelReplay(dayRecord?.day || selectedDuelDay.value, match.id);
+    if (!response?.replay) return;
+    match.replay = response.replay;
+    openBattleReplay(response.replay);
+    error.value = "";
+  } catch (err) {
+    error.value = err.message;
+  } finally {
+    setActionPending("/api/duels/replay", false);
+  }
 }
 
 function openProvinceBattle(battle) {

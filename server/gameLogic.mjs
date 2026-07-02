@@ -699,10 +699,10 @@ export function baseBreakthroughChance(realm) {
     stageIndex: Math.floor((realm || 0) / 10),
     level: ((realm || 0) % 10) + 1
   };
-  const levelPenalty = (info.level - 1) * 0.018;
-  const stagePenalty = info.stageIndex * 0.045;
-  const bottleneckPenalty = info.level === 10 ? 0.12 + info.stageIndex * 0.012 : 0;
-  return clamp(0.86 - levelPenalty - stagePenalty - bottleneckPenalty, 0.08, 0.9);
+  const levelPenalty = (info.level - 1) * 0.024;
+  const stagePenalty = info.stageIndex * 0.058;
+  const bottleneckPenalty = info.level === 10 ? 0.18 + info.stageIndex * 0.024 : 0;
+  return clamp(0.76 - levelPenalty - stagePenalty - bottleneckPenalty, 0.04, 0.86);
 }
 
 export function breakthroughChance(entity) {
@@ -711,7 +711,7 @@ export function breakthroughChance(entity) {
     .filter((root) => root.effect === "xp")
     .reduce((sum, root) => sum + ((root.breakMultiplier || 1.1) - 1) / rootCount(entity), 0);
   const rootMultiplier = (1 + waterBonus) * rootBreakthroughMultiplier(entity);
-  return clamp(base * rootMultiplier, 0.05, 0.95);
+  return clamp(base * rootMultiplier, 0.04, 0.88);
 }
 
 export function buildRealmProgression(entity) {
@@ -768,6 +768,7 @@ const monsterNamesByStage = [
 const monsterNames = monsterNamesByStage.flat();
 const sharedDungeonItemIds = equipmentCatalog.map((item) => item.id);
 const recentRecordDays = 30;
+const duelRecordDays = 7;
 const dungeonLootRules = {
   blood_trial: {
     name: "血色禁地",
@@ -1150,7 +1151,7 @@ function provinceEffect(province) {
     effect.text = `经验获取 +${Math.round(effect.value * 100)}%`;
   } else if (province.type === "breakthrough") {
     effect.label = "突破";
-    effect.value = Number((0.05 + 0.05 * tier).toFixed(3));
+    effect.value = Number((0.025 + 0.035 * tier).toFixed(3));
     effect.text = `突破概率 +${Math.round(effect.value * 100)}%`;
   } else {
     effect.type = "spirit";
@@ -2707,7 +2708,7 @@ function ensureProvinceState(state) {
 
 function breakthroughChanceFor(state, entity) {
   const sectName = entity.id === "player" ? state.sect.name : entity.sect;
-  return clamp(breakthroughChance(entity) * (1 + sectBreakthroughBonus(state, sectName)), 0.05, 0.95);
+  return clamp(breakthroughChance(entity) * (1 + sectBreakthroughBonus(state, sectName)), 0.04, 0.88);
 }
 
 function breakthroughChanceParts(state, entity) {
@@ -2722,7 +2723,7 @@ function breakthroughChanceParts(state, entity) {
     sectMultiplier,
     base,
     bonus,
-    total: clamp(base * sectMultiplier, 0.05, 0.95)
+    total: clamp(base * sectMultiplier, 0.04, 0.88)
   };
 }
 
@@ -3098,11 +3099,11 @@ function repairDuelSeasonFromRecords(state) {
 }
 
 function trimDuelDays(records, currentDay) {
-  const minDayToKeep = Math.max(1, Number(currentDay || 1) - recentRecordDays + 1);
+  const minDayToKeep = Math.max(1, Number(currentDay || 1) - duelRecordDays + 1);
   return [...(records || [])]
     .filter((record) => (record.day || currentDay) >= minDayToKeep)
     .sort((a, b) => b.day - a.day)
-    .slice(0, recentRecordDays);
+    .slice(0, duelRecordDays);
 }
 
 function randomRootSet() {
@@ -3536,13 +3537,6 @@ function compactNonPlayerReplays(state) {
     for (const record of npc.dungeonHistory || []) record.replay = null;
   }
 
-  for (const record of state.duelDays || []) {
-    for (const match of record.matches || []) {
-      const playerInvolved = match.left?.id === "player" || match.right?.id === "player" || match.replay?.left?.id === "player" || match.replay?.right?.id === "player";
-      if (!playerInvolved) match.replay = null;
-    }
-  }
-
   for (const day of state.dungeonDays || []) {
     for (const entry of day.solo || []) {
       if (entry.id !== "player") entry.replay = null;
@@ -3620,7 +3614,7 @@ export function getPublicState(state, options = {}) {
     equipment: state.equipment.map((item) => publicEquipment(item, state)),
     duelDays: publicDuelDays(state.duelDays || []),
     provinceWars: publicProvinceWars(state.provinceWars || []),
-    dungeonDays: state.dungeonDays || [],
+    dungeonDays: publicDungeonDays(state.dungeonDays || []),
     catalog: { realms, realmStages, roots, rootRules: rootRulesCatalog(), dungeons, taskTemplates, itemCatalog, sects, combatSkills, provinces, equipmentSlots, equipmentTiers, equipmentCatalog, duelRanks },
     derived: {
       ...derivedBase,
@@ -3636,8 +3630,17 @@ function publicCultivator(entity, state, options = {}) {
   return {
     ...entity,
     duelHistory: publicDuelHistory(entity.duelHistory || [], options),
+    dungeonHistory: publicDungeonHistory(entity.dungeonHistory || []),
     power: powerOf(entity, state)
   };
+}
+
+function publicDungeonHistory(records) {
+  return records.map((record) => ({
+    ...record,
+    hasReplay: Boolean(record.replay),
+    replay: null
+  }));
 }
 
 function publicDuelHistory(records, options = {}) {
@@ -3657,9 +3660,186 @@ function publicDuelDays(records) {
       right: publicEntityRef(match.right),
       winner: publicEntityRef(match.winner),
       loser: publicEntityRef(match.loser),
+      hasReplay: Boolean(match.replay),
       replay: null
     }))
   }));
+}
+
+function publicDungeonDays(records) {
+  return (records || []).map((record) => ({
+    day: record.day,
+    date: record.date,
+    bloodTrial: record.bloodTrial ? {
+      name: record.bloodTrial.name,
+      caves: (record.bloodTrial.caves || []).map(publicBloodCaveRecord)
+    } : null,
+    solo: (record.solo || []).slice(0, 20).map(publicDungeonHistoryEntry),
+    sects: (record.sects || []).map(publicSectDungeonRecord),
+    voidHallSpiritPools: record.voidHallSpiritPools || [],
+    public: record.public ? publicStarSeaRecord(record.public) : null
+  }));
+}
+
+function publicBloodCaveRecord(cave) {
+  return {
+    cave: cave.cave,
+    name: cave.name,
+    monster: cave.monster,
+    spiritPool: cave.spiritPool,
+    clears: (cave.clears || []).map(publicBloodEntry),
+    challengers: (cave.challengers || []).map(publicBloodEntry)
+  };
+}
+
+function publicBloodEntry(entry) {
+  return {
+    id: entry.id,
+    name: entry.name,
+    sect: entry.sect,
+    realm: entry.realm,
+    gender: entry.gender,
+    primaryRootKey: entry.primaryRootKey,
+    skillId: entry.skillId,
+    output: entry.output,
+    rounds: entry.rounds,
+    success: Boolean(entry.success),
+    spirit: entry.spirit || 0,
+    bonusSpirit: entry.bonusSpirit || 0,
+    item: entry.item || "",
+    tierName: entry.tierName || "",
+    hasReplay: Boolean(entry.replay),
+    replay: null
+  };
+}
+
+function publicDungeonHistoryEntry(record) {
+  return {
+    ...record,
+    hasReplay: Boolean(record.replay),
+    replay: null
+  };
+}
+
+function publicSectDungeonRecord(record) {
+  return {
+    type: record.type,
+    name: record.name,
+    sect: record.sect,
+    day: record.day,
+    date: record.date,
+    success: Boolean(record.success),
+    stage: record.stage,
+    highestRealm: record.highestRealm,
+    highestRealmName: record.highestRealmName,
+    monster: record.monster,
+    monsterRealm: record.monsterRealm,
+    monsterStats: record.monsterStats,
+    monsterPower: record.monsterPower,
+    totalDamage: record.totalDamage,
+    monsterRemainingHp: record.monsterRemainingHp,
+    requiredDamage: record.requiredDamage,
+    spiritPoolRange: record.spiritPoolRange,
+    spiritPool: record.spiritPool || 0,
+    sectSpirit: record.sectSpirit || 0,
+    spiritShare: record.spiritShare || 0,
+    spiritRemainder: record.spiritRemainder || 0,
+    top: (record.top || []).map((entry) => ({ id: entry.id, name: entry.name, damage: entry.damage })),
+    battles: (record.battles || []).map((battle) => ({
+      order: battle.order,
+      challenger: publicEntityRef(battle.challenger),
+      damage: battle.damage,
+      winnerName: battle.winnerName,
+      hasReplay: Boolean(battle.replay),
+      replay: null
+    })),
+    item: record.item || "",
+    itemOwner: record.itemOwner || "",
+    tierName: record.tierName || "",
+    hasReplay: Boolean(record.replay),
+    replay: null
+  };
+}
+
+function publicStarSeaRecord(record) {
+  return {
+    type: record.type,
+    name: record.name,
+    day: record.day,
+    date: record.date,
+    cycle: record.cycle,
+    cycleStartDay: record.cycleStartDay,
+    cycleEndDay: record.cycleEndDay,
+    teamSize: record.teamSize,
+    killed: record.killed,
+    monsterCount: record.monsterCount,
+    monster: record.monster,
+    monsters: record.monsters || (record.monster ? [record.monster] : []),
+    totalDamage: record.totalDamage,
+    spiritPoolRange: record.spiritPoolRange,
+    spiritPool: record.spiritPool,
+    dropChance: record.dropChance,
+    teams: (record.teams || []).map(publicStarSeaTeam),
+    top: (record.top || []).map(publicStarSeaMember),
+    item: record.item || "",
+    itemOwner: record.itemOwner || "",
+    tierName: record.tierName || "",
+    itemValue: record.itemValue || 0,
+    auctionDividend: record.auctionDividend || 0,
+    hasReplay: Boolean(record.replay),
+    replay: null
+  };
+}
+
+function publicStarSeaTeam(record) {
+  return {
+    id: record.id,
+    name: record.name,
+    rank: record.rank,
+    success: Boolean(record.success),
+    damage: record.damage || 0,
+    rounds: record.rounds || 0,
+    score: record.score || 0,
+    speedBonus: record.speedBonus || 0,
+    monsterRemainingHp: record.monsterRemainingHp,
+    monsterMaxHp: record.monsterMaxHp,
+    spirit: record.spirit || 0,
+    members: (record.members || []).map(publicStarSeaMember),
+    top: (record.top || []).map(publicStarSeaMember),
+    item: record.item || "",
+    itemOwner: record.itemOwner || "",
+    itemValue: record.itemValue || 0,
+    auctionDividend: record.auctionDividend || 0,
+    hasReplay: Boolean(record.replay),
+    replay: null
+  };
+}
+
+function publicStarSeaMember(member) {
+  return {
+    id: member.id,
+    name: member.name,
+    sect: member.sect,
+    realm: member.realm,
+    gender: member.gender,
+    teamName: member.teamName,
+    teamRank: member.teamRank,
+    damage: member.damage || 0,
+    spirit: member.spirit || 0,
+    item: member.item || "",
+    tierName: member.tierName || ""
+  };
+}
+
+export function getDuelReplay(state, day, matchId) {
+  ensureStateShape(state);
+  const numericDay = Number(day);
+  const record = (state.duelDays || []).find((item) => Number(item.day) === numericDay);
+  if (!record) throw new Error("未找到该日切磋记录");
+  const match = (record.matches || []).find((item) => item.id === matchId);
+  if (!match || match.type !== "battle") throw new Error("未找到该场切磋");
+  if (!match.replay) throw new Error("该场切磋尚未保存回放");
+  return publicReplay(match.replay);
 }
 
 function publicProvinceWars(records) {

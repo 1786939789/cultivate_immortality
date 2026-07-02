@@ -52,6 +52,11 @@ export function getState(scope = "full") {
   return request(`/api/state${suffix}`);
 }
 
+export function getDuelReplay(day, matchId) {
+  const params = new URLSearchParams({ day: String(day), match: matchId });
+  return request(`/api/duels/replay?${params.toString()}`);
+}
+
 export function postAction(path, body = {}, options = {}) {
   return request(path, { method: "POST", body: { ...body, ...options } });
 }

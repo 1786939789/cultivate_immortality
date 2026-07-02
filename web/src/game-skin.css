@@ -2645,16 +2645,21 @@ body::before {
 }
 
 .arena-surface .duel-rank-cell {
-  min-height: 92px;
+  min-height: 64px;
   border-radius: 7px;
   background:
-    linear-gradient(180deg, rgba(50, 74, 67, .9), rgba(31, 42, 38, .92));
-  color: #f6e3b0;
+    linear-gradient(135deg, color-mix(in srgb, var(--rank-color) 34%, #fff8df), rgba(255, 252, 238, .9)),
+    linear-gradient(180deg, rgba(255, 252, 238, .94), rgba(230, 211, 166, .7));
+  color: color-mix(in srgb, var(--rank-color) 84%, #24160b);
+}
+
+.arena-surface .duel-rank-cell strong {
+  color: color-mix(in srgb, var(--rank-color) 88%, #20140a);
 }
 
 .arena-surface .duel-rank-cell span,
 .arena-surface .duel-rank-cell small {
-  color: rgba(255, 236, 184, .78);
+  color: color-mix(in srgb, var(--rank-color) 76%, #49321a);
 }
 
 .arena-surface .arena-toolbar {
@@ -2677,11 +2682,24 @@ body::before {
 }
 
 .arena-surface .match-result {
-  min-width: 58px;
-  border: 1px solid rgba(136, 44, 37, .34);
-  border-radius: 4px;
-  background: linear-gradient(180deg, rgba(160, 50, 41, .94), rgba(95, 31, 27, .94));
-  color: #ffe6a9;
+  min-width: 86px;
+  border: 1px solid rgba(141, 103, 45, .22);
+  border-radius: 6px;
+  background: rgba(255, 252, 238, .68);
+  color: var(--game-ink);
+  padding: 6px 8px;
+}
+
+.arena-surface .match-result span {
+  color: #166534;
+}
+
+.arena-surface .match-result small {
+  color: #991b1b;
+}
+
+.arena-surface .match-result em {
+  color: var(--game-muted);
 }
 
 .equipment-surface .equipment-tools,
@@ -3094,7 +3112,12 @@ body::before {
 }
 
 .arena-surface .duel-rank-cell {
-  color: #fff2c6;
+  color: color-mix(in srgb, var(--rank-color) 86%, #21160c);
+}
+
+.arena-surface .duel-rank-cell span,
+.arena-surface .duel-rank-cell small {
+  color: color-mix(in srgb, var(--rank-color) 74%, #3f2c17);
 }
 
 .arena-surface .duel-rank-cell span,

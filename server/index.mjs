@@ -8,6 +8,7 @@ import {
   changePlayerPortrait,
   dailySettlement,
   duel,
+  getDuelReplay,
   rest,
   runDailyDuels,
   runDungeon,
@@ -15,7 +16,7 @@ import {
   sectWar,
   useItem
 } from "./gameLogic.mjs";
-import { mutateState, publicState, resetState } from "./store.mjs";
+import { mutateState, publicState, readState, resetState } from "./store.mjs";
 
 const port = Number(process.env.PORT || 8787);
 const rootDir = fileURLToPath(new URL("../", import.meta.url));
@@ -80,6 +81,14 @@ async function handleApi(req, res, url) {
   if (req.method === "GET" && url.pathname === "/api/state") {
     const scope = url.searchParams.get("scope") === "lite" ? "lite" : "full";
     sendJson(res, 200, await publicState("default", { scope }));
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/duels/replay") {
+    const state = await readState("default");
+    const day = url.searchParams.get("day");
+    const match = url.searchParams.get("match");
+    sendJson(res, 200, { replay: getDuelReplay(state, day, match) });
     return;
   }
 
