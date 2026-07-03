@@ -1088,19 +1088,19 @@
                 </div>
                 <div class="territory-stats compact">
                   <span>
-                    <small>每日灵石</small>
-                    <strong>+{{ sect.spirit }}</strong>
-                    <em>{{ bonusItemsText(sect.spiritItems, "spirit") }}</em>
+                    <small>灵石总包</small>
+                    <strong>{{ resourcePlanValue(sect.resourcePlan?.spirit, "spirit") }}</strong>
+                    <em>{{ resourcePlanText(sect.resourcePlan?.spirit, "spirit") }}</em>
                   </span>
                   <span>
-                    <small>经验加成</small>
-                    <strong>+{{ Math.round(sect.xp * 100) }}%</strong>
-                    <em>{{ bonusItemsText(sect.xpItems, "xp") }}</em>
+                    <small>经验总包</small>
+                    <strong>{{ resourcePlanValue(sect.resourcePlan?.xp, "xp") }}</strong>
+                    <em>{{ resourcePlanText(sect.resourcePlan?.xp, "xp") }}</em>
                   </span>
                   <span>
-                    <small>突破加成</small>
-                    <strong>+{{ Math.round(sect.breakthrough * 100) }}%</strong>
-                    <em>{{ bonusItemsText(sect.breakthroughItems, "breakthrough") }}</em>
+                    <small>突破总包</small>
+                    <strong>{{ resourcePlanValue(sect.resourcePlan?.breakthrough, "breakthrough") }}</strong>
+                    <em>{{ resourcePlanText(sect.resourcePlan?.breakthrough, "breakthrough") }}</em>
                   </span>
                 </div>
                 <p>{{ sect.provinceNames.join("、") || "暂无占领省份" }}</p>
@@ -1378,6 +1378,12 @@
                   <option v-for="option in duelDateOptions" :key="option.day" :value="option.day">{{ option.date }}</option>
                 </select>
               </label>
+              <label class="war-search">搜索姓名 / 宗门
+                <span class="search-field">
+                  <input v-model.trim="duelSearch" type="search" placeholder="例如：韩立、黄枫谷">
+                  <button v-if="duelSearch" class="search-clear" type="button" aria-label="清空切磋搜索" @click="duelSearch = ''">×</button>
+                </span>
+              </label>
               <button class="secondary" type="button" :disabled="selectedDuelDay >= state.day" @click="changeDuelDay(1)">后一天</button>
               <button class="primary" type="button" @click="startDailyDuels">{{ todaysDuelRecord ? "查看今日切磋" : "开始切磋" }}</button>
             </div>
@@ -1387,7 +1393,7 @@
             <div class="panel section-head compact">
               <div>
                 <h3>{{ selectedDuelDate }} 对阵</h3>
-                <p v-if="selectedDuelRecord">共 {{ selectedDuelRecord.matches.length }} 组对阵。</p>
+                <p v-if="selectedDuelRecord">共 {{ selectedDuelRecord.matches.length }} 组对阵<span v-if="duelSearch">，筛出 {{ filteredDuelMatches.length }} 组</span>。</p>
                 <p v-else>这个日期还没有切磋记录。</p>
               </div>
               <span class="tag" v-if="selectedDuelRecord">{{ selectedDuelRecord.createdAt }}</span>
@@ -1398,7 +1404,7 @@
               <button
                 class="match-card"
                 :class="{ bye: match.type === 'bye', replayable: match.hasReplay || match.replay }"
-                v-for="match in selectedDuelRecord.matches"
+                v-for="match in filteredDuelMatches"
                 :key="match.id"
                 type="button"
                 :disabled="match.type === 'bye' || !(match.hasReplay || match.replay)"
@@ -1443,6 +1449,7 @@
                   <p>{{ match.summary }}</p>
                 </template>
               </button>
+              <div v-if="!filteredDuelMatches.length" class="empty">没有匹配“{{ duelSearch }}”的人物或宗门。</div>
             </div>
 
             <div class="empty" v-else-if="selectedDuelDay === state.day">{{ currentDate }} 尚未开赛。</div>
@@ -1596,6 +1603,10 @@
                   <div class="equipment-tooltip-source">
                     <strong>掉落源</strong>
                     <span v-for="line in equipmentDropSourceLines(item)" :key="line">{{ line }}</span>
+                  </div>
+                  <div class="equipment-tooltip-source transfer-history">
+                    <strong>最近流转</strong>
+                    <span v-for="line in equipmentTransferPathLines(item)" :key="line">{{ line }}</span>
                   </div>
                 </div>
               </article>
@@ -2551,6 +2562,7 @@ const selectedSectName = ref("");
 const detailReturnStack = ref([]);
 const selectedRealmStage = ref("");
 const selectedDuelDay = ref(null);
+const duelSearch = ref("");
 const selectedProvinceWarDay = ref(null);
 const selectedProvinceWarId = ref("");
 const provinceWarSearch = ref("");
@@ -2898,6 +2910,7 @@ const normalizeEquipmentDisplayItems = (items) => items.map((item) => ({
   value: item.value || fallbackEquipmentValue(item),
   stealChance: item.stealChance ?? equipmentTierStealChance(item.tier),
   ownerName: item.ownerName || "",
+  transferHistory: Array.isArray(item.transferHistory) ? item.transferHistory : [],
   equipped: Boolean(item.equipped)
 }));
 const voidHallSpiritLines = computed(() => {
@@ -3134,7 +3147,8 @@ const sectTerritoryRanking = computed(() => sectSummaries.value
       breakthrough: breakthroughItems.reduce((sum, item) => sum + (Number(item.value) || 0), 0),
       spiritItems,
       xpItems,
-      breakthroughItems
+      breakthroughItems,
+      resourcePlan: sect.resourcePlan || {}
     };
   })
   .sort((a, b) => b.provinceCount - a.provinceCount || b.spirit - a.spirit || b.xp - a.xp));
@@ -3179,6 +3193,13 @@ const duelDateOptions = computed(() => duelDayOptions.value.map((day) => ({ day,
 const selectedDuelRecord = computed(() => duelRecords.value.find((record) => record.day === selectedDuelDay.value));
 const selectedDuelDate = computed(() => selectedDuelRecord.value?.date || dateForDay(selectedDuelDay.value));
 const todaysDuelRecord = computed(() => duelRecords.value.find((record) => record.day === gameState.value.day));
+const normalizedDuelSearch = computed(() => duelSearch.value.trim().toLowerCase());
+const filteredDuelMatches = computed(() => {
+  const matches = selectedDuelRecord.value?.matches || [];
+  const keyword = normalizedDuelSearch.value;
+  if (!keyword) return matches;
+  return matches.filter((match) => duelMatchSearchText(match).includes(keyword));
+});
 const visibleBattleEvents = computed(() => lastBattle.value?.events.slice(0, battleCursor.value) || []);
 const displayedBattleEvents = computed(() => [...visibleBattleEvents.value].reverse());
 const isBattleReplayDone = computed(() => {
@@ -4170,18 +4191,18 @@ function provinceEffect(province) {
   const tier = rank <= 5 ? 1 : rank <= 12 ? 0.82 : rank <= 22 ? 0.62 : 0.42;
   if (province.type === "spirit") {
     const value = 10 + Math.round(10 * tier);
-    return { type: province.type, value, text: `每日成员灵石 +${value}` };
+    return { type: province.type, value, text: `灵石包基准 +${value}/人` };
   }
   if (province.type === "xp") {
     const value = Number((0.4 + 0.2 * tier).toFixed(2));
-    return { type: province.type, value, text: `经验获取 +${Math.round(value * 100)}%` };
+    return { type: province.type, value, text: `经验包基准 +${Math.round(value * 100)}%/人` };
   }
   if (province.type === "breakthrough") {
     const value = Number((0.025 + 0.035 * tier).toFixed(3));
-    return { type: province.type, value, text: `突破概率 +${Math.round(value * 100)}%` };
+    return { type: province.type, value, text: `突破包基准 +${Math.round(value * 100)}%/人` };
   }
   const value = 10 + Math.round(10 * tier);
-  return { type: "spirit", value, text: `每日成员灵石 +${value}` };
+  return { type: "spirit", value, text: `灵石包基准 +${value}/人` };
 }
 
 function bonusItemsText(items, type) {
@@ -4191,6 +4212,35 @@ function bonusItemsText(items, type) {
     if (type === "spirit") return `${item.name} +${value}`;
     return `${item.name} +${Math.round(value * 100)}%`;
   }).join("、");
+}
+
+function resourcePlanValue(plan, type) {
+  if (!plan || !Number(plan.total)) return type === "spirit" ? "0" : "+0%";
+  const total = Number(plan.total) || 0;
+  if (type === "spirit") return `${Math.round(total)} 灵石`;
+  return `+${Math.round(total * 100)}%`;
+}
+
+function resourceShareValue(value, type) {
+  const amount = Number(value) || 0;
+  if (type === "spirit") return `${Math.round(amount)}`;
+  return `+${Math.round(amount * 100)}%`;
+}
+
+function resourceRoleLabel(role) {
+  if (role === "leader") return "掌门";
+  if (role === "elder") return "长老";
+  if (role === "defender") return "守城";
+  return "成员";
+}
+
+function resourcePlanText(plan, type) {
+  if (!plan || !Number(plan.total)) return "暂无占领收益";
+  const top = (plan.top || [])
+    .slice(0, 3)
+    .map((item) => `${resourceRoleLabel(item.role)} ${item.name} ${resourceShareValue(item.share, type)}`)
+    .join("、");
+  return top ? `倾斜：${top}` : "按宗门成员分配";
 }
 
 function sectColor(sectName) {
@@ -4346,6 +4396,32 @@ function equipmentLatestTransfer(item) {
   return (gameState.value.equipmentTransfers || []).find((record) => record.itemId === item?.id) || null;
 }
 
+function equipmentTransferRecords(item) {
+  const history = Array.isArray(item?.transferHistory) ? item.transferHistory : [];
+  if (history.length) return history.slice(0, 5);
+  return (gameState.value.equipmentTransfers || [])
+    .filter((record) => record.itemId === item?.id)
+    .slice(0, 5);
+}
+
+function equipmentTransferLine(record) {
+  if (!record) return "";
+  const day = record.day ? `第${record.day}天 ` : "";
+  if (record.text) return `${day}${record.text}`;
+  const toName = record.winnerName || record.receiverName || record.toName || "未知修士";
+  if (equipmentDropKind(record) === "steal") {
+    const fromName = record.loserName || record.fromName || "未知修士";
+    return `${day}${toName}从${fromName}手中夺得`;
+  }
+  const source = record.context || record.fromName || "副本";
+  return `${day}${toName}从${source}获得`;
+}
+
+function equipmentTransferPathLines(item) {
+  const lines = equipmentTransferRecords(item).map(equipmentTransferLine).filter(Boolean);
+  return lines.length ? lines : ["暂无流转记录"];
+}
+
 function equipmentSpecificSource(item) {
   if (!item?.ownerName) return "";
   const transfer = equipmentLatestTransfer(item);
@@ -4425,6 +4501,28 @@ function equipmentBonus(person, stat) {
 
 function matchPerson(ref) {
   return personByRef(ref);
+}
+
+function duelMatchPersonSearchText(ref) {
+  if (!ref) return "";
+  const person = matchPerson(ref);
+  return [
+    ref.name,
+    ref.sect,
+    person.name,
+    person.sect,
+    realmName(ref.realm ?? person.realm),
+    duelRankText(person)
+  ].filter(Boolean).join(" ");
+}
+
+function duelMatchSearchText(match) {
+  return [
+    duelMatchPersonSearchText(match.left),
+    duelMatchPersonSearchText(match.right),
+    duelMatchPersonSearchText(match.winner),
+    match.summary
+  ].filter(Boolean).join(" ").toLowerCase();
 }
 
 function battlePerson(ref) {

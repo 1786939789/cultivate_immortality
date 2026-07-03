@@ -506,6 +506,29 @@
     0 10px 20px rgba(47, 32, 12, .1);
 }
 
+.view.active .sect-member-card.leader {
+  border-color: rgba(185, 28, 28, .92);
+  background:
+    linear-gradient(180deg, rgba(255, 235, 230, .96), rgba(254, 202, 202, .74)),
+    radial-gradient(circle at 8% 50%, rgba(185, 28, 28, .2), transparent 5rem),
+    rgba(255, 241, 235, .9);
+  box-shadow:
+    inset 0 0 0 2px rgba(185, 28, 28, .24),
+    0 8px 18px rgba(127, 29, 29, .12);
+}
+
+.view.active .sect-member-card.leader:hover,
+.view.active .sect-member-card.leader:focus-visible {
+  border-color: rgba(153, 27, 27, 1);
+  background:
+    linear-gradient(180deg, rgba(255, 228, 220, .98), rgba(252, 165, 165, .82)),
+    radial-gradient(circle at 8% 50%, rgba(185, 28, 28, .25), transparent 5rem),
+    rgba(255, 241, 235, .94);
+  box-shadow:
+    inset 0 0 0 2px rgba(185, 28, 28, .34),
+    0 12px 24px rgba(127, 29, 29, .16);
+}
+
 .attribute-row,
 .realm-row,
 .rank-row,
@@ -3725,6 +3748,10 @@ body::before {
   color: #d7c8ad;
   font-size: 12px;
   line-height: 1.35;
+}
+
+.equipment-surface .equipment-tooltip-source.transfer-history span {
+  color: #f1e3bd;
 }
 
 @media (max-width: 720px) {
