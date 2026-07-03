@@ -1406,8 +1406,8 @@ button {
 .dungeon-monster-card {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(132px, .78fr) minmax(0, 1.22fr);
-  gap: 8px;
+  grid-template-columns: 1fr;
+  gap: 7px;
   align-items: start;
   margin-bottom: 7px;
   padding: 8px;
@@ -1426,6 +1426,13 @@ button {
 .dungeon-monster-card > div:first-child p {
   flex-basis: 100%;
   margin: 0;
+  min-width: 0;
+}
+
+.dungeon-monster-card > div:first-child p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .cave-clear-tag {
@@ -1468,7 +1475,7 @@ button {
 }
 
 .dungeon-monster-card.compact {
-  grid-template-columns: minmax(128px, .78fr) minmax(0, 1.22fr);
+  grid-template-columns: 1fr;
   padding: 8px;
   border: 1px solid rgba(120, 91, 43, .16);
   border-radius: 7px;
@@ -1545,7 +1552,7 @@ button {
 
 .monster-stats {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 5px;
 }
 
@@ -1806,8 +1813,9 @@ button {
 
 .task-form {
   display: grid;
-  grid-template-columns: 1.2fr .9fr .7fr auto;
-  gap: 8px;
+  grid-template-columns: 140px minmax(210px, 260px) minmax(128px, 148px) max-content 104px;
+  justify-content: start;
+  gap: 10px;
   align-items: end;
   margin-top: 12px;
 }
@@ -1817,6 +1825,158 @@ label {
   gap: 5px;
   color: #5b4630;
   font-size: 13px;
+}
+
+.task-form label {
+  min-width: 0;
+}
+
+.task-field-category {
+  width: 140px;
+}
+
+.task-field-name {
+  width: min(260px, 100%);
+}
+
+.task-field-amount {
+  width: min(148px, 100%);
+}
+
+.amount-input-wrap {
+  position: relative;
+  display: block;
+}
+
+.amount-input-wrap input {
+  padding-right: 44px;
+}
+
+.amount-unit {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #7c5b2b;
+  font-size: 12px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.task-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  border: 1px solid rgba(203, 179, 125, .74);
+  border-radius: 7px;
+  background: rgba(255, 253, 246, .72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .6);
+  color: #5b4630;
+  padding: 8px 11px;
+  white-space: nowrap;
+}
+
+.task-form .primary {
+  width: 104px;
+}
+
+.tasks-surface .task-form {
+  grid-template-columns: 140px minmax(210px, 260px) minmax(128px, 148px) max-content 104px;
+  justify-content: start;
+  gap: 10px;
+}
+
+.task-history {
+  grid-template-columns: 1fr;
+}
+
+.task-day-group {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(120, 91, 43, .22);
+  border-radius: 8px;
+  background: rgba(255, 253, 246, .56);
+  padding: 10px;
+}
+
+.task-day-group.today {
+  border-color: rgba(15, 118, 110, .34);
+  background: rgba(240, 253, 250, .32);
+}
+
+.task-day-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #5b4630;
+}
+
+.task-day-head div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.task-day-head strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.task-day-head span,
+.task-day-head em,
+.task-day-empty {
+  color: var(--muted);
+  font-size: 13px;
+  font-style: normal;
+}
+
+.task-day-empty {
+  border: 1px dashed rgba(120, 91, 43, .22);
+  border-radius: 7px;
+  background: rgba(255, 251, 235, .38);
+  padding: 10px 12px;
+}
+
+.task-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+}
+
+.task-card-head h3 {
+  min-width: 0;
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.task-rewards {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.task-reward {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.task-reward.xp {
+  color: #0f766e;
+}
+
+.task-reward.spirit {
+  color: #a16207;
 }
 
 input,
@@ -2123,6 +2283,26 @@ button.event {
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 12px;
+}
+
+.cultivation-nav-panel {
+  margin-bottom: 12px;
+}
+
+.cultivation-subtabs .segment {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding-inline: 12px;
+}
+
+.cultivation-subtabs .segment svg {
+  color: #0f766e;
+}
+
+.cultivation-subtabs .segment.active svg {
+  color: #fde68a;
 }
 
 .map-panel {
@@ -4300,6 +4480,86 @@ button.event {
   align-content: start;
 }
 
+.sect-record-sections .sect-war-event {
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.sect-record-sections .sect-war-event.war-victory {
+  border-left-color: #0f766e;
+  background: linear-gradient(90deg, rgba(20, 184, 166, .13), rgba(255, 253, 246, .58));
+}
+
+.sect-record-sections .sect-war-event.war-defeat {
+  border-left-color: #b91c1c;
+  background: linear-gradient(90deg, rgba(248, 113, 113, .13), rgba(255, 253, 246, .58));
+}
+
+.sect-war-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.sect-war-summary strong {
+  font-weight: 900;
+}
+
+.sect-war-summary .win {
+  color: #0f766e;
+}
+
+.sect-war-summary .loss {
+  color: #b91c1c;
+}
+
+.sect-war-stamp {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  min-height: 60px;
+  border: 1px solid rgba(120, 91, 43, .18);
+  border-radius: 8px;
+  background: rgba(255, 253, 246, .72);
+  text-align: center;
+}
+
+.sect-war-stamp b {
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.sect-war-stamp em {
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.sect-war-stamp.attack b {
+  color: #9f1239;
+}
+
+.sect-war-stamp.defense b {
+  color: #1d4ed8;
+}
+
+.sect-war-stamp.win em {
+  color: #0f766e;
+}
+
+.sect-war-stamp.loss em {
+  color: #b91c1c;
+}
+
+.sect-war-body {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
 .sect-record-sections .sect-war-event strong,
 .sect-record-sections .sect-dungeon-event strong,
 .sect-record-sections .sect-war-event span,
@@ -5456,6 +5716,36 @@ button.event {
     grid-template-columns: 1fr;
   }
 
+  .task-field-category,
+  .task-field-name,
+  .task-field-amount,
+  .task-form .primary {
+    width: 100%;
+  }
+
+  .task-preview {
+    justify-content: space-between;
+    white-space: normal;
+  }
+
+  .task-day-head,
+  .task-day-head div {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .task-card-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .task-rewards {
+    flex-wrap: wrap;
+    white-space: normal;
+  }
+
   .star-sea-overview-line {
     grid-template-columns: 1fr;
   }
@@ -5542,6 +5832,10 @@ button.event {
   .dungeon-monster-card,
   .dungeon-monster-card.compact {
     grid-template-columns: 1fr;
+  }
+
+  .monster-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .blood-podium {
@@ -5688,8 +5982,9 @@ button.event {
 .admin-list {
   display: grid;
   gap: 8px;
-  max-height: 640px;
-  overflow: auto;
+  max-height: 668px;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding-right: 4px;
 }
 
@@ -5761,6 +6056,17 @@ button.event {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.admin-stat-grid {
+  grid-template-columns: repeat(5, minmax(86px, 1fr));
+}
+
+.admin-section-title {
+  margin: 2px 0 -2px;
+  color: #7b5a2e;
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .admin-editor label,
@@ -5870,6 +6176,10 @@ button.event {
   .admin-layout,
   .admin-form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .admin-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .admin-list {

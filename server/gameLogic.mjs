@@ -115,15 +115,15 @@ export function breakthroughGrowthRange(fromRealm) {
   const major = safeRealm % 10 === 9;
 
   if (major) {
-    const defenseMin = 3 + stageIndex;
-    const defenseMax = defenseMin + 2;
-    const attackMin = defenseMax + 4;
+    const defenseMin = 6 + stageIndex * 2;
+    const defenseMax = defenseMin + 4;
+    const attackMin = 14 + stageIndex * 3;
     return {
-      maxHp: [38 + stageIndex * 12, 54 + stageIndex * 14],
-      maxMana: [18 + stageIndex * 5, 28 + stageIndex * 6],
-      attack: [attackMin, attackMin + 5],
+      maxHp: [78 + stageIndex * 28, 108 + stageIndex * 34],
+      maxMana: [24 + stageIndex * 8, 38 + stageIndex * 10],
+      attack: [attackMin, attackMin + 7],
       defense: [defenseMin, defenseMax],
-      divineSense: [4 + stageIndex, 7 + stageIndex]
+      divineSense: [7 + stageIndex * 2, 11 + stageIndex * 3]
     };
   }
 
@@ -131,8 +131,8 @@ export function breakthroughGrowthRange(fromRealm) {
   const defenseMax = defenseMin + 1;
   const attackMin = defenseMax + 3 + Math.floor(stageIndex / 2);
   return {
-    maxHp: [14 + stageIndex * 5 + Math.floor(level / 3) * 2, 22 + stageIndex * 6 + Math.floor(level / 3) * 2],
-    maxMana: [7 + stageIndex * 3 + Math.floor(level / 4), 12 + stageIndex * 4 + Math.floor(level / 4)],
+    maxHp: [20 + stageIndex * 7 + Math.floor(level / 3) * 3, 32 + stageIndex * 8 + Math.floor(level / 3) * 3],
+    maxMana: [5 + stageIndex * 2 + Math.floor(level / 5), 9 + stageIndex * 3 + Math.floor(level / 5)],
     attack: [attackMin, attackMin + 3],
     defense: [defenseMin, defenseMax],
     divineSense: [1 + Math.ceil(stageIndex / 2), 3 + Math.ceil(stageIndex / 2)]
@@ -729,7 +729,7 @@ export function baseBreakthroughChance(realm) {
   };
   const levelPenalty = (info.level - 1) * 0.024;
   const stagePenalty = info.stageIndex * 0.058;
-  const bottleneckPenalty = info.level === 10 ? 0.18 + info.stageIndex * 0.024 : 0;
+  const bottleneckPenalty = info.level === 10 ? 0.26 + info.stageIndex * 0.04 : 0;
   return clamp(0.76 - levelPenalty - stagePenalty - bottleneckPenalty, 0.04, 0.86);
 }
 
@@ -1305,6 +1305,20 @@ function stateSafeId(text) {
   return String(text || "monster").replace(/[^\w-]+/g, "-").slice(0, 30);
 }
 
+function replayIdPart(value) {
+  return String(value ?? "")
+    .trim()
+    .replace(/\s+/g, "_")
+    .replace(/[^\p{L}\p{N}_-]+/gu, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 48) || "x";
+}
+
+function makeReplayId(...parts) {
+  return parts.map(replayIdPart).join("-");
+}
+
 function fightMonster(state, entity, monster, maxRounds = 18, start = {}) {
   const maxHp = effectiveMaxHp(entity, state);
   const maxMana = effectiveMaxMana(entity, state);
@@ -1361,7 +1375,11 @@ function publicMonster(monster) {
     name: monster.name,
     realm: realms[monster.realm],
     realmIndex: monster.realm,
+    root: monster.root,
+    roots: (monster.roots || []).map((root) => ({ ...root })),
+    primaryRootKey: monster.primaryRootKey,
     rootName: primaryRoot(monster).name,
+    skillId: monster.skillId,
     skill: findSkill(monster.skillId)?.name || "妖兽本能",
     maxHp: monster.maxHp,
     attack: monster.attack,
@@ -1442,12 +1460,15 @@ function publicStarSeaReplay(monsters, contributions, killed, state) {
   const target = monsters[Math.min(monsters.length - 1, Math.max(0, killed - 1))] || monsters[0];
   const requiredDamage = monsters.reduce((sum, monster) => sum + Math.floor(powerOf(monster, state) * 0.55), 0);
   const totalDamage = contributions.reduce((sum, entry) => sum + entry.damage, 0);
-  return publicGroupDungeonReplay("乱星海猎妖", target, contributions.slice(0, 10), killed > 0, totalDamage, requiredDamage, state);
+  const replay = publicGroupDungeonReplay("乱星海猎妖", target, contributions.slice(0, 10), killed > 0, totalDamage, requiredDamage, state);
+  replay.replayId = makeReplayId("star-sea", state.day, target.id || target.name, "overview");
+  return replay;
 }
 
 function publicStarSeaTeamReplay(teamRecord, monster, state) {
   return {
     kind: "starSeaTeam",
+    replayId: makeReplayId("star-sea", state.day, teamRecord.id || teamRecord.name, teamRecord.rank || "team"),
     result: teamRecord.success ? "胜" : "负",
     winner: teamRecord.success ? "team" : "monster",
     foughtAt: timestampKey(),
@@ -1574,6 +1595,7 @@ function runSoloDungeonFor(state, entity, date, caves) {
     const startMana = runMana;
     const battle = fightMonster(state, entity, monster, 13 + cave.cave, { hp: startHp, mana: startMana });
     const replay = buildReplay({ ...entity, hp: startHp, mana: startMana }, { ...monster }, battle, battle.winner === "left" ? "胜" : "负", timestampKey(), state);
+    replay.replayId = makeReplayId("blood-trial", state.day, cave.cave, entity.id);
     finalMonster = monster.name;
     finalRealm = monster.realm;
     finalReplay = publicReplay(replay);
@@ -1692,11 +1714,19 @@ function runSectDungeon(state, sectName, members, date) {
     monsterHp = battle.rightHp;
     monsterMana = battle.rightMana;
     const replay = buildReplay({ ...entity }, { ...monster, hp: beforeMonsterHp, mana: beforeMonsterMana }, battle, battle.winner === "left" ? "胜" : "负", timestampKey(), state);
+    const order = battles.length + 1;
+    replay.replayId = makeReplayId("void-hall", state.day, sectName, order, entity.id);
     contributions.push({ entity, damage });
     battles.push({
-      order: battles.length + 1,
+      order,
       challenger: entityRef(entity, entity.id === "player" ? "player" : "npc"),
       damage,
+      monsterStartHp: beforeMonsterHp,
+      monsterStartMana: beforeMonsterMana,
+      monsterEndHp: monsterHp,
+      monsterEndMana: monsterMana,
+      monsterMaxHp: monster.maxHp,
+      monsterMaxMana: monster.maxMana,
       winnerName: battle.winner === "left" ? entity.name : monster.name,
       replay: publicReplay(replay)
     });
@@ -1706,6 +1736,8 @@ function runSectDungeon(state, sectName, members, date) {
   const requiredDamage = monster.maxHp;
   const success = monsterHp <= 0;
   const spiritRange = dungeonLootRules.void_hall.spiritRange({ stage: targetStage });
+  const recordReplay = publicGroupDungeonReplay("虚天殿", monster, contributions, success, totalDamage, monster.maxHp, state);
+  recordReplay.replayId = makeReplayId("void-hall", state.day, sectName, "overview");
 
   const record = {
     type: "sect",
@@ -1727,7 +1759,7 @@ function runSectDungeon(state, sectName, members, date) {
     spiritPoolRange: spiritRange,
     spiritPool: 0,
     sectSpirit: 0,
-    replay: publicGroupDungeonReplay("虚天殿", monster, contributions, success, totalDamage, monster.maxHp, state),
+    replay: recordReplay,
     battles,
     spiritShare: 0,
     top: contributions.slice(0, 5).map(({ entity, damage }) => ({ id: entity.id, name: entity.name, damage })),
@@ -1737,6 +1769,8 @@ function runSectDungeon(state, sectName, members, date) {
     tierName: ""
   };
   for (const { entity, damage } of contributions) {
+    const historyReplay = publicGroupDungeonReplay("虚天殿", monster, contributions.slice(0, 8), success, totalDamage, monster.maxHp, state, entity.id);
+    historyReplay.replayId = makeReplayId("void-hall", state.day, sectName, "history", entity.id);
     pushDungeonHistory(entity, {
       type: "sect",
       name: "虚天殿",
@@ -1747,7 +1781,7 @@ function runSectDungeon(state, sectName, members, date) {
       damage,
       monster: monster.name,
       monsterRealm: realms[monsterRealm],
-      replay: publicGroupDungeonReplay("虚天殿", monster, contributions.slice(0, 8), success, totalDamage, monster.maxHp, state, entity.id),
+      replay: historyReplay,
       item: "",
       tierName: ""
     });
@@ -4040,6 +4074,12 @@ function publicSectDungeonRecord(record) {
       order: battle.order,
       challenger: publicEntityRef(battle.challenger),
       damage: battle.damage,
+      monsterStartHp: battle.monsterStartHp,
+      monsterStartMana: battle.monsterStartMana,
+      monsterEndHp: battle.monsterEndHp,
+      monsterEndMana: battle.monsterEndMana,
+      monsterMaxHp: battle.monsterMaxHp,
+      monsterMaxMana: battle.monsterMaxMana,
       winnerName: battle.winnerName,
       replayId: battle.replayId || "",
       hasReplay: Boolean(battle.replay || battle.replayId),
@@ -4166,7 +4206,7 @@ function publicReplay(replay) {
   const eventLimit = replay.kind === "starSeaTeam" ? 80 : 40;
   return {
     ...replay,
-    replayId: replay.replayId || `battle-${timestampKey()}`,
+    replayId: replay.replayId || makeReplayId("battle", timestampKey(), Math.random().toString(36).slice(2, 8)),
     events: (replay.events || []).slice(0, eventLimit)
   };
 }
@@ -4627,6 +4667,30 @@ function normalizePortraitUrl(value) {
   return text;
 }
 
+function normalizeAdminInteger(value, fallback, { min = 0, max = 999999999 } = {}) {
+  if (value === undefined || value === null || value === "") return fallback;
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return clamp(Math.floor(number), min, max);
+}
+
+function applyAdminCultivatorStats(state, entity, payload) {
+  entity.skillId = payload.skillId && !needsSkillMigration(String(payload.skillId))
+    ? String(payload.skillId)
+    : entity.skillId;
+  entity.xp = normalizeAdminInteger(payload.xp, entity.xp || 0, { min: 0 });
+  entity.spirit = normalizeAdminInteger(payload.spirit, entity.spirit || 0, { min: 0 });
+  entity.maxHp = normalizeAdminInteger(payload.maxHp, entity.maxHp || 1, { min: 1, max: 999999 });
+  entity.attack = normalizeAdminInteger(payload.attack, entity.attack || 1, { min: 1, max: 999999 });
+  entity.defense = normalizeAdminInteger(payload.defense, entity.defense || 0, { min: 0, max: 999999 });
+  entity.divineSense = normalizeAdminInteger(payload.divineSense, entity.divineSense || 1, { min: 1, max: 999999 });
+  entity.maxMana = normalizeAdminInteger(payload.maxMana, entity.maxMana || 1, { min: 1, max: 999999 });
+  const maxHp = effectiveMaxHp(entity, state);
+  const maxMana = effectiveMaxMana(entity, state);
+  entity.hp = clamp(normalizeAdminInteger(entity.hp, maxHp, { min: 1, max: maxHp }), 1, maxHp);
+  entity.mana = clamp(normalizeAdminInteger(entity.mana, maxMana, { min: 0, max: maxMana }), 0, maxMana);
+}
+
 function renameValue(value, oldName, newName) {
   return value === oldName ? newName : value;
 }
@@ -4729,6 +4793,7 @@ export function updateCultivatorProfile(state, payload = {}) {
   entity.roots = rootSet.roots;
   entity.primaryRootKey = rootSet.primaryRootKey;
   entity.root = rootSet.primaryRoot;
+  applyAdminCultivatorStats(state, entity, payload);
   const portraitUrl = normalizePortraitUrl(payload.portraitUrl);
   if (portraitUrl !== undefined) {
     entity.portraitUrl = portraitUrl;

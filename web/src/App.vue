@@ -241,7 +241,34 @@
           </div>
         </section>
 
-        <section v-if="activeTab === 'attributes'" class="view active cultivation-surface attributes-surface">
+        <section v-if="activeTab === 'cultivation'" class="view active cultivation-nav-surface">
+          <div class="panel cultivation-nav-panel">
+            <div class="section-head compact">
+              <div>
+                <h3>修行体系</h3>
+                <p>灵根、境界、技能集中在这里查看。</p>
+              </div>
+              <span class="tag">{{ cultivationSubTabs.find((tab) => tab.id === cultivationSubTab)?.label }}</span>
+            </div>
+            <div class="segmented cultivation-subtabs" role="tablist" aria-label="修行体系子导航">
+              <button
+                v-for="tab in cultivationSubTabs"
+                :key="tab.id"
+                class="segment"
+                :class="{ active: cultivationSubTab === tab.id }"
+                type="button"
+                role="tab"
+                :aria-selected="cultivationSubTab === tab.id"
+                @click="cultivationSubTab = tab.id"
+              >
+                <component :is="tab.icon" :size="16" :stroke-width="2.3" aria-hidden="true" />
+                {{ tab.label }}
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section v-if="activeTab === 'cultivation' && cultivationSubTab === 'attributes'" class="view active cultivation-surface attributes-surface">
           <div class="panel root-astrolabe-panel">
             <div class="section-head">
               <div>
@@ -322,7 +349,7 @@
 
         </section>
 
-        <section v-if="activeTab === 'progression'" class="view active cultivation-surface progression-surface">
+        <section v-if="activeTab === 'cultivation' && cultivationSubTab === 'progression'" class="view active cultivation-surface progression-surface">
           <div class="panel">
             <div class="section-head">
               <div>
@@ -392,13 +419,21 @@
               <span class="tag">{{ currentDate }}</span>
             </div>
             <form class="task-form" @submit.prevent="submitTask">
-              <label>任务
-                <select v-model="taskForm.taskId">
-                  <option v-for="task in enabledTaskDefinitions" :key="task.id" :value="task.id">{{ task.name }}</option>
+              <label class="task-field-category">类别
+                <select v-model="taskForm.category">
+                  <option v-for="category in frontTaskCategories" :key="category.id" :value="category.id">{{ category.label }}</option>
                 </select>
               </label>
-              <label v-if="selectedTaskDefinition?.type === 'measurable'">完成量
-                <input v-model.number="taskForm.completedAmount" type="number" min="0" step="0.01" :placeholder="`标准 ${selectedTaskDefinition.targetAmount}${selectedTaskDefinition.unitName}`">
+              <label class="task-field-name">任务
+                <select v-model="taskForm.taskId">
+                  <option v-for="task in filteredTaskDefinitions" :key="task.id" :value="task.id">{{ task.name }}</option>
+                </select>
+              </label>
+              <label v-if="selectedTaskDefinition?.type === 'measurable'" class="task-field-amount">完成量
+                <span class="amount-input-wrap">
+                  <input v-model.number="taskForm.completedAmount" type="number" min="0" step="0.01" :placeholder="`标准 ${selectedTaskDefinition.targetAmount}`">
+                  <span class="amount-unit">{{ selectedTaskDefinition.unitName }}</span>
+                </span>
               </label>
               <div v-if="selectedTaskDefinition" class="task-preview">
                 <strong>+{{ taskRewardPreview.xp }} 经验</strong>
@@ -407,22 +442,48 @@
               <button class="primary" :disabled="isActionPending('/api/tasks') || !selectedTaskDefinition">{{ isActionPending("/api/tasks") ? "结算中..." : "完成" }}</button>
             </form>
           </div>
-          <div class="cards">
-            <article class="card" v-for="task in todayTaskCompletions" :key="task.id || `${task.day}-${task.name}-${task.xp}`">
-              <div>
-                <h3>{{ task.name }}</h3>
-                <p class="meta">
-                  {{ displayDate(task) }} · {{ task.category || task.type }}
-                  <template v-if="task.type === 'measurable'"> · {{ task.completedAmount }} / {{ task.targetAmount }} {{ task.unitName }}</template>
-                </p>
-              </div>
-              <span class="tag">+{{ task.xp }} 经验 · +{{ task.spirit || 0 }} 灵石</span>
-            </article>
-            <div v-if="!todayTaskCompletions.length" class="empty">{{ currentDate }} 还没有记录任务。完成一件小事，也算向长生路迈一步。</div>
+          <div class="cards task-history">
+            <section
+              v-for="day in recentTaskDays"
+              :key="day.day"
+              class="task-day-group"
+              :class="{ today: day.isToday, 'no-records': !day.tasks.length }"
+            >
+              <header class="task-day-head">
+                <div>
+                  <strong>{{ day.date }}</strong>
+                  <span>{{ day.isToday ? "今日" : day.day >= 1 ? `第 ${day.day} 天` : "开局前" }}</span>
+                </div>
+                <em v-if="day.tasks.length">{{ day.count }} 项 · +{{ day.xp }} 经验 · +{{ day.spirit }} 灵石</em>
+                <em v-else>未记录</em>
+              </header>
+              <article class="card" v-for="task in day.tasks" :key="task.id || `${task.day}-${task.name}-${task.xp}`">
+                <div>
+                  <div class="task-card-head">
+                    <h3>{{ task.name }}</h3>
+                    <span class="task-rewards" aria-label="任务收益">
+                      <span class="task-reward xp">
+                        <Sprout :size="13" :stroke-width="2.4" aria-hidden="true" />
+                        +{{ task.xp }} 经验
+                      </span>
+                      <span class="task-reward spirit">
+                        <Gem :size="13" :stroke-width="2.4" aria-hidden="true" />
+                        +{{ task.spirit || 0 }} 灵石
+                      </span>
+                    </span>
+                  </div>
+                  <p class="meta">
+                    {{ task.category || task.type }}
+                    <template v-if="task.type === 'measurable'"> · {{ task.completedAmount }} / {{ task.targetAmount }} {{ task.unitName }}</template>
+                  </p>
+                </div>
+              </article>
+              <div v-if="!day.tasks.length" class="task-day-empty">这一天还没有记录任务。</div>
+            </section>
           </div>
         </section>
 
-        <section v-if="activeTab === 'skills'" class="view active cultivation-surface skills-surface">
+        <section v-if="activeTab === 'cultivation' && cultivationSubTab === 'skills'" class="view active cultivation-surface skills-surface">
           <div class="panel">
             <div class="section-head">
               <div>
@@ -675,7 +736,7 @@
                       </span>
                     </span>
                     <h3>{{ cave.name }}</h3>
-                    <p>{{ cave.monster?.name }} · {{ cave.monster?.realm }} · {{ cave.monster?.rootName }}</p>
+                    <p :title="`${cave.monster?.name || ''} · ${cave.monster?.realm || ''} · ${cave.monster?.rootName || ''}`">{{ cave.monster?.name }} · {{ cave.monster?.realm }} · {{ cave.monster?.rootName }}</p>
                   </div>
                   <div class="monster-stats">
                     <span v-for="stat in monsterStatItems(cave.monster)" :key="stat.icon" :aria-label="`${stat.label} ${stat.value}`" :title="`${stat.label}：${stat.value}`">
@@ -801,7 +862,7 @@
                       <MonsterEmblem :monster="{ name: record.monster, rootName: record.monsterStats?.rootName }" size="sm" />
                       <span class="tag">妖兽</span>
                       <h3>{{ record.monster }}</h3>
-                      <p>{{ record.monsterRealm }} · {{ record.monsterStats?.rootName || "未知灵根" }}</p>
+                      <p :title="`${record.monsterRealm} · ${record.monsterStats?.rootName || '未知灵根'}`">{{ record.monsterRealm }} · {{ record.monsterStats?.rootName || "未知灵根" }}</p>
                     </div>
                     <div class="monster-stats">
                       <span v-for="stat in monsterStatItems(record.monsterStats)" :key="stat.icon" :aria-label="`${stat.label} ${stat.value}`" :title="`${stat.label}：${stat.value}`">
@@ -1891,19 +1952,29 @@
               </div>
               <div class="panel flat sect-war-panel">
                 <h3>攻守城战绩</h3>
-                <p>攻守城战绩：{{ selectedSect.warWins || 0 }} 胜 {{ selectedSect.warLosses || 0 }} 负。</p>
+                <p class="sect-war-summary">
+                  攻守城战绩：
+                  <strong class="win">{{ sectWarStats(selectedSect).wins }} 胜</strong>
+                  <strong class="loss">{{ sectWarStats(selectedSect).losses }} 负</strong>
+                </p>
                 <div class="timeline detail-scroll">
                   <button
                     class="event event-button sect-war-event"
-                    :class="{ gold: war.captured, bad: !war.captured }"
+                    :class="{ 'war-victory': war.sectWarWon, 'war-defeat': !war.sectWarWon }"
                     v-for="war in sectWarRecords(selectedSect)"
                     :key="`sect-war-${selectedSect.name}-${war.id}`"
                     type="button"
                     @click="openSectWarRecord(war)"
                   >
-                    <strong>{{ shortDisplayDate(war) }} · {{ war.provinceName }}</strong>
-                    <span>{{ war.attacker }} 攻 {{ war.defender }} · {{ war.captured ? "易主" : "守住" }}</span>
-                    <small>{{ war.battles?.length || 0 }} 场车轮战</small>
+                    <span class="sect-war-stamp" :class="[war.sectWarSide, war.sectWarWon ? 'win' : 'loss']">
+                      <b>{{ war.sectWarSideLabel }}</b>
+                      <em>{{ war.sectWarOutcomeLabel }}</em>
+                    </span>
+                    <span class="sect-war-body">
+                      <strong>{{ shortDisplayDate(war) }} · {{ war.provinceName }}</strong>
+                      <span>{{ war.attacker }} 攻 {{ war.defender }} · {{ war.captured ? "易主" : "守住" }}</span>
+                      <small>{{ war.battles?.length || 0 }} 场车轮战</small>
+                    </span>
                   </button>
                   <div v-if="!sectWarRecords(selectedSect).length" class="empty">暂无攻守城记录。</div>
                 </div>
@@ -1987,6 +2058,43 @@
                       <option value="female">女</option>
                       <option value="unknown">未知</option>
                     </select>
+                  </label>
+                  <label>
+                    <span>技能</span>
+                    <select v-model="adminCultivatorDraft.skillId">
+                      <option v-for="skill in combatSkills" :key="`admin-skill-${skill.id}`" :value="skill.id">{{ skill.name }}</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>经验</span>
+                    <input v-model.number="adminCultivatorDraft.xp" type="number" min="0" step="1">
+                  </label>
+                  <label>
+                    <span>灵石</span>
+                    <input v-model.number="adminCultivatorDraft.spirit" type="number" min="0" step="1">
+                  </label>
+                </div>
+                <div class="admin-section-title">基础属性</div>
+                <div class="admin-form-grid admin-stat-grid">
+                  <label>
+                    <span>气血</span>
+                    <input v-model.number="adminCultivatorDraft.maxHp" type="number" min="1" step="1">
+                  </label>
+                  <label>
+                    <span>攻击</span>
+                    <input v-model.number="adminCultivatorDraft.attack" type="number" min="1" step="1">
+                  </label>
+                  <label>
+                    <span>防御</span>
+                    <input v-model.number="adminCultivatorDraft.defense" type="number" min="0" step="1">
+                  </label>
+                  <label>
+                    <span>神识</span>
+                    <input v-model.number="adminCultivatorDraft.divineSense" type="number" min="1" step="1">
+                  </label>
+                  <label>
+                    <span>法力</span>
+                    <input v-model.number="adminCultivatorDraft.maxMana" type="number" min="1" step="1">
                   </label>
                 </div>
                 <div class="admin-root-grid" aria-label="灵根选择">
@@ -2202,9 +2310,7 @@ import { duelLossScore, duelRanks, duelRankForScore, duelSeasonDay, duelSeasonLe
 
 const tabs = [
   { id: "practice", label: "修炼", icon: Sprout },
-  { id: "attributes", label: "灵根", icon: BadgeCent },
-  { id: "progression", label: "境界", icon: Orbit },
-  { id: "skills", label: "技能", icon: WandSparkles },
+  { id: "cultivation", label: "修行体系", icon: Orbit },
   { id: "tasks", label: "现实任务", icon: ScrollText },
   { id: "dungeon", label: "副本", icon: Sword },
   { id: "sect", label: "宗门", icon: Landmark },
@@ -2212,6 +2318,12 @@ const tabs = [
   { id: "equipment", label: "装备", icon: Package },
   { id: "rank", label: "榜单", icon: Trophy },
   { id: "admin", label: "后台", icon: Settings }
+];
+
+const cultivationSubTabs = [
+  { id: "attributes", label: "灵根", icon: BadgeCent },
+  { id: "progression", label: "境界", icon: Orbit },
+  { id: "skills", label: "技能", icon: WandSparkles }
 ];
 
 const taskCategoryOptions = [
@@ -2235,7 +2347,8 @@ const powerSortOptions = [
   { id: "attack", label: "攻击" },
   { id: "defense", label: "防御" },
   { id: "divineSense", label: "神识" },
-  { id: "maxMana", label: "法力" }
+  { id: "maxMana", label: "法力" },
+  { id: "spirit", label: "灵石" }
 ];
 
 const emptyState = {
@@ -2321,6 +2434,7 @@ const pendingActions = ref(new Set());
 const fullStateRefreshing = ref(false);
 const fullStateStale = ref(false);
 const activeTab = ref("practice");
+const cultivationSubTab = ref("attributes");
 const activeSectSubTab = ref("map");
 const activeRankBoard = ref("power");
 const rankSearch = ref("");
@@ -2350,14 +2464,29 @@ const provinceWarSearch = ref("");
 const lastBattle = ref(null);
 const battleReturnTarget = ref(null);
 const battleCursor = ref(0);
+const invalidReplayIds = ref(new Set());
 const countdown = ref("--:--:--");
-const taskForm = reactive({ taskId: "", completedAmount: 1 });
+const taskForm = reactive({ category: "", taskId: "", completedAmount: 1 });
 const adminMode = ref("cultivators");
 const adminSearch = ref("");
 const adminSelectedCultivatorId = ref("player");
 const adminSelectedSectName = ref("");
 const adminSelectedTaskId = ref("");
-const adminCultivatorDraft = reactive({ id: "player", name: "", gender: "unknown", rootKeys: [], portraitUrl: "" });
+const adminCultivatorDraft = reactive({
+  id: "player",
+  name: "",
+  gender: "unknown",
+  rootKeys: [],
+  portraitUrl: "",
+  skillId: "",
+  xp: 0,
+  spirit: 0,
+  maxHp: 1,
+  attack: 1,
+  defense: 0,
+  divineSense: 1,
+  maxMana: 1
+});
 const adminSectDraft = reactive({ oldName: "", name: "", portraitUrl: "" });
 const adminTaskDraft = reactive({
   id: "",
@@ -2454,7 +2583,23 @@ const fallbackDuelRankMap = computed(() => {
 const currentDate = computed(() => dateForDay(gameState.value.day));
 const taskDefinitions = computed(() => gameState.value.taskDefinitions || []);
 const enabledTaskDefinitions = computed(() => taskDefinitions.value.filter((task) => task.enabled !== false));
-const selectedTaskDefinition = computed(() => enabledTaskDefinitions.value.find((task) => task.id === taskForm.taskId) || enabledTaskDefinitions.value[0] || null);
+const frontTaskCategories = computed(() => {
+  const categories = [];
+  for (const task of enabledTaskDefinitions.value) {
+    const category = normalizedTaskCategory(task.category);
+    if (!categories.includes(category)) categories.push(category);
+  }
+  return categories.map((category) => taskCategoryOptions.find((option) => option.id === category) || {
+    id: category,
+    label: category,
+    icon: Leaf
+  });
+});
+const filteredTaskDefinitions = computed(() => {
+  const category = taskForm.category || frontTaskCategories.value[0]?.id || "";
+  return enabledTaskDefinitions.value.filter((task) => normalizedTaskCategory(task.category) === category);
+});
+const selectedTaskDefinition = computed(() => filteredTaskDefinitions.value.find((task) => task.id === taskForm.taskId) || filteredTaskDefinitions.value[0] || null);
 const taskCompletions = computed(() => gameState.value.taskCompletions?.length ? gameState.value.taskCompletions : gameState.value.tasks || []);
 const todayTaskCompletions = computed(() => taskCompletions.value.filter((task) => task.day === gameState.value.day));
 const todayTaskSummary = computed(() => todayTaskCompletions.value.reduce((summary, task) => ({
@@ -2462,6 +2607,30 @@ const todayTaskSummary = computed(() => todayTaskCompletions.value.reduce((summa
   xp: summary.xp + (Number(task.xp) || 0),
   spirit: summary.spirit + (Number(task.spirit) || 0)
 }), { count: 0, xp: 0, spirit: 0 }));
+const recentTaskDays = computed(() => {
+  const currentDay = Math.max(1, Number(gameState.value.day) || 1);
+  const currentTaskDate = dateForDay(currentDay);
+  return Array.from({ length: 7 }, (_, index) => {
+    const day = currentDay - index;
+    const tasks = day >= 1
+      ? taskCompletions.value
+        .filter((task) => Number(task.day) === day)
+        .sort((a, b) => String(b.id || "").localeCompare(String(a.id || "")))
+      : [];
+    const summary = tasks.reduce((total, task) => ({
+      count: total.count + 1,
+      xp: total.xp + (Number(task.xp) || 0),
+      spirit: total.spirit + (Number(task.spirit) || 0)
+    }), { count: 0, xp: 0, spirit: 0 });
+    return {
+      day,
+      date: addDays(currentTaskDate, -index),
+      isToday: day === currentDay,
+      tasks,
+      ...summary
+    };
+  });
+});
 const taskRewardPreview = computed(() => {
   const task = selectedTaskDefinition.value;
   if (!task) return { xp: 0, spirit: 0, multiplier: 0 };
@@ -2736,7 +2905,7 @@ const filteredEquipment = computed(() => equipmentList.value
     return true;
   })
   .sort(compareEquipmentForMode));
-const showcaseEquipment = computed(() => filteredEquipment.value.slice(0, 8).map((item) => ({
+const showcaseEquipment = computed(() => filteredEquipment.value.slice(0, 14).map((item) => ({
   ...item,
   shortName: equipmentShortName(item.name)
 })));
@@ -2853,7 +3022,10 @@ const isBattleReplayDone = computed(() => {
 const battleStatusText = computed(() => {
   if (!lastBattle.value) return "";
   if (!isBattleReplayDone.value) return "战斗正在回放中。";
-  return lastBattle.value.result === "胜" ? "你胜出了这一场。" : "你败下阵来。";
+  const leftName = lastBattle.value.left?.name || "挑战者";
+  const isPlayerReplay = lastBattle.value.left?.id === "player" || lastBattle.value.left?.kind === "player";
+  if (isPlayerReplay) return lastBattle.value.result === "胜" ? "你胜出了这一场。" : "你败下阵来。";
+  return lastBattle.value.result === "胜" ? `${leftName}胜出了这一场。` : `${leftName}败下阵来。`;
 });
 const battleOutcomeLabel = computed(() => (isBattleReplayDone.value ? lastBattle.value.result : "回放"));
 const isStarSeaBattle = computed(() => lastBattle.value?.kind === "starSeaTeam");
@@ -3106,12 +3278,48 @@ function sectDungeonRecords(sect) {
     .filter(Boolean);
 }
 
+function sectWarSide(sect, war) {
+  if (!sect?.name || !war) return "";
+  if (war.attacker === sect.name) return "attack";
+  if (war.defender === sect.name) return "defense";
+  return "";
+}
+
+function sectWonWar(sect, war) {
+  const side = sectWarSide(sect, war);
+  if (side === "attack") return Boolean(war?.captured);
+  if (side === "defense") return !war?.captured;
+  return false;
+}
+
+function withSectWarDisplay(sect, war) {
+  const side = sectWarSide(sect, war);
+  const won = sectWonWar(sect, war);
+  return {
+    ...war,
+    sectWarSide: side,
+    sectWarSideLabel: side === "attack" ? "攻城" : "守城",
+    sectWarWon: won,
+    sectWarOutcomeLabel: won ? "胜" : "负"
+  };
+}
+
+function sectWarStats(sect) {
+  const records = provinceWarRecords.value.filter((war) => sectWarSide(sect, war));
+  if (!records.length) {
+    return { wins: Number(sect?.warWins || 0), losses: Number(sect?.warLosses || 0) };
+  }
+  const wins = records.filter((war) => sectWonWar(sect, war)).length;
+  return { wins, losses: records.length - wins };
+}
+
 function sectWarRecords(sect) {
   if (!sect?.name) return [];
   return provinceWarRecords.value
     .filter((war) => war.attacker === sect.name || war.defender === sect.name)
     .sort((a, b) => (b.day || 0) - (a.day || 0))
-    .slice(0, 12);
+    .slice(0, 12)
+    .map((war) => withSectWarDisplay(sect, war));
 }
 
 function sectDungeonRecordMeta(record) {
@@ -3141,9 +3349,367 @@ function voidHallTopEntries(record) {
   return [ranked[1], ranked[0], ranked[2]].filter(Boolean);
 }
 
+function numericStat(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function voidHallFallbackManaCost(record, battle, startMana) {
+  const monster = record?.monsterStats || {};
+  const skill = skillById(monster.skillId || skillIdByName(monster.skill) || stableSkillId(`${record?.monster || "void"}-${record?.day || ""}`));
+  if (skill?.cost) return Math.min(startMana, skill.cost);
+  return Math.min(startMana, Math.max(1, Math.floor(numericStat(monster.maxMana, startMana) * 0.12)));
+}
+
+function hydrateVoidHallBattles(record) {
+  const monster = record?.monsterStats || {};
+  const maxHp = Math.max(1, numericStat(monster.maxHp || record?.requiredDamage, 1));
+  const maxMana = Math.max(1, numericStat(monster.maxMana, 1));
+  let runningHp = maxHp;
+  let runningMana = maxMana;
+  return (record?.battles || []).map((battle) => {
+    const damage = Math.max(0, numericStat(battle.damage, 0));
+    const startHp = Math.max(0, numericStat(battle.monsterStartHp, runningHp));
+    const startMana = Math.max(0, numericStat(battle.monsterStartMana, runningMana));
+    const endHp = Math.max(0, numericStat(battle.monsterEndHp, startHp - damage));
+    const endMana = Math.max(0, numericStat(battle.monsterEndMana, startMana - voidHallFallbackManaCost(record, battle, startMana)));
+    runningHp = endHp;
+    runningMana = endMana;
+    return {
+      ...battle,
+      damage,
+      monsterStartHp: startHp,
+      monsterStartMana: startMana,
+      monsterEndHp: endHp,
+      monsterEndMana: endMana,
+      monsterMaxHp: numericStat(battle.monsterMaxHp, maxHp),
+      monsterMaxMana: numericStat(battle.monsterMaxMana, maxMana)
+    };
+  });
+}
+
 function voidHallBattles(record) {
-  if (record?.battles?.length) return record.battles;
+  if (record?.battles?.length) {
+    return hydrateVoidHallBattles(record).map((battle) => ({
+      ...battle,
+      replayExpectation: {
+        leftName: battle.challenger?.name || "",
+        rightName: record.monster || ""
+      },
+      fallbackReplay: buildVoidHallBattleSummaryReplay(record, battle)
+    }));
+  }
   return [];
+}
+
+const fallbackRootCycle = ["metal", "wood", "earth", "water", "fire", "heaven"];
+
+function rootKeyFromName(name) {
+  return catalogRoots.value.find((root) => root.name === name)?.key || "";
+}
+
+function battleRootKey(entity) {
+  return entity?.primaryRootKey || entity?.root?.key || rootKeyFromName(entity?.rootName) || "";
+}
+
+function battleRootName(entity) {
+  const key = battleRootKey(entity);
+  return entity?.root?.name || entity?.rootName || catalogRoots.value.find((root) => root.key === key)?.name || "未知灵根";
+}
+
+function battleRootCounterTarget(rootKey) {
+  const index = fallbackRootCycle.indexOf(rootKey);
+  return index >= 0 ? fallbackRootCycle[(index + 1) % fallbackRootCycle.length] : "";
+}
+
+function battleRootPenalty(attacker, defender) {
+  if (!battleRootKey(attacker) || !battleRootKey(defender)) return 0;
+  if (battleRootCounterTarget(battleRootKey(attacker)) !== battleRootKey(defender)) return 0;
+  const realmGap = Math.max(0, Math.floor((defender?.realm || 0) / 10) - Math.floor((attacker?.realm || 0) / 10));
+  return 0.1 * Math.pow(0.5, realmGap);
+}
+
+function applySummaryRootPenalty(stats, penalty) {
+  if (!penalty) return stats;
+  return {
+    ...stats,
+    attack: Math.max(1, Math.floor(stats.attack * (1 - penalty))),
+    defense: Math.max(0, Math.floor(stats.defense * (1 - penalty))),
+    divineSense: Math.max(0, Math.floor(stats.divineSense * (1 - penalty))),
+    rootCounterPenalty: penalty
+  };
+}
+
+function skillIdByName(name) {
+  return combatSkills.value.find((skill) => skill.name === name)?.id || "";
+}
+
+function stableSkillId(seed) {
+  const skills = combatSkills.value;
+  if (!skills.length) return "";
+  return skills[stableHash(seed) % skills.length].id;
+}
+
+function summarySkillText(actorName, targetName, skill, damage) {
+  if (!skill) return `${actorName}出手造成 ${damage} 伤害`;
+  if (skill.type === "double") return `${actorName}施展${skill.name}，剑光连斩共造成 ${damage} 伤害`;
+  if (skill.type === "multi") return `${actorName}催动${skill.name}，剑影分化共造成 ${damage} 伤害`;
+  if (skill.type === "pierce") return `${actorName}祭出${skill.name}破开护体灵光，造成 ${damage} 伤害`;
+  if (skill.type === "manaBurn") return `${actorName}摇动${skill.name}扰乱${targetName}法力，造成 ${damage} 伤害`;
+  if (skill.type === "weaken") return `${actorName}施展${skill.name}封住${targetName}经脉，造成 ${damage} 伤害`;
+  if (skill.type === "dotStrike") return `${actorName}放出${skill.name}扑击${targetName}，造成 ${damage} 伤害`;
+  if (skill.type === "heavy") return `${actorName}凝出${skill.name}重击，造成 ${damage} 伤害`;
+  if (skill.type === "lifesteal") return `${actorName}挥出${skill.name}汲血反攻，造成 ${damage} 伤害`;
+  if (skill.type === "speedStrike") return `${actorName}借${skill.name}疾掠突袭，造成 ${damage} 伤害`;
+  if (skill.type === "execute") return `${actorName}抓住破绽斩出${skill.name}，造成 ${damage} 伤害`;
+  if (["shield", "defenseBuff", "reflect", "heal", "evasionBuff", "dodge", "field", "dot", "stun"].includes(skill.type)) {
+    return `${actorName}运转${skill.name}稳住阵脚，并趁势造成 ${damage} 伤害`;
+  }
+  return `${actorName}施展${skill.name}，造成 ${damage} 伤害`;
+}
+
+function splitSummaryDamage(total, parts) {
+  const count = Math.max(1, parts);
+  const safeTotal = Math.max(0, Math.floor(total));
+  if (!safeTotal) return Array.from({ length: count }, () => 0);
+  const result = [];
+  let remaining = safeTotal;
+  for (let index = 0; index < count; index += 1) {
+    const slots = count - index;
+    const value = index === count - 1
+      ? remaining
+      : Math.max(1, Math.floor(remaining / slots));
+    result.push(value);
+    remaining -= value;
+  }
+  return result;
+}
+
+function buildVoidHallSummaryEvents({ battle, challenger, monsterName, leftStats, rightStats, leftSkill, rightSkill, damage, leftWon, endLeftHp, endRightHp, endLeftMana, endRightMana }) {
+  const events = [];
+  let leftHp = leftStats.hp;
+  let rightHp = rightStats.hp;
+  let leftMana = leftStats.mana;
+  let rightMana = rightStats.mana;
+  const leftName = challenger.name || "参战修士";
+  const rightName = monsterName;
+  const push = (round, kind, text, detail = {}) => events.push({
+    round,
+    kind,
+    text,
+    leftHp,
+    rightHp,
+    leftMana,
+    rightMana,
+    ...detail
+  });
+  const attackerForRoot = { ...challenger, realm: Number(challenger.realm) || 0 };
+  const monsterForRoot = {
+    realm: Number(rightStats.realm) || 0,
+    root: rightStats.root,
+    rootName: rightStats.rootName,
+    primaryRootKey: rightStats.primaryRootKey
+  };
+  const monsterPenalty = battleRootPenalty(attackerForRoot, monsterForRoot);
+  const challengerPenalty = battleRootPenalty(monsterForRoot, attackerForRoot);
+  if (challengerPenalty) {
+    push(0, "root", `${rightName}${battleRootName(monsterForRoot)}克制${leftName}${battleRootName(attackerForRoot)}，${leftName}攻击、防御、神识降低 ${Math.round(challengerPenalty * 1000) / 10}%。`, {
+      side: "left",
+      penalty: challengerPenalty
+    });
+  }
+  if (monsterPenalty) {
+    push(0, "root", `${leftName}${battleRootName(attackerForRoot)}克制${rightName}${battleRootName(monsterForRoot)}，${rightName}攻击、防御、神识降低 ${Math.round(monsterPenalty * 1000) / 10}%。`, {
+      side: "right",
+      penalty: monsterPenalty
+    });
+  }
+  if (rightStats.divineSense > leftStats.divineSense) {
+    push(0, "status", `${rightName}神识压过${leftName}，抢得先手。`, { actorSide: "right", targetSide: "left" });
+  } else if (leftStats.divineSense > rightStats.divineSense) {
+    push(0, "status", `${leftName}神识压过${rightName}，抢得先手。`, { actorSide: "left", targetSide: "right" });
+  }
+
+  const leftActionCount = damage > 36 ? 2 : 1;
+  const leftDamages = splitSummaryDamage(damage, leftActionCount);
+  const roundCount = leftWon ? Math.max(2, leftActionCount + 1) : Math.max(2, leftActionCount + 1);
+  const rightDamageTotal = leftWon ? Math.max(1, Math.floor(leftStats.hp * 0.45)) : leftStats.hp;
+  const rightDamages = splitSummaryDamage(rightDamageTotal, roundCount);
+  const order = rightStats.divineSense > leftStats.divineSense ? ["right", "left"] : ["left", "right"];
+  let leftActionIndex = 0;
+  let rightActionIndex = 0;
+
+  for (let round = 1; round <= roundCount && leftHp > 0 && rightHp > 0; round += 1) {
+    push(round, "round", `第 ${battle?.order || 1} 战第 ${round} 回合。`);
+    for (const side of order) {
+      if (leftHp <= 0 || rightHp <= 0) break;
+      if (side === "left") {
+        const dealt = leftDamages[leftActionIndex] ?? 0;
+        if (dealt <= 0 && leftActionIndex > 0) continue;
+        rightHp = Math.max(leftWon ? 0 : endRightHp, rightHp - dealt);
+        if (leftWon && round === roundCount) rightHp = 0;
+        const useSkill = leftActionIndex === 0 && leftSkill;
+        if (useSkill) {
+          leftMana = Math.max(0, leftMana - leftSkill.cost);
+          push(round, "skill", summarySkillText(leftName, rightName, leftSkill, dealt), {
+            actorSide: "left",
+            targetSide: "right",
+            skill: leftSkill.name,
+            damage: dealt
+          });
+        } else {
+          push(round, "attack", `${leftName}寻隙出手造成 ${dealt} 伤害`, {
+            actorSide: "left",
+            targetSide: "right",
+            damage: dealt
+          });
+        }
+        leftActionIndex += 1;
+      } else {
+        const dealt = rightDamages[rightActionIndex] ?? rightDamages[rightDamages.length - 1] ?? 1;
+        leftHp = Math.max(leftWon ? endLeftHp : 0, leftHp - dealt);
+        if (!leftWon && round === roundCount) leftHp = 0;
+        const useSkill = rightActionIndex === 0 && rightSkill;
+        if (useSkill) {
+          rightMana = Math.max(0, rightMana - rightSkill.cost);
+          push(round, "skill", summarySkillText(rightName, leftName, rightSkill, dealt), {
+            actorSide: "right",
+            targetSide: "left",
+            skill: rightSkill.name,
+            damage: dealt
+          });
+        } else {
+          push(round, "attack", `${rightName}妖力压下，造成 ${dealt} 伤害`, {
+            actorSide: "right",
+            targetSide: "left",
+            damage: dealt
+          });
+        }
+        rightActionIndex += 1;
+      }
+    }
+  }
+
+  leftHp = endLeftHp;
+  rightHp = endRightHp;
+  leftMana = endLeftMana;
+  rightMana = endRightMana;
+  push(roundCount, "finish", `胜者：${battle?.winnerName || rightName}。`, {
+    actorSide: leftWon ? "left" : "right",
+    targetSide: leftWon ? "right" : "left"
+  });
+  return events;
+}
+
+function buildVoidHallBattleSummaryReplay(record, battle) {
+  const challenger = battle?.challenger || {};
+  const monster = record?.monsterStats || {};
+  const monsterName = record?.monster || "虚天殿妖物";
+  const damage = Math.max(0, Number(battle?.damage) || 0);
+  const monsterMaxHp = Math.max(1, numericStat(battle?.monsterMaxHp, numericStat(monster.maxHp || record?.requiredDamage || damage, 1)));
+  const monsterMaxMana = Math.max(1, numericStat(battle?.monsterMaxMana, numericStat(monster.maxMana, 1)));
+  const monsterStartHp = Math.max(0, numericStat(battle?.monsterStartHp, monsterMaxHp));
+  const monsterStartMana = Math.max(0, numericStat(battle?.monsterStartMana, monsterMaxMana));
+  const monsterEndHp = Math.max(0, numericStat(battle?.monsterEndHp, monsterStartHp - damage));
+  const monsterEndMana = Math.max(0, numericStat(battle?.monsterEndMana, monsterStartMana - voidHallFallbackManaCost(record, battle, monsterStartMana)));
+  const leftWon = battle?.winnerName === challenger.name;
+  const challengerHp = Math.max(1, Math.min(999, Math.max(80, damage * 2 + 40)));
+  const challengerMana = Math.max(1, Math.floor(challengerHp * 0.42));
+  const leftStats = {
+    hp: challengerHp,
+    maxHp: challengerHp,
+    mana: challengerMana,
+    maxMana: challengerMana,
+    attack: Math.max(1, Math.round(damage)),
+    defense: Math.max(1, Math.round(challengerHp * 0.12)),
+    divineSense: Math.max(1, Math.round(challengerMana * 0.35))
+  };
+  const rightStats = {
+    hp: monsterStartHp,
+    maxHp: monsterMaxHp,
+    mana: monsterStartMana,
+    maxMana: monsterMaxMana,
+    attack: Number(monster.attack || 1),
+    defense: Number(monster.defense || 1),
+    divineSense: Number(monster.divineSense || 1),
+    realm: Number(monster.realmIndex ?? realmIndex(record?.monsterRealm)) || 0,
+    root: monster.root,
+    rootName: monster.rootName,
+    primaryRootKey: monster.primaryRootKey || rootKeyFromName(monster.rootName)
+  };
+  const leftPenalty = battleRootPenalty({ ...rightStats, rootName: monster.rootName, primaryRootKey: rightStats.primaryRootKey }, challenger);
+  const rightPenalty = battleRootPenalty(challenger, { ...rightStats, rootName: monster.rootName, primaryRootKey: rightStats.primaryRootKey });
+  const effectiveLeftStats = applySummaryRootPenalty(leftStats, leftPenalty);
+  const effectiveRightStats = applySummaryRootPenalty(rightStats, rightPenalty);
+  const endLeftHp = leftWon ? Math.max(1, Math.floor(challengerHp * 0.45)) : 0;
+  const endRightHp = leftWon ? 0 : monsterEndHp;
+  const endLeftMana = Math.max(0, Math.floor(challengerMana * 0.55));
+  const endRightMana = monsterEndMana;
+  const leftSkillId = challenger.skillId || player.value.skillId;
+  const rightSkillId = monster.skillId || skillIdByName(monster.skill) || stableSkillId(`${monsterName}-${record?.day || ""}`);
+  const leftSkill = skillById(leftSkillId);
+  const rightSkill = skillById(rightSkillId);
+  const events = buildVoidHallSummaryEvents({
+    battle,
+    challenger,
+    monsterName,
+    leftStats: { ...effectiveLeftStats, realm: Number(challenger.realm ?? realmIndex(record?.highestRealmName)) || 0 },
+    rightStats: effectiveRightStats,
+    leftSkill,
+    rightSkill,
+    damage,
+    leftWon,
+    endLeftHp,
+    endRightHp,
+    endLeftMana,
+    endRightMana
+  });
+  return {
+    kind: "duel",
+    replayId: `void-summary-${record?.day || gameState.value.day || "x"}-${record?.sect || "sect"}-${battle?.order || 0}`,
+    result: leftWon ? "胜" : "负",
+    winner: leftWon ? "left" : "right",
+    foughtAt: record?.date || dateForDay(record?.day || gameState.value.day),
+    left: {
+      kind: challenger.kind || (challenger.id === "player" ? "player" : "npc"),
+      id: challenger.id || `void-challenger-${battle?.order || 0}`,
+      name: challenger.name || "参战修士",
+      realm: Number(challenger.realm ?? realmIndex(record?.highestRealmName)) || 0,
+      sect: challenger.sect || record?.sect || "",
+      root: challenger.root,
+      roots: challenger.roots,
+      primaryRootKey: challenger.primaryRootKey,
+      skillId: leftSkillId,
+      power: damage,
+      stats: effectiveLeftStats,
+      baseStats: leftStats,
+      rootCounterPenalty: leftPenalty,
+      startHp: challengerHp,
+      startMana: challengerMana,
+      endHp: endLeftHp,
+      endMana: endLeftMana
+    },
+    right: {
+      kind: "monster",
+      id: monster.id || `void-monster-${record?.sect || "sect"}`,
+      name: monsterName,
+      realm: Number(monster.realmIndex ?? realmIndex(record?.monsterRealm)) || 0,
+      sect: "虚天殿",
+      root: monster.root || { key: rightStats.primaryRootKey, name: battleRootName(rightStats) },
+      roots: monster.roots || [{ key: rightStats.primaryRootKey, name: battleRootName(rightStats) }],
+      primaryRootKey: rightStats.primaryRootKey,
+      skillId: rightSkillId,
+      power: Number(record?.monsterPower || monsterMaxHp || 0),
+      stats: effectiveRightStats,
+      baseStats: rightStats,
+      rootCounterPenalty: rightPenalty,
+      startHp: monsterStartHp,
+      startMana: monsterStartMana,
+      endHp: endRightHp,
+      endMana: endRightMana
+    },
+    events
+  };
 }
 
 function voidHallRemainingHp(record) {
@@ -3725,11 +4291,11 @@ const powerRanking = computed(() => cultivators.value
     id: item.id,
     kind: "person",
     sect: item.sect,
-    subtitle: `${item.sect} · ${genderLabel(item.gender)} · ${item.mood} · ${realmName(item.realm)}`,
+    subtitle: `${item.sect} · ${realmName(item.realm)}`,
     value: item.power,
     sortValue: powerSortValue(item, effective),
     sortLabel: powerSortLabel(item, effective),
-    help: `战力 ${item.power}。性别：${genderLabel(item.gender)}；境界：${realmName(item.realm)}；经验：${Math.floor(item.xp)}；灵根 ${rootLine(item)}；血量 ${effective.maxHp}，攻击 ${effective.attack}，防御 ${effective.defense}，神识 ${effective.divineSense}，法力 ${effective.maxMana}。`
+    help: `战力 ${item.power}。境界：${realmName(item.realm)}；经验：${Math.floor(item.xp)}；灵根 ${rootLine(item)}；血量 ${effective.maxHp}，攻击 ${effective.attack}，防御 ${effective.defense}，神识 ${effective.divineSense}，法力 ${effective.maxMana}。`
     };
   })
   .sort(comparePowerRankItems));
@@ -3757,6 +4323,7 @@ const duelRanking = computed(() => cultivators.value
 const sectRanking = computed(() => sectSummaries.value
   .map((sect) => {
     const members = sectMembers(sect);
+    const warStats = sectWarStats(sect);
     return {
       name: sect.name,
       id: sect.name,
@@ -3764,7 +4331,7 @@ const sectRanking = computed(() => sectSummaries.value
       sect: sect.name,
       subtitle: `${members.length}人 · 最强 ${sect.leader}`,
       value: sect.totalPower,
-      help: `宗门总战力 ${sect.totalPower}；成员 ${members.length} 人；最强修士 ${sect.leader}。攻守城 ${sect.warWins}胜${sect.warLosses}负。`
+      help: `宗门总战力 ${sect.totalPower}；成员 ${members.length} 人；最强修士 ${sect.leader}。攻守城 ${warStats.wins}胜${warStats.losses}负。`
     };
   }));
 
@@ -3819,6 +4386,7 @@ function powerSortValue(person, effective = personEffectiveStats(person)) {
   if (powerSortKey.value === "defense") return Number(effective.defense || 0);
   if (powerSortKey.value === "divineSense") return Number(effective.divineSense || 0);
   if (powerSortKey.value === "maxMana") return Number(effective.maxMana || 0);
+  if (powerSortKey.value === "spirit") return Number(person.spirit || 0);
   return Number(person.power || 0);
 }
 
@@ -4099,13 +4667,47 @@ function openBattleReplay(replay, target = captureBattleReturn()) {
 }
 
 function hasReplay(record) {
+  if (record?.fallbackReplay) return true;
+  if (record?.replayId && invalidReplayIds.value.has(record.replayId)) return false;
   return Boolean(record?.replay || record?.replayId || record?.hasReplay);
+}
+
+function markReplayInvalid(record) {
+  if (record?.replayId) invalidReplayIds.value = new Set([...invalidReplayIds.value, record.replayId]);
+  if (record) {
+    record.hasReplay = false;
+    record.replay = null;
+  }
+}
+
+function replayMatchesExpectation(record, replay) {
+  const expectation = record?.replayExpectation;
+  if (!expectation || !replay) return true;
+  const leftName = replay.left?.name || replay.team?.name || "";
+  const rightName = replay.right?.name || replay.monster?.name || "";
+  return (!expectation.leftName || leftName === expectation.leftName)
+    && (!expectation.rightName || rightName === expectation.rightName);
 }
 
 async function openReplay(record, fallbackRecord = null, target = captureBattleReturn()) {
   const source = hasReplay(record) ? record : fallbackRecord;
   if (!source || !hasReplay(source)) return;
+  if (source.replayId && invalidReplayIds.value.has(source.replayId) && source.fallbackReplay) {
+    openBattleReplay(source.fallbackReplay, target);
+    error.value = "";
+    return;
+  }
   if (source.replay) {
+    if (!replayMatchesExpectation(source, source.replay)) {
+      markReplayInvalid(source);
+      if (source.fallbackReplay) {
+        openBattleReplay(source.fallbackReplay, target);
+        error.value = "";
+        return;
+      }
+      error.value = "这条旧回放与当前战斗不匹配，已阻止打开错误战报。新结算的副本记录会自动修正。";
+      return;
+    }
     openBattleReplay(source.replay, target);
     return;
   }
@@ -4114,6 +4716,16 @@ async function openReplay(record, fallbackRecord = null, target = captureBattleR
   try {
     const response = await getBattleReplay(source.replayId);
     if (!response?.replay) return;
+    if (!replayMatchesExpectation(source, response.replay)) {
+      markReplayInvalid(source);
+      if (source.fallbackReplay) {
+        openBattleReplay(source.fallbackReplay, target);
+        error.value = "";
+        return;
+      }
+      error.value = "这条旧回放与当前战斗不匹配，已阻止打开错误战报。新结算的副本记录会自动修正。";
+      return;
+    }
     source.replay = response.replay;
     openBattleReplay(response.replay, target);
     error.value = "";
@@ -4166,8 +4778,19 @@ function resetTabHome(tabId) {
 
 function switchTab(tabId) {
   closeBattleReplay();
+  if (cultivationSubTabs.some((tab) => tab.id === tabId)) {
+    cultivationSubTab.value = tabId;
+    activeTab.value = "cultivation";
+    resetTabHome("cultivation");
+    return;
+  }
   activeTab.value = tabId;
   resetTabHome(tabId);
+}
+
+function adminNumber(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.floor(number)) : fallback;
 }
 
 function syncAdminCultivatorDraft(person = adminCultivatorPerson.value) {
@@ -4178,6 +4801,14 @@ function syncAdminCultivatorDraft(person = adminCultivatorPerson.value) {
   adminCultivatorDraft.gender = person.gender || "unknown";
   adminCultivatorDraft.rootKeys = rootKeys(person).slice(0, 5);
   adminCultivatorDraft.portraitUrl = person.portraitUrl || "";
+  adminCultivatorDraft.skillId = person.skillId || combatSkills.value[0]?.id || "";
+  adminCultivatorDraft.xp = adminNumber(person.xp);
+  adminCultivatorDraft.spirit = adminNumber(person.spirit);
+  adminCultivatorDraft.maxHp = Math.max(1, adminNumber(person.maxHp, 1));
+  adminCultivatorDraft.attack = Math.max(1, adminNumber(person.attack, 1));
+  adminCultivatorDraft.defense = adminNumber(person.defense);
+  adminCultivatorDraft.divineSense = Math.max(1, adminNumber(person.divineSense, 1));
+  adminCultivatorDraft.maxMana = Math.max(1, adminNumber(person.maxMana, 1));
 }
 
 function selectAdminCultivator(id) {
@@ -4264,7 +4895,15 @@ async function saveCultivatorProfile() {
     name: adminCultivatorDraft.name,
     gender: adminCultivatorDraft.gender,
     rootKeys: adminCultivatorDraft.rootKeys,
-    portraitUrl: adminCultivatorDraft.portraitUrl
+    portraitUrl: adminCultivatorDraft.portraitUrl,
+    skillId: adminCultivatorDraft.skillId,
+    xp: adminNumber(adminCultivatorDraft.xp),
+    spirit: adminNumber(adminCultivatorDraft.spirit),
+    maxHp: Math.max(1, adminNumber(adminCultivatorDraft.maxHp, 1)),
+    attack: Math.max(1, adminNumber(adminCultivatorDraft.attack, 1)),
+    defense: adminNumber(adminCultivatorDraft.defense),
+    divineSense: Math.max(1, adminNumber(adminCultivatorDraft.divineSense, 1)),
+    maxMana: Math.max(1, adminNumber(adminCultivatorDraft.maxMana, 1))
   }, { scope: "full" });
   await ensureFullState();
 }
@@ -4357,7 +4996,8 @@ function openPersonById(id) {
 
 function openProgression() {
   selectedRealmStage.value = derived.value.currentRealmInfo?.stage || selectedRealmStage.value;
-  activeTab.value = "progression";
+  cultivationSubTab.value = "progression";
+  activeTab.value = "cultivation";
 }
 
 function personStats(person) {
@@ -4703,7 +5343,7 @@ function baseBreakthroughChance(realm) {
   const level = (safeRealm % 10) + 1;
   const levelPenalty = (level - 1) * 0.024;
   const stagePenalty = stageIndex * 0.058;
-  const bottleneckPenalty = level === 10 ? 0.18 + stageIndex * 0.024 : 0;
+  const bottleneckPenalty = level === 10 ? 0.26 + stageIndex * 0.04 : 0;
   return Math.max(0.04, Math.min(0.86, 0.76 - levelPenalty - stagePenalty - bottleneckPenalty));
 }
 
@@ -4794,10 +5434,11 @@ function sectAvatarStyle(sect) {
 
 function sectStats(sect) {
   const members = sectMembers(sect);
+  const warStats = sectWarStats(sect);
   return [
     ["总战力", sect.totalPower],
     ["成员", members.length],
-    ["攻守城", `${sect.warWins}胜${sect.warLosses}负`]
+    ["攻守城", `${warStats.wins}胜${warStats.losses}负`]
   ];
 }
 
@@ -5389,12 +6030,16 @@ watch([adminSearch, adminMode], () => {
   else syncAdminTaskDraft(adminTaskDefinition.value || filteredAdminTasks.value[0]);
 });
 
-watch(enabledTaskDefinitions, () => {
+watch([enabledTaskDefinitions, () => taskForm.category], () => {
   if (!enabledTaskDefinitions.value.length) {
+    taskForm.category = "";
     taskForm.taskId = "";
     return;
   }
-  const selected = enabledTaskDefinitions.value.find((task) => task.id === taskForm.taskId) || enabledTaskDefinitions.value[0];
+  const firstCategory = frontTaskCategories.value[0]?.id || "";
+  const hasCategory = frontTaskCategories.value.some((category) => category.id === taskForm.category);
+  if (!hasCategory && firstCategory) taskForm.category = firstCategory;
+  const selected = filteredTaskDefinitions.value.find((task) => task.id === taskForm.taskId) || filteredTaskDefinitions.value[0];
   if (taskForm.taskId !== selected.id) taskForm.taskId = selected.id;
 }, { immediate: true });
 
