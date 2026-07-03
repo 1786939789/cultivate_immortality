@@ -22,6 +22,7 @@ import {
   updateCultivatorProfile,
   updateTaskDefinition,
   updateSectProfile,
+  upgradePlayerSkill,
   useItem
 } from "./gameLogic.mjs";
 import { mutateState, publicState, readBattleReplay, readState, resetState } from "./store.mjs";
@@ -36,6 +37,7 @@ const liteActionRoutes = new Set([
   "/api/task-definitions/delete",
   "/api/task-definitions/toggle",
   "/api/player/portrait",
+  "/api/skills/upgrade",
   "/api/rest",
   "/api/day/advance",
   "/api/sect/mission",
@@ -141,6 +143,7 @@ async function handleApi(req, res, url) {
     "/api/task-definitions/delete": (state) => deleteTaskDefinition(state, body),
     "/api/task-definitions/toggle": (state) => toggleTaskDefinition(state, body),
     "/api/player/portrait": (state) => changePlayerPortrait(state, body),
+    "/api/skills/upgrade": (state) => upgradePlayerSkill(state),
     "/api/rest": (state) => rest(state),
     "/api/day/advance": (state) => dailySettlement(state, { manual: true }),
     "/api/dungeons/run": (state) => runDungeon(state, body.id),

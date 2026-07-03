@@ -488,35 +488,71 @@
             <div class="section-head">
               <div>
                 <h3>本命技能</h3>
-                <p>随战局自动释放。</p>
+                <p>技能一阶起步，最高十阶；升阶会增强效果，也会提高法力消耗。</p>
               </div>
-              <span class="tag">{{ playerSkill.name }} · {{ playerSkill.cost }} 法力</span>
             </div>
             <div class="skill-hero" :style="skillVisualStyle(playerSkill)">
-              <span class="skill-hero-art" aria-hidden="true">
-                <img v-if="skillAssetPath(playerSkill)" :src="skillAssetPath(playerSkill)" alt="">
-                <span v-else>{{ skillGlyph(playerSkill) }}</span>
-              </span>
-              <div>
+              <div class="skill-hero-main">
                 <strong>{{ playerSkill.name }}</strong>
                 <span>{{ playerSkill.text }}</span>
-                <span class="tag">消耗 {{ playerSkill.cost }} 法力 · 冷却 {{ playerSkill.cooldown }} 回合</span>
+                <div class="skill-meta-line">
+                  <span>{{ skillRankText(skillUpgrade.rank) }}</span>
+                  <span>消耗 {{ playerSkill.cost }} 法力</span>
+                  <span>冷却 {{ playerSkill.cooldown }} 回合</span>
+                </div>
+              </div>
+            </div>
+            <div class="skill-upgrade-panel">
+              <div class="skill-upgrade-summary">
+                <span>当前 {{ skillRankText(skillUpgrade.rank) }}</span>
+                <span>下阶 {{ skillUpgrade.next ? skillUpgrade.requirementRealm : "已满阶" }}</span>
+                <span>消耗 {{ skillUpgrade.next ? `${skillUpgrade.cost} 灵石` : "无" }}</span>
+                <span>成功率 {{ skillUpgrade.next ? formatPercent(skillUpgrade.chance) : "圆满" }}</span>
+              </div>
+              <div v-if="skillUpgrade.next" class="skill-upgrade-next">
+                <p><strong>{{ skillRankText(skillUpgrade.targetRank) }}预览：</strong>{{ skillUpgrade.next.text }}</p>
+                <small>法力 {{ playerSkill.cost }} → {{ skillUpgrade.next.cost }} · 冷却 {{ skillUpgrade.next.cooldown }} 回合</small>
+              </div>
+              <div class="actions skill-upgrade-actions">
+                <button class="primary" :disabled="!canUpgradeSkill || isActionPending('/api/skills/upgrade')" @click="upgradeSkill">
+                  {{ isActionPending("/api/skills/upgrade") ? "淬炼中..." : "升级技能" }}
+                </button>
+                <span class="meta">{{ skillUpgradeHint }}</span>
               </div>
             </div>
           </div>
 
           <div class="skill-grid">
-            <article class="skill-card" v-for="skill in combatSkills" :key="skill.id" :class="[skillStyle(skill), { active: skill.id === player.skillId }]" :style="skillVisualStyle(skill)">
+            <article class="skill-card" v-for="skill in combatSkills" :key="skill.id" :class="[skillStyle(skill), { active: skill.id === player.skillId }]" :style="skillVisualStyle(skill)" tabindex="0">
               <div class="skill-title">
                 <span class="skill-card-icon" aria-hidden="true">
                   <img v-if="skillAssetPath(skill)" :src="skillAssetPath(skill)" alt="">
                   <span v-else>{{ skillGlyph(skill) }}</span>
                 </span>
                 <strong>{{ skill.name }}</strong>
-                <span class="tag">{{ skill.cost }} 法力</span>
+                <span class="tag">{{ skillRankText(skillPlan(skill).rank) }}</span>
               </div>
-              <p>{{ skill.text }}</p>
-              <small>冷却 {{ skill.cooldown }} 回合</small>
+              <p>{{ skillPlan(skill).current?.text || skill.text }}</p>
+              <small>
+                法力 {{ skillPlan(skill).current?.cost || skill.cost }} · 冷却 {{ skillPlan(skill).current?.cooldown || skill.cooldown }} 回合
+                <template v-if="skillPlan(skill).next"> · {{ skillPlan(skill).requirementRealm }}后可升{{ skillRankText(skillPlan(skill).targetRank) }}</template>
+              </small>
+              <div class="skill-rank-popover" role="tooltip">
+                <div class="skill-rank-popover-head">
+                  <strong>{{ skill.name }}升阶表</strong>
+                  <span>悬停查看</span>
+                </div>
+                <div class="skill-rank-list">
+                  <div class="skill-rank-row" v-for="rank in skillRankRows(skill)" :key="`${skill.id}-${rank.rank}`" :class="{ current: rank.rank === skillPlan(skill).rank }">
+                    <div>
+                      <strong>{{ skillRankText(rank.rank) }}</strong>
+                      <small>{{ rank.requirementRealm }} · {{ skillRankCostText(rank) }} · {{ skillRankChanceText(rank) }}</small>
+                    </div>
+                    <p>{{ rank.skill.text }}</p>
+                    <span>法力 {{ rank.skill.cost }} · 冷却 {{ rank.skill.cooldown }} 回合</span>
+                  </div>
+                </div>
+              </div>
             </article>
           </div>
         </section>
@@ -632,8 +668,8 @@
                   </span>
                 </div>
                 <div class="skill-chip" tabindex="0">
-                  {{ skillName(lastBattle.left.skillId) }}
-                  <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.left.skillId) }}</span>
+                  {{ skillLabel(lastBattle.left) }}
+                  <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.left) }}</span>
                 </div>
                 <Meter label="血量" icon="health" :value="currentBattleFrame.leftHp" :max="battleMax(lastBattle.left, 'hp')" tone="health" />
                 <Meter label="法力" icon="mana" :value="currentBattleFrame.leftMana" :max="battleMax(lastBattle.left, 'mana')" tone="focus" />
@@ -651,8 +687,8 @@
                   </span>
                 </div>
                 <div class="skill-chip" tabindex="0">
-                  {{ skillName(lastBattle.right.skillId) }}
-                  <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.right.skillId) }}</span>
+                  {{ skillLabel(lastBattle.right) }}
+                  <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.right) }}</span>
                 </div>
                 <Meter label="血量" icon="health" :value="currentBattleFrame.rightHp" :max="battleMax(lastBattle.right, 'hp')" tone="health" />
                 <Meter label="法力" icon="mana" :value="currentBattleFrame.rightMana" :max="battleMax(lastBattle.right, 'mana')" tone="focus" />
@@ -1127,8 +1163,8 @@
                   </span>
                 </div>
                 <div class="skill-chip" tabindex="0">
-                  {{ skillName(lastBattle.left.skillId) }}
-                  <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.left.skillId) }}</span>
+                  {{ skillLabel(lastBattle.left) }}
+                  <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.left) }}</span>
                 </div>
                 <Meter label="血量" icon="health" :value="currentBattleFrame.leftHp" :max="battleMax(lastBattle.left, 'hp')" tone="health" />
                 <Meter label="法力" icon="mana" :value="currentBattleFrame.leftMana" :max="battleMax(lastBattle.left, 'mana')" tone="focus" />
@@ -1146,8 +1182,8 @@
                   </span>
                 </div>
                 <div class="skill-chip" tabindex="0">
-                  {{ skillName(lastBattle.right.skillId) }}
-                  <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.right.skillId) }}</span>
+                  {{ skillLabel(lastBattle.right) }}
+                  <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.right) }}</span>
                 </div>
                 <Meter label="血量" icon="health" :value="currentBattleFrame.rightHp" :max="battleMax(lastBattle.right, 'hp')" tone="health" />
                 <Meter label="法力" icon="mana" :value="currentBattleFrame.rightMana" :max="battleMax(lastBattle.right, 'mana')" tone="focus" />
@@ -1442,8 +1478,8 @@
                   </span>
                 </div>
                 <div class="skill-chip" tabindex="0">
-                  {{ skillName(lastBattle.left.skillId) }}
-                  <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.left.skillId) }}</span>
+                  {{ skillLabel(lastBattle.left) }}
+                  <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.left) }}</span>
                 </div>
                 <Meter label="血量" icon="health" :value="currentBattleFrame.leftHp" :max="battleMax(lastBattle.left, 'hp')" tone="health" />
                 <Meter label="法力" icon="mana" :value="currentBattleFrame.leftMana" :max="battleMax(lastBattle.left, 'mana')" tone="focus" />
@@ -1461,8 +1497,8 @@
                   </span>
                 </div>
                 <div class="skill-chip" tabindex="0">
-                  {{ skillName(lastBattle.right.skillId) }}
-                  <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.right.skillId) }}</span>
+                  {{ skillLabel(lastBattle.right) }}
+                  <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.right) }}</span>
                 </div>
                 <Meter label="血量" icon="health" :value="currentBattleFrame.rightHp" :max="battleMax(lastBattle.right, 'hp')" tone="health" />
                 <Meter label="法力" icon="mana" :value="currentBattleFrame.rightMana" :max="battleMax(lastBattle.right, 'mana')" tone="focus" />
@@ -1598,8 +1634,8 @@
                   </span>
                 </div>
                 <div class="skill-chip" tabindex="0">
-                  {{ skillName(lastBattle.left.skillId) }}
-                  <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.left.skillId) }}</span>
+                  {{ skillLabel(lastBattle.left) }}
+                  <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.left) }}</span>
                 </div>
                 <Meter label="血量" icon="health" :value="currentBattleFrame.leftHp" :max="battleMax(lastBattle.left, 'hp')" tone="health" />
                 <Meter label="法力" icon="mana" :value="currentBattleFrame.leftMana" :max="battleMax(lastBattle.left, 'mana')" tone="focus" />
@@ -1617,8 +1653,8 @@
                   </span>
                 </div>
                 <div class="skill-chip" tabindex="0">
-                  {{ skillName(lastBattle.right.skillId) }}
-                  <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.right.skillId) }}</span>
+                  {{ skillLabel(lastBattle.right) }}
+                  <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.right) }}</span>
                 </div>
                 <Meter label="血量" icon="health" :value="currentBattleFrame.rightHp" :max="battleMax(lastBattle.right, 'hp')" tone="health" />
                 <Meter label="法力" icon="mana" :value="currentBattleFrame.rightMana" :max="battleMax(lastBattle.right, 'mana')" tone="focus" />
@@ -1756,7 +1792,7 @@
                   <div>
                     <h3>{{ selectedPerson.name }}</h3>
                     <p>{{ selectedPerson.sect }} · {{ genderLabel(selectedPerson.gender) }} · {{ realmName(selectedPerson.realm) }} · {{ rootLine(selectedPerson) }}</p>
-                    <span class="tag">本命技能：{{ skillName(selectedPerson.skillId) }}</span>
+                    <span class="tag skill-detail-tag" :title="skillTip(selectedPerson)">本命技能：{{ skillLabel(selectedPerson) }} · {{ skillEffectSummary(selectedPerson) }}</span>
                     <span class="tag rank-tag" :class="`duel-rank-${duelRankId(selectedPerson)}`">{{ duelRankText(selectedPerson) }}</span>
                     <span class="tag">{{ rootCounterText(selectedPerson) }}</span>
                   </div>
@@ -1866,6 +1902,16 @@
                 </div>
               </div>
               <div class="panel flat">
+                <h3>技能升阶</h3>
+                <div class="timeline detail-scroll">
+                  <div class="event gold" v-for="record in selectedPerson.skillUpgrades || []" :key="`${record.day}-${record.skillId}-${record.toRank}`">
+                    <strong>{{ skillUpgradeRecordTitle(record) }}</strong>
+                    <span>{{ skillUpgradeRecordMetaText(record) }}</span>
+                  </div>
+                  <div v-if="!selectedPerson.skillUpgrades?.length" class="empty">暂无技能升阶记录。</div>
+                </div>
+              </div>
+              <div class="panel flat">
                 <h3>切磋战绩</h3>
                 <p>第 {{ duelSeasonInfo.season }} 赛季：{{ duelRankText(selectedPerson) }}，{{ selectedPerson.duelSeason?.wins || 0 }} 胜 {{ selectedPerson.duelSeason?.losses || 0 }} 负；累计 {{ selectedPerson.duelWins || 0 }} 胜 {{ selectedPerson.duelLosses || 0 }} 负。</p>
                 <div class="duel-history-strip" v-if="selectedPerson.duelSeasonHistory?.length">
@@ -1915,7 +1961,7 @@
             <div class="section-head">
               <div>
                 <h3>{{ selectedSect.name }}</h3>
-                <p>总战力 {{ selectedSect.totalPower }} · 掌事 {{ selectedSect.leader }}</p>
+                <p>总战力 {{ selectedSect.totalPower }} · 掌门 {{ sectLeaderName(selectedSect) }} · 长老 {{ sectElderNames(selectedSect) }}</p>
               </div>
             </div>
             <div class="detail-grid">
@@ -1938,6 +1984,7 @@
                     <div class="sect-member-main">
                       <div class="sect-member-topline">
                         <span class="tag">{{ realmName(member.realm) }}</span>
+                        <span v-if="sectMemberOffice(selectedSect, member)" class="member-badge office">{{ sectMemberOffice(selectedSect, member) }}</span>
                         <span class="member-badge" :class="{ player: member.isPlayer }">{{ member.isPlayer ? "你" : "NPC" }}</span>
                       </div>
                       <strong>{{ member.name }}</strong>
@@ -2143,6 +2190,25 @@
                   <span>宗门名</span>
                   <input v-model.trim="adminSectDraft.name" maxlength="24">
                 </label>
+                <div class="admin-form-grid">
+                  <label>
+                    <span>掌门</span>
+                    <select v-model="adminSectDraft.leaderId" @change="sanitizeAdminSectOffices">
+                      <option value="">按战力最高自动展示</option>
+                      <option v-for="member in adminSectMembers" :key="`leader-${member.id}`" :value="member.id">{{ member.name }} · {{ realmName(member.realm) }}</option>
+                    </select>
+                  </label>
+                  <div class="admin-field-block">
+                    <span>长老</span>
+                    <div class="admin-check-list">
+                      <label v-for="member in adminElderOptions" :key="`elder-${member.id}`" class="admin-check-row">
+                        <input type="checkbox" :value="member.id" v-model="adminSectDraft.elderIds">
+                        <span>{{ member.name }} · {{ realmName(member.realm) }}</span>
+                      </label>
+                      <small v-if="!adminElderOptions.length">暂无可选长老。</small>
+                    </div>
+                  </div>
+                </div>
                 <div class="admin-actions">
                   <label class="secondary admin-upload-button">
                     <ImagePlus :size="16" aria-hidden="true" />
@@ -2372,6 +2438,7 @@ const emptyState = {
     attributes: {},
     dailyRecords: [],
     breakthroughs: [],
+    skillUpgrades: [],
     duelHistory: [],
     dungeonHistory: [],
     equipment: {}
@@ -2487,7 +2554,7 @@ const adminCultivatorDraft = reactive({
   divineSense: 1,
   maxMana: 1
 });
-const adminSectDraft = reactive({ oldName: "", name: "", portraitUrl: "" });
+const adminSectDraft = reactive({ oldName: "", name: "", portraitUrl: "", leaderId: "", elderIds: [] });
 const adminTaskDraft = reactive({
   id: "",
   name: "",
@@ -2655,7 +2722,23 @@ const playerPortraitPerson = computed(() => ({
   portraitUrl: playerPortraitUrl.value
 }));
 const combatSkills = computed(() => catalog.value.combatSkills?.length ? catalog.value.combatSkills : [fallbackSkill]);
-const playerSkill = computed(() => skillById(player.value.skillId));
+const skillUpgrade = computed(() => derived.value.skillUpgrade || {});
+const skillUpgradePlan = computed(() => derived.value.skillUpgradePlan || []);
+const playerSkill = computed(() => skillUpgrade.value.current || player.value.effectiveSkill || skillById(player.value.skillId));
+const canUpgradeSkill = computed(() => Boolean(
+  skillUpgrade.value.next
+    && !skillUpgrade.value.attemptedToday
+    && skillUpgrade.value.canMeetRealm
+    && skillUpgrade.value.enoughSpirit
+));
+const skillUpgradeHint = computed(() => {
+  const preview = skillUpgrade.value;
+  if (!preview.next) return "此术已修至十阶圆满。";
+  if (preview.attemptedToday) return "今日已经尝试过技能升级，明日再来。";
+  if (!preview.canMeetRealm) return `需要达到${preview.requirementRealm}才能继续升阶。`;
+  if (!preview.enoughSpirit) return `灵石不足，升级需要 ${preview.cost} 灵石。`;
+  return `失败也会扣除 ${preview.cost} 灵石，今日仅可尝试一次。`;
+});
 const sectSummaries = computed(() => derived.value.sects || []);
 const catalogRoots = computed(() => catalog.value.roots?.length ? catalog.value.roots : []);
 const adminCultivators = computed(() => cultivators.value);
@@ -2687,9 +2770,17 @@ const filteredAdminSects = computed(() => {
   return adminSects.value.filter((sect) => [
     sect.name,
     sect.id,
-    sect.leader
+    sectLeaderName(sect),
+    ...(sect.elderNames || [])
   ].filter(Boolean).join(" ").toLowerCase().includes(keyword));
 });
+const adminSectMembers = computed(() => {
+  const name = adminSectDraft.oldName || adminSelectedSectName.value;
+  return [...(sectByName(name)?.members || cultivators.value.filter((person) => person.sect === name))]
+    .sort((a, b) => (b.power || personPower(b)) - (a.power || personPower(a)) || a.name.localeCompare(b.name, "zh-Hans-CN"));
+});
+const adminEffectiveLeaderId = computed(() => adminSectDraft.leaderId || adminSectMembers.value[0]?.id || "");
+const adminElderOptions = computed(() => adminSectMembers.value.filter((member) => member.id !== adminEffectiveLeaderId.value));
 const filteredAdminTasks = computed(() => {
   const keyword = normalizedAdminSearch.value;
   if (!keyword) return taskDefinitions.value;
@@ -2837,6 +2928,19 @@ const todayBreakthroughs = computed(() => {
 });
 const todayBreakthroughHighlight = computed(() => [...todayBreakthroughs.value]
   .sort((a, b) => b.targetRealm - a.targetRealm || a.personIndex - b.personIndex || a.recordIndex - b.recordIndex)[0] || null);
+const todaySkillUpgrades = computed(() => {
+  const today = gameState.value.day;
+  return cultivators.value.flatMap((person, personIndex) => (person.skillUpgrades || [])
+    .map((record, recordIndex) => ({
+      person,
+      record,
+      personIndex,
+      recordIndex
+    }))
+    .filter((item) => item.record.day === today));
+});
+const todaySkillUpgradeHighlight = computed(() => [...todaySkillUpgrades.value]
+  .sort((a, b) => (b.record.toRank || 0) - (a.record.toRank || 0) || a.personIndex - b.personIndex || a.recordIndex - b.recordIndex)[0] || null);
 const todaySpiritHighlight = computed(() => {
   const today = gameState.value.day;
   return cultivators.value
@@ -2878,6 +2982,16 @@ const dailyTickerItems = computed(() => {
       label: "突破",
       name: person.name,
       text: `突破至 ${record.to}，今日共 ${count} 人突破成功`
+    });
+  }
+  if (todaySkillUpgradeHighlight.value) {
+    const { person, record } = todaySkillUpgradeHighlight.value;
+    const count = todaySkillUpgrades.value.length;
+    items.push({
+      key: "skill-upgrade",
+      label: "技能",
+      name: person.name,
+      text: `将「${record.skillName || skillName(record.skillId)}」升至 ${skillRankText(record.toRank)}，今日共 ${count} 人技能升阶`
     });
   }
   if (todaySpiritHighlight.value) {
@@ -3093,7 +3207,7 @@ const starSeaMonsterStats = computed(() => {
     { label: "攻击", value: monster.attack || "?", icon: "attack" },
     { label: "防御", value: monster.defense || "?", icon: "defense" },
     { label: "神识", value: monster.divineSense || "?", icon: "sense" },
-    { label: "技能", value: monster.skill || "妖术", icon: "skill" }
+    { label: "技能", value: skillSummary(monster), icon: "skill" }
   ];
 });
 const groupedRealmProgression = computed(() => {
@@ -3147,6 +3261,42 @@ function skillById(id) {
   return combatSkills.value.find((skill) => skill.id === id) || combatSkills.value[0];
 }
 
+function skillPlan(skill) {
+  return skillUpgradePlan.value.find((item) => item.skillId === skill.id) || {
+    skillId: skill.id,
+    rank: 1,
+    targetRank: 2,
+    current: skill,
+    next: null,
+    requirementRealm: realmName(0),
+    cost: 0,
+    chance: 0
+  };
+}
+
+function skillRankRows(skill) {
+  const plan = skillPlan(skill);
+  return plan.ranks?.length ? plan.ranks : [{
+    rank: 1,
+    requirementRealm: "初始",
+    cost: 0,
+    chance: 1,
+    skill
+  }];
+}
+
+function skillRankText(rank) {
+  return `${Math.max(1, Number(rank) || 1)}阶`;
+}
+
+function skillRankCostText(rank) {
+  return rank.rank <= 1 ? "初始习得" : `${rank.cost || 0} 灵石`;
+}
+
+function skillRankChanceText(rank) {
+  return rank.rank <= 1 ? "必定掌握" : `成功率 ${formatPercent(rank.chance)}`;
+}
+
 function normalizedTaskCategory(category) {
   if (taskCategoryOptions.some((option) => option.id === category)) return category;
   if (["运动", "锻炼", "健身", "修行", "body"].includes(category)) return "运动";
@@ -3162,9 +3312,47 @@ function skillName(id) {
   return skillById(id).name;
 }
 
-function skillTip(id) {
-  const skill = skillById(id);
-  return `${skill.name}：消耗 ${skill.cost} 法力，冷却 ${skill.cooldown} 回合。${skill.text}`;
+function skillForDisplay(target) {
+  if (!target || typeof target === "string") {
+    const skill = skillById(target);
+    return { ...skill, rank: 1 };
+  }
+  if (target.effectiveSkill) return target.effectiveSkill;
+  const skillId = target.skillId || skillIdByName(target.skill) || "";
+  const skill = skillById(skillId);
+  const rawRank = target.skillRank || target.skillRanks?.[skill.id] || skill.rank || 1;
+  const rank = Math.max(1, Math.min(10, Math.floor(Number(rawRank) || 1)));
+  return skillRankRows(skill).find((item) => Number(item.rank) === rank)?.skill || { ...skill, rank };
+}
+
+function skillDisplayRank(target) {
+  const skill = skillForDisplay(target);
+  return Math.max(1, Number(skill.rank || target?.skillRank || 1) || 1);
+}
+
+function skillLabel(target) {
+  const skill = skillForDisplay(target);
+  return `${skill.name} · ${skillRankText(skillDisplayRank(target))} · ${skill.cost} 法力`;
+}
+
+function skillCompactLabel(target) {
+  const skill = skillForDisplay(target);
+  return `${skill.name} · ${skillRankText(skillDisplayRank(target))}`;
+}
+
+function skillEffectSummary(target) {
+  return skillForDisplay(target).text || "暂无技能效果";
+}
+
+function skillSummary(target) {
+  const skill = skillForDisplay(target);
+  return `${skill.name} · ${skillRankText(skillDisplayRank(target))} · ${skill.cost} 法力 · ${skill.text || "暂无技能效果"}`;
+}
+
+function skillTip(target) {
+  const skill = skillForDisplay(target);
+  const rank = skillDisplayRank(target);
+  return `${skill.name} · ${skillRankText(rank)}：消耗 ${skill.cost} 法力，冷却 ${skill.cooldown} 回合。${skill.text}`;
 }
 
 function skillStyle(skill) {
@@ -3337,7 +3525,7 @@ function monsterStatItems(monster = {}) {
     { label: "攻击", value: monster.attack || "?", icon: "attack" },
     { label: "防御", value: monster.defense || "?", icon: "defense" },
     { label: "神识", value: monster.divineSense || "?", icon: "sense" },
-    { label: "技能", value: monster.skill || "妖术", icon: "skill" }
+    { label: "技能", value: skillSummary(monster), icon: "skill" }
   ];
 }
 
@@ -4329,9 +4517,9 @@ const sectRanking = computed(() => sectSummaries.value
       id: sect.name,
       kind: "sect",
       sect: sect.name,
-      subtitle: `${members.length}人 · 最强 ${sect.leader}`,
+      subtitle: `${members.length}人 · 掌门 ${sectLeaderName(sect)}`,
       value: sect.totalPower,
-      help: `宗门总战力 ${sect.totalPower}；成员 ${members.length} 人；最强修士 ${sect.leader}。攻守城 ${warStats.wins}胜${warStats.losses}负。`
+      help: `宗门总战力 ${sect.totalPower}；成员 ${members.length} 人；掌门 ${sectLeaderName(sect)}；长老 ${sectElderNames(sect)}。攻守城 ${warStats.wins}胜${warStats.losses}负。`
     };
   }));
 
@@ -4557,6 +4745,17 @@ function breakthroughRecordMetaText(record) {
   const growth = growthCompactText(record.growth);
   if (growth) parts.push(growth);
   return parts.join(" · ") || "无额外记录";
+}
+
+function skillUpgradeRecordTitle(record) {
+  return `${shortDisplayDate(record)} · ${record.skillName || skillName(record.skillId)} · ${skillRankText(record.fromRank)} → ${skillRankText(record.toRank)}`;
+}
+
+function skillUpgradeRecordMetaText(record) {
+  const parts = [];
+  if (record.cost) parts.push(`消耗 ${record.cost} 灵石`);
+  if (typeof record.chance === "number") parts.push(`成功率 ${formatPercent(record.chance)}`);
+  return parts.join(" · ") || "升阶成功";
 }
 
 function duelRecordTitle(record) {
@@ -4838,10 +5037,17 @@ function syncAdminSectDraft(name = adminSelectedSectName.value) {
   adminSectDraft.oldName = sect.name;
   adminSectDraft.name = sect.name;
   adminSectDraft.portraitUrl = sect.portraitUrl || "";
+  adminSectDraft.leaderId = sect.leaderId || "";
+  const memberIds = new Set((sect.members || []).map((member) => member.id));
+  adminSectDraft.elderIds = Array.isArray(sect.elderIds) ? sect.elderIds.filter((id) => id !== adminSectDraft.leaderId && (!memberIds.size || memberIds.has(id))) : [];
 }
 
 function selectAdminSect(name) {
   syncAdminSectDraft(name);
+}
+
+function sanitizeAdminSectOffices() {
+  adminSectDraft.elderIds = [...new Set(adminSectDraft.elderIds.filter((id) => id && id !== adminEffectiveLeaderId.value))];
 }
 
 function resetAdminTaskDraft() {
@@ -4910,10 +5116,17 @@ async function saveCultivatorProfile() {
 
 async function saveSectProfile() {
   if (!adminSectDraft.oldName) return;
+  sanitizeAdminSectOffices();
+  if (adminEffectiveLeaderId.value && adminSectDraft.elderIds.includes(adminEffectiveLeaderId.value)) {
+    error.value = "掌门和长老不能是同一个人。";
+    return;
+  }
   await act("/api/admin/sect", {
     oldName: adminSectDraft.oldName,
     name: adminSectDraft.name,
-    portraitUrl: adminSectDraft.portraitUrl
+    portraitUrl: adminSectDraft.portraitUrl,
+    leaderId: adminSectDraft.leaderId,
+    elderIds: adminSectDraft.elderIds
   }, { scope: "full" });
   await ensureFullState();
   adminSelectedSectName.value = adminSectDraft.name;
@@ -5012,7 +5225,7 @@ function personStats(person) {
     { label: "攻击", value: statWithBonus(effective.attack, effective.bonuses.attack), icon: "attack" },
     { label: "防御", value: statWithBonus(effective.defense, effective.bonuses.defense), icon: "defense" },
     { label: "神识", value: statWithBonus(effective.divineSense, effective.bonuses.divineSense), icon: "sense" },
-    { label: "技能", value: skillName(person.skillId), icon: "skill" },
+    { label: "技能", value: skillCompactLabel(person), icon: "skill", help: skillTip(person) },
     { label: "战斗力", value: power, icon: "power", help: personPowerFormula(person, effective, power) },
     { label: "战力排名", value: powerRank ? `#${powerRank}` : "未上榜", icon: "rank", help: powerRank ? `当前个人战力榜第 ${powerRank} 名。` : "当前不在个人战力榜中。" }
   ];
@@ -5424,6 +5637,21 @@ function sectTotalPower(name) {
   return sectByName(name)?.totalPower || 0;
 }
 
+function sectLeaderName(sect) {
+  return sect?.leaderName || sect?.leader || "无";
+}
+
+function sectElderNames(sect) {
+  return sect?.elderNames?.length ? sect.elderNames.join("、") : "未设";
+}
+
+function sectMemberOffice(sect, member) {
+  if (!sect || !member) return "";
+  if (member.id === sect.leaderId) return "掌门";
+  if ((sect.elderIds || []).includes(member.id)) return "长老";
+  return "";
+}
+
 function sectAvatarStyle(sect) {
   const name = sect?.name || sect?.oldName || "";
   const portraitUrl = sect?.portraitUrl || "";
@@ -5438,6 +5666,8 @@ function sectStats(sect) {
   return [
     ["总战力", sect.totalPower],
     ["成员", members.length],
+    ["掌门", sectLeaderName(sect)],
+    ["长老", sectElderNames(sect)],
     ["攻守城", `${warStats.wins}胜${warStats.losses}负`]
   ];
 }
@@ -5826,6 +6056,10 @@ async function submitTask() {
 
 async function advanceDay() {
   await act("/api/day/advance");
+}
+
+async function upgradeSkill() {
+  await act("/api/skills/upgrade", {}, { scope: "lite" });
 }
 
 function openPortraitPicker() {

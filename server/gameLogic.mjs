@@ -420,6 +420,258 @@ function needsSkillMigration(skillId) {
   return !combatSkills.some((skill) => skill.id === skillId);
 }
 
+const maxSkillRank = 10;
+const skillUpgradeBaseCosts = [0, 0, 80, 160, 300, 520, 850, 1300, 1900, 2700, 3800];
+const skillUpgradeChances = [0, 0, 0.88, 0.82, 0.76, 0.7, 0.64, 0.58, 0.52, 0.46, 0.4];
+const skillUpgradeTargets = {
+  azure_sword: { power: 1.18 },
+  thunder_pearl: { power: 1.58, pierce: 0.72 },
+  blood_escape: { duration: 2 },
+  poison_flame: { percent: 0.12, duration: 4 },
+  magnetic_light: { power: 0.95 },
+  golden_body: { reduce: 0.65, duration: 3 },
+  soul_hook: { power: 1.2, burn: 50 },
+  green_bamboo: { power: 0.8 },
+  spirit_armor: { amount: 35, duration: 4 },
+  bone_spike: { percent: 0.1, duration: 5 },
+  fire_crow: { power: 1.25, percent: 0.08, duration: 4 },
+  wood_recovery: { percent: 0.42, cooldown: 4 },
+  ghost_step: { chance: 0.62, duration: 3 },
+  demon_cut: { power: 1.55, threshold: 0.45, bonus: 0.9 },
+  ice_seal: { power: 1.05, amount: 32, duration: 4 },
+  starfall: { power: 2.6 },
+  blood_drink: { power: 1.52, leech: 0.7 },
+  mirror_water: { reflect: 0.62, duration: 3 },
+  wind_blade: { power: 1.38, extraDodge: 0.42, duration: 2 },
+  five_element: { reduce: 0.42, amount: 28, duration: 4 }
+};
+
+function skillRankOf(entity, skillId = entity?.skillId) {
+  const rank = Number(entity?.skillRanks?.[skillId] || entity?.skillRank || 1);
+  return clamp(Math.floor(rank), 1, maxSkillRank);
+}
+
+function skillUpgradeCost(skill, targetRank) {
+  const base = skillUpgradeBaseCosts[targetRank] || 0;
+  const multiplier = skill.cost >= 30 ? 1.25 : skill.cost >= 24 ? 1.15 : skill.cost <= 16 ? 0.9 : 1;
+  return Math.max(1, Math.floor(base * multiplier));
+}
+
+function skillUpgradeChance(targetRank) {
+  return skillUpgradeChances[targetRank] || 0;
+}
+
+function skillUpgradeRealmRequirement(targetRank) {
+  if (targetRank <= 1) return 0;
+  return clamp((targetRank - 2) * 10, 0, realms.length - 1);
+}
+
+function skillManaCost(skill, rank) {
+  return Math.max(0, Math.ceil((skill.cost || 0) * (1 + 0.08 * (rank - 1))));
+}
+
+function roundSkillValue(key, value) {
+  if (["amount", "burn", "duration", "cooldown", "hits"].includes(key)) return Math.max(1, Math.round(value));
+  if (["power", "pierce", "percent", "reduce", "chance", "threshold", "bonus", "leech", "extraDodge", "reflect"].includes(key)) {
+    return Math.round(value * 1000) / 1000;
+  }
+  return value;
+}
+
+function scaleSkillValue(skill, key, target, progress) {
+  if (skill[key] === undefined || target === undefined) return skill[key];
+  return roundSkillValue(key, skill[key] + (target - skill[key]) * progress);
+}
+
+function effectiveSkill(skill, rank = 1) {
+  const safeRank = clamp(Math.floor(rank || 1), 1, maxSkillRank);
+  const target = skillUpgradeTargets[skill.id] || {};
+  const progress = (safeRank - 1) / (maxSkillRank - 1);
+  const upgraded = { ...skill, baseCost: skill.cost, rank: safeRank, cost: skillManaCost(skill, safeRank) };
+  for (const key of Object.keys(target)) {
+    upgraded[key] = scaleSkillValue(skill, key, target[key], progress);
+  }
+  upgraded.text = skillEffectText(upgraded);
+  return upgraded;
+}
+
+function effectiveSkillForEntity(entity) {
+  const skill = findSkill(entity?.skillId);
+  return effectiveSkill(skill, skillRankOf(entity, skill.id));
+}
+
+function skillEffectText(skill) {
+  const percent = (value) => `${Math.round((value || 0) * 100)}%`;
+  if (skill.type === "double") return `连续斩出两剑，每剑按 ${percent(skill.power)} 攻击结算。`;
+  if (skill.type === "pierce") return `雷光破罡，造成 ${percent(skill.power)} 攻击伤害，并忽略目标 ${percent(skill.pierce)} 防御。`;
+  if (skill.type === "dodge") return `化作血影游走，闪避接下来 ${skill.duration} 回合内的首个攻击。`;
+  if (skill.type === "dot") return `使目标${skill.status === "bleed" ? "流血" : "中毒"} ${skill.duration} 回合，每回合损失最大血量 ${percent(skill.percent)}。`;
+  if (skill.type === "stun") return `神光压制，造成 ${percent(skill.power)} 攻击伤害，并令目标跳过下一次行动。`;
+  if (skill.type === "shield") return `护体金光持续 ${skill.duration} 回合，受到伤害降低 ${percent(skill.reduce)}。`;
+  if (skill.type === "manaBurn") return `摄魂扰息，造成 ${percent(skill.power)} 攻击伤害，并削去目标 ${skill.burn} 点法力。`;
+  if (skill.type === "multi") return `剑影分化${skill.hits}道，每道按 ${percent(skill.power)} 攻击结算。`;
+  if (skill.type === "defenseBuff") return `防御提高 ${skill.amount} 点，持续 ${skill.duration} 回合。`;
+  if (skill.type === "dotStrike") return `火鸦扑击造成 ${percent(skill.power)} 攻击伤害，并灼烧 ${skill.duration} 回合，每回合损失最大血量 ${percent(skill.percent)}。`;
+  if (skill.type === "heal") return `回转生机，恢复自身最大血量 ${percent(skill.percent)}。`;
+  if (skill.type === "evasionBuff") return `身法飘忽 ${skill.duration} 回合，额外获得 ${percent(skill.chance)} 闪避机会。`;
+  if (skill.type === "execute") return `斩向破绽，基础 ${percent(skill.power)} 攻击；目标血量低于 ${percent(skill.threshold)} 时额外提高 ${percent(skill.bonus)}。`;
+  if (skill.type === "weaken") return `寒气封脉，造成 ${percent(skill.power)} 攻击伤害，并使目标攻击降低 ${skill.amount} 点，持续 ${skill.duration} 回合。`;
+  if (skill.type === "heavy") return `凝聚星辉重击，造成 ${percent(skill.power)} 攻击伤害。`;
+  if (skill.type === "lifesteal") return `造成 ${percent(skill.power)} 攻击伤害，并按伤害量 ${percent(skill.leech)} 恢复自身血量。`;
+  if (skill.type === "reflect") return `镜水护身 ${skill.duration} 回合，反弹所受伤害的 ${percent(skill.reflect)}。`;
+  if (skill.type === "speedStrike") return `疾速突袭造成 ${percent(skill.power)} 攻击伤害，并在 ${skill.duration} 回合内额外提高 ${percent(skill.extraDodge)} 闪避。`;
+  if (skill.type === "field") return `布下五行阵 ${skill.duration} 回合，己方受伤降低 ${percent(skill.reduce)}，目标防御降低 ${skill.amount} 点。`;
+  return skill.text || "";
+}
+
+function normalizeSkillState(entity) {
+  let changed = false;
+  if (!entity.skillRanks || typeof entity.skillRanks !== "object" || Array.isArray(entity.skillRanks)) {
+    entity.skillRanks = {};
+    changed = true;
+  }
+  for (const skill of combatSkills) {
+    if (entity.skillRanks[skill.id] === undefined) continue;
+    const rank = clamp(Math.floor(Number(entity.skillRanks[skill.id]) || 1), 1, maxSkillRank);
+    if (rank !== entity.skillRanks[skill.id]) changed = true;
+    entity.skillRanks[skill.id] = rank;
+  }
+  if (!entity.skillRanks[entity.skillId]) {
+    entity.skillRanks[entity.skillId] = 1;
+    changed = true;
+  }
+  if (entity.lastSkillUpgradeDay === undefined) {
+    entity.lastSkillUpgradeDay = 0;
+    changed = true;
+  }
+  return changed;
+}
+
+function skillUpgradePreview(entity) {
+  const skill = findSkill(entity.skillId);
+  const rank = skillRankOf(entity, skill.id);
+  const targetRank = Math.min(maxSkillRank, rank + 1);
+  const requirement = skillUpgradeRealmRequirement(targetRank);
+  const cost = rank >= maxSkillRank ? 0 : skillUpgradeCost(skill, targetRank);
+  const chance = rank >= maxSkillRank ? 0 : skillUpgradeChance(targetRank);
+  const attemptedToday = Number(entity.lastSkillUpgradeDay || 0) === Number(entity.__stateDay || 0);
+  return {
+    skillId: skill.id,
+    name: skill.name,
+    rank,
+    maxRank: maxSkillRank,
+    current: effectiveSkill(skill, rank),
+    next: rank >= maxSkillRank ? null : effectiveSkill(skill, targetRank),
+    targetRank,
+    requirementRealm: realms[requirement] || realms[0],
+    requirementRealmIndex: requirement,
+    cost,
+    chance,
+    attemptedToday,
+    canMeetRealm: (entity.realm || 0) >= requirement,
+    enoughSpirit: (entity.spirit || 0) >= cost
+  };
+}
+
+function skillRankPlan(skill) {
+  return Array.from({ length: maxSkillRank }, (_, index) => {
+    const rank = index + 1;
+    const requirement = skillUpgradeRealmRequirement(rank);
+    return {
+      rank,
+      requirementRealm: rank <= 1 ? "初始" : realms[requirement] || realms[0],
+      requirementRealmIndex: requirement,
+      cost: rank <= 1 ? 0 : skillUpgradeCost(skill, rank),
+      chance: rank <= 1 ? 1 : skillUpgradeChance(rank),
+      skill: effectiveSkill(skill, rank)
+    };
+  });
+}
+
+function previewSkillUpgradeForState(state, entity) {
+  const snapshot = { ...entity, __stateDay: state.day };
+  return skillUpgradePreview(snapshot);
+}
+
+function skillUpgradePlanForState(state, entity) {
+  return combatSkills.map((skill) => {
+    const snapshot = { ...entity, skillId: skill.id, __stateDay: state.day };
+    return {
+      ...skillUpgradePreview(snapshot),
+      ranks: skillRankPlan(skill),
+      isCurrent: entity.skillId === skill.id
+    };
+  });
+}
+
+function attemptSkillUpgrade(state, entity, { auto = false } = {}) {
+  normalizeSkillState(entity);
+  const skill = findSkill(entity.skillId);
+  const rank = skillRankOf(entity, skill.id);
+  if (rank >= maxSkillRank) {
+    if (auto) return null;
+    throw new Error("技能已达十阶。");
+  }
+  if (Number(entity.lastSkillUpgradeDay || 0) === Number(state.day || 1)) {
+    if (auto) return null;
+    throw new Error("今日已经尝试过技能升级。");
+  }
+  const targetRank = rank + 1;
+  const requirement = skillUpgradeRealmRequirement(targetRank);
+  if ((entity.realm || 0) < requirement) {
+    if (auto) return null;
+    throw new Error(`需要达到${realms[requirement]}才能升至${targetRank}阶。`);
+  }
+  const cost = skillUpgradeCost(skill, targetRank);
+  if ((entity.spirit || 0) < cost) {
+    if (auto) return null;
+    throw new Error(`灵石不足，需要 ${cost} 灵石。`);
+  }
+  const chance = skillUpgradeChance(targetRank);
+  entity.spirit -= cost;
+  entity.lastSkillUpgradeDay = state.day;
+  const success = Math.random() < chance;
+  if (success) entity.skillRanks[skill.id] = targetRank;
+  const result = {
+    skillId: skill.id,
+    name: skill.name,
+    fromRank: rank,
+    targetRank,
+    rank: success ? targetRank : rank,
+    cost,
+    chance,
+    success
+  };
+  if (success) recordSkillUpgrade(state, entity, result);
+  if (!auto) {
+    log(state, success
+      ? `你耗费 ${cost} 灵石淬炼「${skill.name}」，成功升至 ${targetRank} 阶。`
+      : `你耗费 ${cost} 灵石淬炼「${skill.name}」失败，技能仍为 ${rank} 阶。`, success ? "gold" : "bad");
+  }
+  return result;
+}
+
+function recordSkillUpgrade(state, entity, result) {
+  entity.skillUpgrades ??= [];
+  entity.skillUpgrades.unshift({
+    day: state.day,
+    date: stateDateForDay(state),
+    skillId: result.skillId,
+    skillName: result.name,
+    fromRank: result.fromRank,
+    toRank: result.targetRank,
+    cost: result.cost,
+    chance: result.chance
+  });
+  entity.skillUpgrades = entity.skillUpgrades.slice(0, recentRecordDays);
+}
+
+function autoUpgradeNpcSkill(state, npc) {
+  const result = attemptSkillUpgrade(state, npc, { auto: true });
+  if (!result) return null;
+  return `${result.name}${result.success ? `升至${result.targetRank}阶` : `升${result.targetRank}阶失败`}`;
+}
+
 function combatSnapshot(entity, state) {
   return {
     attack: effectiveAttack(entity, state),
@@ -456,7 +708,7 @@ function runTurnBattle(left, right, options = {}) {
   let rightMana = b.mana;
   const events = [];
   let currentRound = 0;
-  const skills = { left: findSkill(left.skillId), right: findSkill(right.skillId) };
+  const skills = { left: effectiveSkillForEntity(left), right: effectiveSkillForEntity(right) };
   const cooldowns = { left: 0, right: 0 };
   const effects = { left: [], right: [] };
 
@@ -1380,6 +1632,8 @@ function publicMonster(monster) {
     primaryRootKey: monster.primaryRootKey,
     rootName: primaryRoot(monster).name,
     skillId: monster.skillId,
+    skillRank: skillRankOf(monster, monster.skillId),
+    effectiveSkill: effectiveSkillForEntity(monster),
     skill: findSkill(monster.skillId)?.name || "妖兽本能",
     maxHp: monster.maxHp,
     attack: monster.attack,
@@ -1977,13 +2231,13 @@ function runStarSeaTeamBattle(state, team, monster) {
   const starSeaDotMaxHpCap = 0.012;
   const monsterCounterPenalty = Math.max(0, ...team.members.map(({ entity }) => rootCounterPenalty(entity, monster)));
   const monsterBaseStats = applyBattleRootPenalty(combatSnapshot(monster, state), monsterCounterPenalty);
-  const monsterSkill = findSkill(monster.skillId);
+  const monsterSkill = effectiveSkillForEntity(monster);
   const fighters = team.members.map(({ entity }) => ({
     entity,
     realm: entity.realm,
     sect: entity.id === "player" ? state.sect.name : entity.sect,
     stats: applyBattleRootPenalty(combatSnapshot(entity, state), rootCounterPenalty(monster, entity)),
-    skill: findSkill(entity.skillId),
+    skill: effectiveSkillForEntity(entity),
     cooldown: 0,
     effects: [],
     damage: 0,
@@ -3206,6 +3460,7 @@ function makeNpc(name, index) {
   const realm = 0;
   const stats = rollBirthStats(realm);
   const innate = rollInnateStats();
+  const skillId = randomSkillId();
 
   return {
     id: `npc-${index}`,
@@ -3221,7 +3476,9 @@ function makeNpc(name, index) {
     maxHp: stats.maxHp,
     mana: effectiveMaxMana({ root, maxMana: stats.maxMana }),
     maxMana: stats.maxMana,
-    skillId: randomSkillId(),
+    skillId,
+    skillRanks: { [skillId]: 1 },
+    lastSkillUpgradeDay: 0,
     spirit: 0,
     reputation: 0,
     body: innate.body,
@@ -3244,6 +3501,7 @@ function makeNpc(name, index) {
     dungeonHistory: [],
     dailyRecords: [],
     breakthroughs: [],
+    skillUpgrades: [],
     duelHistory: []
   };
 }
@@ -3319,6 +3577,7 @@ export function createDefaultState() {
   const root = rootSet.primaryRoot;
   const stats = rollBirthStats();
   const innate = rollInnateStats();
+  const skillId = randomSkillId();
   const openingLog = rootSet.roots.length > 1
     ? `你在山脚租下一间小屋，翻开第一卷长生札记。本世灵根为${rootSetNameLine(rootSet)}。`
     : `你在山脚租下一间小屋，翻开第一卷长生札记。本世灵根为${root.name}。`;
@@ -3339,7 +3598,9 @@ export function createDefaultState() {
       maxHp: stats.maxHp,
       mana: effectiveMaxMana({ root, maxMana: stats.maxMana }),
       maxMana: stats.maxMana,
-      skillId: randomSkillId(),
+      skillId,
+      skillRanks: { [skillId]: 1 },
+      lastSkillUpgradeDay: 0,
       spirit: 80,
       reputation: 0,
       body: innate.body,
@@ -3360,6 +3621,7 @@ export function createDefaultState() {
       dungeonHistory: [],
       dailyRecords: [],
       breakthroughs: [],
+      skillUpgrades: [],
       duelHistory: []
     },
     bag: { focus: 1, blood: 1, insight: 0 },
@@ -3384,7 +3646,7 @@ export function createDefaultState() {
       warLosses: 0
     },
     sectRivals: Object.fromEntries(sects.map((name, index) => [name, makeSectStatus(name, index)])),
-    sectProfiles: Object.fromEntries(sects.map((name) => [name, { name, portraitUrl: "" }])),
+    sectProfiles: Object.fromEntries(sects.map((name) => [name, { name, portraitUrl: "", leaderId: "", elderIds: [] }])),
     provinceVersion,
     provinces: createNeutralProvinceState(),
     provinceWars: [],
@@ -3409,6 +3671,7 @@ export function clearProgressHistory(state) {
     person.dungeonHistory = [];
     person.dailyRecords = [];
     person.breakthroughs = [];
+    person.skillUpgrades = [];
   };
 
   resetPerson(state.player);
@@ -3489,7 +3752,9 @@ function rememberSectProfiles(state) {
   for (const [name, profile] of Object.entries(state.sectProfiles || {})) {
     profiles.sects[name] = {
       name,
-      portraitUrl: profile?.portraitUrl || ""
+      portraitUrl: profile?.portraitUrl || "",
+      leaderId: profile?.leaderId || "",
+      elderIds: Array.isArray(profile?.elderIds) ? [...new Set(profile.elderIds.filter(Boolean))] : []
     };
   }
 }
@@ -3523,7 +3788,11 @@ function rebuildSectProfilesForReset(state, previousState) {
     }
     state.sectProfiles[currentName] = {
       name: currentName,
-      portraitUrl: previousProfiles[currentName]?.portraitUrl || previousProfiles[baseName]?.portraitUrl || ""
+      portraitUrl: previousProfiles[currentName]?.portraitUrl || previousProfiles[baseName]?.portraitUrl || "",
+      leaderId: previousProfiles[currentName]?.leaderId || previousProfiles[baseName]?.leaderId || "",
+      elderIds: Array.isArray(previousProfiles[currentName]?.elderIds)
+        ? previousProfiles[currentName].elderIds
+        : Array.isArray(previousProfiles[baseName]?.elderIds) ? previousProfiles[baseName].elderIds : []
     };
   }
 
@@ -3531,7 +3800,9 @@ function rebuildSectProfilesForReset(state, previousState) {
     if (!name) continue;
     state.sectProfiles[name] = {
       name,
-      portraitUrl: profile?.portraitUrl || ""
+      portraitUrl: profile?.portraitUrl || "",
+      leaderId: profile?.leaderId || "",
+      elderIds: Array.isArray(profile?.elderIds) ? [...new Set(profile.elderIds.filter(Boolean))] : []
     };
   }
 }
@@ -3550,7 +3821,11 @@ export function preserveProfilesForReset(state, previousState) {
   };
   state.sectProfiles[state.sect.name] = {
     name: state.sect.name,
-    portraitUrl: previousState.sectProfiles?.[state.sect.name]?.portraitUrl || state.sectProfiles[state.sect.name]?.portraitUrl || ""
+    portraitUrl: previousState.sectProfiles?.[state.sect.name]?.portraitUrl || state.sectProfiles[state.sect.name]?.portraitUrl || "",
+    leaderId: previousState.sectProfiles?.[state.sect.name]?.leaderId || state.sectProfiles[state.sect.name]?.leaderId || "",
+    elderIds: Array.isArray(previousState.sectProfiles?.[state.sect.name]?.elderIds)
+      ? previousState.sectProfiles[state.sect.name].elderIds
+      : state.sectProfiles[state.sect.name]?.elderIds || []
   };
 
   copyCultivatorProfile(state.player, previousAdminProfiles.cultivators?.player || previousState.player);
@@ -3565,7 +3840,9 @@ export function preserveProfilesForReset(state, previousState) {
     if (npc.sect && !state.sectProfiles[npc.sect]) {
       state.sectProfiles[npc.sect] = {
         name: npc.sect,
-        portraitUrl: previousState.sectProfiles?.[npc.sect]?.portraitUrl || ""
+        portraitUrl: previousState.sectProfiles?.[npc.sect]?.portraitUrl || "",
+        leaderId: previousState.sectProfiles?.[npc.sect]?.leaderId || "",
+        elderIds: Array.isArray(previousState.sectProfiles?.[npc.sect]?.elderIds) ? previousState.sectProfiles[npc.sect].elderIds : []
       };
     }
   }
@@ -3591,7 +3868,12 @@ function migrateRoster(state) {
   state.npcs = npcNames.map((name, index) => makeNpc(name, index));
   state.sectRivals = Object.fromEntries(sects.map((name, index) => [name, makeSectStatus(name, index)]));
   state.sectNameMap ??= {};
-  state.sectProfiles = Object.fromEntries(sects.map((name) => [name, { name, portraitUrl: state.sectProfiles?.[name]?.portraitUrl || "" }]));
+  state.sectProfiles = Object.fromEntries(sects.map((name) => [name, {
+    name,
+    portraitUrl: state.sectProfiles?.[name]?.portraitUrl || "",
+    leaderId: state.sectProfiles?.[name]?.leaderId || "",
+    elderIds: Array.isArray(state.sectProfiles?.[name]?.elderIds) ? state.sectProfiles[name].elderIds : []
+  }]));
   clearProgressHistory(state);
 }
 
@@ -3663,13 +3945,16 @@ export function ensureStateShape(state) {
   state.player.dungeonHistory ??= [];
   state.player.dailyRecords ??= [];
   state.player.breakthroughs ??= [];
+  state.player.skillUpgrades ??= [];
   state.player.duelHistory ??= [];
   for (const record of state.player.dailyRecords) changed = ensureDatedRecord(record) || changed;
   for (const record of state.player.breakthroughs) changed = ensureDatedRecord(record) || changed;
+  for (const record of state.player.skillUpgrades) changed = ensureDatedRecord(record) || changed;
   if (needsSkillMigration(state.player.skillId)) {
     state.player.skillId = randomSkillId();
     changed = true;
   }
+  changed = normalizeSkillState(state.player) || changed;
   let playerBirthStats;
   const playerBaseStats = () => {
     playerBirthStats ??= rollBirthStats(state.player.realm || 0);
@@ -3712,11 +3997,13 @@ export function ensureStateShape(state) {
   for (const name of new Set([...sects.map((item) => currentSectName(state, item)), state.sect.name, ...Object.keys(state.sectRivals)])) {
     if (!name) continue;
     if (!state.sectProfiles[name]) {
-      state.sectProfiles[name] = { name, portraitUrl: "" };
+      state.sectProfiles[name] = { name, portraitUrl: "", leaderId: "", elderIds: [] };
       changed = true;
     } else {
       state.sectProfiles[name].name = name;
       state.sectProfiles[name].portraitUrl ??= "";
+      state.sectProfiles[name].leaderId ??= "";
+      if (!Array.isArray(state.sectProfiles[name].elderIds)) state.sectProfiles[name].elderIds = [];
     }
   }
   state.npcs = state.npcs.map((npc, index) => {
@@ -3752,6 +4039,7 @@ export function ensureStateShape(state) {
       full.skillId = randomSkillId();
       changed = true;
     }
+    changed = normalizeSkillState(full) || changed;
     changed = ensureField(full, "spirit", () => 30 + Math.floor(Math.random() * 90)) || changed;
     changed = ensureField(full, "reputation", () => Math.floor(Math.random() * 28)) || changed;
     changed = ensureField(full, "body", () => 7 + Math.floor(Math.random() * 7)) || changed;
@@ -3769,9 +4057,11 @@ export function ensureStateShape(state) {
     changed = ensureField(full, "mood", () => pick(["谨慎", "好斗", "闭关", "游历"])) || changed;
     changed = ensureField(full, "dailyRecords", []) || changed;
     changed = ensureField(full, "breakthroughs", []) || changed;
+    changed = ensureField(full, "skillUpgrades", []) || changed;
     changed = ensureField(full, "duelHistory", []) || changed;
     for (const record of full.dailyRecords) changed = ensureDatedRecord(record) || changed;
     for (const record of full.breakthroughs) changed = ensureDatedRecord(record) || changed;
+    for (const record of full.skillUpgrades) changed = ensureDatedRecord(record) || changed;
     changed = ensureField(full, "duelWins", () => Math.floor(Math.random() * 6)) || changed;
     changed = ensureField(full, "duelLosses", () => Math.floor(Math.random() * 4)) || changed;
     changed = ensureField(full, "lastBreakthroughDay", 0) || changed;
@@ -3832,6 +4122,7 @@ export function compactStateForStorage(state) {
   for (const { entity } of allCultivators(state)) {
     entity.dailyRecords = (entity.dailyRecords || []).slice(0, recentRecordDays);
     entity.breakthroughs = (entity.breakthroughs || []).slice(0, recentRecordDays);
+    entity.skillUpgrades = (entity.skillUpgrades || []).slice(0, recentRecordDays);
     entity.duelHistory = (entity.duelHistory || []).slice(0, recentRecordDays);
     entity.dungeonHistory = (entity.dungeonHistory || []).slice(0, recentRecordDays);
   }
@@ -3902,6 +4193,8 @@ export function getPublicState(state, options = {}) {
     nextRealm,
     breakChance,
     baseBreakChance: currentRealmInfo.baseBreakChance,
+    skillUpgrade: previewSkillUpgradeForState(state, state.player),
+    skillUpgradePlan: skillUpgradePlanForState(state, state.player),
     sects: buildSectSummaries(state)
   };
 
@@ -3948,6 +4241,8 @@ export function getPublicState(state, options = {}) {
 function publicCultivator(entity, state, options = {}) {
   return {
     ...entity,
+    skillRank: skillRankOf(entity, entity.skillId),
+    effectiveSkill: effectiveSkillForEntity(entity),
     duelHistory: publicDuelHistory(entity.duelHistory || [], options),
     dungeonHistory: publicDungeonHistory(entity.dungeonHistory || []),
     power: powerOf(entity, state)
@@ -4223,7 +4518,9 @@ function publicEntityRef(ref) {
     name: ref.name,
     realm: ref.realm,
     sect: ref.sect,
-    skillId: ref.skillId
+    skillId: ref.skillId,
+    skillRank: skillRankOf(ref, ref.skillId),
+    effectiveSkill: effectiveSkillForEntity(ref)
   };
 }
 
@@ -4312,24 +4609,39 @@ function buildSectSummaries(state) {
   }
 
   return [...groups.values()]
-    .map((sect) => ({
-      ...sect,
-      provinces: (state.provinces || [])
-        .filter((territory) => territory.owner === sect.name)
-        .map((territory) => {
-          const province = provinceById(territory.id);
-          return province ? {
-            ...province,
-            owner: territory.owner,
-            defenders: territory.defenders || [],
-            effect: provinceEffect(province)
-          } : null;
-        })
-        .filter(Boolean),
-      effects: provinceEffectsForSect(state, sect.name),
-      totalPower: Math.round(sect.totalPower),
-      leader: [...sect.members].sort((a, b) => b.power - a.power)[0]?.name || "无"
-    }))
+    .map((sect) => {
+      const profile = state.sectProfiles?.[sect.name] || {};
+      const rankedMembers = [...sect.members].sort((a, b) => b.power - a.power);
+      const explicitLeader = sect.members.find((member) => member.id === profile.leaderId);
+      const leader = explicitLeader || rankedMembers[0] || null;
+      const elderIds = new Set((Array.isArray(profile.elderIds) ? profile.elderIds : []).filter((id) => id && id !== leader?.id));
+      const elders = sect.members
+        .filter((member) => elderIds.has(member.id))
+        .sort((a, b) => b.power - a.power || a.name.localeCompare(b.name, "zh-Hans-CN"));
+      return {
+        ...sect,
+        leaderId: leader?.id || "",
+        leaderName: leader?.name || "无",
+        leader: leader?.name || "无",
+        elders,
+        elderIds: elders.map((member) => member.id),
+        elderNames: elders.map((member) => member.name),
+        provinces: (state.provinces || [])
+          .filter((territory) => territory.owner === sect.name)
+          .map((territory) => {
+            const province = provinceById(territory.id);
+            return province ? {
+              ...province,
+              owner: territory.owner,
+              defenders: territory.defenders || [],
+              effect: provinceEffect(province)
+            } : null;
+          })
+          .filter(Boolean),
+        effects: provinceEffectsForSect(state, sect.name),
+        totalPower: Math.round(sect.totalPower)
+      };
+    })
     .sort((a, b) => b.totalPower - a.totalPower);
 }
 
@@ -4417,6 +4729,7 @@ export function dailySettlement(state, options = {}) {
     }
 
     const duelSeasonReward = duelSeasonRewards.get(npc.id)?.reward || 0;
+    const skillUpgradeNote = autoUpgradeNpcSkill(state, npc);
     npc.dailyRecords.unshift({
       day: state.day,
       date: settlementDate,
@@ -4437,7 +4750,7 @@ export function dailySettlement(state, options = {}) {
       sectBreakMultiplier: chanceParts.sectMultiplier,
       baseBreakChance: chanceParts.base,
       bonusBreakChance: chanceParts.bonus,
-      note: `${breakthroughNote || (npc.realm > beforeRealm ? `突破至${realms[npc.realm]}` : "日常修炼")}${duelSeasonReward ? `；切磋赛季奖励 +${duelSeasonReward} 灵石` : ""}`
+      note: `${breakthroughNote || (npc.realm > beforeRealm ? `突破至${realms[npc.realm]}` : "日常修炼")}${duelSeasonReward ? `；切磋赛季奖励 +${duelSeasonReward} 灵石` : ""}${skillUpgradeNote ? `；技能${skillUpgradeNote}` : ""}`
     });
     npc.dailyRecords = npc.dailyRecords.slice(0, recentRecordDays);
     npc.mood = pick(["谨慎", "好斗", "闭关", "游历"]);
@@ -4678,6 +4991,7 @@ function applyAdminCultivatorStats(state, entity, payload) {
   entity.skillId = payload.skillId && !needsSkillMigration(String(payload.skillId))
     ? String(payload.skillId)
     : entity.skillId;
+  normalizeSkillState(entity);
   entity.xp = normalizeAdminInteger(payload.xp, entity.xp || 0, { min: 0 });
   entity.spirit = normalizeAdminInteger(payload.spirit, entity.spirit || 0, { min: 0 });
   entity.maxHp = normalizeAdminInteger(payload.maxHp, entity.maxHp || 1, { min: 1, max: 999999 });
@@ -4689,6 +5003,22 @@ function applyAdminCultivatorStats(state, entity, payload) {
   const maxMana = effectiveMaxMana(entity, state);
   entity.hp = clamp(normalizeAdminInteger(entity.hp, maxHp, { min: 1, max: maxHp }), 1, maxHp);
   entity.mana = clamp(normalizeAdminInteger(entity.mana, maxMana, { min: 0, max: maxMana }), 0, maxMana);
+}
+
+function normalizeSectOffices(state, sectName, payload = {}) {
+  const members = membersForSect(state, sectName).map(({ entity }) => entity);
+  const memberIds = new Set(members.map((member) => member.id));
+  const leaderId = String(payload.leaderId || "").trim();
+  const elderIds = [...new Set((Array.isArray(payload.elderIds) ? payload.elderIds : [])
+    .map((id) => String(id || "").trim())
+    .filter(Boolean))];
+  if (leaderId && !memberIds.has(leaderId)) throw new Error("掌门必须是本宗门成员。");
+  const invalidElder = elderIds.find((id) => !memberIds.has(id));
+  if (invalidElder) throw new Error("长老必须是本宗门成员。");
+  const fallbackLeaderId = [...members].sort((a, b) => powerOf(b, state) - powerOf(a, state))[0]?.id || "";
+  const effectiveLeaderId = leaderId || fallbackLeaderId;
+  if (effectiveLeaderId && elderIds.includes(effectiveLeaderId)) throw new Error("掌门和长老不能是同一个人。");
+  return { leaderId, elderIds };
 }
 
 function renameValue(value, oldName, newName) {
@@ -4812,10 +5142,13 @@ export function updateSectProfile(state, payload = {}) {
   const newName = normalizeProfileName(payload.name, oldName);
   const portraitUrl = normalizePortraitUrl(payload.portraitUrl);
   renameSectEverywhere(state, oldName, newName);
+  const offices = normalizeSectOffices(state, newName, payload);
   state.sectProfiles ??= {};
   state.sectProfiles[newName] = {
     name: newName,
-    portraitUrl: portraitUrl !== undefined ? portraitUrl : state.sectProfiles[newName]?.portraitUrl || ""
+    portraitUrl: portraitUrl !== undefined ? portraitUrl : state.sectProfiles[newName]?.portraitUrl || "",
+    leaderId: offices.leaderId,
+    elderIds: offices.elderIds
   };
   rememberSectProfiles(state);
   for (const { entity } of allCultivators(state)) rememberCultivatorProfile(state, entity);
@@ -4862,6 +5195,11 @@ export function rest(state) {
   p.hp = clamp(p.hp + 24 + p.body, 0, effectiveMaxHp(p, state));
   p.mana = clamp((p.mana || 0) + 20 + Math.ceil(effectiveDivineSense(p, state) / 4), 0, effectiveMaxMana(p, state));
   log(state, "你闭门调息一夜，血量与法力渐复。");
+}
+
+export function upgradePlayerSkill(state) {
+  ensureStateShape(state);
+  return attemptSkillUpgrade(state, state.player);
 }
 
 export function runDungeon(state, id) {
@@ -4973,7 +5311,9 @@ function entityRef(entity, kind) {
     roots: profile.roots,
     primaryRootKey: profile.primaryRootKey,
     rootProfile: profile,
-    skillId: entity.skillId
+    skillId: entity.skillId,
+    skillRank: skillRankOf(entity, entity.skillId),
+    effectiveSkill: effectiveSkillForEntity(entity)
   };
 }
 

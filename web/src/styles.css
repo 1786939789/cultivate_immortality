@@ -502,6 +502,14 @@ button {
   white-space: nowrap;
 }
 
+.skill-detail-tag {
+  display: inline-flex;
+  max-width: 100%;
+  white-space: normal;
+  line-height: 1.45;
+  vertical-align: top;
+}
+
 .meter {
   display: grid;
   gap: 5px;
@@ -3918,21 +3926,17 @@ button.event {
 .skill-hero {
   position: relative;
   overflow: hidden;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
+  display: block;
   margin-top: 12px;
-  border: 1px solid rgba(15, 118, 110, .18);
+  border: 0;
+  border-left: 3px solid rgba(15, 118, 110, .58);
   border-radius: 8px;
-  background:
-    linear-gradient(90deg, rgba(10, 36, 34, .1), rgba(255, 253, 246, .72)),
-    rgba(255, 255, 255, .46);
-  padding: 10px;
+  background: linear-gradient(90deg, rgba(236, 253, 245, .58), rgba(255, 253, 246, .24));
+  padding: 12px 14px;
 }
 
 .skill-hero::after {
-  content: "";
+  content: none;
   position: absolute;
   inset: -22% -8% -34% auto;
   width: min(48%, 300px);
@@ -3942,11 +3946,11 @@ button.event {
   pointer-events: none;
 }
 
-.skill-hero > div {
+.skill-hero-main {
   position: relative;
   z-index: 1;
   display: grid;
-  gap: 6px;
+  gap: 5px;
   min-width: 0;
 }
 
@@ -3991,6 +3995,70 @@ button.event {
   font-size: 24px;
 }
 
+.skill-meta-line,
+.skill-upgrade-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  color: #6b4a22;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.skill-meta-line span,
+.skill-upgrade-summary span {
+  white-space: nowrap;
+}
+
+.skill-upgrade-panel {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.skill-upgrade-summary {
+  padding: 0 2px;
+}
+
+.skill-upgrade-next {
+  border: 0;
+  border-top: 1px solid rgba(120, 91, 43, .16);
+  border-radius: 0;
+  background: transparent;
+  padding: 8px 2px 0;
+}
+
+.skill-upgrade-next small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.skill-upgrade-next {
+  display: grid;
+  gap: 4px;
+}
+
+.skill-upgrade-next p {
+  margin: 0;
+  color: var(--ink);
+  line-height: 1.6;
+}
+
+.skill-upgrade-next strong {
+  color: #78350f;
+}
+
+.skill-upgrade-actions {
+  align-items: center;
+  padding-top: 2px;
+}
+
+.skill-upgrade-actions .meta {
+  flex: 1 1 220px;
+  margin: 0;
+}
+
 .skill-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4000,13 +4068,19 @@ button.event {
 
 .skill-card {
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid rgba(120, 91, 43, .22);
   background: rgba(255, 255, 255, .46);
   border-radius: 7px;
   padding: 10px;
   display: grid;
   gap: 8px;
+}
+
+.skill-card:hover,
+.skill-card:focus-within,
+.skill-card:focus-visible {
+  z-index: 8;
 }
 
 .skill-card::after {
@@ -4064,6 +4138,105 @@ button.event {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.55;
+}
+
+.skill-rank-popover {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: calc(100% - 4px);
+  z-index: 20;
+  display: grid;
+  gap: 8px;
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  border: 1px solid rgba(120, 91, 43, .3);
+  border-radius: 8px;
+  background: rgba(255, 252, 238, .98);
+  box-shadow: 0 16px 34px rgba(47, 33, 16, .2);
+  transform: translateY(-4px);
+  transition: opacity .16s ease, transform .16s ease, max-height .16s ease, padding .16s ease;
+}
+
+.skill-card:hover .skill-rank-popover,
+.skill-card:focus-within .skill-rank-popover,
+.skill-card:focus-visible .skill-rank-popover {
+  max-height: 380px;
+  opacity: 1;
+  overflow: auto;
+  pointer-events: auto;
+  padding: 10px;
+  transform: translateY(0);
+}
+
+.skill-rank-popover-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(120, 91, 43, .18);
+  background: rgba(255, 252, 238, .98);
+}
+
+.skill-rank-popover-head strong {
+  color: #78350f;
+  font-size: 14px;
+}
+
+.skill-rank-popover-head span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.skill-rank-list {
+  display: grid;
+  gap: 7px;
+}
+
+.skill-rank-row {
+  display: grid;
+  gap: 5px;
+  padding: 8px;
+  border: 1px solid rgba(120, 91, 43, .16);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, .54);
+}
+
+.skill-rank-row.current {
+  border-color: rgba(15, 118, 110, .5);
+  background: rgba(236, 253, 245, .72);
+}
+
+.skill-rank-row > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.skill-rank-row strong {
+  color: #78350f;
+  font-size: 13px;
+}
+
+.skill-rank-row p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.skill-rank-row small,
+.skill-rank-row span {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .progress-summary {
@@ -4426,6 +4599,12 @@ button.event {
   border-color: rgba(15, 118, 110, .36);
   background: rgba(204, 251, 241, .6);
   color: #0f766e;
+}
+
+.member-badge.office {
+  border-color: rgba(194, 65, 12, .32);
+  background: rgba(255, 237, 213, .78);
+  color: #9a3412;
 }
 
 .sect-member-power {
@@ -5820,6 +5999,7 @@ button.event {
   .detail-equipment-top .equipment-paperdoll,
   .blood-podium,
   .progress-summary,
+  .skill-upgrade-summary,
   .root-grid,
   .realm-stage-picker,
   .attribute-row,
@@ -6095,6 +6275,39 @@ button.event {
 .admin-check input {
   width: 16px;
   height: 16px;
+}
+
+.admin-field-block {
+  display: grid;
+  gap: 6px;
+  color: #5f4a34;
+  font-weight: 700;
+}
+
+.admin-check-list {
+  display: grid;
+  gap: 6px;
+  max-height: 210px;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid rgba(92, 64, 35, .16);
+  border-radius: 8px;
+  background: rgba(255, 251, 239, .62);
+}
+
+.admin-check-row {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  padding: 7px 8px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, .44);
+  font-size: 12px;
+}
+
+.admin-check-row input {
+  width: 15px;
+  height: 15px;
 }
 
 .admin-actions {
