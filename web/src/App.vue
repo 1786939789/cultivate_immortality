@@ -71,15 +71,6 @@
           <div class="name-plaque">
             <span>{{ player.name }}</span>
           </div>
-          <button
-            class="portrait-change"
-            type="button"
-            @click="openPortraitPicker"
-            aria-label="打开后台更换主人公头像"
-            title="后台管理头像"
-          >
-            <ImagePlus :size="16" :stroke-width="2.6" aria-hidden="true" />
-          </button>
         </section>
 
         <section class="profile-scroll">
@@ -153,7 +144,12 @@
               </div>
               <div class="scene-copy">
                 <h4>{{ featuredDungeon.title }}</h4>
-                <p>血色禁地、虚天殿、乱星海记录。</p>
+                <div class="scene-status-list" aria-label="今日副本摘要">
+                  <span v-for="item in featuredDungeon.summary" :key="item.key">
+                    <b aria-hidden="true">{{ item.icon }}</b>
+                    {{ item.text }}
+                  </span>
+                </div>
               </div>
               <button class="primary game-cta" type="button" @click="switchTab('dungeon')">查看副本</button>
             </article>
@@ -165,7 +161,7 @@
               <div class="scene-copy">
                 <h4>{{ player.sect || "落云宗" }}</h4>
                 <p>攻守城 {{ gameState.sect?.warWins || 0 }}胜{{ gameState.sect?.warLosses || 0 }}负</p>
-                <p>任务、攻守城、势力地图。</p>
+                <p>{{ homeSectTerritorySummary }}</p>
               </div>
               <button class="primary game-cta" type="button" @click="switchTab('sect')">进入宗门</button>
             </article>
@@ -243,13 +239,6 @@
 
         <section v-if="activeTab === 'cultivation'" class="view active cultivation-nav-surface">
           <div class="panel cultivation-nav-panel">
-            <div class="section-head compact">
-              <div>
-                <h3>修行体系</h3>
-                <p>灵根、境界、技能集中在这里查看。</p>
-              </div>
-              <span class="tag">{{ cultivationSubTabs.find((tab) => tab.id === cultivationSubTab)?.label }}</span>
-            </div>
             <div class="segmented cultivation-subtabs" role="tablist" aria-label="修行体系子导航">
               <button
                 v-for="tab in cultivationSubTabs"
@@ -273,7 +262,6 @@
             <div class="section-head">
               <div>
                 <h3>灵根说明</h3>
-                <p>九种灵根共鸣成盘，悬停可查看加成、组合与克制关系。</p>
               </div>
               <span class="tag">当前 {{ rootLine(player) }}</span>
             </div>
@@ -378,7 +366,6 @@
             <div class="section-head compact">
               <div>
                 <h3>{{ selectedRealmGroup.stage }}十层</h3>
-                <p>总经验达到下一层门槛后即可突破，成功后按本层成长范围随机增加属性并写入存档。</p>
               </div>
               <span class="tag">{{ selectedRealmGroup.items[0].name }} - {{ selectedRealmGroup.items[selectedRealmGroup.items.length - 1].name }}</span>
             </div>
@@ -523,20 +510,29 @@
           </div>
 
           <div class="skill-grid">
-            <article class="skill-card" v-for="skill in combatSkills" :key="skill.id" :class="[skillStyle(skill), { active: skill.id === player.skillId }]" :style="skillVisualStyle(skill)" tabindex="0">
-              <div class="skill-title">
+            <article class="skill-card" v-for="skill in combatSkills" :key="skill.id" :class="{ active: skill.id === player.skillId }" :style="skillVisualStyle(skill)" tabindex="0">
+              <div class="skill-card-head">
                 <span class="skill-card-icon" aria-hidden="true">
                   <img v-if="skillAssetPath(skill)" :src="skillAssetPath(skill)" alt="">
                   <span v-else>{{ skillGlyph(skill) }}</span>
                 </span>
-                <strong>{{ skill.name }}</strong>
-                <span class="tag">{{ skillRankText(skillPlan(skill).rank) }}</span>
+                <div class="skill-card-title">
+                  <strong>{{ skill.name }}</strong>
+                  <span>{{ skill.id === player.skillId ? "当前本命" : "可选技能" }}</span>
+                </div>
+                <span class="skill-rank-badge">{{ skillRankText(skillPlan(skill).rank) }}</span>
               </div>
-              <p>{{ skillPlan(skill).current?.text || skill.text }}</p>
-              <small>
-                法力 {{ skillPlan(skill).current?.cost || skill.cost }} · 冷却 {{ skillPlan(skill).current?.cooldown || skill.cooldown }} 回合
-                <template v-if="skillPlan(skill).next"> · {{ skillPlan(skill).requirementRealm }}后可升{{ skillRankText(skillPlan(skill).targetRank) }}</template>
-              </small>
+              <p class="skill-card-effect">{{ skillPlan(skill).current?.text || skill.text }}</p>
+              <div class="skill-card-meta" aria-label="技能消耗与冷却">
+                <span>
+                  <Zap :size="13" :stroke-width="2.4" aria-hidden="true" />
+                  法力 {{ skillPlan(skill).current?.cost || skill.cost }}
+                </span>
+                <span>
+                  <Orbit :size="13" :stroke-width="2.4" aria-hidden="true" />
+                  冷却 {{ skillPlan(skill).current?.cooldown || skill.cooldown }} 回合
+                </span>
+              </div>
               <div class="skill-rank-popover" role="tooltip">
                 <div class="skill-rank-popover-head">
                   <strong>{{ skill.name }}升阶表</strong>
@@ -1720,13 +1716,6 @@
               </div>
               <span class="rank-count">共 {{ filteredRanking.length }} 条</span>
             </div>
-            <div v-if="activeRankBoard === 'duel'" class="duel-rank-table compact" aria-label="切磋段位分数表">
-              <div v-for="rank in duelRankList" :key="`rank-board-${rank.id}`" class="duel-rank-cell" :class="`duel-rank-${rank.id}`">
-                <strong>{{ rank.name }}</strong>
-                <span>{{ rank.min }}-{{ rank.max }} 分</span>
-                <small>+{{ rank.spiritReward || 0 }} 灵石</small>
-              </div>
-            </div>
             <div class="rank-list">
               <button
                 class="row rank-row"
@@ -1792,7 +1781,7 @@
                   <div>
                     <h3>{{ selectedPerson.name }}</h3>
                     <p>{{ selectedPerson.sect }} · {{ genderLabel(selectedPerson.gender) }} · {{ realmName(selectedPerson.realm) }} · {{ rootLine(selectedPerson) }}</p>
-                    <span class="tag skill-detail-tag" :title="skillTip(selectedPerson)">本命技能：{{ skillLabel(selectedPerson) }} · {{ skillEffectSummary(selectedPerson) }}</span>
+                    <span class="tag skill-detail-tag" :title="skillTip(selectedPerson)">本命技能：{{ skillNameForDisplay(selectedPerson) }}</span>
                     <span class="tag rank-tag" :class="`duel-rank-${duelRankId(selectedPerson)}`">{{ duelRankText(selectedPerson) }}</span>
                     <span class="tag">{{ rootCounterText(selectedPerson) }}</span>
                   </div>
@@ -1808,7 +1797,7 @@
                     </div>
                   </div>
                   <div class="equipment-character-core">
-                    <CharacterPortrait :person="selectedPerson" size="xl" />
+                    <CharacterPortrait :person="withDuelRank(selectedPerson)" size="xl" />
                     <b>{{ personPower(selectedPerson) }}</b>
                     <span>战斗力</span>
                   </div>
@@ -1902,16 +1891,6 @@
                 </div>
               </div>
               <div class="panel flat">
-                <h3>技能升阶</h3>
-                <div class="timeline detail-scroll">
-                  <div class="event gold" v-for="record in selectedPerson.skillUpgrades || []" :key="`${record.day}-${record.skillId}-${record.toRank}`">
-                    <strong>{{ skillUpgradeRecordTitle(record) }}</strong>
-                    <span>{{ skillUpgradeRecordMetaText(record) }}</span>
-                  </div>
-                  <div v-if="!selectedPerson.skillUpgrades?.length" class="empty">暂无技能升阶记录。</div>
-                </div>
-              </div>
-              <div class="panel flat">
                 <h3>切磋战绩</h3>
                 <p>第 {{ duelSeasonInfo.season }} 赛季：{{ duelRankText(selectedPerson) }}，{{ selectedPerson.duelSeason?.wins || 0 }} 胜 {{ selectedPerson.duelSeason?.losses || 0 }} 负；累计 {{ selectedPerson.duelWins || 0 }} 胜 {{ selectedPerson.duelLosses || 0 }} 负。</p>
                 <div class="duel-history-strip" v-if="selectedPerson.duelSeasonHistory?.length">
@@ -1930,7 +1909,7 @@
                     @click="openDuelReplay(record)"
                   >
                     <strong>{{ duelRecordTitle(record) }}</strong>
-                    <span>{{ hasReplay(record) ? "可回放" : "无回放" }}</span>
+                    <span>{{ duelRecordMeta(record) }}</span>
                   </button>
                   <div v-if="!selectedPerson.duelHistory?.length" class="empty">暂无切磋明细。</div>
                 </div>
@@ -1951,6 +1930,16 @@
                     <small v-if="record.item">{{ record.tierName }}「{{ record.item }}」</small>
                   </button>
                   <div v-if="!selectedPerson.dungeonHistory?.length" class="empty">暂无副本闯关记录。</div>
+                </div>
+              </div>
+              <div class="panel flat">
+                <h3>技能升阶</h3>
+                <div class="timeline detail-scroll">
+                  <div class="event gold" v-for="record in selectedPerson.skillUpgrades || []" :key="`${record.day}-${record.skillId}-${record.toRank}`">
+                    <strong>{{ skillUpgradeRecordTitle(record) }}</strong>
+                    <span>{{ skillUpgradeRecordMetaText(record) }}</span>
+                  </div>
+                  <div v-if="!selectedPerson.skillUpgrades?.length" class="empty">暂无技能升阶记录。</div>
                 </div>
               </div>
             </div>
@@ -1979,16 +1968,16 @@
                   </div>
                 </div>
                 <div class="sect-member-grid">
-                  <button class="sect-member-card" v-for="member in sectMembers(selectedSect)" :key="member.id" @click="openPersonById(member.id)">
+                  <button class="sect-member-card" :class="{ leader: member.id === selectedSect.leaderId }" v-for="member in sectMembers(selectedSect)" :key="member.id" @click="openPersonById(member.id)">
                     <CharacterPortrait :person="member" size="md" />
                     <div class="sect-member-main">
                       <div class="sect-member-topline">
                         <span class="tag">{{ realmName(member.realm) }}</span>
-                        <span v-if="sectMemberOffice(selectedSect, member)" class="member-badge office">{{ sectMemberOffice(selectedSect, member) }}</span>
+                        <span v-if="sectMemberOffice(selectedSect, member) && member.id !== selectedSect.leaderId" class="member-badge office">{{ sectMemberOffice(selectedSect, member) }}</span>
                         <span class="member-badge" :class="{ player: member.isPlayer }">{{ member.isPlayer ? "你" : "NPC" }}</span>
                       </div>
                       <strong>{{ member.name }}</strong>
-                      <small>{{ genderLabel(member.gender) }} · {{ member.mood }}</small>
+                      <small>{{ genderLabel(member.gender) }}</small>
                     </div>
                     <div class="sect-member-power">
                       <b>{{ member.power }}</b>
@@ -2074,81 +2063,100 @@
                 <button
                   v-for="person in filteredAdminCultivators"
                   :key="person.id"
-                  class="admin-list-row"
+                  class="admin-list-row admin-cultivator-row"
                   :class="{ active: adminSelectedCultivatorId === person.id }"
                   type="button"
                   @click="selectAdminCultivator(person.id)"
                 >
                   <CharacterPortrait :person="person" size="sm" />
                   <span><strong>{{ person.name }}</strong><small>{{ person.sect }} · {{ realmName(person.realm) }}</small></span>
+                  <b>{{ personPower(person) }}</b>
                 </button>
                 <div v-if="!filteredAdminCultivators.length" class="empty">没有找到匹配的人物。</div>
               </div>
 
-              <form v-if="adminCultivatorPerson" class="admin-editor" @submit.prevent="saveCultivatorProfile">
+              <form v-if="adminCultivatorPerson" class="admin-editor admin-cultivator-editor" @submit.prevent="saveCultivatorProfile">
                 <div class="admin-editor-head" v-if="adminCultivatorPerson">
                   <CharacterPortrait :person="{ ...adminCultivatorPerson, portraitUrl: adminCultivatorDraft.portraitUrl }" size="xl" />
                   <div>
                     <strong>{{ adminCultivatorDraft.name || adminCultivatorPerson.name }}</strong>
                     <small>{{ realmName(adminCultivatorPerson.realm) }} · {{ rootLine(adminCultivatorPerson) }}</small>
                   </div>
+                  <div class="admin-character-head-stats">
+                    <span>战力 <b>{{ personPower(adminCultivatorPerson) }}</b></span>
+                    <span>经验 <b>{{ adminCultivatorDraft.xp }}</b></span>
+                    <span>灵石 <b>{{ adminCultivatorDraft.spirit }}</b></span>
+                  </div>
                 </div>
-                <div class="admin-form-grid">
-                  <label>
-                    <span>名字</span>
-                    <input v-model.trim="adminCultivatorDraft.name" maxlength="24">
-                  </label>
-                  <label>
-                    <span>性别</span>
-                    <select v-model="adminCultivatorDraft.gender">
-                      <option value="male">男</option>
-                      <option value="female">女</option>
-                      <option value="unknown">未知</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span>技能</span>
-                    <select v-model="adminCultivatorDraft.skillId">
-                      <option v-for="skill in combatSkills" :key="`admin-skill-${skill.id}`" :value="skill.id">{{ skill.name }}</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span>经验</span>
-                    <input v-model.number="adminCultivatorDraft.xp" type="number" min="0" step="1">
-                  </label>
-                  <label>
-                    <span>灵石</span>
-                    <input v-model.number="adminCultivatorDraft.spirit" type="number" min="0" step="1">
-                  </label>
+                <div class="admin-editor-section">
+                  <div class="admin-section-title">角色档案</div>
+                  <div class="admin-form-grid">
+                    <label>
+                      <span>名字</span>
+                      <input v-model.trim="adminCultivatorDraft.name" maxlength="24">
+                    </label>
+                    <label>
+                      <span>性别</span>
+                      <select v-model="adminCultivatorDraft.gender">
+                        <option value="male">男</option>
+                        <option value="female">女</option>
+                        <option value="unknown">未知</option>
+                      </select>
+                    </label>
+                    <label class="admin-field-wide">
+                      <span>技能</span>
+                      <select v-model="adminCultivatorDraft.skillId">
+                        <option v-for="skill in combatSkills" :key="`admin-skill-${skill.id}`" :value="skill.id">{{ skill.name }}</option>
+                      </select>
+                    </label>
+                  </div>
                 </div>
-                <div class="admin-section-title">基础属性</div>
-                <div class="admin-form-grid admin-stat-grid">
-                  <label>
-                    <span>气血</span>
-                    <input v-model.number="adminCultivatorDraft.maxHp" type="number" min="1" step="1">
-                  </label>
-                  <label>
-                    <span>攻击</span>
-                    <input v-model.number="adminCultivatorDraft.attack" type="number" min="1" step="1">
-                  </label>
-                  <label>
-                    <span>防御</span>
-                    <input v-model.number="adminCultivatorDraft.defense" type="number" min="0" step="1">
-                  </label>
-                  <label>
-                    <span>神识</span>
-                    <input v-model.number="adminCultivatorDraft.divineSense" type="number" min="1" step="1">
-                  </label>
-                  <label>
-                    <span>法力</span>
-                    <input v-model.number="adminCultivatorDraft.maxMana" type="number" min="1" step="1">
-                  </label>
+                <div class="admin-editor-section">
+                  <div class="admin-section-title">资源</div>
+                  <div class="admin-form-grid admin-resource-grid">
+                    <label>
+                      <span>经验</span>
+                      <input v-model.number="adminCultivatorDraft.xp" type="number" min="0" step="1">
+                    </label>
+                    <label>
+                      <span>灵石</span>
+                      <input v-model.number="adminCultivatorDraft.spirit" type="number" min="0" step="1">
+                    </label>
+                  </div>
                 </div>
-                <div class="admin-root-grid" aria-label="灵根选择">
-                  <label v-for="root in catalogRoots" :key="`admin-root-${root.key}`" class="admin-check">
-                    <input type="checkbox" :checked="adminCultivatorDraft.rootKeys.includes(root.key)" @change="toggleAdminRoot(root.key)">
-                    <span>{{ root.name }}</span>
-                  </label>
+                <div class="admin-editor-section">
+                  <div class="admin-section-title">基础属性</div>
+                  <div class="admin-form-grid admin-stat-grid">
+                    <label>
+                      <span>气血</span>
+                      <input v-model.number="adminCultivatorDraft.maxHp" type="number" min="1" step="1">
+                    </label>
+                    <label>
+                      <span>攻击</span>
+                      <input v-model.number="adminCultivatorDraft.attack" type="number" min="1" step="1">
+                    </label>
+                    <label>
+                      <span>防御</span>
+                      <input v-model.number="adminCultivatorDraft.defense" type="number" min="0" step="1">
+                    </label>
+                    <label>
+                      <span>神识</span>
+                      <input v-model.number="adminCultivatorDraft.divineSense" type="number" min="1" step="1">
+                    </label>
+                    <label>
+                      <span>法力</span>
+                      <input v-model.number="adminCultivatorDraft.maxMana" type="number" min="1" step="1">
+                    </label>
+                  </div>
+                </div>
+                <div class="admin-editor-section">
+                  <div class="admin-section-title">灵根命盘</div>
+                  <div class="admin-root-grid" aria-label="灵根选择">
+                    <label v-for="root in catalogRoots" :key="`admin-root-${root.key}`" class="admin-check">
+                      <input type="checkbox" :checked="adminCultivatorDraft.rootKeys.includes(root.key)" @change="toggleAdminRoot(root.key)">
+                      <span>{{ root.name }}</span>
+                    </label>
+                  </div>
                 </div>
                 <div class="admin-actions">
                   <label class="secondary admin-upload-button">
@@ -2167,45 +2175,63 @@
                 <button
                   v-for="sect in filteredAdminSects"
                   :key="sect.id"
-                  class="admin-list-row"
+                  class="admin-list-row admin-sect-row"
                   :class="{ active: adminSelectedSectName === sect.name }"
                   type="button"
                   @click="selectAdminSect(sect.name)"
                 >
                   <span class="sect-avatar" :style="sectAvatarStyle(sect)"></span>
-                  <span><strong>{{ sect.name }}</strong><small>{{ sectMemberCount(sect.name) }} 人 · 总战力 {{ sectTotalPower(sect.name) }}</small></span>
+                  <span>
+                    <strong>{{ sect.name }}</strong>
+                    <small>{{ sectMemberCount(sect.name) }} 人 · 战力 {{ sectTotalPower(sect.name) }}</small>
+                  </span>
+                  <b>{{ sectLeaderName(sect) }}</b>
                 </button>
                 <div v-if="!filteredAdminSects.length" class="empty">没有找到匹配的宗门。</div>
               </div>
 
-              <form class="admin-editor" @submit.prevent="saveSectProfile">
+              <form class="admin-editor admin-sect-editor" @submit.prevent="saveSectProfile">
                 <div class="admin-editor-head" v-if="adminSectDraft.oldName">
                   <span class="sect-avatar xl" :style="sectAvatarStyle(adminSectDraft)"></span>
                   <div>
                     <strong>{{ adminSectDraft.name }}</strong>
-                    <small>{{ sectMemberCount(adminSectDraft.oldName) }} 名修士</small>
+                    <small>{{ sectMemberCount(adminSectDraft.oldName) }} 名修士 · 总战力 {{ sectTotalPower(adminSectDraft.oldName) }}</small>
+                  </div>
+                  <div class="admin-sect-head-stats">
+                    <span>掌门 <b>{{ adminSectLeaderName }}</b></span>
+                    <span>长老 <b>{{ adminSectElderNames }}</b></span>
                   </div>
                 </div>
-                <label>
-                  <span>宗门名</span>
-                  <input v-model.trim="adminSectDraft.name" maxlength="24">
-                </label>
-                <div class="admin-form-grid">
+                <div class="admin-editor-section">
+                  <div class="admin-section-title">宗门档案</div>
                   <label>
-                    <span>掌门</span>
-                    <select v-model="adminSectDraft.leaderId" @change="sanitizeAdminSectOffices">
-                      <option value="">按战力最高自动展示</option>
-                      <option v-for="member in adminSectMembers" :key="`leader-${member.id}`" :value="member.id">{{ member.name }} · {{ realmName(member.realm) }}</option>
-                    </select>
+                    <span>宗门名</span>
+                    <input v-model.trim="adminSectDraft.name" maxlength="24">
                   </label>
-                  <div class="admin-field-block">
-                    <span>长老</span>
-                    <div class="admin-check-list">
-                      <label v-for="member in adminElderOptions" :key="`elder-${member.id}`" class="admin-check-row">
-                        <input type="checkbox" :value="member.id" v-model="adminSectDraft.elderIds">
-                        <span>{{ member.name }} · {{ realmName(member.realm) }}</span>
-                      </label>
-                      <small v-if="!adminElderOptions.length">暂无可选长老。</small>
+                </div>
+                <div class="admin-form-grid admin-sect-office-grid">
+                  <div class="admin-editor-section">
+                    <div class="admin-section-title">掌门</div>
+                    <label>
+                      <span>掌门人选</span>
+                      <select v-model="adminSectDraft.leaderId" @change="sanitizeAdminSectOffices">
+                        <option value="">按战力最高自动展示</option>
+                        <option v-for="member in adminSectMembers" :key="`leader-${member.id}`" :value="member.id">{{ member.name }} · {{ realmName(member.realm) }}</option>
+                      </select>
+                    </label>
+                    <p class="admin-help-text">掌门会从宗门成员中选择，不能同时担任长老。</p>
+                  </div>
+                  <div class="admin-editor-section">
+                    <div class="admin-section-title">长老</div>
+                    <div class="admin-field-block">
+                      <span>长老人选</span>
+                      <div class="admin-check-list">
+                        <label v-for="member in adminElderOptions" :key="`elder-${member.id}`" class="admin-check-row">
+                          <input type="checkbox" :value="member.id" v-model="adminSectDraft.elderIds">
+                          <span>{{ member.name }} · {{ realmName(member.realm) }}</span>
+                        </label>
+                        <small v-if="!adminElderOptions.length">暂无可选长老。</small>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -2633,13 +2659,12 @@ const fallbackDuelRankMap = computed(() => {
   for (const record of records) {
     for (const match of record.matches || []) {
       if (match.type === "bye") {
-        applyDuelRankDelta(map, match.winner?.id, true);
         continue;
       }
       const winnerId = match.winner?.id || (match.replay?.winner === "left" ? match.replay?.left?.id : match.replay?.right?.id);
       const loserId = match.loser?.id || (winnerId === match.replay?.left?.id ? match.replay?.right?.id : match.replay?.left?.id);
-      applyDuelRankDelta(map, winnerId, true);
-      applyDuelRankDelta(map, loserId, false);
+      applyDuelRankRecordDelta(map, winnerId, true, match.winnerScoreDelta);
+      applyDuelRankRecordDelta(map, loserId, false, match.loserScoreDelta);
     }
   }
   return Object.fromEntries(Object.entries(map).map(([id, season]) => [id, {
@@ -2781,6 +2806,13 @@ const adminSectMembers = computed(() => {
 });
 const adminEffectiveLeaderId = computed(() => adminSectDraft.leaderId || adminSectMembers.value[0]?.id || "");
 const adminElderOptions = computed(() => adminSectMembers.value.filter((member) => member.id !== adminEffectiveLeaderId.value));
+const adminSectLeaderName = computed(() => adminSectMembers.value.find((member) => member.id === adminEffectiveLeaderId.value)?.name || "自动择优");
+const adminSectElderNames = computed(() => {
+  const names = adminSectMembers.value
+    .filter((member) => adminSectDraft.elderIds.includes(member.id))
+    .map((member) => member.name);
+  return names.length ? names.join("、") : "未设置";
+});
 const filteredAdminTasks = computed(() => {
   const keyword = normalizedAdminSearch.value;
   if (!keyword) return taskDefinitions.value;
@@ -3025,8 +3057,18 @@ const showcaseEquipment = computed(() => filteredEquipment.value.slice(0, 14).ma
 })));
 const featuredDungeon = computed(() => ({
   title: selectedDungeonDay.value?.bloodTrial?.caves?.[0]?.name || "幽冥地宫 · 三层",
-  realm: derived.value.nextRealm || realmName(player.value.realm)
+  realm: derived.value.nextRealm || realmName(player.value.realm),
+  summary: todayDungeonSummary.value
 }));
+const todayDungeonSummary = computed(() => {
+  const day = dungeonDays.value.find((item) => item.day === gameState.value.day) || selectedDungeonDay.value;
+  if (!day) return [{ key: "none", icon: "今", text: "今日副本尚未结算" }];
+  return [
+    { key: "blood", icon: "血", text: playerBloodTrialSummary(day) },
+    { key: "void", icon: "殿", text: playerVoidHallSummary(day) },
+    { key: "sea", icon: "海", text: playerStarSeaSummary(day) }
+  ];
+});
 const homeLogs = computed(() => mainLogs.value.slice(0, 6));
 const homeRanking = computed(() => {
   const top = powerRanking.value.slice(0, 5).map((item, index) => ({ ...item, rank: index + 1 }));
@@ -3067,6 +3109,16 @@ const provinceTerritories = computed(() => {
   });
 });
 const occupiedProvinceCount = computed(() => provinceTerritories.value.filter((item) => item.owner).length);
+const homeSectTerritorySummary = computed(() => {
+  const sectName = player.value.sect || gameState.value.sect?.name || "";
+  const provinces = provinceTerritories.value
+    .filter((province) => province.owner === sectName)
+    .sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name, "zh-Hans-CN"));
+  if (!provinces.length) return "当前暂无占领城市";
+  const names = provinces.slice(0, 3).map((province) => province.name.replace(/省|市|自治区|特别行政区/g, ""));
+  const rest = provinces.length - names.length;
+  return `占领 ${names.join("、")}${rest > 0 ? ` 等 ${provinces.length} 城` : ""}`;
+});
 const sectTerritoryRanking = computed(() => sectSummaries.value
   .map((sect) => {
     const provinces = provinceTerritories.value.filter((province) => province.owner === sect.name);
@@ -3207,7 +3259,7 @@ const starSeaMonsterStats = computed(() => {
     { label: "攻击", value: monster.attack || "?", icon: "attack" },
     { label: "防御", value: monster.defense || "?", icon: "defense" },
     { label: "神识", value: monster.divineSense || "?", icon: "sense" },
-    { label: "技能", value: skillSummary(monster), icon: "skill" }
+    { label: "技能", value: skillNameForDisplay(monster), icon: "skill" }
   ];
 });
 const groupedRealmProgression = computed(() => {
@@ -3340,6 +3392,10 @@ function skillCompactLabel(target) {
   return `${skill.name} · ${skillRankText(skillDisplayRank(target))}`;
 }
 
+function skillNameForDisplay(target) {
+  return skillForDisplay(target).name || "普通攻击";
+}
+
 function skillEffectSummary(target) {
   return skillForDisplay(target).text || "暂无技能效果";
 }
@@ -3353,12 +3409,6 @@ function skillTip(target) {
   const skill = skillForDisplay(target);
   const rank = skillDisplayRank(target);
   return `${skill.name} · ${skillRankText(rank)}：消耗 ${skill.cost} 法力，冷却 ${skill.cooldown} 回合。${skill.text}`;
-}
-
-function skillStyle(skill) {
-  if (skill.cost >= 28) return "legendary";
-  if (skill.cost >= 22) return "rare";
-  return "common";
 }
 
 function skillGlyph(skill) {
@@ -3459,6 +3509,31 @@ function voidHallMonsterPower(record) {
   return Number(record?.monsterPower || record?.monsterStats?.power || record?.requiredDamage || record?.monsterStats?.maxHp || 0);
 }
 
+function playerBloodTrialSummary(day) {
+  const solo = (day?.solo || []).find((entry) => entry.id === "player");
+  if (!solo) return "血色未入场";
+  const cleared = (day?.bloodTrial?.caves || []).filter((cave) => (cave.clears || []).some((entry) => entry.id === "player")).length;
+  const total = day?.bloodTrial?.caves?.length || 0;
+  if (total && cleared >= total) return `血色通关 ${cleared}/${total}`;
+  return `血色 ${cleared}/${total || "?"} 关`;
+}
+
+function playerVoidHallSummary(day) {
+  const record = (day?.sects || []).find((item) => item.sect === player.value.sect);
+  if (!record) return "虚天殿未参战";
+  return record.success ? "虚天殿通关" : "虚天殿未通关";
+}
+
+function playerStarSeaSummary(day) {
+  const top = day?.public?.top || [];
+  const topIndex = top.findIndex((entry) => entry.id === "player");
+  if (topIndex >= 0) return `乱星海输出第${topIndex + 1}`;
+  const team = (day?.public?.teams || []).find((record) => (record.members || []).some((member) => member.id === "player"));
+  if (!team) return "乱星海未入榜";
+  const member = (team.members || []).find((item) => item.id === "player");
+  return `乱星海队伍第${team.rank || "?"}，输出 ${member?.damage || 0}`;
+}
+
 function sectDungeonRecords(sect) {
   if (!sect?.name) return [];
   return dungeonDays.value
@@ -3525,7 +3600,7 @@ function monsterStatItems(monster = {}) {
     { label: "攻击", value: monster.attack || "?", icon: "attack" },
     { label: "防御", value: monster.defense || "?", icon: "defense" },
     { label: "神识", value: monster.divineSense || "?", icon: "sense" },
-    { label: "技能", value: skillSummary(monster), icon: "skill" }
+    { label: "技能", value: skillNameForDisplay(monster), icon: "skill" }
   ];
 }
 
@@ -4176,10 +4251,10 @@ function withDuelRank(person) {
   };
 }
 
-function applyDuelRankDelta(map, id, won) {
+function applyDuelRankRecordDelta(map, id, won, delta) {
   if (!id || !map[id]) return;
-  const delta = won ? duelSeasonInfo.value.winScore : duelSeasonInfo.value.lossScore;
-  map[id].score = Math.max(0, Math.min(duelSeasonInfo.value.maxScore, map[id].score + delta));
+  const scoreDelta = typeof delta === "number" ? delta : (won ? duelSeasonInfo.value.winScore : duelSeasonInfo.value.lossScore);
+  map[id].score = Math.max(0, Math.min(duelSeasonInfo.value.maxScore, map[id].score + scoreDelta));
   if (won) map[id].wins += 1;
   else map[id].losses += 1;
 }
@@ -4762,6 +4837,16 @@ function duelRecordTitle(record) {
   return `${shortDateText(record.foughtAt || displayDate(record))} · ${record.result} · ${record.opponent}`;
 }
 
+function duelRecordMeta(record) {
+  const parts = [];
+  if (record.opponentSect) parts.push(record.opponentSect);
+  if (record.opponentRankName) parts.push(record.opponentRankName);
+  if (typeof record.scoreDelta === "number") parts.push(`积分 ${record.scoreDelta > 0 ? "+" : ""}${record.scoreDelta}`);
+  else parts.push(hasReplay(record) ? "可回放" : "无回放");
+  if (!hasReplay(record)) parts.push("七天外无回放");
+  return parts.join(" · ");
+}
+
 function dungeonRecordTitle(record) {
   const name = String(record.name || "副本").split(/[：·]/)[0].trim() || "副本";
   return `${shortDateText(record.date || (record.day ? `第${record.day}天` : ""))} · ${name} · ${record.result}`;
@@ -4868,6 +4953,7 @@ function openBattleReplay(replay, target = captureBattleReturn()) {
 function hasReplay(record) {
   if (record?.fallbackReplay) return true;
   if (record?.replayId && invalidReplayIds.value.has(record.replayId)) return false;
+  if (typeof record?.hasReplay === "boolean") return record.hasReplay;
   return Boolean(record?.replay || record?.replayId || record?.hasReplay);
 }
 
@@ -5622,7 +5708,9 @@ function personXpNeed(person) {
 }
 
 function sectMembers(sect) {
-  return Array.isArray(sect?.members) ? sect.members : [];
+  return Array.isArray(sect?.members)
+    ? [...sect.members].sort((a, b) => (b.power || personPower(b)) - (a.power || personPower(a)) || a.name.localeCompare(b.name, "zh-Hans-CN"))
+    : [];
 }
 
 function sectByName(name) {
@@ -6060,12 +6148,6 @@ async function advanceDay() {
 
 async function upgradeSkill() {
   await act("/api/skills/upgrade", {}, { scope: "lite" });
-}
-
-function openPortraitPicker() {
-  switchTab("admin");
-  adminMode.value = "cultivators";
-  syncAdminCultivatorDraft(player.value);
 }
 
 function openImageEditor(event, target) {

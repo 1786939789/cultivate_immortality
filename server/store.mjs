@@ -165,12 +165,15 @@ function preserveReplaySummary(record, replay) {
 export async function readBattleReplay(replayId, id = "default") {
   const db = await openDb();
   const result = db.exec(
-    "SELECT replay_json FROM battle_replays WHERE id = $id AND save_id = $saveId LIMIT 1",
+    "SELECT replay_json, day, kind FROM battle_replays WHERE id = $id AND save_id = $saveId LIMIT 1",
     { $id: replayId, $saveId: id }
   );
   if (!result.length || !result[0].values.length) throw new Error("未找到该场切磋回放");
-  const replay = JSON.parse(result[0].values[0][0]);
+  const [replayJson, day, kind] = result[0].values[0];
+  const replay = JSON.parse(replayJson);
   replay.replayId = replayId;
+  replay.day = replay.day || Number(day || 0) || undefined;
+  replay.kind = replay.kind || kind;
   return replay;
 }
 

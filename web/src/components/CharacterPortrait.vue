@@ -17,9 +17,13 @@ const props = defineProps({
 const imageFailed = ref(false);
 const imageSrc = computed(() => props.person?.portraitUrl || portraitFor(props.person));
 const initial = computed(() => props.person?.name?.slice(0, 1) || "?");
-const rankClass = computed(() => props.person?.duelSeason?.rankId ? `duel-frame-${props.person.duelSeason.rankId}` : "");
+const rankClass = computed(() => {
+  const rankId = props.person?.duelSeason?.rankId || props.person?.rankId;
+  return rankId ? `duel-frame-${rankId}` : "";
+});
 const portraitStyle = computed(() => ({
-  "--portrait-hue": String(hueFor(props.person?.name || "player"))
+  "--portrait-hue": String(hueFor(props.person?.name || "player")),
+  ...(props.person?.duelSeason?.rankColor || props.person?.rankColor ? { "--duel-frame": props.person.duelSeason?.rankColor || props.person.rankColor } : {})
 }));
 
 watch(imageSrc, () => {

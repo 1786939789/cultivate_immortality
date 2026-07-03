@@ -13,6 +13,8 @@ import {
   getDuelReplay,
   getDuelReplayId,
   getPublicReplay,
+  assertReplayDayAllowed,
+  replayDayFromId,
   rest,
   runDailyDuels,
   runDungeon,
@@ -101,7 +103,10 @@ async function handleApi(req, res, url) {
   if (req.method === "GET" && url.pathname === "/api/duels/replay") {
     const replayId = url.searchParams.get("id");
     if (replayId) {
-      sendJson(res, 200, { replay: getPublicReplay(await readBattleReplay(replayId)) });
+      const state = await readState("default");
+      const replay = await readBattleReplay(replayId);
+      assertReplayDayAllowed(state, replay.day || replayDayFromId(replayId));
+      sendJson(res, 200, { replay: getPublicReplay(replay) });
       return;
     }
     const day = url.searchParams.get("day");
@@ -109,7 +114,9 @@ async function handleApi(req, res, url) {
     const state = await readState("default");
     const existingReplayId = getDuelReplayId(state, day, match);
     if (existingReplayId) {
-      sendJson(res, 200, { replay: getPublicReplay(await readBattleReplay(existingReplayId)) });
+      const replay = await readBattleReplay(existingReplayId);
+      assertReplayDayAllowed(state, replay.day || Number(day));
+      sendJson(res, 200, { replay: getPublicReplay(replay) });
       return;
     }
     sendJson(res, 200, { replay: getDuelReplay(state, day, match) });
@@ -119,7 +126,10 @@ async function handleApi(req, res, url) {
   if (req.method === "GET" && url.pathname === "/api/battles/replay") {
     const replayId = url.searchParams.get("id");
     if (!replayId) throw new Error("缺少战斗回放 ID");
-    sendJson(res, 200, { replay: getPublicReplay(await readBattleReplay(replayId)) });
+    const state = await readState("default");
+    const replay = await readBattleReplay(replayId);
+    assertReplayDayAllowed(state, replay.day || replayDayFromId(replayId));
+    sendJson(res, 200, { replay: getPublicReplay(replay) });
     return;
   }
 

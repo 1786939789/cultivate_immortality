@@ -258,8 +258,6 @@
   pointer-events: none;
 }
 
-.view.active .skill-card.legendary,
-.view.active .skill-card.rare,
 .view.active .equipment-row.tier-5,
 .view.active .equipment-row.tier-6,
 .view.active .equipment-slot-card.tier-4,
@@ -396,6 +394,14 @@
     rgba(255, 255, 255, .42);
   color: #684411;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .32);
+}
+
+.rank-tag[class*="duel-rank-"],
+.duel-season-badge[class*="duel-rank-"] {
+  border-color: color-mix(in srgb, var(--rank-color, #5b6470) 58%, #fff7ed);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--rank-color, #5b6470) 24%, #fff7ed), rgba(255, 255, 255, .72));
+  color: color-mix(in srgb, var(--rank-color, #5b6470) 86%, #1f160c);
 }
 
 .segment.active,
@@ -595,8 +601,6 @@ select:focus {
   pointer-events: none;
 }
 
-.skill-card.legendary,
-.skill-card.rare,
 .equipment-row.tier-5,
 .equipment-row.tier-6,
 .equipment-slot-card.tier-4,
@@ -1085,34 +1089,8 @@ body::before {
   font-weight: 900;
 }
 
-.portrait-change {
-  position: absolute;
-  right: 14px;
-  bottom: 12px;
-  z-index: 3;
-  width: 36px;
-  height: 36px;
-  min-height: 36px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border-radius: 50%;
-  border: 1px solid rgba(128, 89, 38, .64);
-  color: #5b3c1b;
-  background: linear-gradient(180deg, #fff5dc, #d9bb7d);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.78), 0 5px 12px rgba(45, 30, 12, .22);
-  font-weight: 900;
-}
-
 .portrait-input {
   display: none;
-}
-
-.portrait-change:hover,
-.portrait-change:focus-visible {
-  transform: translateY(-1px);
-  filter: brightness(1.04);
 }
 
 .profile-scroll {
@@ -1524,10 +1502,38 @@ body::before {
     0 0 2px rgba(0,0,0,.9);
 }
 
+.scene-status-list {
+  display: grid;
+  gap: 5px;
+}
+
+.scene-status-list span {
+  color: #fff2cd;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.35;
+  text-shadow:
+    0 2px 6px rgba(0,0,0,.82),
+    0 0 2px rgba(0,0,0,.9);
+}
+
+.scene-status-list b {
+  background:
+    radial-gradient(circle at 34% 24%, rgba(255, 255, 255, .34), transparent 42%),
+    rgba(17, 94, 89, .86);
+  border-color: rgba(255, 228, 150, .8);
+  color: #fff7d6;
+}
+
 .scene-copy b {
   display: inline-flex;
   margin-right: 8px;
   color: #2c6d5a;
+}
+
+.scene-copy .scene-status-list b {
+  display: grid;
+  margin-right: 0;
 }
 
 .game-cta {
@@ -2246,11 +2252,6 @@ body::before {
     font-size: 17px;
   }
 
-  .portrait-change {
-    right: 10px;
-    bottom: 10px;
-  }
-
   .profile-info-item {
     grid-template-columns: 22px 42px minmax(0, 1fr);
   }
@@ -2742,7 +2743,7 @@ body::before {
 
 .skills-surface .skill-hero {
   min-height: auto;
-  padding: 12px 14px;
+  padding: 15px 16px;
   border: 0;
   border-left: 3px solid rgba(37, 99, 80, .72);
   background:
@@ -2759,7 +2760,7 @@ body::before {
 
 .skills-surface .skill-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(235px, 1fr));
   gap: 14px;
   margin-top: 14px;
   position: relative;
@@ -2772,23 +2773,48 @@ body::before {
   border-color: rgba(84, 99, 63, .22);
 }
 
+.skills-surface .section-head p,
+.skills-surface .skill-hero span {
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+
+.skills-surface .skill-hero strong {
+  font-size: 25px;
+}
+
 .skills-surface .skill-meta-line,
 .skills-surface .skill-upgrade-summary {
   color: #65451f;
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+.skills-surface .skill-upgrade-next p {
+  font-size: 14.5px;
+  line-height: 1.75;
+}
+
+.skills-surface .skill-upgrade-next small {
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .skills-surface .skill-upgrade-actions .meta {
   color: #5a3c1c;
+  font-size: 13px;
 }
 
 .skills-surface .skill-card {
-  min-height: 166px;
-  padding: 16px 16px 14px;
+  min-height: 192px;
+  padding: 15px;
   border-radius: 8px;
   overflow: visible;
   z-index: 1;
+  align-content: start;
+  grid-template-rows: auto 1fr auto;
   background:
-    linear-gradient(90deg, rgba(38, 103, 83, .15), transparent 74px),
+    radial-gradient(circle at 18px 18px, rgba(38, 103, 83, .13), transparent 84px),
     linear-gradient(180deg, rgba(255, 251, 232, .96), rgba(220, 200, 153, .7));
 }
 
@@ -2818,29 +2844,72 @@ body::before {
 }
 
 .skills-surface .skill-card::before {
-  left: 14px;
-  top: auto;
-  bottom: 14px;
-  width: 42px;
-  height: 58px;
-  border-radius: 5px;
-  background:
-    linear-gradient(180deg, rgba(45, 121, 94, .95), rgba(24, 72, 56, .95));
+  display: none;
 }
 
-.skills-surface .skill-card p,
-.skills-surface .skill-card small {
-  margin-left: 54px;
+.skills-surface .skill-card-head {
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(141, 103, 45, .13);
 }
 
-.skills-surface .skill-card p {
-  font-size: 13px;
-  line-height: 1.7;
+.skills-surface .skill-card-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 7px;
+  box-shadow: 0 5px 11px rgba(24, 65, 54, .16);
 }
 
-.skills-surface .skill-card small {
+.skills-surface .skill-card-title strong {
+  color: #6f320a;
+  font-size: 16px;
+}
+
+.skills-surface .skill-card-title span {
+  color: #7c6743;
   font-size: 12.5px;
-  line-height: 1.65;
+}
+
+.skills-surface .skill-rank-badge {
+  border-color: rgba(157, 115, 33, .34);
+  color: #6e440a;
+  background:
+    linear-gradient(180deg, rgba(255, 248, 214, .95), rgba(232, 203, 126, .64));
+}
+
+.skills-surface .skill-card-effect {
+  margin: 0;
+  color: #4f3d25;
+  font-size: 15px;
+  line-height: 1.75;
+}
+
+.skills-surface .skill-card-meta {
+  border-top-color: rgba(141, 103, 45, .15);
+}
+
+.skills-surface .skill-card-meta span {
+  color: #62441f;
+  font-size: 13px;
+}
+
+.skills-surface .skill-rank-popover-head strong {
+  font-size: 15px;
+}
+
+.skills-surface .skill-rank-popover-head span,
+.skills-surface .skill-rank-row small,
+.skills-surface .skill-rank-row span {
+  font-size: 12.5px;
+}
+
+.skills-surface .skill-rank-row strong {
+  font-size: 14px;
+}
+
+.skills-surface .skill-rank-row p {
+  font-size: 13px;
+  line-height: 1.55;
 }
 
 .arena-surface .duel-rank-table {
@@ -2997,8 +3066,24 @@ body::before {
 }
 
 .rank-surface .rank-medal {
-  border-radius: 5px;
-  box-shadow: inset 0 0 0 1px rgba(255, 248, 200, .55), 0 4px 8px rgba(65, 44, 18, .16);
+  border-radius: 0;
+  box-shadow: none;
+  filter: drop-shadow(0 4px 8px rgba(65, 44, 18, .2));
+}
+
+.rank-surface .rank-medal::before,
+.rank-surface .rank-medal::after {
+  display: none;
+}
+
+.rank-surface .rank-medal > span {
+  display: block;
+  width: auto;
+  height: auto;
+  margin: 0;
+  background: none;
+  border: 0;
+  box-shadow: none;
 }
 
 .progression-surface .realm-stage-picker {
@@ -3061,11 +3146,6 @@ body::before {
   .skills-surface .skill-hero::before,
   .skills-surface .skill-hero::after {
     display: none;
-  }
-
-  .skills-surface .skill-card p,
-  .skills-surface .skill-card small {
-    margin-left: 0;
   }
 
   .skills-surface .skill-rank-popover {
@@ -3164,6 +3244,15 @@ body::before {
 .rank-podium-card.rank-1 .rank-medal {
   color: #fff8cf;
   background: radial-gradient(circle at 50% 36%, #fff4a8, #d99c17 58%, #7f4d00 100%);
+}
+
+.rank-podium-card > .rank-medal::before,
+.rank-podium-card > .rank-medal::after {
+  display: none;
+}
+
+.rank-podium-card > .rank-medal > span {
+  display: contents;
 }
 
 .rank-podium-card.rank-2 .rank-medal {
