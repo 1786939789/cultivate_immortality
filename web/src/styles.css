@@ -3601,6 +3601,38 @@ button.event {
   font-size: 16px;
 }
 
+.province-resource-bonus {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 6px;
+  color: #5c3b16 !important;
+  font-weight: 1000;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.province-resource-bonus svg {
+  flex: 0 0 auto;
+  color: #a46b15;
+  filter: drop-shadow(0 1px 1px rgba(79, 49, 12, .22));
+}
+
+.province-resource-bonus.xp svg {
+  color: #167f6a;
+}
+
+.province-resource-bonus.breakthrough svg {
+  color: #a33443;
+}
+
+.province-owner-name {
+  color: #3e2a12 !important;
+  font: 900 16px/1.2 "Noto Serif SC", serif;
+  letter-spacing: 0;
+}
+
 .sect-province-panel .province-table-row span {
   color: #685239;
 }

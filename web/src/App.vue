@@ -1173,8 +1173,11 @@
                 <span class="province-rank-number">{{ index + 1 }}</span>
                 <strong>{{ territory.name }}</strong>
                 <span class="gdp-tier-badge" :class="`tier-${provinceGdpTier(territory.rank).toLowerCase()}`">{{ provinceGdpTier(territory.rank) }}</span>
-                <span>{{ territory.effect.text }}</span>
-                <span>{{ territory.owner || "无主之地" }}</span>
+                <span class="province-resource-bonus" :class="territory.effect.type" :aria-label="provinceResourceTotalLabel(territory.effect)">
+                  <component :is="provinceResourceIcon(territory.effect.type)" :size="17" :stroke-width="2.7" aria-hidden="true" />
+                  <b>{{ provinceResourceTotalValue(territory.effect) }}</b>
+                </span>
+                <span class="province-owner-name">{{ territory.owner || "无主之地" }}</span>
                 <span class="defender-stack" v-if="defendersFor(territory).length">
                   <span
                     v-for="defender in defendersFor(territory)"
@@ -4365,6 +4368,25 @@ function resourceShareValue(value, type) {
   const amount = Number(value) || 0;
   if (type === "spirit") return `${Math.round(amount)}`;
   return `+${Math.round(amount * 100)}%`;
+}
+
+function provinceResourceIcon(type) {
+  if (type === "xp") return Sparkles;
+  if (type === "breakthrough") return Zap;
+  return Coins;
+}
+
+function provinceResourceTotalValue(effect) {
+  const type = effect?.type || "spirit";
+  const total = (Number(effect?.value) || 0) * 10;
+  if (type === "spirit") return `${Math.round(total)}`;
+  return `+${Math.round(total * 100)}%`;
+}
+
+function provinceResourceTotalLabel(effect) {
+  if (effect?.type === "xp") return `经验总包 ${provinceResourceTotalValue(effect)}`;
+  if (effect?.type === "breakthrough") return `突破总包 ${provinceResourceTotalValue(effect)}`;
+  return `灵石总包 ${provinceResourceTotalValue(effect)}`;
 }
 
 function resourceRoleLabel(role) {
