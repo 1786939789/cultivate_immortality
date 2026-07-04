@@ -3793,10 +3793,15 @@ button.event {
 .sect-war-room .war-lineup {
   grid-template-columns: minmax(0, 1fr) 86px minmax(0, 1fr);
   grid-template-rows: none;
-  align-items: center;
+  align-items: start;
 }
 
 .sect-war-room .war-team {
+  align-self: stretch;
+  grid-template-rows: auto 1fr;
+}
+
+.sect-war-room .war-team .war-team-row {
   align-self: center;
 }
 
