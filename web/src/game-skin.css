@@ -1681,8 +1681,8 @@ body::before {
   right: 2px;
   top: 2px;
   z-index: 2;
-  min-width: 20px;
-  height: 13px;
+  min-width: 22px;
+  height: 15px;
   display: inline-grid;
   place-items: center;
   padding: 0 3px;
@@ -1692,7 +1692,7 @@ body::before {
   background: rgba(255, 244, 199, .9);
   box-shadow: 0 2px 5px rgba(46, 24, 9, .2);
   text-shadow: 0 1px 0 rgba(255, 255, 255, .48);
-  font: 900 8px/1 Georgia, serif;
+  font: 900 9px/1 Georgia, serif;
 }
 
 .gear-slot.tier-1 {
@@ -2013,10 +2013,16 @@ body::before {
   grid-column: 1 / -1;
   justify-self: stretch;
   display: grid;
-  grid-auto-rows: minmax(40px, 1fr);
-  align-content: stretch;
+  grid-auto-rows: minmax(36px, auto);
+  align-content: start;
   gap: 3px;
   margin-top: 8px;
+  max-height: 276px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 3px;
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(115, 82, 39, .55) rgba(74, 47, 21, .1);
 }
 
 .battle-log-list > div {
@@ -3854,15 +3860,7 @@ body::before {
 }
 
 .brand h1::after {
-  content: "传真";
-  width: 25px;
-  height: 36px;
-  margin-left: 10px;
-  border: 1px solid rgba(249, 219, 160, .44);
-  border-radius: 12px;
-  background: linear-gradient(180deg, #96382c, #5d1d18);
-  box-shadow: inset 0 1px 0 rgba(255, 235, 185, .28), 0 4px 10px rgba(0, 0, 0, .26);
-  font-size: 11px;
+  content: none;
 }
 
 .hero {
@@ -4024,10 +4022,18 @@ body::before {
 }
 
 .sidebar {
+  position: sticky;
+  z-index: 25;
   top: 84px;
   overflow: visible;
   padding: 12px;
   min-width: 0;
+}
+
+.sidebar .stats {
+  position: relative;
+  z-index: 30;
+  overflow: visible;
 }
 
 .sidebar::before,
@@ -4041,7 +4047,9 @@ body::before {
 }
 
 .avatar {
-  min-height: clamp(210px, 16.8vw, 272px);
+  width: 100%;
+  min-height: 0;
+  aspect-ratio: 1 / 1;
   margin: 0;
   border: 1px solid rgba(181, 131, 65, .62);
   border-radius: 4px 4px 0 0;
@@ -4122,10 +4130,16 @@ body::before {
 
 .stat {
   min-height: 39px;
+  z-index: 1;
   border-color: rgba(205, 151, 71, .28);
   background:
     linear-gradient(180deg, rgba(255, 236, 176, .085), rgba(255, 236, 176, .035)),
     rgba(0, 0, 0, .16);
+}
+
+.stat:hover,
+.stat:focus-visible {
+  z-index: 80;
 }
 
 .stat > .stat-icon {
@@ -4141,6 +4155,7 @@ body::before {
 }
 
 .stat-tip {
+  z-index: 90;
   border-color: rgba(218, 171, 87, .36);
   background: rgba(16, 17, 15, .96);
   color: #f2ddb0;
@@ -4178,12 +4193,13 @@ body::before {
   content: "";
   position: absolute;
   right: -1px;
-  bottom: -12px;
+  top: 50%;
   z-index: 1;
   width: 138px;
   height: 126px;
   opacity: .92;
   background: url("/assets/xianxia/incense-burner.png") center bottom / contain no-repeat;
+  transform: translateY(-50%);
   filter:
     drop-shadow(0 8px 14px rgba(0, 0, 0, .48))
     drop-shadow(0 0 12px rgba(212, 158, 66, .18));
@@ -4211,6 +4227,69 @@ body::before {
   z-index: 2;
   color: #c49b55;
   font-size: 17px;
+  font-weight: 900;
+}
+
+.breakthrough-count-card {
+  position: relative;
+  min-height: 88px;
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "label count"
+    "hint hint";
+  align-items: center;
+  gap: 6px 12px;
+  padding: 14px 16px;
+  border: 1px solid rgba(205, 151, 71, .42);
+  border-radius: 4px;
+  color: #e8d3a1;
+  background:
+    radial-gradient(circle at 92% 18%, rgba(105, 200, 126, .16), transparent 72px),
+    linear-gradient(135deg, rgba(24, 26, 23, .94), rgba(10, 12, 11, .9));
+  box-shadow: inset 0 0 0 1px rgba(255, 236, 176, .08);
+  overflow: hidden;
+}
+
+.breakthrough-count-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(9, 11, 10, .18), transparent 55%),
+    radial-gradient(circle at 100% 70%, rgba(228, 181, 86, .18), transparent 78px);
+}
+
+.breakthrough-count-card span,
+.breakthrough-count-card strong,
+.breakthrough-count-card small {
+  position: relative;
+  z-index: 1;
+}
+
+.breakthrough-count-card span {
+  grid-area: label;
+  color: #d1b371;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.breakthrough-count-card strong {
+  grid-area: count;
+  color: #8bdf98;
+  font-size: 26px;
+  line-height: 1;
+  text-align: right;
+  text-shadow: 0 0 16px rgba(83, 202, 132, .24);
+  white-space: nowrap;
+}
+
+.breakthrough-count-card small {
+  grid-area: hint;
+  color: #c49b55;
+  font-size: 15px;
   font-weight: 900;
 }
 
@@ -4285,7 +4364,7 @@ body::before {
 
 .scene-card,
 .duel-home {
-  min-height: clamp(214px, 15vw, 280px);
+  min-height: clamp(170px, 11.6vw, 220px);
 }
 
 .scene-card::before,
@@ -4306,13 +4385,30 @@ body::before {
   z-index: 1;
 }
 
+.home-dashboard .scene-card .section-head h3,
+.home-dashboard .duel-home .section-head h3 {
+  color: #ffe8a8;
+  text-shadow:
+    0 2px 3px rgba(0, 0, 0, .98),
+    0 0 8px rgba(0, 0, 0, .86),
+    0 0 12px rgba(238, 180, 78, .28);
+}
+
+.home-dashboard .scene-card .section-head h3::before,
+.home-dashboard .duel-home .section-head h3::before {
+  color: #ffd57d;
+  filter:
+    drop-shadow(0 1px 2px rgba(0, 0, 0, .95))
+    drop-shadow(0 0 6px rgba(241, 179, 73, .32));
+}
+
 .scene-copy {
   max-width: 68%;
-  gap: 12px;
+  gap: 8px;
 }
 
 .scene-copy h4 {
-  font-size: clamp(23px, 1.55vw, 27px);
+  font-size: clamp(21px, 1.38vw, 25px);
 }
 
 .scene-status-list span,
@@ -4321,6 +4417,7 @@ body::before {
 }
 
 .duel-home p {
+  margin-block: 8px;
   font-size: clamp(14px, .92vw, 17px);
 }
 
@@ -4336,11 +4433,11 @@ body::before {
 .log-home {
   color: #4b351d;
   background:
-    radial-gradient(circle at 18% 12%, rgba(255, 241, 198, .22), transparent 17rem),
-    radial-gradient(circle at 88% 10%, rgba(93, 60, 24, .15), transparent 18rem),
-    radial-gradient(circle at 12px 14px, rgba(91, 59, 25, .065) 0 1px, transparent 1.35px),
-    radial-gradient(circle at 41px 38px, rgba(255, 244, 211, .08) 0 1px, transparent 1.45px),
-    linear-gradient(180deg, rgba(209, 187, 145, .97), rgba(181, 154, 106, .97));
+    radial-gradient(circle at 18% 12%, rgba(255, 244, 205, .32), transparent 17rem),
+    radial-gradient(circle at 88% 10%, rgba(93, 60, 24, .1), transparent 18rem),
+    radial-gradient(circle at 12px 14px, rgba(91, 59, 25, .045) 0 1px, transparent 1.35px),
+    radial-gradient(circle at 41px 38px, rgba(255, 248, 222, .11) 0 1px, transparent 1.45px),
+    linear-gradient(180deg, rgba(221, 201, 160, .97), rgba(197, 171, 122, .97));
   background-size:
     auto,
     auto,
@@ -4348,9 +4445,9 @@ body::before {
     74px 74px,
     auto;
   box-shadow:
-    inset 0 0 0 1px rgba(255, 241, 193, .22),
-    inset 0 18px 34px rgba(79, 50, 22, .08),
-    inset 0 -20px 28px rgba(72, 45, 20, .08),
+    inset 0 0 0 1px rgba(255, 244, 202, .28),
+    inset 0 18px 34px rgba(79, 50, 22, .055),
+    inset 0 -20px 28px rgba(72, 45, 20, .06),
     0 14px 25px rgba(0, 0, 0, .22);
 }
 
@@ -4373,40 +4470,53 @@ body::before {
 }
 
 .equipment-showcase {
-  grid-template-columns: repeat(14, minmax(58px, 1fr));
-  gap: clamp(6px, .65vw, 10px);
-  padding: 10px 12px 0;
+  grid-template-columns: repeat(10, minmax(72px, 1fr));
+  gap: clamp(8px, .8vw, 14px);
+  padding: 10px 16px 0;
 }
 
 .gear-slot {
-  width: clamp(52px, 4.1vw, 66px);
-  height: clamp(52px, 4.1vw, 66px);
-  min-width: clamp(52px, 4.1vw, 66px);
+  width: clamp(72px, 5vw, 86px);
+  height: clamp(72px, 5vw, 86px);
+  min-width: clamp(72px, 5vw, 86px);
 }
 
 .gear-slot .equipment-icon {
+  width: calc(100% - 7px);
+  height: calc(100% - 7px);
+}
+
+.gear-slot .equipment-icon img {
   width: calc(100% - 8px);
   height: calc(100% - 8px);
 }
 
-.gear-slot .equipment-icon img {
-  width: calc(100% - 10px);
-  height: calc(100% - 10px);
-}
-
 .ranking-home,
 .log-home {
-  min-height: 298px;
+  min-height: 350px;
 }
 
 .rank-podium {
   min-height: 154px;
+  grid-template-columns: repeat(3, max-content);
+  justify-content: center;
+  justify-items: center;
+  gap: clamp(42px, 3vw, 54px);
 }
 
 .rank-podium-card {
+  width: 118px;
   background:
-    linear-gradient(180deg, rgba(220, 199, 160, .72), rgba(166, 139, 96, .58)),
-    linear-gradient(90deg, transparent 0 8%, rgba(96, 63, 29, .24) 8% 10%, transparent 10% 90%, rgba(96, 63, 29, .24) 90% 92%, transparent 92%);
+    linear-gradient(180deg, rgba(234, 213, 174, .78), rgba(185, 158, 112, .62)),
+    linear-gradient(90deg, transparent 0 8%, rgba(96, 63, 29, .18) 8% 10%, transparent 10% 90%, rgba(96, 63, 29, .18) 90% 92%, transparent 92%);
+}
+
+.ranking-home .rank-podium-card.rank-1 {
+  width: 128px;
+  background:
+    linear-gradient(180deg, rgba(234, 213, 174, .78), rgba(185, 158, 112, .62)),
+    linear-gradient(90deg, transparent 0 8%, rgba(96, 63, 29, .18) 8% 10%, transparent 10% 90%, rgba(96, 63, 29, .18) 90% 92%, transparent 92%);
+  box-shadow: inset 0 0 0 1px rgba(153, 112, 56, .24);
 }
 
 .home-rank-list button.self {
@@ -4415,16 +4525,16 @@ body::before {
 
 .battle-log-list > div {
   min-height: 36px;
-  background: rgba(83, 55, 27, .13);
-  border-color: rgba(78, 50, 23, .17);
+  background: rgba(96, 65, 31, .095);
+  border-color: rgba(78, 50, 23, .13);
 }
 
 .battle-log-list > div.win {
-  background: rgba(117, 153, 95, .34);
+  background: rgba(132, 167, 107, .3);
 }
 
 .battle-log-list > div.loss {
-  background: rgba(154, 89, 61, .26);
+  background: rgba(170, 98, 67, .22);
 }
 
 @media (max-width: 1280px) {
@@ -4447,7 +4557,7 @@ body::before {
   }
 
   .avatar {
-    min-height: 292px;
+    min-height: 0;
   }
 
   .profile-scroll {
@@ -4476,7 +4586,7 @@ body::before {
   }
 
   .equipment-showcase {
-    grid-template-columns: repeat(14, minmax(44px, 1fr));
+    grid-template-columns: repeat(10, minmax(58px, 1fr));
   }
 }
 
@@ -4561,12 +4671,12 @@ body::before {
   }
 
   .avatar {
-    min-height: 280px;
+    min-height: 0;
   }
 
   .scene-card,
   .duel-home {
-    min-height: 250px;
+    min-height: 210px;
   }
 
   .scene-copy {

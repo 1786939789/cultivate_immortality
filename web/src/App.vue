@@ -125,6 +125,12 @@
           <strong>{{ derived.nextRealm || realmName(player.realm + 1) }}</strong>
           <small>还需修为 {{ remainingXp }}</small>
         </section>
+
+        <section class="breakthrough-count-card" aria-label="今日可突破次数">
+          <span>今日可突破</span>
+          <strong>{{ breakthroughAttemptsToday }} 次</strong>
+          <small>{{ breakthroughAttemptHint }}</small>
+        </section>
       </aside>
 
       <main class="main">
@@ -146,7 +152,6 @@
             <article class="panel game-card scene-card scene-dungeon">
               <div class="section-head compact">
                 <h3>历练副本</h3>
-                <span class="tag">{{ featuredDungeon.realm }}</span>
               </div>
               <div class="scene-copy">
                 <h4>{{ featuredDungeon.title }}</h4>
@@ -162,7 +167,7 @@
 
             <article class="panel game-card scene-card scene-sect">
               <div class="section-head compact">
-                <h3>宗门任务</h3>
+                <h3>宗门</h3>
               </div>
               <div class="scene-copy">
                 <h4>{{ player.sect || "落云宗" }}</h4>
@@ -178,7 +183,7 @@
               </div>
               <p>我的排名：{{ playerRank }}</p>
               <p>今日切磋：{{ todayDuelCount }} 场</p>
-              <p>挑战冷却：<strong>{{ countdown }}</strong></p>
+              <p>段位：<strong>{{ duelRankText(withDuelRank(player)) }}</strong></p>
               <div class="duel-mark" aria-hidden="true">⚔</div>
               <button class="primary game-cta" type="button" @click="switchTab('arena')">进入切磋</button>
             </article>
@@ -3073,7 +3078,7 @@ const filteredEquipment = computed(() => equipmentList.value
     return true;
   })
   .sort(compareEquipmentForMode));
-const showcaseEquipment = computed(() => filteredEquipment.value.slice(0, 14).map((item) => ({
+const showcaseEquipment = computed(() => filteredEquipment.value.slice(0, 10).map((item) => ({
   ...item,
   shortName: equipmentShortName(item.name)
 })));
@@ -3091,7 +3096,13 @@ const todayDungeonSummary = computed(() => {
     { key: "sea", icon: "海", text: playerStarSeaSummary(day) }
   ];
 });
-const homeLogs = computed(() => mainLogs.value.slice(0, 6));
+const homeLogs = computed(() => {
+  const currentDay = Number(gameState.value.day || 0);
+  const recentFloor = currentDay > 0 ? Math.max(1, currentDay - 2) : 0;
+  return mainLogs.value
+    .filter((entry) => !recentFloor || !Number.isFinite(Number(entry.day)) || Number(entry.day) >= recentFloor)
+    .slice(0, 30);
+});
 const homeRanking = computed(() => {
   const top = powerRanking.value.slice(0, 5).map((item, index) => ({ ...item, rank: index + 1 }));
   if (top.some((item) => item.id === "player")) return top;
@@ -3325,6 +3336,21 @@ const stats = computed(() => [
 ]);
 
 const remainingXp = computed(() => Math.max(0, Math.ceil((derived.value.xpNeed || 0) - (player.value.xp || 0))));
+const isMaxRealm = computed(() => {
+  const realmList = catalog.value.realms || [];
+  return realmList.length > 0 && Number(player.value.realm || 0) >= realmList.length - 1;
+});
+const hasBreakthroughXp = computed(() => Number(player.value.xp || 0) >= Number(derived.value.xpNeed || 0));
+const attemptedBreakthroughToday = computed(() => Number(player.value.lastBreakthroughDay || 0) === Number(gameState.value.day || 0));
+const breakthroughAttemptsToday = computed(() => (
+  !isMaxRealm.value && hasBreakthroughXp.value && !attemptedBreakthroughToday.value ? 1 : 0
+));
+const breakthroughAttemptHint = computed(() => {
+  if (isMaxRealm.value) return "已至当前境界尽头";
+  if (attemptedBreakthroughToday.value) return "今日已冲关，明日再试";
+  if (!hasBreakthroughXp.value) return `还需修为 ${remainingXp.value}`;
+  return "修为圆满，可待冲关";
+});
 
 function realmName(index) {
   const realmList = catalog.value.realms || [];
