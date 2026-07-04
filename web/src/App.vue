@@ -6091,8 +6091,8 @@ function chinaMapOption() {
         type: "map",
         map: "china-sect",
         roam: false,
-        layoutCenter: ["50%", "50%"],
-        layoutSize: "88%",
+        layoutCenter: ["50%", "51%"],
+        layoutSize: "128%",
         selectedMode: false,
         label: {
           show: true,
