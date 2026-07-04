@@ -3518,6 +3518,47 @@ button.event {
   gap: 6px;
 }
 
+.province-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px;
+  margin: 0 0 10px;
+  padding: 10px;
+  border: 1px solid rgba(90, 65, 30, .2);
+  border-radius: 4px;
+  background:
+    linear-gradient(90deg, rgba(255, 250, 226, .68), rgba(226, 211, 176, .58));
+}
+
+.province-filter-bar label {
+  min-width: 150px;
+  display: grid;
+  gap: 4px;
+  color: #5c4120;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.province-filter-bar select {
+  min-height: 34px;
+  border: 1px solid rgba(93, 68, 31, .3);
+  border-radius: 3px;
+  background: rgba(255, 248, 226, .9);
+  color: #35230e;
+  font-weight: 800;
+  padding: 0 9px;
+}
+
+.province-filter-clear {
+  min-height: 34px;
+  padding-inline: 14px;
+}
+
+.province-filter-empty {
+  margin-top: 2px;
+}
+
 .sect-province-panel .province-table-head,
 .sect-province-panel .province-table-row {
   grid-template-columns: 46px minmax(70px, .58fr) 72px minmax(150px, .98fr) minmax(90px, .68fr) minmax(260px, 1.6fr);

@@ -1160,6 +1160,31 @@
               </div>
               <span class="tag">{{ provinceTerritories.length }} 省</span>
             </div>
+            <div class="province-filter-bar" aria-label="省份资源筛选">
+              <label>加成类型
+                <select v-model="provinceResourceTypeFilter">
+                  <option value="">全部加成</option>
+                  <option value="spirit">灵石</option>
+                  <option value="xp">经验</option>
+                  <option value="breakthrough">突破</option>
+                </select>
+              </label>
+              <label>占领宗门
+                <select v-model="provinceResourceOwnerFilter">
+                  <option value="">全部宗门</option>
+                  <option value="__none">无主之地</option>
+                  <option v-for="owner in provinceResourceOwnerOptions" :key="owner" :value="owner">{{ owner }}</option>
+                </select>
+              </label>
+              <button
+                v-if="provinceResourceTypeFilter || provinceResourceOwnerFilter"
+                class="secondary province-filter-clear"
+                type="button"
+                @click="clearProvinceResourceFilters"
+              >
+                重置
+              </button>
+            </div>
             <div class="province-table">
               <div class="province-table-head">
                 <span>排名</span>
@@ -1169,7 +1194,7 @@
                 <span>占领宗门</span>
                 <span>守城人员</span>
               </div>
-              <div v-for="(territory, index) in provinceResourceRanking" :key="territory.id" class="province-table-row" :style="{ '--sect-color': sectColor(territory.owner) }">
+              <div v-for="(territory, index) in filteredProvinceResourceRanking" :key="territory.id" class="province-table-row" :style="{ '--sect-color': sectColor(territory.owner) }">
                 <span class="province-rank-number">{{ index + 1 }}</span>
                 <strong>{{ territory.name }}</strong>
                 <span class="gdp-tier-badge" :class="`tier-${provinceGdpTier(territory.rank).toLowerCase()}`">{{ provinceGdpTier(territory.rank) }}</span>
@@ -1193,6 +1218,7 @@
                 </span>
                 <span v-else>未派驻</span>
               </div>
+              <div v-if="!filteredProvinceResourceRanking.length" class="empty province-filter-empty">没有符合筛选条件的省份。</div>
             </div>
           </div>
 
@@ -2646,6 +2672,8 @@ const duelSearch = ref("");
 const selectedProvinceWarDay = ref(null);
 const selectedProvinceWarId = ref("");
 const provinceWarSearch = ref("");
+const provinceResourceTypeFilter = ref("");
+const provinceResourceOwnerFilter = ref("");
 const lastBattle = ref(null);
 const battleReturnTarget = ref(null);
 const replayLoading = ref(false);
@@ -3268,6 +3296,16 @@ const provinceResourceRanking = computed(() => {
   if (activeTab.value !== "sect" || activeSectSubTab.value !== "provinces") return [];
   return [...provinceTerritories.value].sort((a, b) => a.rank - b.rank);
 });
+const provinceResourceOwnerOptions = computed(() => {
+  const owners = new Set(provinceTerritories.value.map((province) => province.owner).filter(Boolean));
+  return [...owners].sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
+});
+const filteredProvinceResourceRanking = computed(() => provinceResourceRanking.value.filter((territory) => {
+  const typeMatched = !provinceResourceTypeFilter.value || territory.effect.type === provinceResourceTypeFilter.value;
+  const ownerMatched = !provinceResourceOwnerFilter.value
+    || (provinceResourceOwnerFilter.value === "__none" ? !territory.owner : territory.owner === provinceResourceOwnerFilter.value);
+  return typeMatched && ownerMatched;
+}));
 const topProvinceResourcePreview = computed(() => [...provinceTerritories.value].sort((a, b) => a.rank - b.rank).slice(0, 5));
 const provinceWarDayRecords = computed(() => {
   if (activeTab.value !== "sect" && activeTab.value !== "arena") return [];
@@ -4427,6 +4465,11 @@ function defendersFor(territory) {
 
 function defenderTooltip(defender) {
   return `${defender.name} · ${realmName(defender.realm)}`;
+}
+
+function clearProvinceResourceFilters() {
+  provinceResourceTypeFilter.value = "";
+  provinceResourceOwnerFilter.value = "";
 }
 
 const cultivators = computed(() => [
