@@ -3679,18 +3679,73 @@ button.event {
   justify-content: flex-end;
 }
 
+.sect-war-log-panel .war-log-toolbar {
+  width: min(430px, 100%);
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  align-items: stretch;
+  justify-items: stretch;
+  padding: 10px;
+  border: 1px solid rgba(101, 73, 31, .2);
+  border-radius: 5px;
+  background: rgba(247, 239, 207, .52);
+}
+
+.sect-war-log-panel .war-log-date-controls {
+  display: grid;
+  grid-template-columns: 82px minmax(130px, 1fr) 82px;
+  gap: 8px;
+  align-items: end;
+}
+
 .sect-war-log-panel .arena-toolbar label {
+  min-width: 0;
   color: #5c4120;
   font-size: 12px;
   font-weight: 800;
 }
 
+.sect-war-log-panel .war-log-date-controls label,
+.sect-war-log-panel .war-search {
+  display: grid;
+  gap: 4px;
+}
+
+.sect-war-log-panel .war-search {
+  width: 100%;
+  justify-self: stretch;
+}
+
+.sect-war-log-panel .war-log-date-controls button {
+  width: 82px;
+  min-width: 0;
+  min-height: 34px;
+  padding-inline: 8px;
+}
+
 .sect-war-log-panel select,
 .sect-war-log-panel input {
+  width: 100%;
+  min-width: 0;
   border-color: rgba(93, 68, 31, .3);
   border-radius: 3px;
   background: rgba(255, 248, 226, .86);
   color: #35230e;
+}
+
+.sect-war-log-panel .search-field {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.sect-war-log-panel .search-field input {
+  flex: 1 1 auto;
+}
+
+.sect-war-log-panel .search-clear {
+  flex: 0 0 auto;
 }
 
 .war-matchup-card {

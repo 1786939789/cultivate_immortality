@@ -1325,20 +1325,22 @@
               <div>
                 <h3>每日攻城记录</h3>
               </div>
-              <div class="arena-toolbar compact">
-                <button class="secondary" type="button" @click="changeProvinceWarDay(-1)">前一天</button>
-                <label>查看日期
-                  <select v-model.number="selectedProvinceWarDay">
-                    <option v-for="option in provinceWarDateOptions" :key="option.day" :value="option.day">{{ option.date }}</option>
-                  </select>
-                </label>
+              <div class="arena-toolbar compact war-log-toolbar">
+                <div class="war-log-date-controls">
+                  <button class="secondary" type="button" @click="changeProvinceWarDay(-1)">前一天</button>
+                  <label>查看日期
+                    <select v-model.number="selectedProvinceWarDay">
+                      <option v-for="option in provinceWarDateOptions" :key="option.day" :value="option.day">{{ option.date }}</option>
+                    </select>
+                  </label>
+                  <button class="secondary" type="button" :disabled="selectedProvinceWarDay >= state.day" @click="changeProvinceWarDay(1)">后一天</button>
+                </div>
                 <label class="war-search">搜索省份 / 宗门
                   <span class="search-field">
                     <input v-model.trim="provinceWarSearch" type="search" placeholder="例如：贵州、黄枫谷、妙音门">
                     <button v-if="provinceWarSearch" class="search-clear" type="button" aria-label="清空攻城记录搜索" @click="provinceWarSearch = ''">×</button>
                   </span>
                 </label>
-                <button class="secondary" type="button" :disabled="selectedProvinceWarDay >= state.day" @click="changeProvinceWarDay(1)">后一天</button>
               </div>
             </div>
 
