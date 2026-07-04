@@ -1347,7 +1347,7 @@
                 </div>
 
                 <div class="war-lineup" v-if="war.battles.length">
-                  <div class="war-team">
+                  <div class="war-team" :class="{ 'two-lines': warTeam(war, 'attacker').length > 5 }">
                     <span class="war-team-name"><i :style="{ background: sectColor(war.attacker) }"></i>{{ war.attacker }}</span>
                     <div class="war-team-row">
                       <div v-for="member in warTeam(war, 'attacker')" :key="`${war.id}-attacker-${member.id || member.name}`" class="war-roster-card">
@@ -1361,7 +1361,7 @@
                     <strong>VS</strong>
                     <span>{{ war.battles.length }} 场</span>
                   </div>
-                  <div class="war-team">
+                  <div class="war-team" :class="{ 'two-lines': warTeam(war, 'defender').length > 5 }">
                     <span class="war-team-name"><i :style="{ background: sectColor(war.defender) }"></i>{{ war.defender }}</span>
                     <div class="war-team-row">
                       <div v-for="member in warTeam(war, 'defender')" :key="`${war.id}-defender-${member.id || member.name}`" class="war-roster-card">
