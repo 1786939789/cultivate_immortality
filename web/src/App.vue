@@ -2511,7 +2511,19 @@ const skillAssetPaths = {
   magnetic_light: "/assets/skill-effects/magnetic_light.png",
   golden_body: "/assets/skill-effects/golden_body.png",
   soul_hook: "/assets/skill-effects/soul_hook.png",
-  green_bamboo: "/assets/skill-effects/green_bamboo.png"
+  green_bamboo: "/assets/skill-effects/green_bamboo.png",
+  spirit_armor: "/assets/skill-effects/spirit_armor.png",
+  bone_spike: "/assets/skill-effects/bone_spike.png",
+  fire_crow: "/assets/skill-effects/fire_crow.png",
+  wood_recovery: "/assets/skill-effects/wood_recovery.png",
+  ghost_step: "/assets/skill-effects/ghost_step.png",
+  demon_cut: "/assets/skill-effects/demon_cut.png",
+  ice_seal: "/assets/skill-effects/ice_seal.png",
+  starfall: "/assets/skill-effects/starfall.png",
+  blood_drink: "/assets/skill-effects/blood_drink.png",
+  mirror_water: "/assets/skill-effects/mirror_water.png",
+  wind_blade: "/assets/skill-effects/wind_blade.png",
+  five_element: "/assets/skill-effects/five_element.png"
 };
 
 const skillGlyphs = {
