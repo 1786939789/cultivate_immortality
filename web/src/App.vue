@@ -1028,16 +1028,29 @@
 
         </section>
 
-        <section v-if="activeTab === 'sect'" class="view active">
-          <div class="panel section-head compact">
-            <div>
+        <section v-if="activeTab === 'sect'" class="view active sect-war-room">
+          <div class="panel section-head compact sect-command-header">
+            <div class="sect-command-title">
               <h3>宗门疆域</h3>
               <p>各宗门每日会随机攻打一处省级行政区；无主之地直接占领，有主之地按守城者车轮战结算。</p>
             </div>
-            <span class="tag">{{ occupiedProvinceCount }} / {{ provinceTerritories.length }} 已占领</span>
+            <div class="sect-command-stats" aria-label="宗门疆域概览">
+              <span>
+                <small>已占领</small>
+                <strong>{{ provinceTerritories.length ? `${occupiedProvinceCount} / ${provinceTerritories.length}` : "读取中" }}</strong>
+              </span>
+              <span>
+                <small>参战宗门</small>
+                <strong>{{ sectSummaries.length || "读取中" }}</strong>
+              </span>
+              <span>
+                <small>今日战报</small>
+                <strong>{{ provinceWarRecords.length ? (selectedProvinceWarDayRecord?.wars?.length || 0) : "读取中" }}</strong>
+              </span>
+            </div>
           </div>
 
-          <div class="subtabs">
+          <div class="subtabs sect-command-tabs" role="tablist" aria-label="宗门疆域子导航">
             <button
               v-for="tab in sectSubTabs"
               :key="tab.id"
@@ -1046,18 +1059,38 @@
               :class="{ active: activeSectSubTab === tab.id }"
               @click="activeSectSubTab = tab.id"
             >
+              <i aria-hidden="true">{{ tab.icon }}</i>
               {{ tab.label }}
             </button>
           </div>
 
-          <div v-if="activeSectSubTab === 'map'" class="panel map-panel">
+          <div v-if="activeSectSubTab === 'map'" class="panel map-panel sect-system-panel sect-map-panel">
             <div class="map-shell">
               <div class="map-toolbar">
-                <span>中国省级行政区宗门占领图</span>
-                <button class="secondary map-fullscreen-button" type="button" @click="openMapFullscreen">全屏</button>
+                <span>势力地图</span>
+                <button class="secondary map-fullscreen-button" type="button" @click="openMapFullscreen">全屏地图</button>
               </div>
-              <div ref="normalMapMount" class="map-normal-mount">
-                <div ref="chinaMapRef" class="china-map" role="img" aria-label="中国省级行政区宗门占领图"></div>
+              <div class="sect-map-stage">
+                <div ref="normalMapMount" class="map-normal-mount">
+                  <div ref="chinaMapRef" class="china-map" role="img" aria-label="中国省级行政区宗门占领图"></div>
+                </div>
+                <aside class="sect-map-intel" aria-label="势力地图情报">
+                  <div>
+                    <small>占领进度</small>
+                    <strong>{{ occupiedProvinceCount }} / {{ provinceTerritories.length }}</strong>
+                    <span>无主之地 {{ provinceTerritories.length - occupiedProvinceCount }} 处</span>
+                  </div>
+                  <div>
+                    <small>疆域首席</small>
+                    <strong>{{ topSectTerritories[0]?.name || "暂无" }}</strong>
+                    <span>{{ topSectTerritories[0]?.provinceCount || 0 }} 省</span>
+                  </div>
+                  <div>
+                    <small>资源首位</small>
+                    <strong>{{ topProvinceResourcePreview[0]?.name || "暂无" }}</strong>
+                    <span>{{ topProvinceResourcePreview[0]?.effect?.text || "暂无占领收益" }}</span>
+                  </div>
+                </aside>
               </div>
               <div class="province-legend">
                 <span
@@ -1077,47 +1110,58 @@
             </div>
           </div>
 
-          <div v-else-if="activeSectSubTab === 'sects'" class="panel">
-            <h3>宗门占领排行</h3>
-            <div class="sect-territory-list">
-              <article v-for="sect in sectTerritoryRanking" :key="sect.name" class="sect-territory-card" :style="{ '--sect-color': sectColor(sect.name) }">
+          <div v-else-if="activeSectSubTab === 'sects'" class="panel sect-system-panel sect-rank-panel">
+            <div class="section-head compact sect-panel-title">
+              <div>
+                <h3>宗门排行</h3>
+              </div>
+              <span class="tag">{{ sectTerritoryRanking.length }} 宗</span>
+            </div>
+            <div class="sect-rank-table-head">
+              <span>排名</span>
+              <span>宗门</span>
+              <span>已占领</span>
+              <span>灵石总包</span>
+              <span>经验总包</span>
+              <span>突破总包</span>
+              <span>主要占领省份</span>
+            </div>
+            <div class="sect-territory-list sect-rank-table">
+              <article v-for="(sect, index) in sectTerritoryRanking" :key="sect.name" class="sect-territory-card" :style="{ '--sect-color': sectColor(sect.name) }">
                 <div class="sect-territory-rank">
+                  <span class="sect-rank-medal">{{ index + 1 }}</span>
+                </div>
+                <div class="sect-rank-name">
+                  <span class="sect-emblem" :style="{ background: sectColor(sect.name) }">{{ sect.name.slice(0, 1) }}</span>
                   <strong>{{ sect.name }}</strong>
-                  <span>{{ sect.provinceCount }} 省</span>
                 </div>
-                <div class="territory-stats compact">
-                  <span>
-                    <small>灵石总包</small>
-                    <strong>{{ resourcePlanValue(sect.resourcePlan?.spirit, "spirit") }}</strong>
-                    <em>{{ resourcePlanText(sect.resourcePlan?.spirit, "spirit") }}</em>
-                  </span>
-                  <span>
-                    <small>经验总包</small>
-                    <strong>{{ resourcePlanValue(sect.resourcePlan?.xp, "xp") }}</strong>
-                    <em>{{ resourcePlanText(sect.resourcePlan?.xp, "xp") }}</em>
-                  </span>
-                  <span>
-                    <small>突破总包</small>
-                    <strong>{{ resourcePlanValue(sect.resourcePlan?.breakthrough, "breakthrough") }}</strong>
-                    <em>{{ resourcePlanText(sect.resourcePlan?.breakthrough, "breakthrough") }}</em>
-                  </span>
-                </div>
-                <p>{{ sect.provinceNames.join("、") || "暂无占领省份" }}</p>
+                <span class="rank-number">{{ sect.provinceCount }}</span>
+                <span class="resource-pill spirit">{{ resourcePlanValue(sect.resourcePlan?.spirit, "spirit") }}</span>
+                <span class="resource-pill xp">{{ resourcePlanValue(sect.resourcePlan?.xp, "xp") }}</span>
+                <span class="resource-pill breakthrough">{{ resourcePlanValue(sect.resourcePlan?.breakthrough, "breakthrough") }}</span>
+                <p>{{ sect.provinceNames.slice(0, 5).join("、") || "暂无占领省份" }}</p>
               </article>
             </div>
           </div>
 
-          <div v-else-if="activeSectSubTab === 'provinces'" class="panel">
-            <h3>省份资源排行</h3>
+          <div v-else-if="activeSectSubTab === 'provinces'" class="panel sect-system-panel sect-province-panel">
+            <div class="section-head compact sect-panel-title">
+              <div>
+                <h3>省份资源</h3>
+              </div>
+              <span class="tag">{{ provinceTerritories.length }} 省</span>
+            </div>
             <div class="province-table">
               <div class="province-table-head">
+                <span>排名</span>
                 <span>省份</span>
                 <span>GDP档位</span>
                 <span>加成</span>
                 <span>占领宗门</span>
                 <span>守城人员</span>
               </div>
-              <div v-for="territory in provinceResourceRanking" :key="territory.id" class="province-table-row" :style="{ '--sect-color': sectColor(territory.owner) }">
+              <div v-for="(territory, index) in provinceResourceRanking" :key="territory.id" class="province-table-row" :style="{ '--sect-color': sectColor(territory.owner) }">
+                <span class="province-rank-number">{{ index + 1 }}</span>
                 <strong>{{ territory.name }}</strong>
                 <span>{{ territory.rank }}</span>
                 <span>{{ territory.effect.text }}</span>
@@ -1209,8 +1253,8 @@
             </div>
           </div>
 
-          <div v-else-if="selectedProvinceWar" class="panel">
-            <div class="section-head compact">
+          <div v-else-if="selectedProvinceWar" class="panel sect-system-panel sect-war-detail-panel">
+            <div class="section-head compact sect-panel-title">
               <div>
                 <h3>{{ selectedProvinceWar.provinceName }} 攻城详情</h3>
                 <p>{{ selectedProvinceWar.result }}。</p>
@@ -1259,12 +1303,10 @@
             </div>
           </div>
 
-          <div v-else class="panel">
-            <div class="section-head compact">
+          <div v-else class="panel sect-system-panel sect-war-log-panel">
+            <div class="section-head compact sect-panel-title">
               <div>
                 <h3>每日攻城记录</h3>
-                <p v-if="selectedProvinceWarDayRecord">共 {{ selectedProvinceWarDayRecord.wars.length }} 场攻守。</p>
-                <p v-else>这个日期还没有攻城记录。</p>
               </div>
               <div class="arena-toolbar compact">
                 <button class="secondary" type="button" @click="changeProvinceWarDay(-1)">前一天</button>
@@ -1286,16 +1328,13 @@
             <div class="war-day-list" v-if="selectedProvinceWarDayRecord">
               <button v-for="war in filteredProvinceWars" :key="war.id" class="war-matchup-card" :class="{ captured: war.captured }" type="button" @click="openProvinceWarDetail(war)">
                 <div class="war-matchup-head">
-                  <div>
-                    <strong>{{ war.provinceName }}</strong>
-                    <small>{{ war.attacker }} 攻 {{ war.defender }}</small>
-                  </div>
+                  <strong>{{ war.provinceName }}</strong>
                   <span class="tag">{{ war.captured ? "易主" : "守住" }}</span>
                 </div>
 
                 <div class="war-lineup" v-if="war.battles.length">
                   <div class="war-team">
-                    <span class="war-team-name">{{ war.attacker }}</span>
+                    <span class="war-team-name"><i :style="{ background: sectColor(war.attacker) }"></i>{{ war.attacker }}</span>
                     <div class="war-team-row">
                       <div v-for="member in warTeam(war, 'attacker')" :key="`${war.id}-attacker-${member.id || member.name}`" class="war-roster-card">
                         <CharacterPortrait :person="battlePerson(member)" size="sm" />
@@ -1309,7 +1348,7 @@
                     <span>{{ war.battles.length }} 场</span>
                   </div>
                   <div class="war-team">
-                    <span class="war-team-name">{{ war.defender }}</span>
+                    <span class="war-team-name"><i :style="{ background: sectColor(war.defender) }"></i>{{ war.defender }}</span>
                     <div class="war-team-row">
                       <div v-for="member in warTeam(war, 'defender')" :key="`${war.id}-defender-${member.id || member.name}`" class="war-roster-card">
                         <CharacterPortrait :person="battlePerson(member)" size="sm" />
@@ -1323,7 +1362,7 @@
                   无主之地直接占领
                 </div>
 
-                <p>{{ war.result }}</p>
+                <p><span>{{ war.captured ? "战况详情" : "守城详情" }}</span>{{ war.result }}</p>
               </button>
               <div v-if="!filteredProvinceWars.length" class="empty">没有匹配“{{ provinceWarSearch }}”的省份或宗门。</div>
             </div>
@@ -2657,16 +2696,16 @@ const playerPortraitOptions = [
 ];
 
 const sectSubTabs = [
-  { id: "map", label: "势力地图" },
-  { id: "sects", label: "宗门排行" },
-  { id: "provinces", label: "省份资源" },
-  { id: "wars", label: "攻城记录" }
+  { id: "map", label: "势力地图", icon: "图" },
+  { id: "sects", label: "宗门排行", icon: "榜" },
+  { id: "provinces", label: "省份资源", icon: "资" },
+  { id: "wars", label: "攻城记录", icon: "战" }
 ];
 
 const gameState = computed(() => state.value || emptyState);
 const player = computed(() => gameState.value.player);
-const derived = computed(() => gameState.value.derived);
-const catalog = computed(() => gameState.value.catalog);
+const derived = computed(() => gameState.value.derived || {});
+const catalog = computed(() => gameState.value.catalog || {});
 const equipmentSlots = computed(() => catalog.value.equipmentSlots?.length ? catalog.value.equipmentSlots : fallbackEquipmentSlots);
 const equipmentTiers = computed(() => catalog.value.equipmentTiers?.length ? catalog.value.equipmentTiers : fallbackEquipmentTiers);
 const duelRankList = computed(() => catalog.value.duelRanks?.length ? catalog.value.duelRanks : duelRanks);
@@ -3201,10 +3240,12 @@ const sectTerritoryRanking = computed(() => sectSummaries.value
     };
   })
   .sort((a, b) => b.provinceCount - a.provinceCount || b.spirit - a.spirit || b.xp - a.xp));
+const topSectTerritories = computed(() => sectTerritoryRanking.value.slice(0, 5));
 const provinceResourceRanking = computed(() => {
   if (activeTab.value !== "sect" || activeSectSubTab.value !== "provinces") return [];
   return [...provinceTerritories.value].sort((a, b) => a.rank - b.rank);
 });
+const topProvinceResourcePreview = computed(() => [...provinceTerritories.value].sort((a, b) => a.rank - b.rank).slice(0, 5));
 const provinceWarDayRecords = computed(() => {
   if (activeTab.value !== "sect" && activeTab.value !== "arena") return [];
   const groups = new Map();

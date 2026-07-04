@@ -2263,6 +2263,21 @@ body::before {
   .loot-ticker {
     flex-basis: 100%;
     min-width: 0;
+    width: 100%;
+    max-width: calc(100vw - 20px);
+    overflow: hidden;
+  }
+
+  .loot-ticker-track {
+    position: relative;
+    min-height: 22px;
+    overflow: hidden;
+  }
+
+  .loot-ticker-content {
+    position: absolute;
+    inset-block: 0;
+    left: 0;
   }
 
   .resource-chip {
@@ -5835,4 +5850,153 @@ body::before {
 .root-astrolabe .root-counter-node:focus-visible .root-ring-art,
 .root-astrolabe .root-counter-node.highlighted .root-ring-art {
   transform: scale(1.055);
+}
+
+/* Sect territory war-room pass: keep the concept-board treatment above generic paper panels. */
+.view.active.sect-war-room {
+  margin-top: 0;
+}
+
+.view.active.sect-war-room > .panel,
+.view.active.sect-war-room .sect-system-panel,
+.view.active.sect-war-room .war-matchup-card,
+.view.active.sect-war-room .sect-territory-card,
+.view.active.sect-war-room .war-day-card,
+.view.active.sect-war-room .province-table-row {
+  border-color: var(--sect-frame-soft);
+}
+
+.view.active.sect-war-room > .sect-command-header {
+  background:
+    linear-gradient(90deg, rgba(15, 23, 26, .96), rgba(38, 46, 42, .92)),
+    radial-gradient(circle at 34% 0%, rgba(229, 194, 114, .18), transparent 24rem);
+}
+
+.view.active.sect-war-room > .sect-system-panel,
+.view.active.sect-war-room .sect-system-panel {
+  background:
+    radial-gradient(circle at 18% 0%, rgba(255, 250, 222, .38), transparent 20rem),
+    linear-gradient(180deg, rgba(243, 232, 199, .97), rgba(217, 200, 160, .97));
+}
+
+.view.active.sect-war-room .section-head h3,
+.view.active.sect-war-room .panel > h3:first-child {
+  color: #f8e9b2;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, .35);
+}
+
+.view.active.sect-war-room .sect-command-title h3 {
+  color: #f2d58a;
+}
+
+.view.active.sect-war-room .sect-panel-title h3,
+.view.active.sect-war-room .sect-map-panel .map-toolbar span {
+  color: #f8e9b2;
+}
+
+.view.active.sect-war-room .sect-panel-title p,
+.view.active.sect-war-room .panel p {
+  color: var(--sect-muted);
+}
+
+@media (max-width: 1180px) {
+  .sect-map-stage,
+  .sect-territory-card {
+    grid-template-columns: 1fr;
+  }
+
+  .sect-map-intel {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .sect-war-room .war-lineup {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .topbar .loot-ticker {
+    width: 100%;
+    max-width: calc(100vw - 20px);
+    min-width: 0;
+    flex: 1 1 100%;
+    overflow: hidden;
+  }
+
+  .topbar .loot-ticker-track {
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    contain: paint;
+  }
+
+  .topbar .loot-ticker-content {
+    min-width: 100%;
+    max-width: none;
+  }
+
+  .app,
+  .layout,
+  .main,
+  .sidebar {
+    min-width: 0;
+  }
+
+  .sect-war-room {
+    width: 100%;
+    max-width: 100%;
+    padding: 8px;
+    overflow: hidden;
+  }
+
+  .sect-war-room::before {
+    inset: 5px;
+  }
+
+  .sect-command-header,
+  .sect-panel-title {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .sect-command-title h3 {
+    font-size: 30px;
+  }
+
+  .sect-command-stats,
+  .sect-command-tabs,
+  .sect-map-intel,
+  .sect-province-panel .province-table-head,
+  .sect-province-panel .province-table-row,
+  .territory-stats.compact {
+    grid-template-columns: 1fr;
+  }
+
+  .sect-command-tabs .segment {
+    min-height: 46px;
+    font-size: 18px;
+  }
+
+  .sect-map-panel .china-map {
+    min-height: 430px;
+  }
+
+  .sect-map-panel,
+  .sect-system-panel,
+  .sect-command-header,
+  .sect-command-tabs .segment,
+  .sect-map-stage,
+  .map-normal-mount,
+  .china-map {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .sect-system-panel > h3,
+  .sect-panel-title h3,
+  .sect-map-panel .map-toolbar span {
+    min-width: 0;
+    width: auto;
+    font-size: 22px;
+  }
 }

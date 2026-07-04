@@ -222,7 +222,10 @@ button {
 }
 
 .loot-ticker-track {
+  min-width: 0;
+  max-width: 100%;
   overflow: hidden;
+  contain: paint;
 }
 
 .loot-ticker-content {
@@ -231,6 +234,7 @@ button {
   min-width: 100%;
   white-space: nowrap;
   animation: loot-scroll 28s linear infinite;
+  will-change: transform;
 }
 
 .loot-ticker-content span {
@@ -2978,6 +2982,717 @@ button.event {
 
 .war-battle-summary {
   line-height: 1.5;
+}
+
+.sect-war-room {
+  --sect-bg-deep: #17232b;
+  --sect-bg-ink: #243239;
+  --sect-frame: rgba(174, 133, 66, .9);
+  --sect-frame-soft: rgba(190, 153, 88, .42);
+  --sect-paper: rgba(232, 219, 184, .95);
+  --sect-paper-soft: rgba(243, 232, 199, .88);
+  --sect-ink: #382612;
+  --sect-muted: #715f45;
+  --sect-gold: #d6b15b;
+  --sect-jade: #0f766e;
+  position: relative;
+  padding: 12px;
+  border: 2px solid rgba(94, 71, 39, .88);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(19, 27, 31, .80), rgba(34, 46, 47, .88)),
+    radial-gradient(circle at 12% 12%, rgba(205, 159, 79, .18), transparent 24rem),
+    radial-gradient(circle at 86% 4%, rgba(25, 91, 99, .28), transparent 24rem),
+    url("/assets/sect/war-room-bg.png") center / cover no-repeat;
+  box-shadow:
+    inset 0 0 0 1px rgba(236, 199, 115, .18),
+    inset 0 0 62px rgba(0, 0, 0, .42),
+    0 20px 38px rgba(0, 0, 0, .2);
+}
+
+.sect-war-room::before {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  pointer-events: none;
+  border: 1px solid rgba(219, 181, 103, .32);
+  border-radius: 5px;
+  background:
+    linear-gradient(90deg, transparent, rgba(232, 197, 116, .08), transparent),
+    repeating-linear-gradient(135deg, rgba(255, 244, 205, .04) 0 1px, transparent 1px 18px);
+  opacity: .85;
+}
+
+.sect-war-room > * {
+  position: relative;
+  z-index: 1;
+}
+
+.sect-war-room .panel {
+  color: var(--sect-ink);
+}
+
+.sect-command-header {
+  min-height: 78px;
+  margin: 0;
+  padding: 10px 14px 10px 18px;
+  border-color: rgba(218, 179, 96, .62);
+  border-radius: 5px;
+  background:
+    linear-gradient(90deg, rgba(15, 23, 26, .96), rgba(38, 46, 42, .92)),
+    radial-gradient(circle at 34% 0%, rgba(229, 194, 114, .18), transparent 24rem);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 239, 184, .1),
+    0 16px 28px rgba(0, 0, 0, .2);
+}
+
+.sect-command-title {
+  display: grid;
+  gap: 5px;
+}
+
+.sect-command-title h3 {
+  margin: 0;
+  color: #f2d58a;
+  font: 900 32px/1.05 "KaiTi", "STKaiti", "Microsoft YaHei", serif;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, .36);
+}
+
+.sect-command-title p {
+  max-width: 760px;
+  color: rgba(249, 237, 205, .82);
+  font-size: 13px;
+}
+
+.sect-command-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(92px, 1fr));
+  gap: 8px;
+  min-width: min(430px, 100%);
+}
+
+.sect-command-stats span {
+  border: 1px solid rgba(214, 177, 91, .38);
+  border-radius: 4px;
+  background:
+    linear-gradient(180deg, rgba(65, 53, 35, .82), rgba(28, 31, 27, .88));
+  padding: 7px 10px;
+  display: grid;
+  gap: 2px;
+  box-shadow: inset 0 0 0 1px rgba(255, 241, 195, .06);
+}
+
+.sect-command-stats small {
+  color: rgba(239, 220, 162, .78);
+  font-size: 11px;
+}
+
+.sect-command-stats strong {
+  color: #fff2bd;
+  font-size: 18px;
+  line-height: 1.1;
+}
+
+.sect-command-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.sect-command-tabs .segment {
+  position: relative;
+  min-height: 48px;
+  border: 1px solid rgba(148, 116, 67, .8);
+  border-radius: 3px;
+  background:
+    linear-gradient(180deg, rgba(67, 58, 43, .96), rgba(35, 34, 30, .96)),
+    radial-gradient(circle at 50% 0%, rgba(214, 177, 91, .14), transparent 70%);
+  color: #e3c884;
+  font: 900 20px/1 "KaiTi", "STKaiti", "Microsoft YaHei", serif;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 236, 177, .07),
+    0 10px 18px rgba(0, 0, 0, .16);
+}
+
+.sect-command-tabs .segment i {
+  width: 26px;
+  height: 26px;
+  border: 1px solid rgba(227, 200, 132, .44);
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  color: #f7df9c;
+  font-style: normal;
+  font-size: 14px;
+  background: rgba(15, 23, 26, .38);
+}
+
+.sect-command-tabs .segment.active {
+  min-height: 52px;
+  border-color: rgba(255, 226, 147, .85);
+  background:
+    linear-gradient(180deg, rgba(245, 229, 182, .98), rgba(190, 151, 81, .96)),
+    radial-gradient(circle at 50% 0%, rgba(255, 250, 220, .58), transparent 60%);
+  color: #21160b;
+  text-shadow: 0 1px 0 rgba(255, 246, 211, .8);
+}
+
+.sect-command-tabs .segment.active i {
+  border-color: rgba(84, 57, 24, .38);
+  background: rgba(83, 53, 20, .13);
+  color: #3b260f;
+}
+
+.sect-system-panel {
+  border: 2px solid var(--sect-frame);
+  border-radius: 6px;
+  background:
+    linear-gradient(180deg, rgba(243, 232, 199, .96), rgba(217, 200, 160, .96)),
+    radial-gradient(circle at 12% 0%, rgba(255, 250, 222, .44), transparent 18rem);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 248, 216, .46),
+    inset 0 -24px 32px rgba(91, 60, 24, .08),
+    0 16px 28px rgba(0, 0, 0, .2);
+}
+
+.sect-system-panel > h3,
+.sect-panel-title h3,
+.sect-map-panel .map-toolbar span {
+  position: relative;
+  width: max-content;
+  min-width: 150px;
+  margin: -2px 0 8px -2px;
+  padding: 8px 18px 8px 14px;
+  border: 1px solid rgba(210, 178, 98, .58);
+  border-left: 0;
+  border-radius: 0 0 5px 0;
+  background:
+    linear-gradient(135deg, rgba(20, 87, 79, .95), rgba(31, 72, 70, .96));
+  color: #f8e9b2;
+  font: 900 25px/1 "KaiTi", "STKaiti", "Microsoft YaHei", serif;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, .35);
+}
+
+.sect-panel-title {
+  align-items: flex-start;
+  margin-bottom: 12px;
+  border-bottom: 1px solid rgba(94, 67, 32, .24);
+}
+
+.sect-panel-title h3 {
+  margin-left: -16px;
+}
+
+.sect-panel-title p {
+  color: var(--sect-muted);
+  font-size: 13px;
+}
+
+.sect-war-room .tag {
+  border-radius: 3px;
+  border-color: rgba(148, 43, 43, .38);
+  background: linear-gradient(180deg, rgba(149, 56, 44, .93), rgba(112, 43, 35, .93));
+  color: #ffefd0;
+  font-weight: 800;
+}
+
+.sect-map-panel {
+  padding: 0 12px 12px;
+}
+
+.sect-map-panel .map-shell {
+  gap: 12px;
+}
+
+.sect-map-panel .map-toolbar {
+  margin: 0 -12px;
+  padding-right: 12px;
+}
+
+.sect-map-panel .map-fullscreen-button {
+  border-radius: 999px;
+  border-color: rgba(96, 72, 38, .42);
+  background:
+    linear-gradient(180deg, rgba(246, 226, 163, .96), rgba(176, 134, 62, .96));
+  color: #35230e;
+  font-weight: 900;
+}
+
+.sect-map-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 230px;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.sect-map-panel .china-map {
+  min-height: clamp(480px, 53vw, 580px);
+  border: 2px solid rgba(36, 52, 57, .72);
+  border-radius: 4px;
+  background:
+    radial-gradient(circle at 74% 66%, rgba(198, 146, 62, .16), transparent 12rem),
+    linear-gradient(135deg, #223744, #1a4b66 48%, #14334f);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 246, 210, .13),
+    inset 0 0 36px rgba(0, 0, 0, .38);
+}
+
+.sect-map-intel {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.sect-map-intel div {
+  min-height: 104px;
+  border: 1px solid rgba(90, 69, 39, .34);
+  border-radius: 5px;
+  background:
+    linear-gradient(180deg, rgba(58, 51, 36, .92), rgba(25, 30, 29, .94));
+  color: #f3e4b0;
+  padding: 12px;
+  display: grid;
+  gap: 5px;
+  box-shadow: inset 0 0 0 1px rgba(255, 238, 176, .06);
+}
+
+.sect-map-intel small {
+  color: rgba(229, 202, 135, .8);
+  font-size: 12px;
+}
+
+.sect-map-intel strong {
+  color: #fff0b0;
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+.sect-map-intel span {
+  color: rgba(244, 233, 198, .72);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.sect-map-panel .province-legend {
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(63, 47, 25, .24);
+  border-radius: 4px;
+  background: rgba(53, 45, 32, .9);
+  color: #ead8a1;
+}
+
+.sect-map-panel .province-legend span {
+  border-radius: 3px;
+  padding: 4px 7px;
+}
+
+.sect-map-panel .province-legend span[tabindex]:hover,
+.sect-map-panel .province-legend span[tabindex]:focus-visible,
+.sect-map-panel .province-legend span.active {
+  background: rgba(246, 226, 163, .16);
+  color: #fff0b0;
+  box-shadow: 0 0 0 1px rgba(246, 226, 163, .24);
+}
+
+.sect-map-panel .province-legend i {
+  border-radius: 2px;
+}
+
+.sect-territory-list {
+  gap: 8px;
+}
+
+.sect-territory-card {
+  grid-template-columns: minmax(180px, .76fr) minmax(0, 1.35fr) minmax(180px, .9fr);
+  align-items: center;
+  gap: 12px;
+  border-color: rgba(101, 76, 39, .25);
+  border-left-width: 7px;
+  border-radius: 4px;
+  background:
+    linear-gradient(90deg, rgba(255, 247, 218, .78), rgba(232, 217, 178, .88)),
+    linear-gradient(90deg, color-mix(in srgb, var(--sect-color), transparent 88%), transparent);
+  padding: 10px 12px;
+  box-shadow: inset 0 0 0 1px rgba(255, 250, 225, .46);
+}
+
+.sect-territory-rank {
+  justify-content: start;
+}
+
+.sect-rank-medal {
+  width: 34px;
+  height: 34px;
+  border: 2px solid rgba(110, 78, 34, .4);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 35% 28%, #fff7c6, #bd8435 72%);
+  color: #55340f;
+  font-weight: 900;
+  box-shadow: 0 3px 8px rgba(50, 34, 16, .18);
+}
+
+.sect-territory-rank strong {
+  color: #2f2111;
+  font: 900 24px/1.05 "KaiTi", "STKaiti", "Microsoft YaHei", serif;
+}
+
+.sect-territory-rank > span:last-child {
+  margin-left: auto;
+  border-radius: 999px;
+  background: rgba(39, 82, 76, .12);
+  color: #1f514d;
+  padding: 4px 9px;
+  font-weight: 900;
+}
+
+.sect-territory-card p {
+  color: #685239;
+  font-size: 13px;
+}
+
+.sect-rank-table-head,
+.sect-rank-table .sect-territory-card {
+  display: grid;
+  grid-template-columns: 64px minmax(140px, .95fr) 76px minmax(100px, .8fr) minmax(100px, .8fr) minmax(100px, .8fr) minmax(180px, 1.2fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.sect-rank-table-head {
+  min-height: 38px;
+  margin-bottom: 7px;
+  border: 1px solid rgba(90, 65, 30, .22);
+  border-radius: 3px;
+  background: rgba(95, 73, 42, .1);
+  color: #533819;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.sect-rank-table .sect-territory-card {
+  padding: 8px 10px;
+  border-left-width: 6px;
+}
+
+.sect-rank-table .sect-territory-rank {
+  justify-content: center;
+}
+
+.sect-rank-name {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+}
+
+.sect-emblem {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border: 2px solid rgba(255, 239, 182, .64);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff6cf;
+  font: 900 18px/1 "KaiTi", "STKaiti", "Microsoft YaHei", serif;
+  box-shadow:
+    inset 0 0 0 1px rgba(20, 13, 8, .28),
+    0 3px 8px rgba(50, 34, 16, .18);
+}
+
+.sect-rank-name strong {
+  color: #2f2111;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 900 22px/1.05 "KaiTi", "STKaiti", "Microsoft YaHei", serif;
+}
+
+.rank-number {
+  justify-self: center;
+  border-radius: 999px;
+  background: rgba(39, 82, 76, .12);
+  color: #1f514d;
+  padding: 4px 9px;
+  font-weight: 900;
+}
+
+.resource-pill {
+  position: relative;
+  min-height: 36px;
+  border: 1px solid rgba(90, 65, 30, .2);
+  border-radius: 4px;
+  background: rgba(255, 251, 232, .64);
+  color: #23464a;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 8px;
+  font-weight: 900;
+}
+
+.resource-pill::before {
+  content: "";
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff7c6, #2d8175 72%);
+  box-shadow: inset 0 0 0 1px rgba(34, 50, 42, .18);
+}
+
+.resource-pill.xp::before {
+  background: radial-gradient(circle at 35% 30%, #f4edff, #6065b9 72%);
+}
+
+.resource-pill.breakthrough::before {
+  background: radial-gradient(circle at 35% 30%, #fff8ce, #c28b31 72%);
+}
+
+.sect-rank-table .sect-territory-card p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.territory-stats.compact {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.sect-war-room .territory-stats span {
+  min-height: 74px;
+  border-color: rgba(91, 67, 31, .2);
+  border-radius: 4px;
+  background: rgba(255, 251, 232, .56);
+}
+
+.sect-war-room .territory-stats small {
+  color: #76552b;
+  font-weight: 800;
+}
+
+.sect-war-room .territory-stats strong {
+  color: #23464a;
+}
+
+.sect-war-room .territory-stats em {
+  color: #76614a;
+}
+
+.sect-province-panel .province-table {
+  gap: 6px;
+}
+
+.sect-province-panel .province-table-head,
+.sect-province-panel .province-table-row {
+  grid-template-columns: 60px minmax(86px, .75fr) .7fr 1.1fr .92fr minmax(180px, 1.25fr);
+}
+
+.sect-province-panel .province-table-head {
+  min-height: 38px;
+  border: 1px solid rgba(90, 65, 30, .22);
+  border-radius: 3px;
+  background: rgba(95, 73, 42, .1);
+  color: #533819;
+  padding: 8px 10px;
+}
+
+.sect-province-panel .province-table-row {
+  min-height: 54px;
+  border-left-width: 6px;
+  border-radius: 3px;
+  background:
+    linear-gradient(90deg, rgba(255, 250, 226, .78), rgba(230, 213, 173, .82));
+  padding: 8px 10px;
+}
+
+.province-rank-number {
+  width: 30px;
+  height: 30px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid rgba(112, 82, 38, .32);
+  border-radius: 50%;
+  background: rgba(255, 246, 209, .72);
+  color: #533819 !important;
+  font-weight: 900;
+}
+
+.sect-province-panel .province-table-row strong {
+  color: #2f2111;
+  font-size: 16px;
+}
+
+.sect-province-panel .province-table-row span {
+  color: #685239;
+}
+
+.sect-province-panel .defender-stack {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+}
+
+.sect-province-panel .defender-chip {
+  flex: 0 0 auto;
+  max-width: 104px;
+  border-color: rgba(31, 83, 75, .26);
+  border-radius: 999px;
+  background: rgba(233, 248, 235, .68);
+  color: #1b4f49;
+}
+
+.sect-province-panel .defender-chip .character-portrait {
+  flex: 0 0 auto;
+}
+
+.sect-war-log-panel .arena-toolbar {
+  margin: 0;
+}
+
+.sect-war-log-panel .arena-toolbar.compact {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.sect-war-log-panel .arena-toolbar label {
+  color: #5c4120;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.sect-war-log-panel select,
+.sect-war-log-panel input {
+  border-color: rgba(93, 68, 31, .3);
+  border-radius: 3px;
+  background: rgba(255, 248, 226, .86);
+  color: #35230e;
+}
+
+.war-matchup-card {
+  border-color: rgba(91, 67, 31, .25);
+  border-radius: 4px;
+  background:
+    linear-gradient(90deg, rgba(255, 247, 218, .82), rgba(226, 210, 169, .9));
+  box-shadow: inset 0 0 0 1px rgba(255, 251, 229, .45);
+}
+
+.sect-war-room .war-matchup-card:hover,
+.sect-war-room .war-matchup-card:focus-visible {
+  border-color: rgba(16, 97, 87, .48);
+  background:
+    linear-gradient(90deg, rgba(239, 248, 224, .92), rgba(221, 207, 164, .95));
+}
+
+.sect-war-room .war-matchup-head strong {
+  color: #2f2111;
+  font: 900 22px/1.1 "KaiTi", "STKaiti", "Microsoft YaHei", serif;
+}
+
+.sect-war-room .war-matchup-head small,
+.sect-war-room .war-matchup-card p {
+  color: #70583b;
+}
+
+.sect-war-room .war-matchup-card p {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  text-align: right;
+}
+
+.sect-war-room .war-matchup-card p span {
+  border: 1px solid rgba(91, 67, 31, .3);
+  border-radius: 3px;
+  background: linear-gradient(180deg, rgba(95, 73, 42, .92), rgba(48, 40, 29, .92));
+  color: #f7e4ad;
+  padding: 5px 10px;
+  font-weight: 900;
+}
+
+.sect-war-room .war-lineup {
+  grid-template-columns: minmax(0, 1fr) 86px minmax(0, 1fr);
+  grid-template-rows: none;
+  align-items: center;
+}
+
+.sect-war-room .war-team-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #4e3619;
+  font-weight: 900;
+}
+
+.sect-war-room .war-team-name i {
+  width: 28px;
+  height: 28px;
+  border: 2px solid rgba(255, 239, 182, .62);
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(20, 13, 8, .28);
+}
+
+.sect-war-room .war-roster-card {
+  min-width: 72px;
+  border-color: rgba(86, 65, 35, .2);
+  border-radius: 4px;
+  background: rgba(255, 251, 232, .68);
+}
+
+.sect-war-room .war-lineup-vs strong {
+  min-width: 58px;
+  min-height: 40px;
+  border: 0;
+  background: transparent;
+  color: #8d2d20;
+  font: 900 28px/1 "KaiTi", "STKaiti", "Microsoft YaHei", serif;
+  transform: rotate(-8deg);
+}
+
+.sect-war-room .war-direct-capture {
+  border-color: rgba(15, 118, 110, .26);
+  border-radius: 3px;
+  background: rgba(223, 246, 232, .76);
+  color: #1f514d;
+  font-weight: 800;
+}
+
+.sect-war-detail-panel .war-day-card,
+.sect-war-room .war-day-card {
+  border-color: rgba(91, 67, 31, .26);
+  border-left-width: 7px;
+  border-radius: 4px;
+  background:
+    linear-gradient(180deg, rgba(255, 248, 222, .82), rgba(228, 211, 170, .9));
+}
+
+.sect-war-room .war-day-title strong {
+  color: #2f2111;
+  font: 900 24px/1.1 "KaiTi", "STKaiti", "Microsoft YaHei", serif;
+}
+
+.sect-war-room .war-killboard,
+.sect-war-room .war-battle-link {
+  border-radius: 4px;
+  background: rgba(255, 251, 232, .66);
+}
+
+.sect-war-room .war-battle-vs {
+  border: 0;
+  background: transparent;
+  color: #8d2d20;
+  font-weight: 900;
 }
 
 .log {
