@@ -1172,13 +1172,18 @@
               <div v-for="(territory, index) in provinceResourceRanking" :key="territory.id" class="province-table-row" :style="{ '--sect-color': sectColor(territory.owner) }">
                 <span class="province-rank-number">{{ index + 1 }}</span>
                 <strong>{{ territory.name }}</strong>
-                <span>{{ territory.rank }}</span>
+                <span class="gdp-tier-badge" :class="`tier-${provinceGdpTier(territory.rank).toLowerCase()}`">{{ provinceGdpTier(territory.rank) }}</span>
                 <span>{{ territory.effect.text }}</span>
                 <span>{{ territory.owner || "无主之地" }}</span>
                 <span class="defender-stack" v-if="defendersFor(territory).length">
-                  <span v-for="defender in defendersFor(territory)" :key="`${territory.id}-${defender.id}`" class="defender-chip">
+                  <span
+                    v-for="defender in defendersFor(territory)"
+                    :key="`${territory.id}-${defender.id}`"
+                    class="defender-chip icon-only"
+                    :title="defender.name"
+                    :aria-label="defender.name"
+                  >
                     <CharacterPortrait :person="defender" size="xs" />
-                    {{ defender.name }}
                   </span>
                 </span>
                 <span v-else>未派驻</span>
@@ -4328,6 +4333,16 @@ function provinceEffect(province) {
   }
   const value = 10 + Math.round(10 * tier);
   return { type: "spirit", value, text: `灵石包基准 +${value}/人` };
+}
+
+function provinceGdpTier(rank) {
+  const value = Number(rank) || 99;
+  if (value <= 3) return "S";
+  if (value <= 8) return "A";
+  if (value <= 14) return "B";
+  if (value <= 21) return "C";
+  if (value <= 28) return "D";
+  return "E";
 }
 
 function bonusItemsText(items, type) {

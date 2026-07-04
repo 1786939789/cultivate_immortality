@@ -3519,7 +3519,7 @@ button.event {
 
 .sect-province-panel .province-table-head,
 .sect-province-panel .province-table-row {
-  grid-template-columns: 60px minmax(86px, .75fr) .7fr 1.1fr .92fr minmax(180px, 1.25fr);
+  grid-template-columns: 46px minmax(70px, .58fr) 72px minmax(150px, .98fr) minmax(90px, .68fr) minmax(260px, 1.6fr);
 }
 
 .sect-province-panel .province-table-head {
@@ -3541,8 +3541,8 @@ button.event {
 }
 
 .province-rank-number {
-  width: 30px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
   display: inline-grid;
   place-items: center;
   border: 1px solid rgba(112, 82, 38, .32);
@@ -3550,6 +3550,49 @@ button.event {
   background: rgba(255, 246, 209, .72);
   color: #533819 !important;
   font-weight: 900;
+}
+
+.gdp-tier-badge {
+  justify-self: start;
+  width: 34px;
+  height: 28px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--tier-color, #8b6f3d) 62%, #fff4cf);
+  border-radius: 6px;
+  color: #fff8dd !important;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, .34), transparent 28%),
+    linear-gradient(145deg, color-mix(in srgb, var(--tier-color, #8b6f3d) 86%, #fff2c7), var(--tier-color, #8b6f3d));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 247, 213, .22),
+    0 2px 5px rgba(54, 36, 13, .22);
+  font: 1000 18px/1 "Cinzel", "Georgia", serif;
+  text-shadow: 0 1px 1px rgba(31, 18, 8, .34);
+}
+
+.gdp-tier-badge.tier-s {
+  --tier-color: #c9344a;
+}
+
+.gdp-tier-badge.tier-a {
+  --tier-color: #d4881e;
+}
+
+.gdp-tier-badge.tier-b {
+  --tier-color: #1f8a65;
+}
+
+.gdp-tier-badge.tier-c {
+  --tier-color: #2576b8;
+}
+
+.gdp-tier-badge.tier-d {
+  --tier-color: #6b62b9;
+}
+
+.gdp-tier-badge.tier-e {
+  --tier-color: #68717d;
 }
 
 .sect-province-panel .province-table-row strong {
@@ -3565,21 +3608,32 @@ button.event {
   flex-wrap: nowrap;
   overflow-x: auto;
   overflow-y: hidden;
-  padding-bottom: 2px;
+  gap: 5px;
+  padding: 1px 0 2px;
   scrollbar-width: thin;
 }
 
 .sect-province-panel .defender-chip {
   flex: 0 0 auto;
-  max-width: 104px;
+  width: 30px;
+  height: 30px;
+  display: inline-grid;
+  place-items: center;
   border-color: rgba(31, 83, 75, .26);
-  border-radius: 999px;
-  background: rgba(233, 248, 235, .68);
+  border-radius: 7px;
+  background: rgba(233, 248, 235, .72);
   color: #1b4f49;
+  padding: 2px;
+}
+
+.sect-province-panel .defender-chip.icon-only {
+  font-size: 0;
 }
 
 .sect-province-panel .defender-chip .character-portrait {
+  --portrait-size: 24px;
   flex: 0 0 auto;
+  border-radius: 5px;
 }
 
 .sect-war-log-panel .arena-toolbar {
