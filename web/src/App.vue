@@ -1446,181 +1446,241 @@
         </teleport>
 
         <section v-if="activeTab === 'arena'" class="view active cultivation-surface arena-surface">
-          <div v-if="!lastBattle && !replayLoading" class="panel">
-            <h3>人物切磋</h3>
-            <p>第 {{ duelSeasonInfo.season }} 赛季 · 第 {{ duelSeasonInfo.seasonDay }} / {{ duelSeasonInfo.length }} 天。胜利 +{{ duelSeasonInfo.winScore }} 分，失败 {{ duelSeasonInfo.lossScore }} 分，积分范围 0-{{ duelSeasonInfo.maxScore }}。</p>
-            <div class="duel-rank-table" aria-label="切磋段位分数表">
-              <div v-for="rank in duelRankList" :key="rank.id" class="duel-rank-cell" :class="`duel-rank-${rank.id}`">
-                <strong>{{ rank.name }}</strong>
-                <span>{{ rank.min }}-{{ rank.max }} 分</span>
-                <small>赛季 +{{ rank.spiritReward || 0 }} 灵石</small>
+          <div class="duel-console-shell">
+            <div class="duel-console-head">
+              <h2>斗法场 · 赛季演武台</h2>
+              <div class="duel-season-strip" aria-label="切磋赛季状态">
+                <span><i class="duel-mini-icon season" aria-hidden="true"></i>第 {{ duelSeasonInfo.season }} 赛季</span>
+                <span>第 {{ duelSeasonInfo.seasonDay }} / {{ duelSeasonInfo.length }} 天</span>
+                <span class="duel-gain">胜利 +{{ duelSeasonInfo.winScore }} 分</span>
+                <span class="duel-loss">失败 {{ duelSeasonInfo.lossScore }} 分</span>
+                <span>积分 0-{{ duelSeasonInfo.maxScore }}</span>
               </div>
             </div>
-            <div class="arena-toolbar">
-              <button class="secondary" type="button" @click="changeDuelDay(-1)">前一天</button>
-              <label>查看日期
-                <select v-model.number="selectedDuelDay">
+
+            <div class="duel-reward-rail" aria-label="赛季段位奖励">
+              <div class="duel-reward-title">
+                <strong>赛季段位</strong>
+                <span>奖励</span>
+              </div>
+              <div class="duel-rank-table">
+                <div v-for="(rank, index) in duelRankList" :key="rank.id" class="duel-rank-cell" :class="`duel-rank-${rank.id}`">
+                  <i class="duel-rank-medal" aria-hidden="true"></i>
+                  <div>
+                    <strong>{{ rank.name }}</strong>
+                    <span>{{ rank.min }}-{{ rank.max }} 分</span>
+                    <small><b>灵石</b> × {{ rank.spiritReward || 0 }}</small>
+                  </div>
+                  <em v-if="index < duelRankList.length - 1" aria-hidden="true"></em>
+                </div>
+              </div>
+            </div>
+
+            <div class="duel-command-bar">
+              <button class="secondary duel-nav-button" type="button" @click="changeDuelDay(-1)">前一天</button>
+              <label class="duel-date-select">
+                <select v-model.number="selectedDuelDay" aria-label="查看日期">
                   <option v-for="option in duelDateOptions" :key="option.day" :value="option.day">{{ option.date }}</option>
                 </select>
               </label>
-              <label class="war-search">搜索姓名 / 宗门
+              <label class="duel-search war-search">
                 <span class="search-field">
-                  <input v-model.trim="duelSearch" type="search" placeholder="例如：韩立、黄枫谷">
+                  <input v-model.trim="duelSearch" type="search" placeholder="搜索姓名 / 宗门">
                   <button v-if="duelSearch" class="search-clear" type="button" aria-label="清空切磋搜索" @click="duelSearch = ''">×</button>
                 </span>
               </label>
-              <button class="secondary" type="button" :disabled="selectedDuelDay >= state.day" @click="changeDuelDay(1)">后一天</button>
-              <button class="primary" type="button" @click="startDailyDuels">{{ todaysDuelRecord ? "查看今日切磋" : "开始切磋" }}</button>
-            </div>
-          </div>
-
-          <div v-if="!lastBattle && !replayLoading" class="duel-day-board">
-            <div class="panel section-head compact">
-              <div>
-                <h3>{{ selectedDuelDate }} 对阵</h3>
-                <p v-if="selectedDuelRecord">共 {{ selectedDuelRecord.matches.length }} 组对阵<span v-if="duelSearch">，筛出 {{ filteredDuelMatches.length }} 组</span>。</p>
-                <p v-else>这个日期还没有切磋记录。</p>
-              </div>
-              <span class="tag" v-if="selectedDuelRecord">{{ selectedDuelRecord.createdAt }}</span>
-              <span class="tag" v-else>未开赛</span>
+              <button class="secondary duel-nav-button" type="button" :disabled="selectedDuelDay >= state.day" @click="changeDuelDay(1)">后一天</button>
+              <button class="primary duel-start-button" type="button" @click="startDailyDuels">{{ todaysDuelRecord ? "查看今日切磋" : "开始切磋" }}</button>
             </div>
 
-            <div class="match-list" v-if="selectedDuelRecord">
-              <button
-                class="match-card"
-                :class="{ bye: match.type === 'bye', replayable: match.hasReplay || match.replay }"
-                v-for="match in filteredDuelMatches"
-                :key="match.id"
-                type="button"
-                :disabled="match.type === 'bye' || !(match.hasReplay || match.replay)"
-                @click="openMatchReplay(match, selectedDuelRecord)"
-              >
-                <template v-if="match.type === 'battle'">
-                  <div class="match-person" :class="{ winner: match.winner.id === match.left.id }">
-                    <CharacterPortrait :person="matchPerson(match.left)" size="sm" />
-                    <div>
-                      <strong>
-                        {{ match.left.name }}
-                        <span class="match-outcome" :class="match.winner.id === match.left.id ? 'win' : 'loss'">{{ match.winner.id === match.left.id ? "胜" : "负" }}</span>
-                      </strong>
-                      <small>{{ duelRankText(matchPerson(match.left)) }}</small>
-                      <small class="match-realm-line">{{ realmName(match.left.realm) }} · {{ match.left.sect }}</small>
+            <div class="duel-system-grid">
+              <section class="duel-match-board">
+                <div class="duel-board-title">
+                  <h3>今日对阵</h3>
+                  <span v-if="selectedDuelRecord">{{ selectedDuelRecord.createdAt }}</span>
+                  <span v-else>未开赛</span>
+                </div>
+
+                <div class="match-list" v-if="selectedDuelRecord">
+                  <button
+                    class="match-card duel-match-card"
+                    :class="{ bye: match.type === 'bye', replayable: match.hasReplay || match.replay }"
+                    v-for="(match, index) in filteredDuelMatches"
+                    :key="match.id"
+                    type="button"
+                    :disabled="match.type === 'bye' || !(match.hasReplay || match.replay)"
+                    @click="openMatchReplay(match, selectedDuelRecord)"
+                  >
+                    <template v-if="match.type === 'battle'">
+                      <div class="match-person duel-combatant" :class="{ winner: match.winner.id === match.left.id }">
+                        <CharacterPortrait :person="matchPerson(match.left)" size="sm" />
+                        <div class="duel-person-copy">
+                          <strong>{{ match.left.name }}<span v-if="match.left.id === player.id">我</span></strong>
+                          <small>{{ realmName(match.left.realm) }}</small>
+                          <small>{{ match.left.sect }}</small>
+                        </div>
+                      </div>
+                      <div class="duel-rank-stamp" :class="`duel-rank-${duelRankId(matchPerson(match.left))}`">
+                        <i class="duel-rank-medal" aria-hidden="true"></i>
+                        <span>{{ duelRankName(matchPerson(match.left)) }}</span>
+                      </div>
+                      <div class="duel-match-vs">
+                        <strong>VS</strong>
+                        <span>第 {{ index + 1 }} 场</span>
+                      </div>
+                      <div class="duel-rank-stamp" :class="`duel-rank-${duelRankId(matchPerson(match.right))}`">
+                        <i class="duel-rank-medal" aria-hidden="true"></i>
+                        <span>{{ duelRankName(matchPerson(match.right)) }}</span>
+                      </div>
+                      <div class="match-person duel-combatant" :class="{ winner: match.winner.id === match.right.id }">
+                        <CharacterPortrait :person="matchPerson(match.right)" size="sm" />
+                        <div class="duel-person-copy">
+                          <strong>{{ match.right.name }}<span v-if="match.right.id === player.id">我</span></strong>
+                          <small>{{ realmName(match.right.realm) }}</small>
+                          <small>{{ match.right.sect }}</small>
+                        </div>
+                      </div>
+                      <div class="duel-result-stamp" :class="match.winner.id === match.left.id ? 'win' : 'loss'">{{ match.winner.id === match.left.id ? "胜利" : "失败" }}</div>
+                      <span class="duel-replay-button" aria-hidden="true"><i>▶</i><b>回放</b></span>
+                    </template>
+                    <template v-else>
+                      <div class="match-person duel-combatant winner">
+                        <CharacterPortrait :person="matchPerson(match.winner)" size="sm" />
+                        <div class="duel-person-copy">
+                          <strong>{{ match.winner.name }}<span v-if="match.winner.id === player.id">我</span></strong>
+                          <small>{{ realmName(match.winner.realm) }}</small>
+                          <small>{{ match.winner.sect }}</small>
+                        </div>
+                      </div>
+                      <div class="duel-rank-stamp" :class="`duel-rank-${duelRankId(matchPerson(match.winner))}`">
+                        <i class="duel-rank-medal" aria-hidden="true"></i>
+                        <span>{{ duelRankName(matchPerson(match.winner)) }}</span>
+                      </div>
+                      <div class="duel-bye-mark">轮</div>
+                      <div class="duel-match-vs bye-vs">
+                        <strong>-</strong>
+                        <span>本场轮空</span>
+                      </div>
+                      <div class="duel-result-stamp bye">轮空</div>
+                    </template>
+                  </button>
+                  <div v-if="!filteredDuelMatches.length" class="empty duel-empty">没有匹配“{{ duelSearch }}”的人物或宗门。</div>
+                </div>
+
+                <div class="empty duel-empty" v-else-if="selectedDuelDay === state.day">{{ currentDate }} 尚未开赛。</div>
+                <div class="empty duel-empty" v-else>没有找到 {{ selectedDuelDate }} 的切磋记录。</div>
+              </section>
+
+              <section class="duel-replay-panel" :class="{ live: lastBattle }">
+                <div class="duel-replay-title">
+                  <h3>切磋实况</h3>
+                  <div class="duel-replay-actions" v-if="lastBattle">
+                    <button class="secondary" @click="replayBattle">重播</button>
+                    <button class="primary" @click="returnFromBattle">关闭回放</button>
+                  </div>
+                </div>
+
+                <div v-if="replayLoading" class="replay-loading-panel duel-loading">
+                  <div class="loading-orb" aria-hidden="true"></div>
+                  <h3>正在读取战斗回放</h3>
+                  <p>战报玉简正在展开，请稍候。</p>
+                  <button class="secondary" type="button" @click="returnFromBattle">{{ battleBackLabel }}</button>
+                </div>
+
+                <template v-else-if="lastBattle">
+                  <div class="duel-arena-stage">
+                    <div class="duel-fighter left">
+                      <CharacterPortrait :person="battlePerson(lastBattle.left)" size="lg" />
+                      <strong>{{ lastBattle.left.name }}</strong>
+                      <small>{{ lastBattle.left.sect }}</small>
+                      <small>{{ realmName(lastBattle.left.realm) }}</small>
+                      <Meter label="血量" icon="health" :value="currentBattleFrame.leftHp" :max="battleMax(lastBattle.left, 'hp')" tone="health" />
+                      <Meter label="法力" icon="mana" :value="currentBattleFrame.leftMana" :max="battleMax(lastBattle.left, 'mana')" tone="focus" />
+                    </div>
+                    <div class="duel-live-center">
+                      <strong>VS</strong>
+                      <span>{{ battleOutcomeLabel }}</span>
+                      <small>{{ battleStatusText }}</small>
+                    </div>
+                    <div class="duel-fighter right">
+                      <CharacterPortrait :person="battlePerson(lastBattle.right)" size="lg" />
+                      <strong>{{ lastBattle.right.name }}</strong>
+                      <small>{{ lastBattle.right.sect }}</small>
+                      <small>{{ realmName(lastBattle.right.realm) }}</small>
+                      <Meter label="血量" icon="health" :value="currentBattleFrame.rightHp" :max="battleMax(lastBattle.right, 'hp')" tone="health" />
+                      <Meter label="法力" icon="mana" :value="currentBattleFrame.rightMana" :max="battleMax(lastBattle.right, 'mana')" tone="focus" />
                     </div>
                   </div>
-                  <div class="match-person" :class="{ winner: match.winner.id === match.right.id }">
-                    <CharacterPortrait :person="matchPerson(match.right)" size="sm" />
-                    <div>
-                      <strong>
-                        {{ match.right.name }}
-                        <span class="match-outcome" :class="match.winner.id === match.right.id ? 'win' : 'loss'">{{ match.winner.id === match.right.id ? "胜" : "负" }}</span>
-                      </strong>
-                      <small>{{ duelRankText(matchPerson(match.right)) }}</small>
-                      <small class="match-realm-line">{{ realmName(match.right.realm) }} · {{ match.right.sect }}</small>
+
+                  <div class="duel-skill-row">
+                    <div class="skill-chip" tabindex="0">
+                      <span>{{ skillLabel(lastBattle.left) }}</span>
+                      <small>进攻 (1)</small>
+                      <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.left) }}</span>
+                    </div>
+                    <div class="skill-chip" tabindex="0">
+                      <span>{{ skillLabel(lastBattle.right) }}</span>
+                      <small>应变 (2)</small>
+                      <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.right) }}</span>
+                    </div>
+                  </div>
+
+                  <div class="battle-feed duel-battle-feed">
+                    <div
+                      class="battle-event"
+                      v-for="(event, index) in displayedBattleEvents"
+                      :key="`${index}-${event.text}`"
+                      :class="[event.kind, skillEffectClass(event)]"
+                      :style="skillEffectStyle(event)"
+                    >
+                      <div v-if="event.kind === 'skill'" class="skill-cast" aria-hidden="true">
+                        <img v-if="skillEffectImage(event)" class="skill-cast-art" :src="skillEffectImage(event)" alt="">
+                        <i :class="{ 'has-art': skillEffectImage(event) }">
+                          <img v-if="skillEffectImage(event)" class="skill-cast-icon" :src="skillEffectImage(event)" alt="">
+                          <span v-else>{{ skillEffectGlyph(event) }}</span>
+                        </i>
+                        <b>{{ skillEffectTitle(event) }}</b>
+                      </div>
+                      <span>{{ event.round ? `回合 ${event.round}` : "回合 1" }}</span>
+                      <p>{{ event.text }}</p>
+                      <time>{{ String(index * 2).padStart(2, "0") }}:{{ String((index * 6) % 60).padStart(2, "0") }}</time>
                     </div>
                   </div>
                 </template>
-                <template v-else>
-                  <div class="match-person winner">
-                    <CharacterPortrait :person="matchPerson(match.winner)" size="sm" />
-                    <div>
-                      <strong>{{ match.winner.name }}</strong>
-                      <small>{{ duelRankText(matchPerson(match.winner)) }} · {{ realmName(match.winner.realm) }} · {{ match.winner.sect }}</small>
+
+                <div v-else class="duel-preview">
+                  <div class="duel-arena-stage preview" v-if="duelPreviewMatch">
+                    <div class="duel-fighter left">
+                      <CharacterPortrait :person="matchPerson(duelPreviewMatch.left)" size="lg" />
+                      <strong>{{ duelPreviewMatch.left.name }}</strong>
+                      <small>{{ duelPreviewMatch.left.sect }}</small>
+                      <small>{{ realmName(duelPreviewMatch.left.realm) }}</small>
+                    </div>
+                    <div class="duel-live-center">
+                      <strong>VS</strong>
+                      <span>第 {{ duelPreviewIndex + 1 }} 场</span>
+                      <small>{{ selectedDuelDate }}</small>
+                    </div>
+                    <div class="duel-fighter right">
+                      <CharacterPortrait :person="matchPerson(duelPreviewMatch.right)" size="lg" />
+                      <strong>{{ duelPreviewMatch.right.name }}</strong>
+                      <small>{{ duelPreviewMatch.right.sect }}</small>
+                      <small>{{ realmName(duelPreviewMatch.right.realm) }}</small>
                     </div>
                   </div>
-                  <div class="match-result">
-                    <span>轮空</span>
-                    <small>直接胜</small>
+                  <div class="duel-skill-row muted-row">
+                    <span>选择左侧可回放对阵</span>
+                    <span>战报时间轴将在此展开</span>
                   </div>
-                  <p>{{ match.summary }}</p>
-                </template>
-              </button>
-              <div v-if="!filteredDuelMatches.length" class="empty">没有匹配“{{ duelSearch }}”的人物或宗门。</div>
-            </div>
-
-            <div class="empty" v-else-if="selectedDuelDay === state.day">{{ currentDate }} 尚未开赛。</div>
-            <div class="empty" v-else>没有找到 {{ selectedDuelDate }} 的切磋记录。</div>
-          </div>
-
-          <div v-else-if="replayLoading" class="panel replay-loading-panel">
-            <div class="loading-orb" aria-hidden="true"></div>
-            <h3>正在读取战斗回放</h3>
-            <p>战报玉简正在展开，请稍候。</p>
-            <button class="secondary" type="button" @click="returnFromBattle">{{ battleBackLabel }}</button>
-          </div>
-
-          <div v-else-if="lastBattle" class="battle-detail">
-            <div class="panel battle-header">
-              <div>
-                <h3>切磋实况</h3>
-                <p>{{ lastBattle.left.name }} 对阵 {{ lastBattle.right.name }}，{{ battleStatusText }}</p>
-              </div>
-              <div class="actions">
-                <button class="secondary" @click="replayBattle">重播</button>
-                <button class="primary" @click="returnFromBattle">{{ battleBackLabel }}</button>
-              </div>
-            </div>
-
-            <div class="battle-line live">
-              <div class="fighter">
-                <CharacterPortrait :person="battlePerson(lastBattle.left)" size="lg" />
-                <strong>{{ lastBattle.left.name }}</strong>
-                <small>{{ realmName(lastBattle.left.realm) }} · 战力 {{ lastBattle.left.power }}</small>
-                <div class="battle-stats">
-                  <span v-for="stat in battleStatsFromEffective(lastBattle.left.stats)" :key="stat.label" :aria-label="`${stat.label} ${stat.value}`">
-                    <StatIcon :name="stat.icon" :class="`detail-icon-${stat.icon}`" />
-                    <span>{{ stat.label }}</span>
-                    <strong>{{ stat.value }}</strong>
-                  </span>
-                </div>
-                <div class="skill-chip" tabindex="0">
-                  {{ skillLabel(lastBattle.left) }}
-                  <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.left) }}</span>
-                </div>
-                <Meter label="血量" icon="health" :value="currentBattleFrame.leftHp" :max="battleMax(lastBattle.left, 'hp')" tone="health" />
-                <Meter label="法力" icon="mana" :value="currentBattleFrame.leftMana" :max="battleMax(lastBattle.left, 'mana')" tone="focus" />
-              </div>
-              <div class="vs">{{ battleOutcomeLabel }}</div>
-              <div class="fighter">
-                <CharacterPortrait :person="battlePerson(lastBattle.right)" size="lg" />
-                <strong>{{ lastBattle.right.name }}</strong>
-                <small>{{ realmName(lastBattle.right.realm) }} · 战力 {{ lastBattle.right.power }}</small>
-                <div class="battle-stats">
-                  <span v-for="stat in battleStatsFromEffective(lastBattle.right.stats)" :key="stat.label" :aria-label="`${stat.label} ${stat.value}`">
-                    <StatIcon :name="stat.icon" :class="`detail-icon-${stat.icon}`" />
-                    <span>{{ stat.label }}</span>
-                    <strong>{{ stat.value }}</strong>
-                  </span>
-                </div>
-                <div class="skill-chip" tabindex="0">
-                  {{ skillLabel(lastBattle.right) }}
-                  <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.right) }}</span>
-                </div>
-                <Meter label="血量" icon="health" :value="currentBattleFrame.rightHp" :max="battleMax(lastBattle.right, 'hp')" tone="health" />
-                <Meter label="法力" icon="mana" :value="currentBattleFrame.rightMana" :max="battleMax(lastBattle.right, 'mana')" tone="focus" />
-              </div>
-            </div>
-
-            <div class="panel">
-              <div class="battle-feed">
-                <div
-                  class="battle-event"
-                  v-for="(event, index) in displayedBattleEvents"
-                  :key="`${index}-${event.text}`"
-                  :class="[event.kind, skillEffectClass(event)]"
-                  :style="skillEffectStyle(event)"
-                >
-                  <div v-if="event.kind === 'skill'" class="skill-cast" aria-hidden="true">
-                    <img v-if="skillEffectImage(event)" class="skill-cast-art" :src="skillEffectImage(event)" alt="">
-                    <i :class="{ 'has-art': skillEffectImage(event) }">
-                      <img v-if="skillEffectImage(event)" class="skill-cast-icon" :src="skillEffectImage(event)" alt="">
-                      <span v-else>{{ skillEffectGlyph(event) }}</span>
-                    </i>
-                    <b>{{ skillEffectTitle(event) }}</b>
+                  <div class="battle-feed duel-battle-feed preview-feed">
+                    <div class="battle-event">
+                      <span>回合 1</span>
+                      <p>{{ duelPreviewMatch ? `${duelPreviewMatch.left.name} 与 ${duelPreviewMatch.right.name} 正在演武台候场。` : "尚无可展示的切磋实况。" }}</p>
+                      <time>00:00</time>
+                    </div>
                   </div>
-                  <span>{{ event.round ? `第${event.round}回合` : "战报" }}</span>
-                  <p>{{ event.text }}</p>
                 </div>
-              </div>
+              </section>
             </div>
           </div>
         </section>
@@ -3351,6 +3411,11 @@ const filteredDuelMatches = computed(() => {
   if (!keyword) return matches;
   return matches.filter((match) => duelMatchSearchText(match).includes(keyword));
 });
+const duelPreviewIndex = computed(() => filteredDuelMatches.value.findIndex((match) => match.type === "battle" && (match.hasReplay || match.replay)));
+const duelPreviewMatch = computed(() => {
+  const index = duelPreviewIndex.value;
+  return index >= 0 ? filteredDuelMatches.value[index] : null;
+});
 const visibleBattleEvents = computed(() => lastBattle.value?.events.slice(0, battleCursor.value) || []);
 const displayedBattleEvents = computed(() => [...visibleBattleEvents.value].reverse());
 const isBattleReplayDone = computed(() => {
@@ -5026,6 +5091,11 @@ function duelRankId(person) {
 function duelRankText(person) {
   const season = person?.duelSeason || duelRankByScore(0);
   return `${season.rankName || "黑铁"} ${season.score || 0}分`;
+}
+
+function duelRankName(person) {
+  const season = person?.duelSeason || duelRankByScore(0);
+  return season.rankName || "黑铁";
 }
 
 function genderLabel(gender) {
