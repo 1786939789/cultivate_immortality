@@ -5285,6 +5285,7 @@ body::before {
   display: grid;
   grid-template-columns: minmax(420px, .85fr) minmax(430px, 1fr);
   gap: 16px;
+  align-items: stretch;
 }
 
 .skills-surface > .panel .section-head {
@@ -5395,7 +5396,7 @@ body::before {
 
 .skills-surface .skill-upgrade-panel {
   display: grid;
-  align-content: center;
+  align-content: start;
   gap: 14px;
   align-self: stretch;
   height: 100%;
