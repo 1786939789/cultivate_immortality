@@ -319,7 +319,7 @@ function rootCounters(attacker, defender) {
 function rootCounterPenalty(attacker, defender) {
   if (!rootCounters(attacker, defender)) return 0;
   const realmGap = Math.max(0, Math.floor((defender.realm || 0) / 10) - Math.floor((attacker.realm || 0) / 10));
-  return 0.1 * Math.pow(0.5, realmGap);
+  return Math.max(0.01, 0.1 * Math.pow(0.5, realmGap));
 }
 
 function rootProfile(entity) {

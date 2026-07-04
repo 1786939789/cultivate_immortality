@@ -274,7 +274,6 @@
               <div>
                 <h3>灵根说明</h3>
               </div>
-              <span class="tag">当前 {{ rootLine(player) }}</span>
             </div>
 
             <div class="root-astrolabe-layout">
@@ -299,7 +298,7 @@
                   type="button"
                   class="root-counter-node"
                   :class="[
-                    { highlighted: node.highlighted, special: node.special },
+                    { highlighted: node.highlighted, special: node.special, owned: node.owned, primary: node.primary },
                     `root-icon-${node.key}`
                   ]"
                   :style="{ left: `${node.x}%`, top: `${node.y}%` }"
@@ -308,7 +307,7 @@
                   @mouseleave="hoveredRootKey = ''"
                   @blur="hoveredRootKey = ''"
                 >
-                  <span class="root-ring-art" aria-hidden="true" :style="{ backgroundImage: `url(/assets/root-rings/${node.key}.png)` }"></span>
+                  <span class="root-ring-art" aria-hidden="true" :style="{ backgroundImage: `url(${rootIconPath(node.key)})` }"></span>
                   <span class="root-counter-orb" aria-hidden="true">
                     {{ node.shortName }}
                   </span>
@@ -319,11 +318,10 @@
                 <span class="root-detail-kicker">{{ hoveredRootDetail.special ? "特殊灵根" : "基础灵根" }}</span>
                 <div class="root-detail-head">
                   <span class="root-detail-icon" :class="`root-icon-${hoveredRootDetail.key}`" aria-hidden="true">
-                    <component :is="rootIconComponent(hoveredRootDetail.key)" :size="24" :stroke-width="2.4" />
+                    <img :src="rootIconPath(hoveredRootDetail.key)" alt="">
                   </span>
                   <div>
                     <h4>{{ hoveredRootDetail.name }}</h4>
-                    <p>{{ hoveredRootDetail.badge }}</p>
                   </div>
                 </div>
                 <p>{{ hoveredRootDetail.note }}</p>
@@ -333,15 +331,15 @@
                     <strong>{{ hoveredRootDetail.effectText }}</strong>
                   </div>
                   <div>
-                    <span>克制关系</span>
-                    <strong>{{ hoveredRootDetail.counterText }}</strong>
+                    <span>受制灵根</span>
+                    <strong>{{ hoveredRootDetail.counteredByText }}</strong>
                   </div>
                   <div>
-                    <span>当前状态</span>
-                    <strong>{{ hoveredRootDetail.statusText }}</strong>
+                    <span>克制灵根</span>
+                    <strong>{{ hoveredRootDetail.restrainsText }}</strong>
                   </div>
                 </div>
-                <p class="muted">战斗中被克者攻击、防御、神识最高降低 10%，跨大境界逐级减半。</p>
+                <p class="muted">战斗中被克者攻击、防御、神识最高降低 10%；跨大境界按 10%、5%、2.5% 逐级减半，最低 1%。</p>
               </aside>
             </div>
           </div>
@@ -353,9 +351,7 @@
             <div class="section-head">
               <div>
                 <h3>境界总览</h3>
-                <p>经验门槛、突破率、成长范围。</p>
               </div>
-              <span class="tag">当前 {{ realmName(player.realm) }}</span>
             </div>
 
             <div class="realm-stage-picker">
@@ -368,7 +364,6 @@
                 @click="selectedRealmStage = group.stage"
               >
                 <strong>{{ group.stage }}</strong>
-                <span>{{ group.items[0].name }} - {{ group.items[group.items.length - 1].name }}</span>
               </button>
             </div>
           </div>
@@ -376,9 +371,8 @@
           <section class="panel realm-stage" v-if="selectedRealmGroup">
             <div class="section-head compact">
               <div>
-                <h3>{{ selectedRealmGroup.stage }}十层</h3>
+                <h3>{{ realmName(player.realm) }}</h3>
               </div>
-              <span class="tag">{{ selectedRealmGroup.items[0].name }} - {{ selectedRealmGroup.items[selectedRealmGroup.items.length - 1].name }}</span>
             </div>
             <div class="realm-table-head" aria-hidden="true">
               <span>层级</span>
@@ -486,10 +480,13 @@
             <div class="section-head">
               <div>
                 <h3>本命技能</h3>
-                <p>技能一阶起步，最高十阶；升阶会增强效果，也会提高法力消耗。</p>
               </div>
             </div>
-            <div class="skill-hero" :style="skillVisualStyle(playerSkill)">
+            <div class="skill-hero" :class="{ 'has-skill-image': Boolean(skillAssetPath(playerSkill)) }" :style="skillVisualStyle(playerSkill)">
+              <span class="skill-hero-icon" aria-hidden="true">
+                <img v-if="skillAssetPath(playerSkill)" :src="skillAssetPath(playerSkill)" alt="">
+                <span v-else>{{ skillGlyph(playerSkill) }}</span>
+              </span>
               <div class="skill-hero-main">
                 <strong>{{ playerSkill.name }}</strong>
                 <span>{{ playerSkill.text }}</span>
@@ -503,7 +500,7 @@
             <div class="skill-upgrade-panel">
               <div class="skill-upgrade-summary">
                 <span>当前 {{ skillRankText(skillUpgrade.rank) }}</span>
-                <span>下阶 {{ skillUpgrade.next ? skillUpgrade.requirementRealm : "已满阶" }}</span>
+                <span>可升级境界：{{ skillUpgrade.next ? skillUpgradeRealmStageText(skillUpgrade) : "已满阶" }}</span>
                 <span>消耗 {{ skillUpgrade.next ? `${skillUpgrade.cost} 灵石` : "无" }}</span>
                 <span>成功率 {{ skillUpgrade.next ? formatPercent(skillUpgrade.chance) : "圆满" }}</span>
               </div>
@@ -529,21 +526,12 @@
                 </span>
                 <div class="skill-card-title">
                   <strong>{{ skill.name }}</strong>
-                  <span>{{ skill.id === player.skillId ? "当前本命" : "可选技能" }}</span>
+                  <span>法力 {{ skillPlan(skill).current?.cost || skill.cost }}</span>
+                  <span>冷却 {{ skillPlan(skill).current?.cooldown || skill.cooldown }} 回合</span>
                 </div>
                 <span class="skill-rank-badge">{{ skillRankText(skillPlan(skill).rank) }}</span>
               </div>
               <p class="skill-card-effect">{{ skillPlan(skill).current?.text || skill.text }}</p>
-              <div class="skill-card-meta" aria-label="技能消耗与冷却">
-                <span>
-                  <Zap :size="13" :stroke-width="2.4" aria-hidden="true" />
-                  法力 {{ skillPlan(skill).current?.cost || skill.cost }}
-                </span>
-                <span>
-                  <Orbit :size="13" :stroke-width="2.4" aria-hidden="true" />
-                  冷却 {{ skillPlan(skill).current?.cooldown || skill.cooldown }} 回合
-                </span>
-              </div>
               <div class="skill-rank-popover" role="tooltip">
                 <div class="skill-rank-popover-head">
                   <strong>{{ skill.name }}升阶表</strong>
@@ -3367,6 +3355,13 @@ function realmStageName(stage) {
   return catalog.value.realmStages?.[Math.min(Math.max(stage, 0), (catalog.value.realmStages?.length || 1) - 1)] || `第${stage + 1}阶`;
 }
 
+function skillUpgradeRealmStageText(preview) {
+  const index = Number.isFinite(Number(preview?.requirementRealmIndex))
+    ? Number(preview.requirementRealmIndex)
+    : Math.max(0, realmIndex(preview?.requirementRealm || realmName(0)));
+  return realmStageName(Math.floor(index / 10));
+}
+
 function skillById(id) {
   return combatSkills.value.find((skill) => skill.id === id) || combatSkills.value[0];
 }
@@ -3747,7 +3742,7 @@ function battleRootPenalty(attacker, defender) {
   if (!battleRootKey(attacker) || !battleRootKey(defender)) return 0;
   if (battleRootCounterTarget(battleRootKey(attacker)) !== battleRootKey(defender)) return 0;
   const realmGap = Math.max(0, Math.floor((defender?.realm || 0) / 10) - Math.floor((attacker?.realm || 0) / 10));
-  return 0.1 * Math.pow(0.5, realmGap);
+  return Math.max(0.01, 0.1 * Math.pow(0.5, realmGap));
 }
 
 function applySummaryRootPenalty(stats, penalty) {
@@ -5499,6 +5494,12 @@ function rootName(key) {
   return catalog.value.roots.find((root) => root.key === key)?.name || key;
 }
 
+function compactRootNames(names) {
+  const cleaned = (names || []).map((name) => String(name || "").replace(/灵根$/, "")).filter(Boolean);
+  if (!cleaned.length) return "";
+  return `${cleaned.join("、")}灵根`;
+}
+
 const rootCycleNodes = computed(() => {
   const cycle = catalog.value.rootRules?.cycle || [];
   const count = Math.max(1, cycle.length);
@@ -5613,10 +5614,14 @@ const hoveredRootDetail = computed(() => {
   const node = rootAstrolabeNodes.value.find((item) => item.key === key) || rootAstrolabeNodes.value[0] || {};
   if (node.special) {
     const targets = node.childNames?.length ? node.childNames : (node.keys || []).map(rootName);
+    const targetLine = compactRootNames(targets);
     return {
       ...node,
-      effectText: `由 ${targets.join("、")} 组成`,
-      counterText: `${node.name}克${targets.join("、")}，不受普通灵根相克`,
+      effectText: `由 ${targetLine} 组成`,
+      note: rootMoodText(node.key),
+      counterText: `${node.name}克${targetLine}，不受普通灵根相克`,
+      counteredByText: "不被普通灵根克制",
+      restrainsText: targetLine || "子灵根",
       statusText: node.statusText || "特殊共鸣未激活"
     };
   }
@@ -5626,9 +5631,11 @@ const hoveredRootDetail = computed(() => {
   const root = catalog.value.roots.find((item) => item.key === node.key);
   return {
     ...node,
-    note: root?.note || node.note || "",
-    effectText: root?.note || node.note || "暂无加成说明",
+    note: rootMoodText(node.key),
+    effectText: rootEffectShortText(root || node),
     counterText: `${node.name}克${target?.targetName || "未知"}，受${incoming?.name || "未知"}克`,
+    counteredByText: incoming?.name || "未知",
+    restrainsText: target?.targetName || "未知",
     statusText: node.statusText || "未拥有"
   };
 });
@@ -5660,6 +5667,24 @@ function rootIconComponent(key) {
     wind: Cloud,
     hidden: Dna
   }[key] || BadgeCent;
+}
+
+function rootIconPath(key) {
+  return `/assets/cultivation-system/root-icons/${key || "wood"}.png`;
+}
+
+function rootMoodText(key) {
+  return {
+    metal: "霜刃出匣，肃杀而坚凝",
+    wood: "青枝破土，生生不息",
+    water: "寒潭映月，绵密而深远",
+    fire: "丹焰腾空，炽烈而明澈",
+    earth: "厚土载山，沉稳而包容",
+    thunder: "惊雷破夜，迅疾而刚猛",
+    wind: "长风过岭，轻灵而无形",
+    hidden: "雾锁幽渊，藏锋而难测",
+    heaven: "天光垂落，万象归一"
+  }[key] || "随心而动，玄妙自生";
 }
 
 function specialRootCompositionText(special) {
@@ -5707,6 +5732,18 @@ function rootEffectLabel(root) {
     divineSense: "神识",
     xp: "经验"
   }[root?.effect] || "加成";
+}
+
+function rootEffectShortText(root) {
+  if (!root) return "暂无加成";
+  const range = typeof root.min === "number" && typeof root.max === "number"
+    ? ` +${formatPercent(root.min)}~${formatPercent(root.max)}`
+    : "";
+  const base = `${rootEffectLabel(root)}${range}`;
+  if (root.effect === "xp" && typeof root.breakMultiplier === "number") {
+    return `${base}，突破 +${formatPercent(root.breakMultiplier - 1)}`;
+  }
+  return base;
 }
 
 function rootBonusText(person, root) {

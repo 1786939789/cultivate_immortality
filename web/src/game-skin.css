@@ -1185,6 +1185,7 @@ body::before {
 
 .profile-progress {
   position: relative;
+  grid-template-columns: 24px 58px minmax(0, 1fr);
   border-color: rgba(126, 95, 49, .28);
   font: inherit;
   text-align: left;
@@ -1198,6 +1199,8 @@ body::before {
 
 .profile-progress .meter {
   grid-column: 3;
+  justify-self: end;
+  width: min(100%, 138px);
   min-width: 0;
   align-self: center;
   margin: 0;
@@ -4770,4 +4773,1066 @@ body::before {
 .view.active:not(:has(.home-dashboard)) .panel > h3:first-child {
   color: #5d3a17;
   text-shadow: 0 1px 0 rgba(255, 240, 197, .62);
+}
+
+/* Cultivation system concept pass: code-native UI over AI-generated RPG assets. */
+.cultivation-nav-surface {
+  margin-bottom: 0;
+}
+
+.cultivation-nav-panel {
+  padding: 0 18px;
+  border: 1px solid rgba(196, 143, 65, .36);
+  border-radius: 4px 4px 0 0;
+  background:
+    linear-gradient(180deg, rgba(16, 17, 15, .95), rgba(34, 29, 21, .92)),
+    radial-gradient(circle at 80% 0%, rgba(207, 159, 70, .15), transparent 18rem);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 226, 154, .08),
+    0 10px 22px rgba(0, 0, 0, .22);
+}
+
+.cultivation-subtabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(150px, 1fr));
+  gap: 8px;
+  max-width: 760px;
+  min-height: 64px;
+  align-items: end;
+  margin: 0 auto;
+}
+
+.cultivation-subtabs .segment {
+  position: relative;
+  min-height: 58px;
+  justify-content: center;
+  border: 1px solid rgba(155, 110, 52, .58);
+  border-bottom-color: rgba(223, 178, 89, .75);
+  border-radius: 4px 4px 0 0;
+  background:
+    linear-gradient(180deg, rgba(44, 44, 39, .98), rgba(22, 23, 21, .96)),
+    radial-gradient(circle at 50% 0%, rgba(196, 145, 60, .16), transparent 70%);
+  color: #d8bd7a;
+  font: 900 24px/1 "KaiTi", "STKaiti", "Microsoft YaHei", serif;
+  letter-spacing: 0;
+  box-shadow: inset 0 0 0 1px rgba(255, 231, 160, .06);
+}
+
+.cultivation-subtabs .segment svg {
+  display: none;
+}
+
+.cultivation-subtabs .segment.active {
+  min-height: 66px;
+  border-color: rgba(236, 199, 115, .78);
+  background:
+    linear-gradient(180deg, rgba(241, 224, 177, .96), rgba(178, 145, 84, .96)),
+    radial-gradient(circle at 50% 0%, rgba(255, 251, 223, .54), transparent 60%);
+  color: #21160b;
+  text-shadow: 0 1px 0 rgba(255, 245, 207, .75);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 247, 209, .55),
+    0 -2px 18px rgba(219, 176, 82, .18);
+}
+
+.cultivation-surface {
+  margin-top: 0;
+  padding: 18px;
+  border: 2px solid rgba(97, 68, 32, .82);
+  border-radius: 0 0 8px 8px;
+  background:
+    linear-gradient(180deg, rgba(16, 17, 15, .92), rgba(22, 20, 17, .96)),
+    url("/assets/cultivation-system/root-system-bg.png") center / cover no-repeat;
+  box-shadow:
+    inset 0 0 0 1px rgba(236, 195, 102, .14),
+    inset 0 0 68px rgba(0, 0, 0, .48),
+    0 20px 34px rgba(0, 0, 0, .24);
+}
+
+.cultivation-surface::before {
+  inset: 9px;
+  border-color: rgba(211, 164, 76, .22);
+  background:
+    linear-gradient(90deg, transparent, rgba(218, 172, 83, .12), transparent),
+    radial-gradient(circle at 50% 0%, rgba(37, 92, 74, .13), transparent 28rem);
+  background-size: auto;
+  mask-image: none;
+}
+
+.view.active.cultivation-surface > .panel,
+.view.active.cultivation-surface .realm-stage {
+  color: #f0d99d;
+  border: 1px solid rgba(150, 103, 45, .72);
+  border-radius: 5px;
+  background:
+    linear-gradient(180deg, rgba(20, 22, 20, .86), rgba(27, 25, 21, .9)),
+    radial-gradient(circle at 50% 0%, rgba(217, 168, 73, .1), transparent 18rem);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 227, 151, .08),
+    0 14px 25px rgba(0, 0, 0, .22);
+}
+
+.view.active.cultivation-surface > .panel::before,
+.view.active.cultivation-surface .realm-stage::before {
+  display: none;
+}
+
+.cultivation-surface .section-head {
+  align-items: center;
+  min-height: 54px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid rgba(182, 130, 58, .45);
+}
+
+.view.active.cultivation-surface .section-head h3,
+.view.active.cultivation-surface .panel > h3:first-child {
+  color: #f3d386;
+  font: 900 30px/1.15 "KaiTi", "STKaiti", "Microsoft YaHei", serif;
+  letter-spacing: 0;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, .55);
+}
+
+.cultivation-surface .section-head p {
+  color: #c8ad76;
+  font-size: 14px;
+}
+
+.cultivation-surface .tag {
+  min-height: 34px;
+  border: 1px solid rgba(169, 126, 62, .72);
+  border-radius: 3px;
+  background:
+    linear-gradient(180deg, rgba(31, 34, 29, .92), rgba(19, 21, 18, .92)),
+    radial-gradient(circle at 50% 0%, rgba(97, 167, 103, .16), transparent 70%);
+  color: #e7c374;
+  font-weight: 900;
+}
+
+.attributes-surface .root-astrolabe-panel {
+  background:
+    linear-gradient(90deg, rgba(15, 17, 16, .75), rgba(19, 18, 15, .6)),
+    url("/assets/cultivation-system/root-system-bg.png") center / cover no-repeat;
+}
+
+.root-astrolabe-layout {
+  grid-template-columns: minmax(500px, 1.15fr) minmax(380px, .85fr);
+  gap: 16px;
+}
+
+.root-astrolabe {
+  min-height: 586px;
+  border: 1px solid rgba(151, 104, 47, .64);
+  border-radius: 4px;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(213, 166, 76, .08), transparent 36%),
+    radial-gradient(circle at 50% 50%, transparent 0 34%, rgba(181, 135, 64, .1) 35% 35.8%, transparent 37% 53%, rgba(181, 135, 64, .13) 54% 54.8%, transparent 56%),
+    url("/assets/cultivation-system/root-system-bg.png") 37% 52% / cover no-repeat;
+  box-shadow: inset 0 0 44px rgba(0, 0, 0, .5);
+}
+
+.root-astrolabe::before {
+  inset: 8%;
+  border-color: rgba(215, 170, 85, .26);
+  box-shadow:
+    inset 0 0 0 1px rgba(209, 165, 82, .16),
+    inset 0 0 50px rgba(20, 79, 67, .12),
+    0 0 32px rgba(211, 164, 82, .1);
+}
+
+.root-astrolabe::after {
+  background:
+    radial-gradient(circle at 50% 50%, transparent 0 48%, rgba(8, 10, 9, .24) 75%),
+    linear-gradient(135deg, rgba(240, 195, 103, .06), transparent 42%);
+}
+
+.root-astrolabe .root-counter-lines {
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  color: rgba(229, 191, 104, .72);
+}
+
+.root-astrolabe .root-counter-lines marker path {
+  fill: currentColor;
+}
+
+.root-astrolabe .root-counter-lines path {
+  stroke: currentColor;
+  stroke-width: .72;
+  opacity: .78;
+  marker-end: url("#rootArrow");
+  filter: drop-shadow(0 0 4px rgba(224, 174, 82, .3));
+}
+
+.root-astrolabe .root-counter-lines path.active {
+  stroke-width: 1.2;
+  opacity: 1;
+}
+
+.root-astrolabe .root-counter-node {
+  --node-size: 112px;
+  min-height: var(--node-size);
+  filter: drop-shadow(0 12px 16px rgba(0, 0, 0, .42));
+}
+
+.root-astrolabe .root-counter-node.special {
+  --node-size: 94px;
+}
+
+.root-ring-art {
+  inset: 0;
+  border: 2px solid rgba(216, 170, 86, .58);
+  border-radius: 999px;
+  background-size: cover;
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 230, 158, .16),
+    inset 0 -12px 18px rgba(0, 0, 0, .32),
+    0 0 18px color-mix(in srgb, var(--root-color, #73b87a) 42%, transparent);
+}
+
+.root-astrolabe .root-counter-node.primary .root-ring-art,
+.root-astrolabe .root-counter-node.owned .root-ring-art,
+.root-astrolabe .root-counter-node.highlighted .root-ring-art,
+.root-astrolabe .root-counter-node:hover .root-ring-art,
+.root-astrolabe .root-counter-node:focus-visible .root-ring-art {
+  border-color: rgba(238, 207, 116, .9);
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 243, 186, .28),
+    inset 0 -12px 18px rgba(0, 0, 0, .28),
+    0 0 24px color-mix(in srgb, var(--root-color, #73b87a) 65%, transparent),
+    0 0 0 4px rgba(233, 203, 116, .12);
+}
+
+.root-astrolabe .root-counter-orb {
+  top: auto;
+  bottom: 6px;
+  width: 36px;
+  height: 28px;
+  border-radius: 2px;
+  background: rgba(16, 17, 14, .75);
+  color: #f6dd9a;
+  font: 900 21px/1 "KaiTi", "STKaiti", "Microsoft YaHei", serif;
+  box-shadow: inset 0 0 0 1px rgba(239, 202, 119, .35);
+  transform: translateX(-50%);
+}
+
+.root-detail-panel {
+  padding: 26px 28px;
+  border: 1px solid rgba(146, 103, 46, .6);
+  border-radius: 4px;
+  background:
+    radial-gradient(circle at 88% 12%, rgba(122, 84, 39, .1), transparent 15rem),
+    linear-gradient(180deg, rgba(218, 201, 164, .98), rgba(191, 168, 121, .98));
+  color: #2f2416;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 244, 205, .28),
+    inset 0 -18px 34px rgba(81, 53, 23, .08);
+}
+
+.root-detail-kicker {
+  width: fit-content;
+  border: 1px solid rgba(101, 70, 34, .38);
+  border-radius: 3px;
+  background: linear-gradient(180deg, rgba(92, 69, 39, .96), rgba(55, 42, 27, .96));
+  color: #f4daa0;
+  font: 900 17px/1 "KaiTi", "STKaiti", "Microsoft YaHei", serif;
+  padding: 9px 18px;
+}
+
+.root-detail-head {
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 20px;
+  align-items: center;
+  margin: 20px 0 18px;
+}
+
+.root-detail-icon {
+  width: 92px;
+  height: 92px;
+  border: 2px solid rgba(92, 63, 30, .65);
+  border-radius: 999px;
+  background: #14241c;
+  box-shadow: 0 10px 18px rgba(54, 35, 16, .18);
+}
+
+.root-detail-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
+.root-detail-head h4 {
+  color: #276736;
+  font: 900 44px/1 "KaiTi", "STKaiti", "Microsoft YaHei", serif;
+}
+
+.root-detail-head p {
+  color: #5f4a2b;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.root-detail-panel > p:not(.muted) {
+  color: #3d2c19;
+  font-size: 19px;
+  line-height: 1.8;
+}
+
+.root-detail-stats {
+  display: grid;
+  gap: 12px;
+  margin: 22px 0;
+}
+
+.root-detail-stats > div {
+  display: grid;
+  grid-template-columns: 116px minmax(0, 1fr);
+  min-height: 58px;
+  border: 1px solid rgba(95, 68, 34, .28);
+  background: rgba(232, 218, 183, .42);
+}
+
+.root-detail-stats span {
+  display: grid;
+  place-items: center;
+  border-right: 1px solid rgba(95, 68, 34, .24);
+  background: rgba(61, 47, 29, .88);
+  color: #ecd18f;
+  font: 900 17px/1 "KaiTi", "STKaiti", "Microsoft YaHei", serif;
+}
+
+.root-detail-stats strong {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  color: #332413;
+  font-size: 16px;
+  line-height: 1.55;
+  padding: 10px 14px;
+}
+
+.root-detail-panel .muted {
+  border-top: 1px solid rgba(95, 68, 34, .28);
+  color: #3b2b19;
+  font-size: 16px;
+  line-height: 1.7;
+  padding-top: 16px;
+}
+
+.progression-surface .panel:first-child {
+  padding-bottom: 18px;
+}
+
+.progression-surface .realm-stage-picker {
+  grid-template-columns: repeat(9, minmax(104px, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.progression-surface .realm-stage-button {
+  display: grid;
+  place-items: center;
+  min-height: 112px;
+  border: 0;
+  border-radius: 4px;
+  background:
+    url("/assets/cultivation-system/realm-stage-idle.png") center / 100% 100% no-repeat;
+  color: #d6b977;
+  padding: 0 12px;
+  text-align: center;
+  box-shadow: none;
+}
+
+.progression-surface .realm-stage-button strong {
+  color: #f2d28b;
+  font: 900 31px/1 "KaiTi", "STKaiti", "Microsoft YaHei", serif;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, .6);
+}
+
+.progression-surface .realm-stage-button span {
+  color: #c6a66a;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.progression-surface .realm-stage-button.current,
+.progression-surface .realm-stage-button.active {
+  background-image: url("/assets/cultivation-system/realm-stage-selected.png");
+  color: #ecf6cc;
+  filter: drop-shadow(0 0 10px rgba(116, 216, 138, .25));
+  transform: translateY(-2px);
+}
+
+.progression-surface .realm-stage-button.current strong,
+.progression-surface .realm-stage-button.active strong {
+  color: #f5e4a4;
+}
+
+.progression-surface .realm-stage {
+  margin-top: 14px;
+  padding: 18px;
+}
+
+.progression-surface .realm-table-head,
+.progression-surface .realm-row {
+  grid-template-columns: minmax(130px, .82fr) minmax(190px, 1.18fr) minmax(150px, .9fr) minmax(150px, .86fr) minmax(130px, .72fr);
+}
+
+.progression-surface .realm-table-head {
+  gap: 0;
+  border: 1px solid rgba(166, 116, 54, .45);
+  border-bottom: 0;
+  background: linear-gradient(180deg, rgba(216, 192, 147, .96), rgba(188, 158, 101, .95));
+  color: #312311;
+  font: 900 15px/1.2 "KaiTi", "STKaiti", "Microsoft YaHei", serif;
+  padding: 0;
+}
+
+.progression-surface .realm-table-head span,
+.progression-surface .realm-row > span,
+.progression-surface .realm-row > div {
+  min-width: 0;
+  border-right: 1px solid rgba(119, 82, 39, .34);
+  padding: 10px 12px;
+}
+
+.progression-surface .realm-table-head span:last-child,
+.progression-surface .realm-row > span:last-child {
+  border-right: 0;
+}
+
+.progression-surface .realm-grid {
+  gap: 0;
+  border: 1px solid rgba(166, 116, 54, .45);
+  border-top: 0;
+}
+
+.progression-surface .realm-row {
+  gap: 0;
+  min-height: 48px;
+  border: 0;
+  border-top: 1px solid rgba(126, 88, 43, .32);
+  border-radius: 0;
+  background: linear-gradient(90deg, rgba(209, 196, 165, .96), rgba(188, 174, 143, .94));
+  color: #372814;
+  padding: 0;
+}
+
+.progression-surface .realm-row.passed {
+  background: linear-gradient(90deg, rgba(209, 196, 165, .96), rgba(188, 174, 143, .94));
+  opacity: 1;
+}
+
+.progression-surface .realm-row.current {
+  position: relative;
+  border-top-color: rgba(240, 207, 103, .84);
+  outline: 2px solid rgba(85, 214, 137, .78);
+  outline-offset: -2px;
+  background:
+    radial-gradient(circle at 10% 50%, rgba(104, 232, 142, .32), transparent 12rem),
+    linear-gradient(90deg, rgba(217, 233, 190, .98), rgba(183, 210, 171, .98));
+  color: #162916;
+  box-shadow:
+    inset 5px 0 0 rgba(75, 201, 112, .95),
+    inset 0 0 0 1px rgba(255, 241, 160, .54),
+    inset 0 0 24px rgba(72, 179, 111, .2),
+    0 0 0 1px rgba(238, 199, 93, .72),
+    0 0 18px rgba(93, 221, 128, .28);
+}
+
+.progression-surface .realm-row strong {
+  color: inherit;
+  font-size: 16px;
+}
+
+.progression-surface .realm-row small {
+  color: rgba(238, 218, 166, .72);
+  font-size: 12px;
+}
+
+.progression-surface .realm-row > span {
+  color: inherit;
+  font-size: 15px;
+  white-space: normal;
+}
+
+.progression-surface .realm-row > span:last-child {
+  color: #efd489;
+  font-weight: 900;
+}
+
+.skills-surface > .panel {
+  display: grid;
+  grid-template-columns: minmax(420px, .85fr) minmax(430px, 1fr);
+  gap: 16px;
+}
+
+.skills-surface > .panel .section-head {
+  grid-column: 1 / -1;
+  justify-content: center;
+  text-align: center;
+}
+
+.skills-surface .skill-hero {
+  --skill-image: none;
+  display: grid;
+  grid-template-columns: 124px minmax(0, 1fr);
+  gap: 22px;
+  align-items: center;
+  align-self: stretch;
+  height: 100%;
+  min-height: 236px;
+  padding: 20px 22px 18px;
+  border: 1px solid rgba(154, 108, 49, .56);
+  border-radius: 4px;
+  border-left: 1px solid rgba(154, 108, 49, .56);
+  background:
+    linear-gradient(90deg, rgba(215, 194, 153, .94), rgba(186, 163, 116, .9)),
+    radial-gradient(circle at 82px 50%, rgba(42, 117, 93, .24), transparent 70px);
+  box-shadow: inset 0 0 0 1px rgba(255, 241, 191, .24);
+}
+
+.skills-surface .skill-hero::before {
+  display: none;
+}
+
+.skills-surface .skill-hero-icon {
+  width: 124px;
+  height: 124px;
+  display: block;
+  border: 2px solid rgba(76, 55, 27, .72);
+  border-radius: 4px;
+  background:
+    var(--skill-image) center / cover no-repeat,
+    radial-gradient(circle at 50% 36%, rgba(55, 128, 101, .46), transparent 54%),
+    linear-gradient(135deg, rgba(24, 90, 73, .96), rgba(14, 16, 14, .96));
+  box-shadow: 0 10px 18px rgba(0, 0, 0, .26);
+}
+
+.skills-surface .skill-hero-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 2px;
+}
+
+.skills-surface .skill-hero-icon > span {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: #f5df9e;
+  font: 900 48px/1 "KaiTi", "STKaiti", "Microsoft YaHei", serif;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, .56);
+}
+
+.skills-surface .skill-hero-icon > span::before {
+  content: "";
+  position: absolute;
+  inset: 14px;
+  border: 1px solid rgba(235, 201, 116, .28);
+  border-radius: 999px;
+  box-shadow: inset 0 0 18px rgba(244, 218, 142, .08);
+}
+
+.skills-surface .skill-hero-main {
+  display: grid;
+  gap: 14px;
+}
+
+.skills-surface .skill-hero strong {
+  color: #33200e;
+  font: 900 31px/1.1 "KaiTi", "STKaiti", "Microsoft YaHei", serif;
+}
+
+.skills-surface .skill-hero span {
+  color: #2e2418;
+  font-size: 17px;
+  line-height: 1.75;
+}
+
+.skills-surface .skill-hero .skill-hero-icon > span {
+  color: #f5df9e;
+  font: 900 48px/1 "KaiTi", "STKaiti", "Microsoft YaHei", serif;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, .56);
+}
+
+.skills-surface .skill-meta-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 6px;
+  border-top: 1px solid rgba(92, 65, 32, .25);
+  padding-top: 14px;
+}
+
+.skills-surface .skill-meta-line span {
+  min-width: 92px;
+  color: #2f2417;
+  font-weight: 900;
+}
+
+.skills-surface .skill-upgrade-panel {
+  display: grid;
+  align-content: center;
+  gap: 14px;
+  align-self: stretch;
+  height: 100%;
+  margin-top: 0;
+  padding: 18px;
+  border: 1px solid rgba(154, 108, 49, .56);
+  border-radius: 4px;
+  background: linear-gradient(180deg, rgba(29, 29, 25, .9), rgba(21, 22, 19, .92));
+}
+
+.skills-surface .skill-upgrade-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 0;
+}
+
+.skills-surface .skill-upgrade-summary span {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  border: 1px solid rgba(136, 95, 44, .46);
+  background: rgba(12, 14, 13, .46);
+  color: #e4c782;
+  font-size: 15px;
+  font-weight: 900;
+  padding: 8px 12px;
+}
+
+.skills-surface .skill-upgrade-next {
+  border: 1px solid rgba(136, 95, 44, .36);
+  background: rgba(8, 10, 9, .32);
+  color: #d9c08a;
+  padding: 12px;
+}
+
+.skills-surface .skill-upgrade-next p {
+  color: #efd99e;
+  font-size: 15px;
+}
+
+.skills-surface .skill-upgrade-next small {
+  color: #bddd93;
+}
+
+.skills-surface .skill-upgrade-actions {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+}
+
+.skills-surface .skill-upgrade-actions .primary {
+  min-height: 54px;
+  border-color: rgba(221, 193, 116, .8);
+  border-radius: 4px;
+  background:
+    linear-gradient(180deg, rgba(87, 132, 71, .96), rgba(31, 85, 61, .96));
+  color: #fff2b8;
+  font: 900 20px/1 "KaiTi", "STKaiti", "Microsoft YaHei", serif;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 247, 187, .22),
+    0 8px 14px rgba(0, 0, 0, .28);
+}
+
+.skills-surface .skill-upgrade-actions .meta {
+  color: #e4ca8e;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.skills-surface .skill-grid {
+  grid-template-columns: repeat(3, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.skills-surface .skill-card {
+  --skill-image: none;
+  min-height: 188px;
+  padding: 16px;
+  border: 1px solid rgba(148, 102, 46, .58);
+  border-radius: 4px;
+  background:
+    radial-gradient(circle at 90% 0%, rgba(218, 174, 86, .08), transparent 10rem),
+    linear-gradient(180deg, rgba(213, 194, 154, .98), rgba(180, 155, 107, .96));
+  box-shadow: inset 0 0 0 1px rgba(255, 240, 191, .2), 0 12px 18px rgba(0, 0, 0, .2);
+}
+
+.skills-surface .skill-card.active {
+  border-color: rgba(231, 200, 111, .92);
+  background:
+    radial-gradient(circle at 18% 14%, rgba(130, 224, 144, .3), transparent 8rem),
+    radial-gradient(circle at 92% 0%, rgba(255, 217, 108, .22), transparent 10rem),
+    linear-gradient(180deg, rgba(232, 216, 162, .99), rgba(184, 156, 94, .98));
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 246, 182, .58),
+    inset 0 0 26px rgba(63, 139, 84, .18),
+    0 0 0 2px rgba(232, 196, 91, .52),
+    0 0 22px rgba(128, 224, 134, .22),
+    0 14px 24px rgba(0, 0, 0, .28);
+}
+
+.skills-surface .skill-card.active .skill-card-title span {
+  border-color: rgba(45, 109, 70, .6);
+  background: linear-gradient(180deg, rgba(55, 119, 74, .96), rgba(26, 79, 58, .96));
+  color: #fff0b6;
+}
+
+.skills-surface .skill-card.active .skill-rank-badge {
+  border-color: rgba(105, 74, 25, .52);
+  background: linear-gradient(180deg, rgba(255, 239, 166, .98), rgba(207, 160, 67, .92));
+  color: #36210b;
+}
+
+.skills-surface .skill-card::after {
+  opacity: .09;
+}
+
+.skills-surface .skill-card-icon {
+  width: 86px;
+  height: 86px;
+  border: 2px solid rgba(65, 45, 23, .68);
+  border-radius: 4px;
+  background: #151811;
+}
+
+.skills-surface .skill-card-head {
+  grid-template-columns: 86px minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.skills-surface .skill-card-title strong {
+  color: #2c1c0d;
+  font: 900 21px/1.2 "KaiTi", "STKaiti", "Microsoft YaHei", serif;
+}
+
+.skills-surface .skill-card-title span,
+.skills-surface .skill-card-effect,
+.skills-surface .skill-card-meta span {
+  color: #352617;
+}
+
+.skills-surface .skill-card-title span {
+  width: fit-content;
+  border: 1px solid rgba(70, 99, 49, .35);
+  background: rgba(80, 103, 50, .18);
+  line-height: 1.2;
+  font-weight: 900;
+  padding: 3px 7px;
+}
+
+.skills-surface .skill-rank-badge {
+  border-color: rgba(61, 45, 25, .45);
+  border-radius: 3px;
+  background: rgba(42, 34, 23, .9);
+  color: #f0d591;
+}
+
+.skills-surface .skill-card-effect {
+  font-size: 15px;
+  line-height: 1.72;
+}
+
+.skills-surface .skill-card-meta {
+  border-top-color: rgba(72, 51, 27, .24);
+}
+
+.skills-surface .skill-card-meta svg {
+  color: #22725c;
+}
+
+.skills-surface .skill-rank-popover {
+  left: 14px;
+  right: 14px;
+  border: 1px solid rgba(157, 113, 51, .68);
+  border-radius: 4px;
+  background: rgba(28, 29, 25, .98);
+  color: #e8cf91;
+}
+
+.skills-surface .skill-rank-popover-head {
+  background: rgba(28, 29, 25, .98);
+  border-bottom-color: rgba(157, 113, 51, .34);
+}
+
+.skills-surface .skill-rank-popover-head strong,
+.skills-surface .skill-rank-row strong {
+  color: #f0d891;
+}
+
+.skills-surface .skill-rank-popover-head span,
+.skills-surface .skill-rank-row small,
+.skills-surface .skill-rank-row span,
+.skills-surface .skill-rank-row p {
+  color: #d3ba80;
+}
+
+.skills-surface .skill-rank-row.current {
+  background: rgba(39, 94, 70, .32);
+}
+
+@media (max-width: 1320px) {
+  .progression-surface .realm-stage-picker {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .skills-surface > .panel {
+    grid-template-columns: 1fr;
+  }
+
+  .skills-surface .skill-grid {
+    grid-template-columns: repeat(2, minmax(260px, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .root-astrolabe-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .root-astrolabe {
+    min-height: 520px;
+  }
+
+  .progression-surface .realm-table-head,
+  .progression-surface .realm-row {
+    grid-template-columns: minmax(120px, 1fr) minmax(160px, 1.2fr) minmax(120px, .9fr) minmax(120px, .9fr) minmax(110px, .8fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .cultivation-subtabs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .cultivation-subtabs .segment {
+    min-height: 50px;
+    font-size: 20px;
+  }
+
+  .cultivation-surface {
+    padding: 10px;
+  }
+
+  .root-astrolabe {
+    min-height: 430px;
+  }
+
+  .root-astrolabe .root-counter-node {
+    --node-size: 78px;
+  }
+
+  .root-astrolabe .root-counter-node.special {
+    --node-size: 68px;
+  }
+
+  .root-astrolabe .root-counter-orb {
+    width: 28px;
+    height: 22px;
+    font-size: 16px;
+  }
+
+  .progression-surface .realm-stage-picker,
+  .skills-surface .skill-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .progression-surface .realm-table-head {
+    display: none;
+  }
+
+  .progression-surface .realm-row {
+    grid-template-columns: 1fr;
+  }
+
+  .progression-surface .realm-row > span,
+  .progression-surface .realm-row > div {
+    border-right: 0;
+    border-bottom: 1px solid rgba(119, 82, 39, .22);
+  }
+
+  .skills-surface .skill-hero {
+    grid-template-columns: 1fr;
+    padding: 16px;
+  }
+
+  .skills-surface .skill-hero-icon {
+    justify-self: center;
+  }
+
+  .skills-surface .skill-upgrade-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Cultivation sub-navigation plaque refinement. */
+.view.active.cultivation-nav-surface {
+  position: relative;
+  z-index: 3;
+  margin: 0 0 -2px;
+  padding: 0;
+  background: transparent;
+}
+
+.view.active.cultivation-nav-surface > .cultivation-nav-panel {
+  position: relative;
+  min-height: 76px;
+  overflow: visible;
+  padding: 14px 24px 0;
+  border: 0;
+  border-radius: 0;
+  background:
+    linear-gradient(180deg, rgba(5, 8, 8, .92), rgba(18, 20, 18, .98) 52%, rgba(6, 8, 7, .98)),
+    radial-gradient(circle at 92% 20%, rgba(203, 150, 66, .12), transparent 20rem);
+  box-shadow:
+    inset 0 1px 0 rgba(220, 170, 76, .5),
+    inset 0 4px 0 rgba(17, 12, 7, .88),
+    inset 0 -1px 0 rgba(231, 178, 84, .66),
+    inset 0 -7px 0 rgba(9, 10, 8, .92),
+    inset 0 -9px 0 rgba(168, 116, 49, .58);
+}
+
+.view.active.cultivation-nav-surface > .cultivation-nav-panel::before,
+.view.active.cultivation-nav-surface > .cultivation-nav-panel::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+}
+
+.view.active.cultivation-nav-surface > .cultivation-nav-panel::before {
+  top: 7px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(230, 181, 91, .55), transparent);
+}
+
+.view.active.cultivation-nav-surface > .cultivation-nav-panel::after {
+  bottom: 12px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(245, 198, 98, .48), transparent);
+}
+
+.view.active.cultivation-nav-surface .cultivation-subtabs {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: flex-start;
+  align-items: flex-end;
+  gap: 18px;
+  max-width: none;
+  min-height: 58px;
+  margin: 0 0 0 26px;
+}
+
+.view.active.cultivation-nav-surface .cultivation-subtabs .segment {
+  flex: 0 0 clamp(148px, 15vw, 220px);
+  min-height: 52px;
+  padding: 9px 14px 11px;
+  border: 2px solid rgba(142, 99, 48, .78);
+  border-bottom-color: rgba(197, 143, 63, .72);
+  border-radius: 2px 2px 0 0;
+  clip-path: polygon(8% 0, 92% 0, 100% 16%, 100% 100%, 0 100%, 0 16%);
+  background:
+    linear-gradient(180deg, rgba(40, 42, 37, .98), rgba(17, 20, 18, .98)),
+    radial-gradient(circle at 50% 0%, rgba(218, 165, 78, .1), transparent 58%);
+  color: #cdb37a;
+  font-size: 23px;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 221, 150, .07),
+    inset 0 -10px 16px rgba(0, 0, 0, .22),
+    0 0 0 1px rgba(20, 12, 7, .7),
+    0 8px 14px rgba(0, 0, 0, .3);
+}
+
+.view.active.cultivation-nav-surface .cultivation-subtabs .segment::before {
+  content: "";
+  position: absolute;
+  inset: 7px 11px;
+  border: 1px solid rgba(190, 138, 65, .32);
+  clip-path: inherit;
+  pointer-events: none;
+}
+
+.view.active.cultivation-nav-surface .cultivation-subtabs .segment.active {
+  min-height: 64px;
+  margin-bottom: -1px;
+  padding-top: 12px;
+  border-color: rgba(151, 105, 51, .88);
+  border-bottom-color: rgba(215, 179, 109, .92);
+  background:
+    radial-gradient(circle at 50% 12%, rgba(255, 248, 211, .42), transparent 58%),
+    radial-gradient(circle at 18px 18px, rgba(91, 59, 25, .045) 0 1px, transparent 1.4px),
+    linear-gradient(180deg, rgba(235, 218, 176, .99), rgba(192, 159, 101, .98));
+  color: #17110a;
+  text-shadow: 0 1px 0 rgba(255, 247, 213, .78);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 245, 198, .42),
+    inset 0 -12px 18px rgba(100, 68, 29, .1),
+    0 0 0 1px rgba(55, 32, 13, .72),
+    0 -2px 18px rgba(236, 192, 103, .16);
+}
+
+.view.active.cultivation-nav-surface .cultivation-subtabs .segment.active::after {
+  content: "";
+  position: absolute;
+  left: 32%;
+  right: 32%;
+  bottom: -1px;
+  height: 7px;
+  border: 1px solid rgba(133, 87, 38, .72);
+  border-top: 0;
+  background: linear-gradient(180deg, rgba(210, 178, 118, .98), rgba(121, 82, 39, .92));
+}
+
+@media (max-width: 900px) {
+  .view.active.cultivation-nav-surface > .cultivation-nav-panel {
+    min-height: 76px;
+    padding-inline: 12px;
+  }
+
+  .view.active.cultivation-nav-surface .cultivation-subtabs {
+    gap: 10px;
+    margin-left: 0;
+  }
+
+  .view.active.cultivation-nav-surface .cultivation-subtabs .segment {
+    flex: 1 1 0;
+    min-width: 0;
+    font-size: 21px;
+  }
+}
+
+/* Keep root-node hover hit areas stable, especially for the inner special roots. */
+.root-astrolabe .root-counter-node,
+.root-astrolabe .root-counter-node:hover,
+.root-astrolabe .root-counter-node:focus-visible {
+  transform: translate(-50%, -50%);
+}
+
+.root-astrolabe .root-counter-node .root-ring-art,
+.root-astrolabe .root-counter-node .root-counter-orb {
+  pointer-events: none;
+}
+
+.root-astrolabe .root-counter-node .root-ring-art {
+  transform-origin: center;
+  transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease;
+}
+
+.root-astrolabe .root-counter-node:hover .root-ring-art,
+.root-astrolabe .root-counter-node:focus-visible .root-ring-art,
+.root-astrolabe .root-counter-node.highlighted .root-ring-art {
+  transform: scale(1.055);
 }
