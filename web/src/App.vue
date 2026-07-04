@@ -1183,10 +1183,12 @@
                     v-for="defender in defendersFor(territory)"
                     :key="`${territory.id}-${defender.id}`"
                     class="defender-chip icon-only"
-                    :title="defender.name"
-                    :aria-label="defender.name"
+                    :title="defenderTooltip(defender)"
+                    :aria-label="defenderTooltip(defender)"
+                    tabindex="0"
                   >
                     <CharacterPortrait :person="defender" size="xs" />
+                    <span class="defender-tooltip" role="tooltip">{{ defenderTooltip(defender) }}</span>
                   </span>
                 </span>
                 <span v-else>未派驻</span>
@@ -4421,6 +4423,10 @@ function defenderNames(territory) {
 function defendersFor(territory) {
   const ids = new Set(territory.defenders || []);
   return cultivators.value.filter((person) => ids.has(person.id));
+}
+
+function defenderTooltip(defender) {
+  return `${defender.name} · ${realmName(defender.realm)}`;
 }
 
 const cultivators = computed(() => [
