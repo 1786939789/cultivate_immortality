@@ -3434,15 +3434,16 @@ button.event {
 
 .resource-pill {
   position: relative;
-  min-height: 36px;
-  border: 1px solid rgba(90, 65, 30, .16);
-  border-radius: 4px;
-  background: rgba(255, 251, 232, .48);
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   color: #24444a;
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 5px 8px;
+  padding: 0;
   font: 900 16px/1.1 "Cinzel", "Georgia", "Microsoft YaHei", sans-serif;
 }
 
