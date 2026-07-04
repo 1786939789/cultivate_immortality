@@ -48,7 +48,7 @@ export function clearCachedState() {
 }
 
 export function getState(scope = "full") {
-  const suffix = scope === "lite" ? "?scope=lite" : "";
+  const suffix = scope === "full" ? "" : `?scope=${encodeURIComponent(scope)}`;
   return request(`/api/state${suffix}`);
 }
 

@@ -3,17 +3,21 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import initSqlJs from "sql.js";
-import { clearProgressHistory, compactStateForStorage, createDefaultState, ensureStateShape, getPublicState, preserveProfilesForReset, settleIfNeeded } from "./gameLogic.mjs";
+import { clearProgressHistory, compactStateForStorage, createDefaultState, dateKey, ensureStateShape, getPublicState, minReplayDayFor, preserveProfilesForReset, settleIfNeeded } from "./gameLogic.mjs";
 
 const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const dataDir = join(rootDir, "data");
-const dbPath = join(dataDir, "game.sqlite");
+const dbPath = process.env.GAME_DB_PATH || join(dataDir, "game.sqlite");
 const wasmPath = join(rootDir, "node_modules", "sql.js", "dist", "sql-wasm.wasm");
 
 mkdirSync(dataDir, { recursive: true });
 
 let dbPromise;
 const stateCache = new Map();
+const stateValidationCache = new Map();
+const publicStateCache = new Map();
+let deferredPersistTimer = null;
+let deferredPersistDb = null;
 
 async function openDb() {
   if (!dbPromise) {
@@ -41,6 +45,14 @@ async function openDb() {
           updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
       `);
+      db.run(`
+        CREATE TABLE IF NOT EXISTS save_meta (
+          id TEXT PRIMARY KEY,
+          day INTEGER NOT NULL,
+          last_settlement_date TEXT,
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
       db.run("CREATE INDEX IF NOT EXISTS idx_battle_replays_save ON battle_replays (save_id);");
       persist(db);
       return db;
@@ -53,12 +65,84 @@ function persist(db) {
   writeFileSync(dbPath, Buffer.from(db.export()));
 }
 
+function schedulePersist(db) {
+  deferredPersistDb = db;
+  if (deferredPersistTimer) return;
+  deferredPersistTimer = setTimeout(() => {
+    deferredPersistTimer = null;
+    const targetDb = deferredPersistDb;
+    deferredPersistDb = null;
+    if (!targetDb) return;
+    persist(targetDb);
+  }, 1200);
+}
+
+function flushDeferredPersist() {
+  if (deferredPersistTimer) {
+    clearTimeout(deferredPersistTimer);
+    deferredPersistTimer = null;
+  }
+  if (!deferredPersistDb) return;
+  const targetDb = deferredPersistDb;
+  deferredPersistDb = null;
+  persist(targetDb);
+}
+
+process.once("beforeExit", flushDeferredPersist);
+process.once("SIGINT", () => {
+  flushDeferredPersist();
+  process.exit(130);
+});
+process.once("SIGTERM", () => {
+  flushDeferredPersist();
+  process.exit(143);
+});
+
+function readSaveMeta(db, id = "default") {
+  const metaResult = db.exec("SELECT day, last_settlement_date FROM save_meta WHERE id = $id LIMIT 1", { $id: id });
+  if (metaResult.length && metaResult[0].values.length) {
+    const [day, lastSettlementDate] = metaResult[0].values[0];
+    return { day: Number(day) || 1, lastSettlementDate: lastSettlementDate || "" };
+  }
+  const result = db.exec("SELECT state_json FROM saves WHERE id = $id", { $id: id });
+  if (!result.length || !result[0].values.length) return null;
+  const raw = String(result[0].values[0][0] || "");
+  const dayMatch = raw.match(/"day"\s*:\s*(\d+)/);
+  const lastSettlementMatch = raw.match(/"lastSettlementDate"\s*:\s*"([^"]*)"/);
+  return {
+    day: dayMatch ? Number(dayMatch[1]) || 1 : 1,
+    lastSettlementDate: lastSettlementMatch ? lastSettlementMatch[1] : ""
+  };
+}
+
+function writeSaveMeta(db, state, id = "default") {
+  const statement = db.prepare(`
+    INSERT INTO save_meta (id, day, last_settlement_date, updated_at)
+    VALUES ($id, $day, $lastSettlementDate, datetime('now'))
+    ON CONFLICT(id) DO UPDATE SET
+      day = excluded.day,
+      last_settlement_date = excluded.last_settlement_date,
+      updated_at = excluded.updated_at
+  `);
+  try {
+    statement.run({
+      $id: id,
+      $day: Number(state.day || 1) || 1,
+      $lastSettlementDate: state.lastSettlementDate || ""
+    });
+  } finally {
+    statement.free();
+  }
+}
+
 export async function readState(id = "default") {
   const cached = stateCache.get(id);
   if (cached) {
+    if (stateValidationCache.get(id) === dateKey()) return cached;
     const shapeChanged = ensureStateShape(cached);
     const settled = settleIfNeeded(cached);
     if (shapeChanged || settled) await writeState(cached, id);
+    else stateValidationCache.set(id, dateKey());
     return cached;
   }
 
@@ -77,13 +161,16 @@ export async function readState(id = "default") {
   const settled = settleIfNeeded(state);
   const replaysMigrated = extractBattleReplays(db, state, id);
   if (shapeChanged || settled || replaysMigrated) await writeState(state, id);
+  else stateValidationCache.set(id, dateKey());
   return state;
 }
 
-export async function writeState(state, id = "default") {
+export async function writeState(state, id = "default", options = {}) {
   const db = await openDb();
-  extractBattleReplays(db, state, id);
-  compactStateForStorage(state);
+  writePendingBattleReplays(db, state, id);
+  if (!options.skipReplayExtraction) extractBattleReplays(db, state, id);
+  compactStateForStorage(state, { skipReplayCompaction: options.skipReplayExtraction });
+  pruneBattleReplays(db, state, id);
   const statement = db.prepare(`
     INSERT INTO saves (id, state_json, updated_at)
     VALUES ($id, $state, datetime('now'))
@@ -93,8 +180,51 @@ export async function writeState(state, id = "default") {
   `);
   statement.run({ $id: id, $state: JSON.stringify(state) });
   statement.free();
+  writeSaveMeta(db, state, id);
   stateCache.set(id, state);
-  persist(db);
+  stateValidationCache.set(id, dateKey());
+  publicStateCache.delete(id);
+  if (options.deferPersist) schedulePersist(db);
+  else persist(db);
+}
+
+function pruneBattleReplays(db, state, saveId) {
+  const minDay = minReplayDayFor(state.day || 1);
+  const statement = db.prepare("DELETE FROM battle_replays WHERE save_id = $saveId AND day IS NOT NULL AND day < $minDay");
+  try {
+    statement.run({ $saveId: saveId, $minDay: minDay });
+  } finally {
+    statement.free();
+  }
+}
+
+function writePendingBattleReplays(db, state, saveId) {
+  const pending = Array.isArray(state.__pendingBattleReplays) ? state.__pendingBattleReplays : [];
+  if (!pending.length) return false;
+  const statement = db.prepare(`
+    INSERT INTO battle_replays (id, save_id, kind, day, match_id, replay_json, updated_at)
+    VALUES ($id, $saveId, $kind, $day, $matchId, $replay, datetime('now'))
+    ON CONFLICT(id) DO UPDATE SET
+      replay_json = excluded.replay_json,
+      updated_at = excluded.updated_at
+  `);
+  try {
+    for (const item of pending) {
+      if (!item?.id || !item.replay) continue;
+      statement.run({
+        $id: item.id,
+        $saveId: saveId,
+        $kind: item.kind || item.replay.kind || "battle",
+        $day: Number(item.day || item.replay.day || 0) || null,
+        $matchId: item.matchId || "",
+        $replay: JSON.stringify(item.replay)
+      });
+    }
+  } finally {
+    statement.free();
+    delete state.__pendingBattleReplays;
+  }
+  return true;
 }
 
 function extractBattleReplays(db, state, saveId) {
@@ -177,10 +307,18 @@ export async function readBattleReplay(replayId, id = "default") {
   return replay;
 }
 
+export async function readReplayMeta(id = "default") {
+  const db = await openDb();
+  const meta = readSaveMeta(db, id);
+  if (!meta) return { day: 1, lastSettlementDate: "" };
+  return meta;
+}
+
 export async function mutateState(mutator, id = "default", options = {}) {
   const state = await readState(id);
   const result = mutator(state);
-  await writeState(state, id);
+  await writeState(state, id, options.storageOptions);
+  if (options.resultOnly) return { result };
   const publicState = getPublicState(state, options.publicOptions);
   return result === undefined ? publicState : { state: publicState, result };
 }
@@ -200,7 +338,12 @@ export async function resetState(id = "default", options = {}) {
   const replayStatement = db.prepare("DELETE FROM battle_replays WHERE save_id = $id");
   replayStatement.run({ $id: id });
   replayStatement.free();
+  const metaStatement = db.prepare("DELETE FROM save_meta WHERE id = $id");
+  metaStatement.run({ $id: id });
+  metaStatement.free();
   stateCache.delete(id);
+  stateValidationCache.delete(id);
+  publicStateCache.delete(id);
   persist(db);
 
   const state = preserveProfilesForReset(clearProgressHistory(createDefaultState()), previousState);
@@ -209,6 +352,12 @@ export async function resetState(id = "default", options = {}) {
 }
 
 export async function publicState(id = "default", options = {}) {
+  const scope = ["home", "lite"].includes(options.scope) ? options.scope : "full";
+  const cached = publicStateCache.get(id);
+  if (cached?.date === dateKey() && cached?.[scope]) return cached[scope];
   const state = await readState(id);
-  return getPublicState(state, options);
+  const nextState = getPublicState(state, options);
+  const nextCache = { ...(cached?.date === dateKey() ? cached : {}), date: dateKey(), [scope]: nextState };
+  publicStateCache.set(id, nextCache);
+  return nextState;
 }

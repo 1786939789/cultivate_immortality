@@ -27,7 +27,7 @@ import {
   upgradePlayerSkill,
   useItem
 } from "./gameLogic.mjs";
-import { mutateState, publicState, readBattleReplay, readState, resetState } from "./store.mjs";
+import { mutateState, publicState, readBattleReplay, readReplayMeta, readState, resetState } from "./store.mjs";
 
 const port = Number(process.env.PORT || 8787);
 const rootDir = fileURLToPath(new URL("../", import.meta.url));
@@ -43,6 +43,8 @@ const liteActionRoutes = new Set([
   "/api/rest",
   "/api/day/advance",
   "/api/sect/mission",
+  "/api/duel",
+  "/api/duels/day",
   "/api/items/buy",
   "/api/items/use"
 ]);
@@ -95,7 +97,8 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "GET" && url.pathname === "/api/state") {
-    const scope = url.searchParams.get("scope") === "lite" ? "lite" : "full";
+    const requestedScope = url.searchParams.get("scope");
+    const scope = ["home", "lite"].includes(requestedScope) ? requestedScope : "full";
     sendJson(res, 200, await publicState("default", { scope }));
     return;
   }
@@ -103,7 +106,7 @@ async function handleApi(req, res, url) {
   if (req.method === "GET" && url.pathname === "/api/duels/replay") {
     const replayId = url.searchParams.get("id");
     if (replayId) {
-      const state = await readState("default");
+      const state = await readReplayMeta("default");
       const replay = await readBattleReplay(replayId);
       assertReplayDayAllowed(state, replay.day || replayDayFromId(replayId));
       sendJson(res, 200, { replay: getPublicReplay(replay) });
@@ -126,7 +129,7 @@ async function handleApi(req, res, url) {
   if (req.method === "GET" && url.pathname === "/api/battles/replay") {
     const replayId = url.searchParams.get("id");
     if (!replayId) throw new Error("缺少战斗回放 ID");
-    const state = await readState("default");
+    const state = await readReplayMeta("default");
     const replay = await readBattleReplay(replayId);
     assertReplayDayAllowed(state, replay.day || replayDayFromId(replayId));
     sendJson(res, 200, { replay: getPublicReplay(replay) });
@@ -175,7 +178,11 @@ async function handleApi(req, res, url) {
 
   const requestedScope = body.scope === "lite" || body.scope === "full" ? body.scope : "";
   const scope = requestedScope || (liteActionRoutes.has(url.pathname) ? "lite" : "full");
-  sendJson(res, 200, await mutateState(mutator, "default", { publicOptions: { scope } }));
+  const storageOptions = url.pathname === "/api/duel" || url.pathname === "/api/duels/day"
+    ? { skipReplayExtraction: true, deferPersist: true }
+    : undefined;
+  const resultOnly = url.pathname === "/api/duels/day";
+  sendJson(res, 200, await mutateState(mutator, "default", { publicOptions: { scope }, storageOptions, resultOnly }));
 }
 
 async function serveStatic(req, res, url) {

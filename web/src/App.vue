@@ -1360,7 +1360,7 @@
         </teleport>
 
         <section v-if="activeTab === 'arena'" class="view active cultivation-surface arena-surface">
-          <div v-if="!lastBattle" class="panel">
+          <div v-if="!lastBattle && !replayLoading" class="panel">
             <h3>人物切磋</h3>
             <p>第 {{ duelSeasonInfo.season }} 赛季 · 第 {{ duelSeasonInfo.seasonDay }} / {{ duelSeasonInfo.length }} 天。胜利 +{{ duelSeasonInfo.winScore }} 分，失败 {{ duelSeasonInfo.lossScore }} 分，积分范围 0-{{ duelSeasonInfo.maxScore }}。</p>
             <div class="duel-rank-table" aria-label="切磋段位分数表">
@@ -1388,7 +1388,7 @@
             </div>
           </div>
 
-          <div v-if="!lastBattle" class="duel-day-board">
+          <div v-if="!lastBattle && !replayLoading" class="duel-day-board">
             <div class="panel section-head compact">
               <div>
                 <h3>{{ selectedDuelDate }} 对阵</h3>
@@ -1455,7 +1455,14 @@
             <div class="empty" v-else>没有找到 {{ selectedDuelDate }} 的切磋记录。</div>
           </div>
 
-          <div v-else class="battle-detail">
+          <div v-else-if="replayLoading" class="panel replay-loading-panel">
+            <div class="loading-orb" aria-hidden="true"></div>
+            <h3>正在读取战斗回放</h3>
+            <p>战报玉简正在展开，请稍候。</p>
+            <button class="secondary" type="button" @click="returnFromBattle">{{ battleBackLabel }}</button>
+          </div>
+
+          <div v-else-if="lastBattle" class="battle-detail">
             <div class="panel battle-header">
               <div>
                 <h3>切磋实况</h3>
@@ -2567,6 +2574,7 @@ const selectedProvinceWarId = ref("");
 const provinceWarSearch = ref("");
 const lastBattle = ref(null);
 const battleReturnTarget = ref(null);
+const replayLoading = ref(false);
 const battleCursor = ref(0);
 const invalidReplayIds = ref(new Set());
 const countdown = ref("--:--:--");
@@ -2761,6 +2769,7 @@ const playerPortraitPerson = computed(() => ({
   portraitUrl: playerPortraitUrl.value
 }));
 const combatSkills = computed(() => catalog.value.combatSkills?.length ? catalog.value.combatSkills : [fallbackSkill]);
+const homeSummary = computed(() => gameState.value.home || {});
 const skillUpgrade = computed(() => derived.value.skillUpgrade || {});
 const skillUpgradePlan = computed(() => derived.value.skillUpgradePlan || []);
 const playerSkill = computed(() => skillUpgrade.value.current || player.value.effectiveSkill || skillById(player.value.skillId));
@@ -3066,14 +3075,17 @@ const filteredEquipment = computed(() => equipmentList.value
     return true;
   })
   .sort(compareEquipmentForMode));
-const showcaseEquipment = computed(() => filteredEquipment.value.slice(0, 10).map((item) => ({
-  ...item,
-  shortName: equipmentShortName(item.name)
-})));
+const showcaseEquipment = computed(() => {
+  const source = homeSummary.value.equipment?.length ? homeSummary.value.equipment : filteredEquipment.value.slice(0, 10);
+  return source.map((item) => ({
+    ...item,
+    shortName: equipmentShortName(item.name)
+  }));
+});
 const featuredDungeon = computed(() => ({
-  title: selectedDungeonDay.value?.bloodTrial?.caves?.[0]?.name || "幽冥地宫 · 三层",
+  title: homeSummary.value.dungeonSummary?.title || selectedDungeonDay.value?.bloodTrial?.caves?.[0]?.name || "幽冥地宫 · 三层",
   realm: derived.value.nextRealm || realmName(player.value.realm),
-  summary: todayDungeonSummary.value
+  summary: homeSummary.value.dungeonSummary?.summary || todayDungeonSummary.value
 }));
 const todayDungeonSummary = computed(() => {
   const day = dungeonDays.value.find((item) => item.day === gameState.value.day) || selectedDungeonDay.value;
@@ -3085,6 +3097,7 @@ const todayDungeonSummary = computed(() => {
   ];
 });
 const homeLogs = computed(() => {
+  if (homeSummary.value.logs?.length) return homeSummary.value.logs;
   const currentDay = Number(gameState.value.day || 0);
   const recentFloor = currentDay > 0 ? Math.max(1, currentDay - 2) : 0;
   return mainLogs.value
@@ -3092,6 +3105,17 @@ const homeLogs = computed(() => {
     .slice(0, 30);
 });
 const homeRanking = computed(() => {
+  if (homeSummary.value.ranking?.length) {
+    const top = homeSummary.value.ranking.map((item) => ({ ...item, kind: "person" }));
+    if (top.some((item) => item.id === "player")) return top;
+    return [...top.slice(0, 4), {
+      id: "player",
+      kind: "person",
+      name: player.value.name,
+      value: derived.value.playerPower,
+      rank: homeSummary.value.playerRank || playerRank.value
+    }];
+  }
   const top = powerRanking.value.slice(0, 5).map((item, index) => ({ ...item, rank: index + 1 }));
   if (top.some((item) => item.id === "player")) return top;
   return [...top.slice(0, 4), {
@@ -3108,13 +3132,17 @@ const homePodium = computed(() => {
 });
 const homeRankRows = computed(() => homeRanking.value.slice(3));
 const playerRank = computed(() => {
+  if (homeSummary.value.playerRank) return homeSummary.value.playerRank;
   const index = powerRanking.value.findIndex((item) => item.id === "player");
   return index >= 0 ? index + 1 : "-";
 });
-const todayDuelCount = computed(() => todaysDuelRecord.value?.matches?.filter((match) => {
-  const ids = [match.left?.id, match.right?.id, match.winner?.id, match.loser?.id].filter(Boolean);
-  return ids.includes("player");
-}).length || 0);
+const todayDuelCount = computed(() => {
+  if (typeof homeSummary.value.todayDuelCount === "number") return homeSummary.value.todayDuelCount;
+  return todaysDuelRecord.value?.matches?.filter((match) => {
+    const ids = [match.left?.id, match.right?.id, match.winner?.id, match.loser?.id].filter(Boolean);
+    return ids.includes("player");
+  }).length || 0;
+});
 const provinceWarRecords = computed(() => gameState.value.provinceWars || []);
 const provinceTerritories = computed(() => {
   const owners = new Map((gameState.value.provinces || []).map((item) => [item.id, item]));
@@ -3131,6 +3159,7 @@ const provinceTerritories = computed(() => {
 });
 const occupiedProvinceCount = computed(() => provinceTerritories.value.filter((item) => item.owner).length);
 const homeSectTerritorySummary = computed(() => {
+  if (homeSummary.value.sectTerritorySummary) return homeSummary.value.sectTerritorySummary;
   const sectName = player.value.sect || gameState.value.sect?.name || "";
   const provinces = provinceTerritories.value
     .filter((province) => province.owner === sectName)
@@ -5075,9 +5104,22 @@ function captureBattleReturn() {
 
 function openBattleReplay(replay, target = captureBattleReturn()) {
   if (!replay) return;
+  replayLoading.value = false;
   battleReturnTarget.value = target;
   lastBattle.value = replay;
   playBattle();
+}
+
+function openReplayLoading(target = captureBattleReturn()) {
+  battleReturnTarget.value = target;
+  lastBattle.value = null;
+  battleCursor.value = 0;
+  clearInterval(battleTimer);
+  replayLoading.value = true;
+}
+
+function cancelReplayLoading() {
+  replayLoading.value = false;
 }
 
 function hasReplay(record) {
@@ -5127,6 +5169,7 @@ async function openReplay(record, fallbackRecord = null, target = captureBattleR
     return;
   }
   if (!source.replayId) return;
+  openReplayLoading(target);
   setActionPending("/api/battles/replay", true);
   try {
     const response = await getBattleReplay(source.replayId);
@@ -5145,6 +5188,7 @@ async function openReplay(record, fallbackRecord = null, target = captureBattleR
     openBattleReplay(response.replay, target);
     error.value = "";
   } catch (err) {
+    cancelReplayLoading();
     error.value = err.message;
   } finally {
     setActionPending("/api/battles/replay", false);
@@ -5168,6 +5212,7 @@ function returnFromBattle() {
 function closeBattleReplay() {
   lastBattle.value = null;
   battleReturnTarget.value = null;
+  replayLoading.value = false;
   battleCursor.value = 0;
   clearInterval(battleTimer);
 }
@@ -6104,7 +6149,7 @@ function mergeGameState(current, incoming, options = {}) {
       derived: incomingState.derived || {}
     };
   }
-  if (incoming.__scope !== "lite" || !current) {
+  if (!["home", "lite"].includes(incoming.__scope) || !current) {
     const { __scope, ...fullState } = incoming;
     return fullState;
   }
@@ -6123,6 +6168,7 @@ function mergeGameState(current, incoming, options = {}) {
     tasks: incoming.tasks || current.tasks || [],
     taskDefinitions: incoming.taskDefinitions || current.taskDefinitions || [],
     taskCompletions: incoming.taskCompletions || current.taskCompletions || [],
+    home: incoming.home || current.home || {},
     catalog: current.catalog || {},
     derived: {
       ...(current.derived || {}),
@@ -6133,9 +6179,9 @@ function mergeGameState(current, incoming, options = {}) {
 
 function applyState(nextState, options = {}) {
   state.value = mergeGameState(state.value, nextState, options);
-  if (state.value) saveCachedState(state.value);
-  if (nextState?.__scope !== "lite") fullStateStale.value = false;
-  else if (options.markStale) fullStateStale.value = true;
+  if (state.value && nextState?.__scope === "home") saveCachedState(state.value);
+  if (!["home", "lite"].includes(nextState?.__scope)) fullStateStale.value = false;
+  else fullStateStale.value = true;
 }
 
 function syncSelectedDays() {
@@ -6173,10 +6219,15 @@ async function act(path, body = {}, options = {}) {
   setActionPending(path, true);
   try {
     const response = await postAction(path, body, options);
-    const nextState = response.state || response;
-    applyState(nextState, options);
-    syncSelectedDays();
-    if (nextState?.__scope === "lite" && (options.markStale || shouldMarkFullStateStale(path))) {
+    const nextState = response.state || (response.result !== undefined ? null : response);
+    if (nextState) {
+      applyState(nextState, options);
+      syncSelectedDays();
+      if (nextState?.__scope === "lite" && (options.markStale || shouldMarkFullStateStale(path))) {
+        fullStateStale.value = true;
+        if (!options.deferFullRefresh && needsHeavyState(activeTab.value)) ensureFullState();
+      }
+    } else if (options.markStale || shouldMarkFullStateStale(path)) {
       fullStateStale.value = true;
       if (!options.deferFullRefresh && needsHeavyState(activeTab.value)) ensureFullState();
     }
@@ -6196,6 +6247,10 @@ function shouldMarkFullStateStale(path) {
 
 function needsHeavyState(tab = activeTab.value) {
   return ["dungeon", "sect", "arena", "equipment", "rank", "admin"].includes(tab);
+}
+
+function needsLiteState(tab = activeTab.value) {
+  return ["cultivation", "tasks"].includes(tab);
 }
 
 function playBattle() {
@@ -6222,9 +6277,10 @@ function clearBattleReplay() {
 
 async function openDuelReplay(record) {
   if (!hasReplay(record)) return;
-  await openReplay(record);
+  const target = captureBattleReturn();
   activeTab.value = "arena";
   detailView.value = "rank";
+  await openReplay(record, null, target);
 }
 
 async function openMatchReplay(match, dayRecord) {
@@ -6237,6 +6293,7 @@ async function openMatchReplay(match, dayRecord) {
     await openReplay(match);
     return;
   }
+  openReplayLoading(captureBattleReturn());
   setActionPending("/api/duels/replay", true);
   try {
     const response = await getDuelReplay(dayRecord?.day || selectedDuelDay.value, match.id);
@@ -6245,6 +6302,7 @@ async function openMatchReplay(match, dayRecord) {
     openBattleReplay(response.replay);
     error.value = "";
   } catch (err) {
+    cancelReplayLoading();
     error.value = err.message;
   } finally {
     setActionPending("/api/duels/replay", false);
@@ -6295,10 +6353,22 @@ function changeProvinceWarDay(offset) {
 }
 
 async function startDailyDuels() {
-  const result = await act("/api/duels/day");
+  const result = await act("/api/duels/day", {}, { scope: "lite", markStale: true, deferFullRefresh: true });
   if (!result) return;
+  upsertDuelDayRecord(result);
   selectedDuelDay.value = result.day;
   clearBattleReplay();
+}
+
+function upsertDuelDayRecord(record) {
+  if (!record || !state.value) return;
+  const current = gameState.value.duelDays || [];
+  const next = [record, ...current.filter((item) => item.day !== record.day)]
+    .sort((a, b) => (Number(b.day) || 0) - (Number(a.day) || 0));
+  state.value = {
+    ...state.value,
+    duelDays: next
+  };
 }
 
 async function submitTask() {
@@ -6468,9 +6538,11 @@ onMounted(async () => {
   if (cachedState) {
     state.value = cachedState;
     loading.value = false;
+    fullStateStale.value = true;
     syncSelectedDays();
   }
-  await refresh("full");
+  await refresh("home");
+  if (needsHeavyState(activeTab.value)) ensureFullState();
   window.addEventListener("resize", resizeChinaMap);
   window.addEventListener("keydown", handleMapFullscreenKey);
 });
@@ -6499,6 +6571,8 @@ watch([state, activeTab, activeSectSubTab], async () => {
 watch(activeTab, () => {
   if (needsHeavyState(activeTab.value) && state.value && fullStateStale.value) {
     ensureFullState();
+  } else if (needsLiteState(activeTab.value) && state.value && fullStateStale.value) {
+    refresh("lite");
   }
   if (activeTab.value === "admin") {
     if (adminMode.value === "cultivators") syncAdminCultivatorDraft(adminCultivatorPerson.value);
