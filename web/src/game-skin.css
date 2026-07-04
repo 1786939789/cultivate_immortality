@@ -990,14 +990,14 @@ body::before {
 }
 
 .sidebar {
-  position: sticky;
+  position: static;
   top: 88px;
   align-self: start;
   height: fit-content;
-  max-height: calc(100vh - 104px);
+  max-height: none;
   gap: 0;
   padding: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .sidebar .stats,
@@ -4040,7 +4040,7 @@ body::before {
 }
 
 .sidebar {
-  position: sticky;
+  position: static;
   z-index: 25;
   top: 84px;
   overflow: visible;
@@ -5904,10 +5904,9 @@ body::before {
   display: flex;
   flex-direction: column;
   gap: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  max-height: calc(100vh - 104px);
-  scrollbar-width: thin;
+  overflow: visible;
+  max-height: none;
+  scrollbar-width: auto;
 }
 
 .sidebar .avatar,
