@@ -3785,3 +3785,817 @@ body::before {
     transform: none;
   }
 }
+
+/* Home dashboard redesign, matched to the approved game-system concept. */
+:root {
+  --home-bg-dark: #090b0b;
+  --home-ink: #20160d;
+  --home-paper: #e8d8b6;
+  --home-paper-bright: #f8edd0;
+  --home-gold: #c89749;
+  --home-gold-soft: rgba(218, 171, 87, .52);
+  --home-lacquer: #14120f;
+  --home-lacquer-2: #242016;
+  --home-jade: #285c4d;
+  --home-jade-bright: #80d59a;
+  --home-red: #823125;
+}
+
+body {
+  color: var(--home-ink);
+  background:
+    linear-gradient(180deg, rgba(7, 8, 8, .72), rgba(7, 8, 8, .28) 42%, rgba(7, 8, 8, .5)),
+    radial-gradient(circle at 28% 4%, rgba(225, 177, 89, .2), transparent 28rem),
+    url("/assets/xianxia/home-dashboard-bg.png") center top / cover fixed,
+    #080908;
+  overflow-x: hidden;
+}
+
+body::before {
+  opacity: .22;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, .08), transparent 22%, rgba(0, 0, 0, .36)),
+    repeating-linear-gradient(90deg, transparent 0 54px, rgba(245, 216, 151, .04) 55px 56px);
+  mix-blend-mode: normal;
+}
+
+.app {
+  width: min(1920px, 100%);
+  padding: 0 18px 18px;
+}
+
+.topbar {
+  min-height: 68px;
+  margin: 0 -18px 10px;
+  padding: 7px 24px 7px 34px;
+  gap: 18px;
+  border-bottom: 1px solid rgba(224, 180, 96, .45);
+  background:
+    linear-gradient(180deg, rgba(23, 22, 19, .98), rgba(8, 9, 8, .98)),
+    radial-gradient(circle at 8% 0%, rgba(215, 170, 89, .22), transparent 17rem);
+  box-shadow:
+    inset 0 -1px 0 rgba(255, 232, 166, .14),
+    0 14px 28px rgba(0, 0, 0, .38);
+}
+
+.brand {
+  flex: 0 0 clamp(190px, 13.2vw, 250px);
+  min-height: 50px;
+}
+
+.brand h1 {
+  color: #f1dfb7;
+  font-size: clamp(36px, 2.9vw, 56px);
+  font-weight: 900;
+  letter-spacing: 0;
+  text-shadow:
+    0 3px 0 #090806,
+    0 0 16px rgba(242, 207, 139, .34);
+}
+
+.brand h1::after {
+  content: "传真";
+  width: 25px;
+  height: 36px;
+  margin-left: 10px;
+  border: 1px solid rgba(249, 219, 160, .44);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #96382c, #5d1d18);
+  box-shadow: inset 0 1px 0 rgba(255, 235, 185, .28), 0 4px 10px rgba(0, 0, 0, .26);
+  font-size: 11px;
+}
+
+.hero {
+  min-width: 0;
+}
+
+.hero-content {
+  height: 48px;
+  gap: 18px;
+}
+
+.resource-strip {
+  gap: 12px;
+}
+
+.resource-chip {
+  min-width: 104px;
+  height: 42px;
+  grid-template-columns: 28px auto minmax(0, 1fr);
+  gap: 8px;
+  padding: 5px 12px 5px 7px;
+  border-color: rgba(218, 171, 87, .68);
+  color: #f7e8bf;
+  background:
+    linear-gradient(180deg, rgba(38, 33, 24, .96), rgba(11, 11, 10, .96)),
+    radial-gradient(circle at 24px 50%, rgba(47, 128, 101, .45), transparent 32px);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 235, 176, .12),
+    0 3px 9px rgba(0, 0, 0, .32);
+}
+
+.resource-chip .stat-icon {
+  width: 27px;
+  height: 27px;
+  color: #f2d17a;
+  background: radial-gradient(circle, rgba(63, 142, 106, .95), rgba(13, 48, 40, .98));
+}
+
+.resource-chip small {
+  color: #f6e6bf;
+  font-size: 15px;
+}
+
+.resource-chip strong {
+  color: #fff4cc;
+  font-size: 17px;
+}
+
+.loot-ticker {
+  flex: 1 1 820px;
+  max-width: none;
+  min-width: 420px;
+  height: 42px;
+  border-radius: 0;
+  border-color: rgba(172, 124, 58, .62);
+  color: #f4dfac;
+  background:
+    linear-gradient(90deg, transparent 0 10px, rgba(82, 55, 24, .38) 10px 12px, transparent 12px calc(100% - 12px), rgba(82, 55, 24, .38) calc(100% - 12px) calc(100% - 10px), transparent calc(100% - 10px)),
+    linear-gradient(180deg, rgba(32, 27, 19, .96), rgba(11, 11, 10, .94));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 227, 160, .1),
+    0 3px 10px rgba(0, 0, 0, .28);
+}
+
+.loot-ticker-track {
+  overflow: hidden;
+  contain: paint;
+}
+
+.loot-ticker-label {
+  color: #f1cf76;
+}
+
+.quick {
+  flex: 0 0 auto;
+  gap: 9px;
+}
+
+.quick .settlement-card {
+  min-width: 158px;
+  height: 42px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  color: #cdb586;
+  background: transparent;
+}
+
+.quick .settlement-card span {
+  color: #d2b373;
+  font-size: 15px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.quick .settlement-card strong {
+  color: #ffd68b;
+  font: 900 20px/1 Georgia, serif;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.quick .settlement-card small {
+  display: none;
+}
+
+.quick button {
+  width: auto;
+  min-width: 100px;
+  height: 42px;
+  min-height: 42px;
+  padding: 0 14px;
+  border-radius: 3px;
+  color: #fff4cc;
+  background:
+    linear-gradient(180deg, rgba(70, 129, 108, .96), rgba(29, 68, 59, .96)),
+    url("/assets/kenney/ui-pack-rpg-expansion/PNG/buttonLong_brown.png") center / 100% 100%;
+  border-color: rgba(218, 171, 87, .72);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 243, 196, .28),
+    inset 0 -2px 0 rgba(0, 0, 0, .2),
+    0 5px 10px rgba(0, 0, 0, .28);
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.quick button::before {
+  content: none;
+}
+
+.quick .danger {
+  color: #ffead0;
+  background:
+    linear-gradient(180deg, rgba(124, 54, 42, .98), rgba(82, 31, 27, .98)),
+    url("/assets/kenney/ui-pack-rpg-expansion/PNG/buttonLong_brown.png") center / 100% 100%;
+  border-color: rgba(195, 109, 81, .66);
+}
+
+.layout {
+  grid-template-columns: clamp(300px, 22.5vw, 405px) minmax(0, 1fr);
+  gap: 18px;
+  min-height: calc(100vh - 86px);
+}
+
+.sidebar,
+.main {
+  border: 2px solid rgba(184, 133, 65, .76);
+  border-radius: 5px;
+  background:
+    linear-gradient(180deg, rgba(21, 23, 21, .86), rgba(13, 15, 14, .88)),
+    radial-gradient(circle at 50% 0%, rgba(232, 190, 104, .14), transparent 18rem);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 234, 166, .16),
+    0 20px 36px rgba(0, 0, 0, .38);
+}
+
+.sidebar {
+  top: 84px;
+  overflow: visible;
+  padding: 12px;
+  min-width: 0;
+}
+
+.sidebar::before,
+.main::before {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  pointer-events: none;
+  border: 1px solid rgba(205, 151, 71, .36);
+  border-radius: 4px;
+}
+
+.avatar {
+  min-height: clamp(210px, 16.8vw, 272px);
+  margin: 0;
+  border: 1px solid rgba(181, 131, 65, .62);
+  border-radius: 4px 4px 0 0;
+  background:
+    radial-gradient(circle at 50% 36%, rgba(211, 171, 87, .16), transparent 96px),
+    linear-gradient(180deg, rgba(21, 24, 23, .22), rgba(8, 10, 9, .48)),
+    url("/assets/xianxia/home-dashboard-bg.png") 24% 42% / 210% auto;
+  box-shadow: inset 0 0 0 1px rgba(255, 230, 165, .1);
+}
+
+.avatar::before {
+  background:
+    radial-gradient(circle at 48% 48%, transparent 0 124px, rgba(204, 152, 71, .2) 126px 128px, transparent 129px),
+    repeating-conic-gradient(from 8deg at 48% 48%, rgba(218, 171, 87, .12) 0deg 5deg, transparent 5deg 16deg),
+    linear-gradient(180deg, rgba(0, 0, 0, .06), rgba(0, 0, 0, .28));
+}
+
+.avatar .character-portrait img {
+  object-position: center 18%;
+  filter: saturate(1.03) contrast(1.04) drop-shadow(0 10px 20px rgba(0, 0, 0, .38));
+}
+
+.name-plaque {
+  right: 20px;
+  top: 43px;
+  border-color: rgba(212, 164, 82, .78);
+  color: #4a2b10;
+  background:
+    radial-gradient(circle at 50% 13px, rgba(95, 56, 20, .28) 0 3px, transparent 4px),
+    linear-gradient(180deg, rgba(255, 245, 208, .98), rgba(218, 184, 121, .98));
+}
+
+.profile-scroll {
+  padding: 10px 12px 9px;
+  border: 1px solid rgba(181, 131, 65, .55);
+  border-top: 0;
+  background:
+    linear-gradient(180deg, rgba(18, 22, 21, .92), rgba(13, 16, 15, .92)),
+    radial-gradient(circle at 50% 0%, rgba(218, 171, 87, .16), transparent 12rem);
+}
+
+.profile-title-row strong {
+  color: #f5dfad;
+  font-size: 23px;
+}
+
+.profile-info-item {
+  min-height: 32px;
+  border-color: rgba(205, 151, 71, .24);
+  color: #dfc891;
+  background: rgba(255, 236, 176, .055);
+  box-shadow: inset 0 1px 0 rgba(255, 236, 176, .05);
+}
+
+.profile-info-item svg,
+.profile-info-item span {
+  color: #b99a61;
+}
+
+.profile-info-item strong {
+  color: #f0dca6;
+}
+
+.profile-progress .bar {
+  height: 7px;
+  border-color: rgba(218, 171, 87, .42);
+  background: rgba(0, 0, 0, .42);
+}
+
+.profile-progress .bar span {
+  background: linear-gradient(90deg, #1f7d67, #86d885);
+}
+
+.stats {
+  padding: 8px 0 0;
+  background: transparent;
+}
+
+.stat {
+  min-height: 39px;
+  border-color: rgba(205, 151, 71, .28);
+  background:
+    linear-gradient(180deg, rgba(255, 236, 176, .085), rgba(255, 236, 176, .035)),
+    rgba(0, 0, 0, .16);
+}
+
+.stat > .stat-icon {
+  color: #d5b777;
+}
+
+.stat b {
+  color: #f4dda8;
+}
+
+.stat span {
+  color: #d0b57a;
+}
+
+.stat-tip {
+  border-color: rgba(218, 171, 87, .36);
+  background: rgba(16, 17, 15, .96);
+  color: #f2ddb0;
+}
+
+.next-realm-card {
+  position: relative;
+  display: grid;
+  gap: 5px;
+  min-height: 118px;
+  margin-top: 12px;
+  padding: 15px 134px 13px 18px;
+  border: 1px solid rgba(205, 151, 71, .44);
+  border-radius: 4px;
+  color: #e8d3a1;
+  background:
+    radial-gradient(circle at calc(100% - 54px) 52%, rgba(198, 149, 68, .28), transparent 50px),
+    linear-gradient(135deg, rgba(24, 26, 23, .94), rgba(10, 12, 11, .9));
+  box-shadow: inset 0 0 0 1px rgba(255, 236, 176, .08);
+  overflow: hidden;
+}
+
+.next-realm-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(9, 11, 10, .26), transparent 48%),
+    radial-gradient(circle at calc(100% - 74px) 64%, rgba(228, 181, 86, .24), transparent 66px);
+}
+
+.next-realm-card::after {
+  content: "";
+  position: absolute;
+  right: -1px;
+  bottom: -12px;
+  z-index: 1;
+  width: 138px;
+  height: 126px;
+  opacity: .92;
+  background: url("/assets/xianxia/incense-burner.png") center bottom / contain no-repeat;
+  filter:
+    drop-shadow(0 8px 14px rgba(0, 0, 0, .48))
+    drop-shadow(0 0 12px rgba(212, 158, 66, .18));
+}
+
+.next-realm-card span {
+  position: relative;
+  z-index: 2;
+  color: #d1b371;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.next-realm-card strong {
+  position: relative;
+  z-index: 2;
+  color: #8bdf98;
+  font-size: 28px;
+  line-height: 1.08;
+  text-shadow: 0 0 16px rgba(83, 202, 132, .24);
+}
+
+.next-realm-card small {
+  position: relative;
+  z-index: 2;
+  color: #c49b55;
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.main {
+  position: relative;
+  padding: 12px 18px 20px;
+  min-width: 0;
+  background:
+    linear-gradient(180deg, rgba(32, 31, 27, .9), rgba(16, 17, 15, .86)),
+    radial-gradient(circle at 8% 0%, rgba(218, 171, 87, .12), transparent 16rem);
+}
+
+.tabs {
+  grid-template-columns: repeat(9, minmax(82px, 1fr));
+  position: relative;
+  z-index: 2;
+  margin: 0 0 20px;
+  border: 1px solid rgba(196, 142, 68, .5);
+  border-radius: 2px;
+  overflow: hidden;
+  background:
+    linear-gradient(90deg, rgba(255, 230, 163, .05), transparent 45%, rgba(255, 230, 163, .04)),
+    linear-gradient(180deg, rgba(43, 39, 31, .98), rgba(16, 18, 16, .98));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 232, 166, .12),
+    0 10px 0 rgba(5, 6, 5, .34),
+    0 14px 18px rgba(0, 0, 0, .22);
+}
+
+.tab {
+  min-height: 72px;
+  border-right: 1px solid rgba(196, 142, 68, .24);
+  color: #c7ad78;
+  background:
+    linear-gradient(180deg, rgba(255, 238, 180, .04), rgba(0, 0, 0, .08));
+  font-size: 18px;
+}
+
+.tab svg {
+  color: #c4a365;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, .55));
+}
+
+.tab.active {
+  color: #ffe4a7;
+  border-bottom: 3px solid #d1a455;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(239, 197, 103, .28), transparent 72%),
+    linear-gradient(180deg, rgba(80, 61, 34, .96), rgba(39, 34, 25, .98));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 232, 166, .16),
+    0 0 18px rgba(209, 164, 85, .16);
+}
+
+.tab.active svg {
+  color: #ffe0a0;
+}
+
+.home-dashboard {
+  gap: 16px;
+  position: relative;
+  z-index: 1;
+}
+
+.game-card {
+  border: 1px solid rgba(187, 132, 59, .68);
+  border-radius: 5px;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 234, 166, .14),
+    0 14px 25px rgba(0, 0, 0, .22);
+}
+
+.scene-card,
+.duel-home {
+  min-height: clamp(214px, 15vw, 280px);
+}
+
+.scene-card::before,
+.duel-home::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  background:
+    linear-gradient(90deg, rgba(5, 7, 8, .36), rgba(5, 7, 8, .03) 56%, rgba(5, 7, 8, .08)),
+    linear-gradient(180deg, rgba(5, 7, 8, .03), rgba(5, 7, 8, .24) 100%);
+}
+
+.scene-card > *,
+.duel-home > * {
+  position: relative;
+  z-index: 1;
+}
+
+.scene-copy {
+  max-width: 68%;
+  gap: 12px;
+}
+
+.scene-copy h4 {
+  font-size: clamp(23px, 1.55vw, 27px);
+}
+
+.scene-status-list span,
+.scene-copy p {
+  font-size: clamp(13px, .86vw, 16px);
+}
+
+.duel-home p {
+  font-size: clamp(14px, .92vw, 17px);
+}
+
+.duel-home .duel-mark {
+  right: 30px;
+  bottom: 38px;
+  top: auto;
+  opacity: .7;
+}
+
+.equipment-home,
+.ranking-home,
+.log-home {
+  color: #4b351d;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(255, 241, 198, .22), transparent 17rem),
+    radial-gradient(circle at 88% 10%, rgba(93, 60, 24, .15), transparent 18rem),
+    radial-gradient(circle at 12px 14px, rgba(91, 59, 25, .065) 0 1px, transparent 1.35px),
+    radial-gradient(circle at 41px 38px, rgba(255, 244, 211, .08) 0 1px, transparent 1.45px),
+    linear-gradient(180deg, rgba(209, 187, 145, .97), rgba(181, 154, 106, .97));
+  background-size:
+    auto,
+    auto,
+    58px 58px,
+    74px 74px,
+    auto;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 241, 193, .22),
+    inset 0 18px 34px rgba(79, 50, 22, .08),
+    inset 0 -20px 28px rgba(72, 45, 20, .08),
+    0 14px 25px rgba(0, 0, 0, .22);
+}
+
+.equipment-home {
+  min-height: 136px;
+  padding-bottom: 14px;
+}
+
+.equipment-home .section-head,
+.ranking-home .section-head,
+.log-home .section-head {
+  border-bottom-color: rgba(80, 51, 23, .28);
+}
+
+.equipment-home .section-head h3,
+.ranking-home .section-head h3,
+.log-home .section-head h3 {
+  color: #5d3a17;
+  text-shadow: 0 1px 0 rgba(255, 240, 197, .62);
+}
+
+.equipment-showcase {
+  grid-template-columns: repeat(14, minmax(58px, 1fr));
+  gap: clamp(6px, .65vw, 10px);
+  padding: 10px 12px 0;
+}
+
+.gear-slot {
+  width: clamp(52px, 4.1vw, 66px);
+  height: clamp(52px, 4.1vw, 66px);
+  min-width: clamp(52px, 4.1vw, 66px);
+}
+
+.gear-slot .equipment-icon {
+  width: calc(100% - 8px);
+  height: calc(100% - 8px);
+}
+
+.gear-slot .equipment-icon img {
+  width: calc(100% - 10px);
+  height: calc(100% - 10px);
+}
+
+.ranking-home,
+.log-home {
+  min-height: 298px;
+}
+
+.rank-podium {
+  min-height: 154px;
+}
+
+.rank-podium-card {
+  background:
+    linear-gradient(180deg, rgba(220, 199, 160, .72), rgba(166, 139, 96, .58)),
+    linear-gradient(90deg, transparent 0 8%, rgba(96, 63, 29, .24) 8% 10%, transparent 10% 90%, rgba(96, 63, 29, .24) 90% 92%, transparent 92%);
+}
+
+.home-rank-list button.self {
+  background: rgba(132, 163, 111, .56);
+}
+
+.battle-log-list > div {
+  min-height: 36px;
+  background: rgba(83, 55, 27, .13);
+  border-color: rgba(78, 50, 23, .17);
+}
+
+.battle-log-list > div.win {
+  background: rgba(117, 153, 95, .34);
+}
+
+.battle-log-list > div.loss {
+  background: rgba(154, 89, 61, .26);
+}
+
+@media (max-width: 1280px) {
+  .app {
+    padding-inline: 12px;
+  }
+
+  .topbar {
+    padding-inline: 18px;
+    margin-inline: -12px;
+  }
+
+  .layout {
+    grid-template-columns: 300px minmax(0, 1fr);
+    gap: 14px;
+  }
+
+  .sidebar {
+    padding: 9px;
+  }
+
+  .avatar {
+    min-height: 292px;
+  }
+
+  .profile-scroll {
+    padding: 10px;
+  }
+
+  .stat {
+    padding-inline: 7px;
+  }
+
+  .stat span {
+    font-size: 13px;
+  }
+
+  .main {
+    padding-inline: 14px;
+  }
+
+  .tab {
+    min-height: 72px;
+    font-size: 16px;
+  }
+
+  .game-card {
+    padding: 12px;
+  }
+
+  .equipment-showcase {
+    grid-template-columns: repeat(14, minmax(44px, 1fr));
+  }
+}
+
+@media (max-width: 1040px) {
+  .topbar {
+    flex-wrap: wrap;
+    min-height: 116px;
+  }
+
+  .brand {
+    flex-basis: 260px;
+  }
+
+  .hero {
+    order: 3;
+    flex-basis: 100%;
+  }
+
+  .hero-content {
+    justify-content: stretch;
+  }
+
+  .loot-ticker {
+    max-width: none;
+  }
+
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: relative;
+    top: auto;
+  }
+
+  .scene-card,
+  .duel-home,
+  .ranking-home,
+  .log-home {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 720px) {
+  .app {
+    padding: 0 10px 12px;
+  }
+
+  .topbar {
+    margin-inline: -10px;
+    padding: 10px;
+  }
+
+  .brand h1 {
+    font-size: 36px;
+  }
+
+  .hero-content,
+  .quick {
+    height: auto;
+    flex-wrap: wrap;
+  }
+
+  .resource-strip,
+  .quick {
+    width: 100%;
+  }
+
+  .resource-chip,
+  .quick .settlement-card,
+  .quick button {
+    flex: 1 1 150px;
+  }
+
+  .tabs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .tab {
+    min-height: 64px;
+    font-size: 15px;
+  }
+
+  .avatar {
+    min-height: 280px;
+  }
+
+  .scene-card,
+  .duel-home {
+    min-height: 250px;
+  }
+
+  .scene-copy {
+    max-width: 100%;
+  }
+
+  .equipment-showcase {
+    grid-template-columns: repeat(auto-fit, minmax(58px, 1fr));
+  }
+
+  .rank-podium {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .rank-podium-card,
+  .rank-podium-card.rank-1 {
+    height: auto;
+    min-height: 112px;
+  }
+
+  .home-rank-list button,
+  .battle-log-list > div {
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+
+  .home-rank-list em,
+  .home-rank-list strong,
+  .battle-log-list time {
+    grid-column: 2;
+  }
+}

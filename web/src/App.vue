@@ -119,6 +119,12 @@
             <small class="stat-tip" role="tooltip">{{ stat.help }}</small>
           </div>
         </section>
+
+        <section class="next-realm-card" aria-label="下一境界">
+          <span>下一境界</span>
+          <strong>{{ derived.nextRealm || realmName(player.realm + 1) }}</strong>
+          <small>还需修为 {{ remainingXp }}</small>
+        </section>
       </aside>
 
       <main class="main">
@@ -2355,7 +2361,7 @@
           <button class="secondary" type="button" @click="closeImageEditor">取消</button>
         </div>
         <div class="crop-preview-wrap">
-          <canvas ref="cropCanvas" class="crop-preview" width="256" height="256"></canvas>
+          <canvas ref="cropCanvas" class="crop-preview" :width="cropOutputSize" :height="cropOutputSize"></canvas>
         </div>
         <div class="crop-controls">
           <label><span>缩放</span><input v-model.number="imageEditor.zoom" type="range" min="1" max="3" step="0.01" @input="drawCropPreview"></label>
@@ -2412,7 +2418,7 @@ import { equipmentCatalog as fallbackEquipmentCatalog, equipmentSlots as fallbac
 import { duelLossScore, duelRanks, duelRankForScore, duelSeasonDay, duelSeasonLength, duelSeasonMaxScore, duelSeasonOfDay, duelWinScore } from "../../shared/duelSeasonData.mjs";
 
 const tabs = [
-  { id: "practice", label: "修炼", icon: Sprout },
+  { id: "practice", label: "首页", icon: Sprout },
   { id: "cultivation", label: "修行体系", icon: Orbit },
   { id: "tasks", label: "现实任务", icon: ScrollText },
   { id: "dungeon", label: "副本", icon: Sword },
@@ -2616,6 +2622,9 @@ const imageEditor = reactive({
   offsetX: 0,
   offsetY: 0
 });
+
+const cropOutputSize = computed(() => imageEditor.target === "sect" ? 256 : 448);
+const cropOutputQuality = computed(() => imageEditor.target === "sect" ? 0.82 : 0.9);
 const chinaMapRef = ref(null);
 const normalMapMount = ref(null);
 const fullscreenMapMount = ref(null);
@@ -3314,6 +3323,8 @@ const stats = computed(() => [
   { label: "神识", icon: "sense", value: statTotal(derived.value.effectiveStats.divineSense), help: "神识更高者优先出手，也会获得闪避机会。" },
   { label: "法力", icon: "mana", value: statTotal(derived.value.effectiveStats.maxMana), help: "用于释放技能，回合战中消耗法力加强攻击。" }
 ]);
+
+const remainingXp = computed(() => Math.max(0, Math.ceil((derived.value.xpNeed || 0) - (player.value.xp || 0))));
 
 function realmName(index) {
   const realmList = catalog.value.realms || [];
@@ -6284,8 +6295,12 @@ function drawCropPreview() {
   const canvas = cropCanvas.value;
   const image = imageEditor.image;
   if (!canvas || !image) return;
-  const size = 256;
+  const size = cropOutputSize.value;
+  if (canvas.width !== size) canvas.width = size;
+  if (canvas.height !== size) canvas.height = size;
   const context = canvas.getContext("2d");
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
   context.clearRect(0, 0, size, size);
   context.fillStyle = "#f7edd7";
   context.fillRect(0, 0, size, size);
@@ -6304,7 +6319,7 @@ function applyCroppedImage() {
   drawCropPreview();
   const canvas = cropCanvas.value;
   if (!canvas) return;
-  const dataUrl = canvas.toDataURL("image/webp", 0.82);
+  const dataUrl = canvas.toDataURL("image/webp", cropOutputQuality.value);
   if (imageEditor.target === "sect") adminSectDraft.portraitUrl = dataUrl;
   else adminCultivatorDraft.portraitUrl = dataUrl;
   closeImageEditor();

@@ -5269,7 +5269,7 @@ function normalizePortraitUrl(value) {
   if (!/^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+/=]+$/i.test(text)) {
     throw new Error("头像必须是压缩后的图片数据。");
   }
-  if (Buffer.byteLength(text, "utf8") > 240_000) {
+  if (Buffer.byteLength(text, "utf8") > 900_000) {
     throw new Error("头像数据仍然过大，请裁剪或压缩后再保存。");
   }
   return text;
