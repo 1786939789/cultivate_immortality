@@ -1136,9 +1136,18 @@
                   <strong>{{ sect.name }}</strong>
                 </div>
                 <span class="rank-number">{{ sect.provinceCount }}</span>
-                <span class="resource-pill spirit">{{ resourcePlanValue(sect.resourcePlan?.spirit, "spirit") }}</span>
-                <span class="resource-pill xp">{{ resourcePlanValue(sect.resourcePlan?.xp, "xp") }}</span>
-                <span class="resource-pill breakthrough">{{ resourcePlanValue(sect.resourcePlan?.breakthrough, "breakthrough") }}</span>
+                <span class="resource-pill spirit" aria-label="灵石总包">
+                  <Coins :size="18" :stroke-width="2.6" aria-hidden="true" />
+                  <b>{{ resourcePlanValue(sect.resourcePlan?.spirit, "spirit") }}</b>
+                </span>
+                <span class="resource-pill xp" aria-label="经验总包">
+                  <Sparkles :size="18" :stroke-width="2.6" aria-hidden="true" />
+                  <b>{{ resourcePlanValue(sect.resourcePlan?.xp, "xp") }}</b>
+                </span>
+                <span class="resource-pill breakthrough" aria-label="突破总包">
+                  <Zap :size="18" :stroke-width="2.6" aria-hidden="true" />
+                  <b>{{ resourcePlanValue(sect.resourcePlan?.breakthrough, "breakthrough") }}</b>
+                </span>
                 <p>{{ sect.provinceNames.slice(0, 5).join("、") || "暂无占领省份" }}</p>
               </article>
             </div>
@@ -2423,6 +2432,7 @@ import {
   BadgeCent,
   CircleUserRound,
   Cloud,
+  Coins,
   Dna,
   Dumbbell,
   Flame,
@@ -2436,6 +2446,7 @@ import {
   Route,
   ScrollText,
   Settings,
+  Sparkles,
   Sprout,
   Sun,
   Sword,
@@ -4331,7 +4342,7 @@ function bonusItemsText(items, type) {
 function resourcePlanValue(plan, type) {
   if (!plan || !Number(plan.total)) return type === "spirit" ? "0" : "+0%";
   const total = Number(plan.total) || 0;
-  if (type === "spirit") return `${Math.round(total)} 灵石`;
+  if (type === "spirit") return `${Math.round(total)}`;
   return `+${Math.round(total * 100)}%`;
 }
 

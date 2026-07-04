@@ -3416,49 +3416,76 @@ button.event {
 
 .rank-number {
   justify-self: center;
-  border-radius: 999px;
-  background: rgba(39, 82, 76, .12);
-  color: #1f514d;
-  padding: 4px 9px;
-  font-weight: 900;
+  min-width: 42px;
+  color: #5c3a10;
+  font: 1000 22px/1 "Cinzel", "Georgia", "KaiTi", "STKaiti", serif;
+  text-align: center;
+  text-shadow:
+    0 1px 0 rgba(255, 248, 215, .86),
+    0 0 10px rgba(171, 116, 36, .26);
+}
+
+.sect-rank-table .rank-number {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
 }
 
 .resource-pill {
   position: relative;
   min-height: 36px;
-  border: 1px solid rgba(90, 65, 30, .2);
+  border: 1px solid rgba(90, 65, 30, .16);
   border-radius: 4px;
-  background: rgba(255, 251, 232, .64);
-  color: #23464a;
+  background: rgba(255, 251, 232, .48);
+  color: #24444a;
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 6px 8px;
-  font-weight: 900;
+  padding: 5px 8px;
+  font: 900 16px/1.1 "Cinzel", "Georgia", "Microsoft YaHei", sans-serif;
 }
 
-.resource-pill::before {
-  content: "";
-  width: 16px;
-  height: 16px;
+.resource-pill svg {
+  width: 20px;
+  height: 20px;
   flex: 0 0 auto;
+  padding: 3px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #fff7c6, #2d8175 72%);
-  box-shadow: inset 0 0 0 1px rgba(34, 50, 42, .18);
+  color: #fff7d6;
+  background:
+    radial-gradient(circle at 34% 26%, rgba(255, 255, 235, .95), rgba(245, 185, 75, .72) 28%, transparent 31%),
+    linear-gradient(145deg, #2f8178, #16524e);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 246, 202, .36),
+    0 2px 5px rgba(63, 43, 18, .2);
 }
 
-.resource-pill.xp::before {
-  background: radial-gradient(circle at 35% 30%, #f4edff, #6065b9 72%);
+.resource-pill b {
+  display: inline-block;
+  min-width: 0;
+  letter-spacing: .01em;
 }
 
-.resource-pill.breakthrough::before {
-  background: radial-gradient(circle at 35% 30%, #fff8ce, #c28b31 72%);
+.resource-pill.xp svg {
+  background:
+    radial-gradient(circle at 34% 26%, rgba(255, 255, 255, .96), rgba(199, 190, 255, .74) 28%, transparent 31%),
+    linear-gradient(145deg, #6674d8, #393a91);
+}
+
+.resource-pill.breakthrough svg {
+  background:
+    radial-gradient(circle at 34% 26%, rgba(255, 255, 238, .96), rgba(255, 211, 99, .75) 28%, transparent 31%),
+    linear-gradient(145deg, #c48c2e, #835312);
 }
 
 .sect-rank-table .sect-territory-card p {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: #4c3417;
+  font: 900 18px/1.25 "KaiTi", "STKaiti", "Microsoft YaHei", serif;
+  letter-spacing: .03em;
 }
 
 .territory-stats.compact {
