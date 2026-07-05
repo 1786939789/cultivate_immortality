@@ -1701,31 +1701,63 @@ body::before {
 .duel-skill-row .skill-chip {
   position: relative;
   display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
   gap: 3px;
   min-width: 0;
   width: 50%;
   min-height: 48px;
-  padding: 8px 10px 8px 48px;
+  padding: 7px 10px 7px 8px;
   border: 1px solid rgba(74, 134, 204, .55);
   border-radius: 4px;
   color: #e9d19a;
   background:
-    radial-gradient(circle at 24px 50%, rgba(56, 161, 224, .8) 0 14px, rgba(18, 45, 76, .95) 15px 23px, transparent 24px),
+    radial-gradient(circle at 25px 50%, rgba(56, 161, 224, .24) 0 20px, transparent 21px),
     linear-gradient(180deg, rgba(22, 31, 35, .96), rgba(8, 12, 13, .98));
 }
 
-.duel-skill-row .skill-chip span:first-child {
+.duel-skill-row .skill-chip-icon {
+  grid-row: 1 / span 2;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  align-self: center;
+  border: 1px solid rgba(103, 178, 225, .72);
+  border-radius: 50%;
+  color: #cfeeff;
+  font-size: 15px;
+  font-weight: 1000;
+  background:
+    radial-gradient(circle at 36% 30%, rgba(255, 255, 255, .32), transparent 34%),
+    linear-gradient(135deg, rgba(34, 90, 120, .98), rgba(8, 19, 29, .98));
+  box-shadow:
+    inset 0 0 10px rgba(109, 202, 255, .26),
+    0 0 10px rgba(36, 143, 206, .25);
+  overflow: hidden;
+}
+
+.duel-skill-row .skill-chip-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.duel-skill-row .skill-chip-title {
+  min-width: 0;
   overflow: hidden;
   font-size: 13px;
   font-weight: 900;
+  line-height: 1.25;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
 .duel-skill-row .skill-chip small {
+  min-width: 0;
   color: #c49b50;
   font-size: 11px;
   font-weight: 800;
+  line-height: 1.2;
 }
 
 .duel-skill-row.muted-row {

@@ -1614,12 +1614,20 @@
 
                   <div class="duel-skill-row">
                     <div class="skill-chip" tabindex="0">
-                      <span>{{ skillLabel(lastBattle.left) }}</span>
+                      <span class="skill-chip-icon" aria-hidden="true">
+                        <img v-if="skillIconPath(lastBattle.left)" :src="skillIconPath(lastBattle.left)" alt="">
+                        <span v-else>{{ skillIconGlyph(lastBattle.left) }}</span>
+                      </span>
+                      <span class="skill-chip-title">{{ skillLabel(lastBattle.left) }}</span>
                       <small>进攻 (1)</small>
                       <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.left) }}</span>
                     </div>
                     <div class="skill-chip" tabindex="0">
-                      <span>{{ skillLabel(lastBattle.right) }}</span>
+                      <span class="skill-chip-icon" aria-hidden="true">
+                        <img v-if="skillIconPath(lastBattle.right)" :src="skillIconPath(lastBattle.right)" alt="">
+                        <span v-else>{{ skillIconGlyph(lastBattle.right) }}</span>
+                      </span>
+                      <span class="skill-chip-title">{{ skillLabel(lastBattle.right) }}</span>
                       <small>应变 (2)</small>
                       <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.right) }}</span>
                     </div>
@@ -3678,6 +3686,14 @@ function skillGlyph(skill) {
 
 function skillAssetPath(skill) {
   return skillAssetPaths[skill?.id] || "";
+}
+
+function skillIconPath(target) {
+  return skillAssetPath(skillForDisplay(target));
+}
+
+function skillIconGlyph(target) {
+  return skillGlyph(skillForDisplay(target));
 }
 
 function skillVisualStyle(skill) {
