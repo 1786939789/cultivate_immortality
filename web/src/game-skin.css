@@ -7071,6 +7071,104 @@ body::before {
   height: 32px;
 }
 
+.arena-surface.view.active .duel-console-shell .duel-replay-panel.live {
+  box-sizing: border-box;
+  height: 600px;
+  min-height: 600px;
+  grid-template-rows: auto 292px 74px minmax(0, 1fr);
+}
+
+.arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-arena-stage {
+  box-sizing: border-box;
+  min-height: 292px;
+  height: 292px;
+  grid-template-columns: minmax(0, 1fr) 92px minmax(0, 1fr);
+  align-items: stretch;
+  padding: 14px 16px 12px;
+  background:
+    linear-gradient(180deg, rgba(6, 10, 11, .06), rgba(6, 10, 11, .34)),
+    url("/assets/home-cards/duel-arena.png") center / cover no-repeat;
+}
+
+.arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-fighter {
+  display: grid;
+  grid-template-rows: 72px 22px 18px 18px 34px 34px;
+  align-content: start;
+  gap: 3px;
+  min-width: 0;
+}
+
+.arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-fighter.right {
+  justify-items: end;
+}
+
+.arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-fighter .character-portrait.lg {
+  width: 68px;
+  height: 68px;
+}
+
+.arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-fighter strong,
+.arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-fighter small {
+  overflow: hidden;
+  max-width: 100%;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-fighter strong {
+  font-size: 16px;
+}
+
+.arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-fighter .meter {
+  width: min(168px, 100%);
+  min-height: 30px;
+  margin-top: 0;
+}
+
+.arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-live-center {
+  align-self: center;
+  min-width: 0;
+}
+
+.arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-live-center strong {
+  font-size: 44px;
+}
+
+.arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-live-center span {
+  margin-top: 6px;
+  font-size: 14px;
+}
+
+.arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-live-center small {
+  display: -webkit-box;
+  overflow: hidden;
+  max-width: 92px;
+  margin-top: 4px;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-skill-row {
+  box-sizing: border-box;
+  min-height: 74px;
+  height: 74px;
+  padding-block: 9px;
+  overflow: hidden;
+}
+
+.arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-battle-feed {
+  box-sizing: border-box;
+  min-height: 150px;
+  max-height: none;
+  overflow: auto;
+}
+
+.arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-battle-feed .battle-event {
+  min-height: 35px;
+}
+
 @media (max-width: 760px) {
   .arena-surface.view.active .duel-console-shell .duel-rank-table,
   .arena-surface.view.active .duel-console-shell .duel-match-card {
