@@ -7201,6 +7201,135 @@ body::before {
   min-height: 35px;
 }
 
+.view.active.sect-war-room .sect-war-replay-shell {
+  display: grid;
+  gap: 12px;
+}
+
+.view.active.sect-war-room .sect-war-replay-panel {
+  position: relative;
+  display: grid;
+  box-sizing: border-box;
+  min-height: 600px;
+  height: 600px;
+  grid-template-rows: auto 292px 74px minmax(0, 1fr);
+  border: 1px solid rgba(203, 147, 58, .62);
+  background:
+    linear-gradient(180deg, rgba(9, 16, 16, .96), rgba(7, 12, 12, .98)),
+    radial-gradient(circle at 50% 0, rgba(197, 139, 50, .15), transparent 16rem);
+  box-shadow:
+    inset 0 0 0 2px rgba(0, 0, 0, .52),
+    inset 0 0 28px rgba(0, 0, 0, .62);
+  overflow: hidden;
+}
+
+.view.active.sect-war-room .sect-war-replay-panel .duel-replay-title {
+  min-height: 55px;
+  color: #f4d9a0;
+}
+
+.view.active.sect-war-room .sect-war-replay-panel .duel-replay-title h3 {
+  margin: 0;
+  color: #ffe0a2;
+  font: 900 22px/1.1 "KaiTi", "STKaiti", "Microsoft YaHei", serif;
+}
+
+.view.active.sect-war-room .sect-war-replay-panel .duel-replay-title p {
+  margin: 4px 0 0;
+  color: #d0b477;
+}
+
+.view.active.sect-war-room .sect-war-replay-panel .duel-arena-stage {
+  box-sizing: border-box;
+  min-height: 292px;
+  height: 292px;
+  grid-template-columns: minmax(0, 1fr) 92px minmax(0, 1fr);
+  align-items: stretch;
+  padding: 14px 16px 12px;
+  background:
+    linear-gradient(180deg, rgba(6, 10, 11, .06), rgba(6, 10, 11, .34)),
+    url("/assets/home-cards/duel-arena.png") center / cover no-repeat;
+}
+
+.view.active.sect-war-room .sect-war-replay-panel .duel-fighter {
+  display: grid;
+  grid-template-rows: 72px 22px 18px 18px 34px 34px;
+  align-content: start;
+  gap: 3px;
+  min-width: 0;
+}
+
+.view.active.sect-war-room .sect-war-replay-panel .duel-fighter.right {
+  justify-items: end;
+}
+
+.view.active.sect-war-room .sect-war-replay-panel .duel-fighter .character-portrait.lg {
+  width: 68px;
+  height: 68px;
+}
+
+.view.active.sect-war-room .sect-war-replay-panel .duel-fighter strong,
+.view.active.sect-war-room .sect-war-replay-panel .duel-fighter small {
+  overflow: hidden;
+  max-width: 100%;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.view.active.sect-war-room .sect-war-replay-panel .duel-fighter strong {
+  font-size: 16px;
+}
+
+.view.active.sect-war-room .sect-war-replay-panel .duel-fighter .meter {
+  width: min(168px, 100%);
+  min-height: 30px;
+  margin-top: 0;
+}
+
+.view.active.sect-war-room .sect-war-replay-panel .duel-live-center {
+  align-self: center;
+  min-width: 0;
+}
+
+.view.active.sect-war-room .sect-war-replay-panel .duel-live-center strong {
+  font-size: 44px;
+}
+
+.view.active.sect-war-room .sect-war-replay-panel .duel-live-center span {
+  margin-top: 6px;
+  font-size: 14px;
+}
+
+.view.active.sect-war-room .sect-war-replay-panel .duel-live-center small {
+  display: -webkit-box;
+  overflow: hidden;
+  max-width: 92px;
+  margin-top: 4px;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.view.active.sect-war-room .sect-war-replay-panel .duel-skill-row {
+  box-sizing: border-box;
+  min-height: 74px;
+  height: 74px;
+  padding-block: 9px;
+  overflow: hidden;
+}
+
+.view.active.sect-war-room .sect-war-replay-panel .duel-battle-feed {
+  box-sizing: border-box;
+  min-height: 150px;
+  max-height: none;
+  overflow: auto;
+}
+
+.view.active.sect-war-room .sect-war-replay-panel .duel-battle-feed .battle-event {
+  min-height: 35px;
+}
+
 @media (max-width: 760px) {
   .arena-surface.view.active .duel-console-shell .duel-rank-table,
   .arena-surface.view.active .duel-console-shell .duel-match-card {

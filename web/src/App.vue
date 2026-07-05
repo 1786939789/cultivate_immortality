@@ -1222,60 +1222,65 @@
             </div>
           </div>
 
-          <div v-else-if="lastBattle" class="battle-detail">
-            <div class="panel battle-header">
-              <div>
-                <h3>攻城实况</h3>
-                <p>{{ lastBattle.left.name }} 对阵 {{ lastBattle.right.name }}，{{ battleStatusText }}</p>
-              </div>
-              <div class="actions">
-                <button class="secondary" @click="replayBattle">重播</button>
-                <button class="primary" @click="returnFromBattle">{{ battleBackLabel }}</button>
-              </div>
-            </div>
-
-            <div class="battle-line live">
-              <div class="fighter">
-                <CharacterPortrait :person="battlePerson(lastBattle.left)" size="lg" />
-                <strong>{{ lastBattle.left.name }}</strong>
-                <small>{{ realmName(lastBattle.left.realm) }} · 战力 {{ lastBattle.left.power }}</small>
-                <div class="battle-stats">
-                  <span v-for="stat in battleStatsFromEffective(lastBattle.left.stats)" :key="stat.label" :aria-label="`${stat.label} ${stat.value}`">
-                    <StatIcon :name="stat.icon" :class="`detail-icon-${stat.icon}`" />
-                    <span>{{ stat.label }}</span>
-                    <strong>{{ stat.value }}</strong>
-                  </span>
+          <div v-else-if="lastBattle" class="sect-war-replay-shell">
+            <section class="duel-replay-panel live sect-war-replay-panel">
+              <div class="duel-replay-title">
+                <div>
+                  <h3>攻城实况</h3>
+                  <p>{{ lastBattle.left.name }} 对阵 {{ lastBattle.right.name }}，{{ battleStatusText }}</p>
                 </div>
+                <div class="duel-replay-actions">
+                  <button class="secondary" @click="replayBattle">重播</button>
+                  <button class="primary" @click="returnFromBattle">{{ battleBackLabel }}</button>
+                </div>
+              </div>
+
+              <div class="duel-arena-stage">
+                <div class="duel-fighter left">
+                  <CharacterPortrait :person="battlePerson(lastBattle.left)" size="lg" />
+                  <strong>{{ lastBattle.left.name }}</strong>
+                  <small>{{ lastBattle.left.sect }}</small>
+                  <small>{{ realmName(lastBattle.left.realm) }}</small>
+                  <Meter label="血量" icon="health" :value="currentBattleFrame.leftHp" :max="battleMax(lastBattle.left, 'hp')" tone="health" />
+                  <Meter label="法力" icon="mana" :value="currentBattleFrame.leftMana" :max="battleMax(lastBattle.left, 'mana')" tone="focus" />
+                </div>
+                <div class="duel-live-center">
+                  <strong>VS</strong>
+                  <span>{{ battleOutcomeLabel }}</span>
+                  <small>{{ battleStatusText }}</small>
+                </div>
+                <div class="duel-fighter right">
+                  <CharacterPortrait :person="battlePerson(lastBattle.right)" size="lg" />
+                  <strong>{{ lastBattle.right.name }}</strong>
+                  <small>{{ lastBattle.right.sect }}</small>
+                  <small>{{ realmName(lastBattle.right.realm) }}</small>
+                  <Meter label="血量" icon="health" :value="currentBattleFrame.rightHp" :max="battleMax(lastBattle.right, 'hp')" tone="health" />
+                  <Meter label="法力" icon="mana" :value="currentBattleFrame.rightMana" :max="battleMax(lastBattle.right, 'mana')" tone="focus" />
+                </div>
+              </div>
+
+              <div class="duel-skill-row">
                 <div class="skill-chip" tabindex="0">
-                  {{ skillLabel(lastBattle.left) }}
+                  <span class="skill-chip-icon" aria-hidden="true">
+                    <img v-if="skillIconPath(lastBattle.left)" :src="skillIconPath(lastBattle.left)" alt="">
+                    <span v-else>{{ skillIconGlyph(lastBattle.left) }}</span>
+                  </span>
+                  <span class="skill-chip-title">{{ skillLabel(lastBattle.left) }}</span>
+                  <small>攻城 (1)</small>
                   <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.left) }}</span>
                 </div>
-                <Meter label="血量" icon="health" :value="currentBattleFrame.leftHp" :max="battleMax(lastBattle.left, 'hp')" tone="health" />
-                <Meter label="法力" icon="mana" :value="currentBattleFrame.leftMana" :max="battleMax(lastBattle.left, 'mana')" tone="focus" />
-              </div>
-              <div class="vs">{{ battleOutcomeLabel }}</div>
-              <div class="fighter">
-                <CharacterPortrait :person="battlePerson(lastBattle.right)" size="lg" />
-                <strong>{{ lastBattle.right.name }}</strong>
-                <small>{{ realmName(lastBattle.right.realm) }} · 战力 {{ lastBattle.right.power }}</small>
-                <div class="battle-stats">
-                  <span v-for="stat in battleStatsFromEffective(lastBattle.right.stats)" :key="stat.label" :aria-label="`${stat.label} ${stat.value}`">
-                    <StatIcon :name="stat.icon" :class="`detail-icon-${stat.icon}`" />
-                    <span>{{ stat.label }}</span>
-                    <strong>{{ stat.value }}</strong>
-                  </span>
-                </div>
                 <div class="skill-chip" tabindex="0">
-                  {{ skillLabel(lastBattle.right) }}
+                  <span class="skill-chip-icon" aria-hidden="true">
+                    <img v-if="skillIconPath(lastBattle.right)" :src="skillIconPath(lastBattle.right)" alt="">
+                    <span v-else>{{ skillIconGlyph(lastBattle.right) }}</span>
+                  </span>
+                  <span class="skill-chip-title">{{ skillLabel(lastBattle.right) }}</span>
+                  <small>守城 (2)</small>
                   <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.right) }}</span>
                 </div>
-                <Meter label="血量" icon="health" :value="currentBattleFrame.rightHp" :max="battleMax(lastBattle.right, 'hp')" tone="health" />
-                <Meter label="法力" icon="mana" :value="currentBattleFrame.rightMana" :max="battleMax(lastBattle.right, 'mana')" tone="focus" />
               </div>
-            </div>
 
-            <div class="panel">
-              <div class="battle-feed">
+              <div class="battle-feed duel-battle-feed">
                 <div
                   class="battle-event"
                   v-for="(event, index) in displayedBattleEvents"
@@ -1291,11 +1296,12 @@
                     </i>
                     <b>{{ skillEffectTitle(event) }}</b>
                   </div>
-                  <span>{{ event.round ? `第${event.round}回合` : "战报" }}</span>
+                  <span>{{ event.round ? `回合 ${event.round}` : "回合 1" }}</span>
                   <p>{{ event.text }}</p>
+                  <time>{{ String(index * 2).padStart(2, "0") }}:{{ String((index * 6) % 60).padStart(2, "0") }}</time>
                 </div>
               </div>
-            </div>
+            </section>
           </div>
 
           <div v-else-if="selectedProvinceWar" class="panel sect-system-panel sect-war-detail-panel">
@@ -6550,7 +6556,6 @@ async function openMatchReplay(match, dayRecord) {
 function openProvinceBattle(battle) {
   if (!hasReplay(battle)) return;
   openReplay(battle);
-  detailView.value = "rank";
 }
 
 function openProvinceWarDetail(war) {
