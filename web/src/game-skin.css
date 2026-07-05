@@ -6981,6 +6981,9 @@ body::before {
   width: 48px;
   height: 48px;
   flex: 0 0 auto;
+  background: var(--rank-icon) center / contain no-repeat;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .arena-surface.view.active .duel-console-shell .duel-rank-cell::before,
@@ -7004,6 +7007,9 @@ body::before {
 .arena-surface.view.active .duel-console-shell .duel-rank-stamp .duel-rank-medal {
   width: 46px;
   height: 46px;
+  background: var(--rank-icon) center / contain no-repeat;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 @media (max-width: 760px) {

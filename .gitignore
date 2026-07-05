@@ -28,10 +28,13 @@ pnpm-debug.log*
 .cache/
 .eslintcache
 
+# Generated image source sheets
+web/public/assets/duel-ranks/duel-rank-sheet-source.png
+scripts/slice_duel_rank_assets.py
+
 # OS and editor files
 .DS_Store
 Thumbs.db
 Desktop.ini
 .idea/
 .vscode/
-

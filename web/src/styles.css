@@ -6228,34 +6228,42 @@ button.event {
 
 .duel-rank-iron {
   --rank-color: #5b6470;
+  --rank-icon: url("/assets/duel-ranks/rank-iron.png");
 }
 
 .duel-rank-bronze {
   --rank-color: #a66a3d;
+  --rank-icon: url("/assets/duel-ranks/rank-bronze.png");
 }
 
 .duel-rank-silver {
   --rank-color: #8f9baa;
+  --rank-icon: url("/assets/duel-ranks/rank-silver.png");
 }
 
 .duel-rank-gold {
   --rank-color: #d4a02f;
+  --rank-icon: url("/assets/duel-ranks/rank-gold.png");
 }
 
 .duel-rank-platinum {
   --rank-color: #429f96;
+  --rank-icon: url("/assets/duel-ranks/rank-platinum.png");
 }
 
 .duel-rank-diamond {
   --rank-color: #3b86d1;
+  --rank-icon: url("/assets/duel-ranks/rank-diamond.png");
 }
 
 .duel-rank-master {
   --rank-color: #8b5fd7;
+  --rank-icon: url("/assets/duel-ranks/rank-master.png");
 }
 
 .duel-rank-challenger {
   --rank-color: #cf4f31;
+  --rank-icon: url("/assets/duel-ranks/rank-challenger.png");
 }
 
 .duel-day-board {
