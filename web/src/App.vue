@@ -237,7 +237,7 @@
                 <h3>战斗日志</h3>
               </div>
               <div class="battle-log-list">
-                <div v-for="entry in homeLogs" :key="`${entry.day}-${entry.text}`" :class="logTone(entry)">
+                <div v-for="(entry, index) in homeLogs" :key="`${entry.day}-${entry.time || ''}-${entry.text}-${index}`" :class="logTone(entry)">
                   <b>{{ logTone(entry) === "loss" ? "败" : "胜" }}</b>
                   <span>{{ entry.text }}</span>
                   <time>{{ entry.date || currentDate }}</time>
@@ -377,7 +377,7 @@
             <div class="realm-table-head" aria-hidden="true">
               <span>层级</span>
               <span>突破目标</span>
-              <span>下层总经验</span>
+              <span>所需经验</span>
               <span>突破成长</span>
               <span>基础突破率</span>
             </div>
@@ -393,7 +393,7 @@
                   <small>{{ realm.index === player.realm ? "当前所在层" : realm.index < player.realm ? "已突破" : "未抵达" }}</small>
                 </div>
                 <span>{{ realm.nextRealm }}</span>
-                <span>总 {{ realm.xpNeed }} 经验</span>
+                <span>{{ realm.xpNeed }}</span>
                 <span>{{ realm.growthText }}</span>
                 <span>{{ formatPercent(realm.baseBreakChance) }}</span>
               </div>
@@ -638,7 +638,7 @@
             </div>
           </div>
 
-          <div v-else-if="lastBattle" class="battle-detail rank-battle-detail">
+          <div v-else-if="lastBattle && !(activeDungeonRecordTab === 'void' && selectedVoidHallRecord)" class="battle-detail rank-battle-detail">
             <div class="panel battle-header">
               <div>
                 <h3>副本回合</h3>
@@ -856,21 +856,156 @@
                 </div>
                 <button class="primary" type="button" @click="closeVoidHallRecord">返回虚天殿</button>
               </div>
-              <div class="void-battle-list" v-if="voidHallBattles(selectedVoidHallRecord).length">
-                <button
-                  class="war-battle-link"
-                  type="button"
-                  v-for="battle in voidHallBattles(selectedVoidHallRecord)"
-                  :key="`${selectedVoidHallRecord.sect}-${battle.order}`"
-                  :disabled="!hasReplay(battle)"
-                  @click="openReplay(battle)"
-                >
-                  <span class="war-battle-order">第 {{ battle.order }} 战</span>
-                  <strong class="war-battle-name left">{{ battle.challenger?.name || battle.name || "参战修士" }}</strong>
-                  <span class="war-battle-vs">VS</span>
-                  <strong class="war-battle-name right">{{ selectedVoidHallRecord.monster }}</strong>
-                  <small class="war-battle-summary">输出 {{ battle.damage || 0 }}<span v-if="battle.winnerName"> · 胜者：{{ battle.winnerName }}</span></small>
-                </button>
+              <div class="wheel-battle-console void-wheel-console" v-if="voidHallBattles(selectedVoidHallRecord).length">
+                <section class="duel-match-board wheel-battle-board">
+                  <div class="duel-board-title">
+                    <div>
+                      <h3>虚天殿车轮战</h3>
+                      <span>{{ voidHallBattles(selectedVoidHallRecord).length }} 场挑战</span>
+                    </div>
+                    <span>{{ selectedVoidHallRecord.success ? "通关" : "未通关" }}</span>
+                  </div>
+                  <div class="match-list wheel-match-list">
+                    <button
+                      class="war-battle-link wheel-battle-link"
+                      type="button"
+                      v-for="battle in voidHallBattles(selectedVoidHallRecord)"
+                      :key="`${selectedVoidHallRecord.sect}-${battle.order}`"
+                      :disabled="!hasReplay(battle)"
+                      :class="{ active: lastBattle?.replayId && battle.replayId === lastBattle.replayId }"
+                      @click="openReplay(battle, null, captureBattleReturn())"
+                    >
+                      <span class="war-battle-order">第 {{ battle.order }} 战</span>
+                      <strong class="war-battle-name left">{{ battle.challenger?.name || battle.name || "参战修士" }}</strong>
+                      <span class="war-battle-vs">VS</span>
+                      <strong class="war-battle-name right">{{ selectedVoidHallRecord.monster }}</strong>
+                      <small class="war-battle-summary">输出 {{ battle.damage || 0 }}<span v-if="battle.winnerName"> · 胜者：{{ battle.winnerName }}</span></small>
+                    </button>
+                  </div>
+                </section>
+                <section class="duel-replay-panel sect-war-replay-panel wheel-replay-panel" :class="{ live: lastBattle }">
+                  <div class="duel-replay-title">
+                    <div>
+                      <h3>虚天殿实况</h3>
+                      <p>{{ lastBattle ? `${lastBattle.left.name} 对阵 ${lastBattle.right.name}，${battleStatusText}` : "选择左侧场次查看战斗回放。" }}</p>
+                    </div>
+                    <div class="duel-replay-actions" v-if="lastBattle">
+                      <button class="secondary" @click="replayBattle">重播</button>
+                      <button class="primary" @click="closeBattleReplay">关闭回放</button>
+                    </div>
+                  </div>
+
+                  <div v-if="replayLoading" class="replay-loading-panel duel-loading">
+                    <div class="loading-orb" aria-hidden="true"></div>
+                    <h3>正在读取战斗回放</h3>
+                    <p>战报玉简正在展开，请稍候。</p>
+                  </div>
+
+                  <template v-else-if="lastBattle">
+                    <div class="duel-arena-stage">
+                      <div class="duel-fighter left">
+                        <CharacterPortrait :person="battlePerson(lastBattle.left)" size="lg" />
+                        <strong>{{ lastBattle.left.name }}</strong>
+                        <small>{{ lastBattle.left.sect }}</small>
+                        <small>{{ realmName(lastBattle.left.realm) }}</small>
+                        <div class="duel-fighter-attrs" :aria-label="`${lastBattle.left.name} 战斗属性`">
+                          <span class="root">{{ battleRootName(lastBattle.left) }}</span>
+                          <span v-for="stat in battleCompactStats(lastBattle.left)" :key="stat.label">{{ stat.short }} {{ stat.value }}</span>
+                        </div>
+                        <Meter label="血量" icon="health" :value="currentBattleFrame.leftHp" :max="battleMax(lastBattle.left, 'hp')" tone="health" />
+                        <Meter label="法力" icon="mana" :value="currentBattleFrame.leftMana" :max="battleMax(lastBattle.left, 'mana')" tone="focus" />
+                      </div>
+                      <div class="duel-live-center">
+                        <strong>VS</strong>
+                        <span>{{ battleOutcomeLabel }}</span>
+                        <small>{{ battleStatusText }}</small>
+                      </div>
+                      <div class="duel-fighter right">
+                        <CharacterPortrait :person="battlePerson(lastBattle.right)" size="lg" />
+                        <strong>{{ lastBattle.right.name }}</strong>
+                        <small>{{ lastBattle.right.sect }}</small>
+                        <small>{{ realmName(lastBattle.right.realm) }}</small>
+                        <div class="duel-fighter-attrs" :aria-label="`${lastBattle.right.name} 战斗属性`">
+                          <span class="root">{{ battleRootName(lastBattle.right) }}</span>
+                          <span v-for="stat in battleCompactStats(lastBattle.right)" :key="stat.label">{{ stat.short }} {{ stat.value }}</span>
+                        </div>
+                        <Meter label="血量" icon="health" :value="currentBattleFrame.rightHp" :max="battleMax(lastBattle.right, 'hp')" tone="health" />
+                        <Meter label="法力" icon="mana" :value="currentBattleFrame.rightMana" :max="battleMax(lastBattle.right, 'mana')" tone="focus" />
+                      </div>
+                    </div>
+
+                    <div class="duel-skill-row">
+                      <div class="skill-chip" tabindex="0">
+                        <span class="skill-chip-icon" aria-hidden="true">
+                          <img v-if="skillIconPath(lastBattle.left)" :src="skillIconPath(lastBattle.left)" alt="">
+                          <span v-else>{{ skillIconGlyph(lastBattle.left) }}</span>
+                        </span>
+                        <span class="skill-chip-title">{{ skillLabel(lastBattle.left) }}</span>
+                        <small>挑战 (1)</small>
+                        <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.left) }}</span>
+                      </div>
+                      <div class="skill-chip" tabindex="0">
+                        <span class="skill-chip-icon" aria-hidden="true">
+                          <img v-if="skillIconPath(lastBattle.right)" :src="skillIconPath(lastBattle.right)" alt="">
+                          <span v-else>{{ skillIconGlyph(lastBattle.right) }}</span>
+                        </span>
+                        <span class="skill-chip-title">{{ skillLabel(lastBattle.right) }}</span>
+                        <small>妖物 (2)</small>
+                        <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.right) }}</span>
+                      </div>
+                    </div>
+
+                    <div class="battle-feed duel-battle-feed">
+                      <div
+                        class="battle-event"
+                        v-for="(event, index) in displayedBattleEvents"
+                        :key="`${index}-${event.text}`"
+                        :class="[event.kind, skillEffectClass(event)]"
+                        :style="skillEffectStyle(event)"
+                      >
+                        <div v-if="event.kind === 'skill'" class="skill-cast" aria-hidden="true">
+                          <img v-if="skillEffectImage(event)" class="skill-cast-art" :src="skillEffectImage(event)" alt="">
+                          <i :class="{ 'has-art': skillEffectImage(event) }">
+                            <img v-if="skillEffectImage(event)" class="skill-cast-icon" :src="skillEffectImage(event)" alt="">
+                            <span v-else>{{ skillEffectGlyph(event) }}</span>
+                          </i>
+                          <b>{{ skillEffectTitle(event) }}</b>
+                          <strong v-if="skillDamageText(event)" class="skill-cast-damage">{{ skillDamageText(event) }}</strong>
+                        </div>
+                        <span>{{ event.round ? `回合 ${event.round}` : "回合 1" }}</span>
+                        <p>{{ event.text }}</p>
+                      </div>
+                    </div>
+                  </template>
+
+                  <div v-else class="duel-preview wheel-replay-empty">
+                    <div class="duel-arena-stage preview">
+                      <div class="duel-fighter left">
+                        <strong>{{ selectedVoidHallRecord.sect }}</strong>
+                        <small>挑战宗门</small>
+                      </div>
+                      <div class="duel-live-center">
+                        <strong>VS</strong>
+                        <span>{{ selectedVoidHallRecord.monsterRealm }}</span>
+                        <small>{{ selectedVoidHallRecord.monster }}</small>
+                      </div>
+                      <div class="duel-fighter right">
+                        <strong>{{ selectedVoidHallRecord.monster }}</strong>
+                        <small>虚天殿妖物</small>
+                      </div>
+                    </div>
+                    <div class="duel-skill-row muted-row">
+                      <span>选择左侧车轮战</span>
+                      <span>战斗实况将在此展开</span>
+                    </div>
+                    <div class="battle-feed duel-battle-feed preview-feed">
+                      <div class="battle-event">
+                        <span>候场</span>
+                        <p>点击左侧任意一战查看回放。</p>
+                      </div>
+                    </div>
+                  </div>
+                </section>
               </div>
               <button v-else-if="hasReplay(selectedVoidHallRecord)" class="event event-button void-overview-button" type="button" @click="openReplay(selectedVoidHallRecord)">
                 查看虚天殿合战。
@@ -1044,8 +1179,9 @@
                 <strong>{{ sectSummaries.length || "读取中" }}</strong>
               </span>
               <span>
-                <small>今日战报</small>
-                <strong>{{ provinceWarRecords.length ? (selectedProvinceWarDayRecord?.wars?.length || 0) : "读取中" }}</strong>
+                <small>今日战况</small>
+                <strong v-if="provinceWarRecords.length">攻 {{ todayProvinceWarSummary.captured }} / 守 {{ todayProvinceWarSummary.defended }}</strong>
+                <strong v-else>读取中</strong>
               </span>
             </div>
           </div>
@@ -1148,7 +1284,13 @@
                   <Zap :size="18" :stroke-width="2.6" aria-hidden="true" />
                   <b>{{ resourcePlanValue(sect.resourcePlan?.breakthrough, "breakthrough") }}</b>
                 </span>
-                <p>{{ sect.provinceNames.slice(0, 5).join("、") || "暂无占领省份" }}</p>
+                <p v-if="sect.provinceHighlights.length" class="sect-province-highlights">
+                  <span v-for="province in sect.provinceHighlights" :key="`${sect.name}-${province.id}`" class="sect-province-highlight">
+                    <span class="gdp-tier-badge compact" :class="`tier-${province.tier.toLowerCase()}`">{{ province.tier }}</span>
+                    <span>{{ province.shortName }}</span>
+                  </span>
+                </p>
+                <p v-else>暂无占领省份</p>
               </article>
             </div>
           </div>
@@ -1222,7 +1364,7 @@
             </div>
           </div>
 
-          <div v-else-if="lastBattle" class="sect-war-replay-shell">
+          <div v-else-if="lastBattle && !selectedProvinceWar" class="sect-war-replay-shell">
             <section class="duel-replay-panel live sect-war-replay-panel">
               <div class="duel-replay-title">
                 <div>
@@ -1241,6 +1383,10 @@
                   <strong>{{ lastBattle.left.name }}</strong>
                   <small>{{ lastBattle.left.sect }}</small>
                   <small>{{ realmName(lastBattle.left.realm) }}</small>
+                  <div class="duel-fighter-attrs" :aria-label="`${lastBattle.left.name} 战斗属性`">
+                    <span class="root">{{ battleRootName(lastBattle.left) }}</span>
+                    <span v-for="stat in battleCompactStats(lastBattle.left)" :key="stat.label">{{ stat.short }} {{ stat.value }}</span>
+                  </div>
                   <Meter label="血量" icon="health" :value="currentBattleFrame.leftHp" :max="battleMax(lastBattle.left, 'hp')" tone="health" />
                   <Meter label="法力" icon="mana" :value="currentBattleFrame.leftMana" :max="battleMax(lastBattle.left, 'mana')" tone="focus" />
                 </div>
@@ -1254,6 +1400,10 @@
                   <strong>{{ lastBattle.right.name }}</strong>
                   <small>{{ lastBattle.right.sect }}</small>
                   <small>{{ realmName(lastBattle.right.realm) }}</small>
+                  <div class="duel-fighter-attrs" :aria-label="`${lastBattle.right.name} 战斗属性`">
+                    <span class="root">{{ battleRootName(lastBattle.right) }}</span>
+                    <span v-for="stat in battleCompactStats(lastBattle.right)" :key="stat.label">{{ stat.short }} {{ stat.value }}</span>
+                  </div>
                   <Meter label="血量" icon="health" :value="currentBattleFrame.rightHp" :max="battleMax(lastBattle.right, 'hp')" tone="health" />
                   <Meter label="法力" icon="mana" :value="currentBattleFrame.rightMana" :max="battleMax(lastBattle.right, 'mana')" tone="focus" />
                 </div>
@@ -1295,10 +1445,10 @@
                       <span v-else>{{ skillEffectGlyph(event) }}</span>
                     </i>
                     <b>{{ skillEffectTitle(event) }}</b>
+                    <strong v-if="skillDamageText(event)" class="skill-cast-damage">{{ skillDamageText(event) }}</strong>
                   </div>
                   <span>{{ event.round ? `回合 ${event.round}` : "回合 1" }}</span>
                   <p>{{ event.text }}</p>
-                  <time>{{ String(index * 2).padStart(2, "0") }}:{{ String((index * 6) % 60).padStart(2, "0") }}</time>
                 </div>
               </div>
             </section>
@@ -1341,14 +1491,148 @@
                   <small v-else>无人斩敌</small>
                 </div>
               </div>
-              <div class="war-battle-grid" v-if="selectedProvinceWar.battles.length">
-                <button class="war-battle-link" v-for="battle in selectedProvinceWar.battles" :key="`${selectedProvinceWar.id}-${battle.order}`" type="button" @click="openProvinceBattle(battle)">
-                  <span class="war-battle-order">第 {{ battle.order }} 战</span>
-                  <strong class="war-battle-name left">{{ battleName(battle, "attacker") }}</strong>
-                  <span class="war-battle-vs">VS</span>
-                  <strong class="war-battle-name right">{{ battleName(battle, "defender") }}</strong>
-                  <small class="war-battle-summary">胜者：{{ battle.winnerName || battleWinnerName(battle) }}</small>
-                </button>
+              <div class="wheel-battle-console" v-if="selectedProvinceWar.battles.length">
+                <section class="duel-match-board wheel-battle-board">
+                  <div class="duel-board-title">
+                    <div>
+                      <h3>车轮战序列</h3>
+                      <span>{{ selectedProvinceWar.battles.length }} 场 PK</span>
+                    </div>
+                    <span>{{ selectedProvinceWar.captured ? "攻城成功" : "守城成功" }}</span>
+                  </div>
+                  <div class="match-list wheel-match-list">
+                    <button class="war-battle-link wheel-battle-link" v-for="battle in selectedProvinceWar.battles" :key="`${selectedProvinceWar.id}-${battle.order}`" type="button" :class="{ active: lastBattle?.replayId && battle.replayId === lastBattle.replayId }" @click="openProvinceBattle(battle)">
+                      <span class="war-battle-order">第 {{ battle.order }} 战</span>
+                      <strong class="war-battle-name left">{{ battleName(battle, "attacker") }}</strong>
+                      <span class="war-battle-vs">VS</span>
+                      <strong class="war-battle-name right">{{ battleName(battle, "defender") }}</strong>
+                      <small class="war-battle-summary">胜者：{{ battle.winnerName || battleWinnerName(battle) }}</small>
+                    </button>
+                  </div>
+                </section>
+                <section class="duel-replay-panel sect-war-replay-panel wheel-replay-panel" :class="{ live: lastBattle }">
+                  <div class="duel-replay-title">
+                    <div>
+                      <h3>车轮战实况</h3>
+                      <p>{{ lastBattle ? `${lastBattle.left.name} 对阵 ${lastBattle.right.name}，${battleStatusText}` : "选择左侧场次查看战斗回放。" }}</p>
+                    </div>
+                    <div class="duel-replay-actions" v-if="lastBattle">
+                      <button class="secondary" @click="replayBattle">重播</button>
+                      <button class="primary" @click="closeBattleReplay">关闭回放</button>
+                    </div>
+                  </div>
+
+                  <div v-if="replayLoading" class="replay-loading-panel duel-loading">
+                    <div class="loading-orb" aria-hidden="true"></div>
+                    <h3>正在读取战斗回放</h3>
+                    <p>战报玉简正在展开，请稍候。</p>
+                  </div>
+
+                  <template v-else-if="lastBattle">
+                    <div class="duel-arena-stage">
+                      <div class="duel-fighter left">
+                        <CharacterPortrait :person="battlePerson(lastBattle.left)" size="lg" />
+                        <strong>{{ lastBattle.left.name }}</strong>
+                        <small>{{ lastBattle.left.sect }}</small>
+                        <small>{{ realmName(lastBattle.left.realm) }}</small>
+                        <div class="duel-fighter-attrs" :aria-label="`${lastBattle.left.name} 战斗属性`">
+                          <span class="root">{{ battleRootName(lastBattle.left) }}</span>
+                          <span v-for="stat in battleCompactStats(lastBattle.left)" :key="stat.label">{{ stat.short }} {{ stat.value }}</span>
+                        </div>
+                        <Meter label="血量" icon="health" :value="currentBattleFrame.leftHp" :max="battleMax(lastBattle.left, 'hp')" tone="health" />
+                        <Meter label="法力" icon="mana" :value="currentBattleFrame.leftMana" :max="battleMax(lastBattle.left, 'mana')" tone="focus" />
+                      </div>
+                      <div class="duel-live-center">
+                        <strong>VS</strong>
+                        <span>{{ battleOutcomeLabel }}</span>
+                        <small>{{ battleStatusText }}</small>
+                      </div>
+                      <div class="duel-fighter right">
+                        <CharacterPortrait :person="battlePerson(lastBattle.right)" size="lg" />
+                        <strong>{{ lastBattle.right.name }}</strong>
+                        <small>{{ lastBattle.right.sect }}</small>
+                        <small>{{ realmName(lastBattle.right.realm) }}</small>
+                        <div class="duel-fighter-attrs" :aria-label="`${lastBattle.right.name} 战斗属性`">
+                          <span class="root">{{ battleRootName(lastBattle.right) }}</span>
+                          <span v-for="stat in battleCompactStats(lastBattle.right)" :key="stat.label">{{ stat.short }} {{ stat.value }}</span>
+                        </div>
+                        <Meter label="血量" icon="health" :value="currentBattleFrame.rightHp" :max="battleMax(lastBattle.right, 'hp')" tone="health" />
+                        <Meter label="法力" icon="mana" :value="currentBattleFrame.rightMana" :max="battleMax(lastBattle.right, 'mana')" tone="focus" />
+                      </div>
+                    </div>
+
+                    <div class="duel-skill-row">
+                      <div class="skill-chip" tabindex="0">
+                        <span class="skill-chip-icon" aria-hidden="true">
+                          <img v-if="skillIconPath(lastBattle.left)" :src="skillIconPath(lastBattle.left)" alt="">
+                          <span v-else>{{ skillIconGlyph(lastBattle.left) }}</span>
+                        </span>
+                        <span class="skill-chip-title">{{ skillLabel(lastBattle.left) }}</span>
+                        <small>攻城 (1)</small>
+                        <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.left) }}</span>
+                      </div>
+                      <div class="skill-chip" tabindex="0">
+                        <span class="skill-chip-icon" aria-hidden="true">
+                          <img v-if="skillIconPath(lastBattle.right)" :src="skillIconPath(lastBattle.right)" alt="">
+                          <span v-else>{{ skillIconGlyph(lastBattle.right) }}</span>
+                        </span>
+                        <span class="skill-chip-title">{{ skillLabel(lastBattle.right) }}</span>
+                        <small>守城 (2)</small>
+                        <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.right) }}</span>
+                      </div>
+                    </div>
+
+                    <div class="battle-feed duel-battle-feed">
+                      <div
+                        class="battle-event"
+                        v-for="(event, index) in displayedBattleEvents"
+                        :key="`${index}-${event.text}`"
+                        :class="[event.kind, skillEffectClass(event)]"
+                        :style="skillEffectStyle(event)"
+                      >
+                        <div v-if="event.kind === 'skill'" class="skill-cast" aria-hidden="true">
+                          <img v-if="skillEffectImage(event)" class="skill-cast-art" :src="skillEffectImage(event)" alt="">
+                          <i :class="{ 'has-art': skillEffectImage(event) }">
+                            <img v-if="skillEffectImage(event)" class="skill-cast-icon" :src="skillEffectImage(event)" alt="">
+                            <span v-else>{{ skillEffectGlyph(event) }}</span>
+                          </i>
+                          <b>{{ skillEffectTitle(event) }}</b>
+                          <strong v-if="skillDamageText(event)" class="skill-cast-damage">{{ skillDamageText(event) }}</strong>
+                        </div>
+                        <span>{{ event.round ? `回合 ${event.round}` : "回合 1" }}</span>
+                        <p>{{ event.text }}</p>
+                      </div>
+                    </div>
+                  </template>
+
+                  <div v-else class="duel-preview wheel-replay-empty">
+                    <div class="duel-arena-stage preview">
+                      <div class="duel-fighter left">
+                        <strong>{{ selectedProvinceWar.attacker }}</strong>
+                        <small>攻城方</small>
+                      </div>
+                      <div class="duel-live-center">
+                        <strong>VS</strong>
+                        <span>{{ selectedProvinceWar.provinceName }}</span>
+                        <small>{{ selectedProvinceWar.defender }}</small>
+                      </div>
+                      <div class="duel-fighter right">
+                        <strong>{{ selectedProvinceWar.defender }}</strong>
+                        <small>守城方</small>
+                      </div>
+                    </div>
+                    <div class="duel-skill-row muted-row">
+                      <span>选择左侧车轮战</span>
+                      <span>战斗实况将在此展开</span>
+                    </div>
+                    <div class="battle-feed duel-battle-feed preview-feed">
+                      <div class="battle-event">
+                        <span>候场</span>
+                        <p>点击左侧任意一战查看回放。</p>
+                      </div>
+                    </div>
+                  </div>
+                </section>
               </div>
               <small v-else>无主之地直接占领。</small>
             </div>
@@ -1529,14 +1813,16 @@
                       <div class="duel-rank-stamp" :class="`duel-rank-${duelRankId(matchPerson(match.left))}`">
                         <i class="duel-rank-medal" aria-hidden="true"></i>
                         <span>{{ duelRankName(matchPerson(match.left)) }}</span>
+                        <small>{{ duelRankScoreText(matchPerson(match.left)) }}</small>
                       </div>
                       <div class="duel-match-vs">
                         <strong>VS</strong>
-                        <span>第 {{ index + 1 }} 场</span>
+                        <span>第 {{ match.order || index + 1 }} 场</span>
                       </div>
                       <div class="duel-rank-stamp" :class="`duel-rank-${duelRankId(matchPerson(match.right))}`">
                         <i class="duel-rank-medal" aria-hidden="true"></i>
                         <span>{{ duelRankName(matchPerson(match.right)) }}</span>
+                        <small>{{ duelRankScoreText(matchPerson(match.right)) }}</small>
                       </div>
                       <div class="match-person duel-combatant" :class="{ winner: match.winner.id === match.right.id }">
                         <CharacterPortrait :person="matchPerson(match.right)" size="sm" />
@@ -1561,6 +1847,7 @@
                       <div class="duel-rank-stamp" :class="`duel-rank-${duelRankId(matchPerson(match.winner))}`">
                         <i class="duel-rank-medal" aria-hidden="true"></i>
                         <span>{{ duelRankName(matchPerson(match.winner)) }}</span>
+                        <small>{{ duelRankScoreText(matchPerson(match.winner)) }}</small>
                       </div>
                       <div class="duel-bye-mark">轮</div>
                       <div class="duel-match-vs bye-vs">
@@ -1600,6 +1887,10 @@
                       <strong>{{ lastBattle.left.name }}</strong>
                       <small>{{ lastBattle.left.sect }}</small>
                       <small>{{ realmName(lastBattle.left.realm) }}</small>
+                      <div class="duel-fighter-attrs" :aria-label="`${lastBattle.left.name} 战斗属性`">
+                        <span class="root">{{ battleRootName(lastBattle.left) }}</span>
+                        <span v-for="stat in battleCompactStats(lastBattle.left)" :key="stat.label">{{ stat.short }} {{ stat.value }}</span>
+                      </div>
                       <Meter label="血量" icon="health" :value="currentBattleFrame.leftHp" :max="battleMax(lastBattle.left, 'hp')" tone="health" />
                       <Meter label="法力" icon="mana" :value="currentBattleFrame.leftMana" :max="battleMax(lastBattle.left, 'mana')" tone="focus" />
                     </div>
@@ -1613,6 +1904,10 @@
                       <strong>{{ lastBattle.right.name }}</strong>
                       <small>{{ lastBattle.right.sect }}</small>
                       <small>{{ realmName(lastBattle.right.realm) }}</small>
+                      <div class="duel-fighter-attrs" :aria-label="`${lastBattle.right.name} 战斗属性`">
+                        <span class="root">{{ battleRootName(lastBattle.right) }}</span>
+                        <span v-for="stat in battleCompactStats(lastBattle.right)" :key="stat.label">{{ stat.short }} {{ stat.value }}</span>
+                      </div>
                       <Meter label="血量" icon="health" :value="currentBattleFrame.rightHp" :max="battleMax(lastBattle.right, 'hp')" tone="health" />
                       <Meter label="法力" icon="mana" :value="currentBattleFrame.rightMana" :max="battleMax(lastBattle.right, 'mana')" tone="focus" />
                     </div>
@@ -1649,15 +1944,15 @@
                     >
                       <div v-if="event.kind === 'skill'" class="skill-cast" aria-hidden="true">
                         <img v-if="skillEffectImage(event)" class="skill-cast-art" :src="skillEffectImage(event)" alt="">
-                        <i :class="{ 'has-art': skillEffectImage(event) }">
-                          <img v-if="skillEffectImage(event)" class="skill-cast-icon" :src="skillEffectImage(event)" alt="">
-                          <span v-else>{{ skillEffectGlyph(event) }}</span>
-                        </i>
-                        <b>{{ skillEffectTitle(event) }}</b>
-                      </div>
-                      <span>{{ event.round ? `回合 ${event.round}` : "回合 1" }}</span>
-                      <p>{{ event.text }}</p>
-                      <time>{{ String(index * 2).padStart(2, "0") }}:{{ String((index * 6) % 60).padStart(2, "0") }}</time>
+                    <i :class="{ 'has-art': skillEffectImage(event) }">
+                      <img v-if="skillEffectImage(event)" class="skill-cast-icon" :src="skillEffectImage(event)" alt="">
+                      <span v-else>{{ skillEffectGlyph(event) }}</span>
+                    </i>
+                    <b>{{ skillEffectTitle(event) }}</b>
+                    <strong v-if="skillDamageText(event)" class="skill-cast-damage">{{ skillDamageText(event) }}</strong>
+                  </div>
+                  <span>{{ event.round ? `回合 ${event.round}` : "回合 1" }}</span>
+                  <p>{{ event.text }}</p>
                     </div>
                   </div>
                 </template>
@@ -1690,7 +1985,6 @@
                     <div class="battle-event">
                       <span>回合 1</span>
                       <p>{{ duelPreviewMatch ? `${duelPreviewMatch.left.name} 与 ${duelPreviewMatch.right.name} 正在演武台候场。` : "尚无可展示的切磋实况。" }}</p>
-                      <time>00:00</time>
                     </div>
                   </div>
                 </div>
@@ -1706,7 +2000,7 @@
                 <h3>装备图鉴</h3>
                 <p>唯一装备 · 自动穿戴最优同部位。</p>
               </div>
-              <span class="tag">{{ equipmentList.length }} 件</span>
+              <span class="tag">已获取 {{ equipmentCollectionCount.acquired }} / 总数 {{ equipmentCollectionCount.total }}</span>
             </div>
             <div class="equipment-tools">
               <label>品质
@@ -1850,6 +2144,7 @@
                       <span v-else>{{ skillEffectGlyph(event) }}</span>
                     </i>
                     <b>{{ skillEffectTitle(event) }}</b>
+                    <strong v-if="skillDamageText(event)" class="skill-cast-damage">{{ skillDamageText(event) }}</strong>
                   </div>
                   <span>{{ event.round ? `第${event.round}回合` : "战报" }}</span>
                   <p>{{ event.text }}</p>
@@ -2112,7 +2407,7 @@
               <div class="panel flat">
                 <h3>技能升阶</h3>
                 <div class="timeline detail-scroll">
-                  <div class="event gold" v-for="record in selectedPerson.skillUpgrades || []" :key="`${record.day}-${record.skillId}-${record.toRank}`">
+                  <div class="event" :class="{ gold: skillUpgradeRecordSucceeded(record), bad: !skillUpgradeRecordSucceeded(record) }" v-for="record in selectedPerson.skillUpgrades || []" :key="`${record.day}-${record.skillId}-${record.toRank}-${record.success === false ? 'fail' : 'success'}`">
                     <strong>{{ skillUpgradeRecordTitle(record) }}</strong>
                     <span>{{ skillUpgradeRecordMetaText(record) }}</span>
                   </div>
@@ -2569,7 +2864,7 @@ import {
   Zap
 } from "lucide-vue-next";
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from "vue";
-import { clearCachedState, getBattleReplay, getCachedState, getDuelReplay, getState, postAction, saveCachedState } from "./api";
+import { clearCachedState, getBattleReplay, getCachedState, getCultivatorDetail, getDuelReplay, getState, postAction, saveCachedState } from "./api";
 import CharacterPortrait from "./components/CharacterPortrait.vue";
 import EquipmentIcon from "./components/EquipmentIcon.vue";
 import LogPanel from "./components/LogPanel.vue";
@@ -2716,7 +3011,10 @@ const loading = ref(true);
 const error = ref("");
 const pendingActions = ref(new Set());
 const fullStateRefreshing = ref(false);
+const homeStateRefreshing = ref(false);
 const fullStateStale = ref(false);
+const personDetails = ref({});
+const personDetailLoading = ref(new Set());
 const activeTab = ref("practice");
 const cultivationSubTab = ref("attributes");
 const activeSectSubTab = ref("map");
@@ -2964,7 +3262,47 @@ const skillUpgradeHint = computed(() => {
   return `失败也会扣除 ${preview.cost} 灵石，今日仅可尝试一次。`;
 });
 const sectSummaries = computed(() => derived.value.sects || []);
-const catalogRoots = computed(() => catalog.value.roots?.length ? catalog.value.roots : []);
+const fallbackRoots = [
+  { key: "metal", name: "金灵根", effect: "attack", min: 0.05, max: 0.1, note: "攻击提高 5%-10%。" },
+  { key: "wood", name: "木灵根", effect: "hp", min: 0.1, max: 0.2, note: "血量上限提高 10%-20%。" },
+  { key: "earth", name: "土灵根", effect: "defense", min: 0.05, max: 0.1, note: "防御提高 5%-10%。" },
+  { key: "water", name: "水灵根", effect: "xp", min: 0.4, max: 0.6, breakMultiplier: 1.1, note: "每日经验获取提高 40%-60%，突破率按倍率提高 10%。" },
+  { key: "fire", name: "火灵根", effect: "divineSense", min: 0.1, max: 0.2, note: "神识提高 10%-20%。" },
+  { key: "heaven", name: "天灵根", effect: "mana", min: 0.1, max: 0.2, note: "法力上限提高 10%-20%。" }
+];
+const fallbackRootCycle = ["metal", "wood", "earth", "water", "fire", "heaven"];
+const fallbackSpecialRoots = [
+  { id: "thunder", name: "雷灵根", keys: ["metal", "wood", "earth"], note: "金、木、土齐备时自动转换；克金灵根、木灵根、土灵根，不被其他灵根相克。" },
+  { id: "wind", name: "风灵根", keys: ["water", "fire", "heaven"], note: "水、火、天齐备时自动转换；克水灵根、火灵根、天灵根，不被其他灵根相克。" },
+  { id: "hidden", name: "隐灵根", keys: ["metal", "wood", "water", "fire", "earth"], note: "金、木、水、火、土齐备时自动转换；克五行灵根，不被其他灵根相克。" }
+];
+const fallbackRootByKey = Object.fromEntries(fallbackRoots.map((root) => [root.key, root]));
+const fallbackRootRules = {
+  cycle: fallbackRootCycle.map((key) => {
+    const root = fallbackRootByKey[key];
+    const target = fallbackRootByKey[fallbackRootCycle[(fallbackRootCycle.indexOf(key) + 1) % fallbackRootCycle.length]];
+    return {
+      key,
+      name: root.name,
+      targetKey: target.key,
+      targetName: target.name,
+      text: `${root.name}克${target.name}`
+    };
+  }),
+  specialRoots: fallbackSpecialRoots.map((special) => ({
+    ...special,
+    childNames: special.keys.map((key) => fallbackRootByKey[key]?.name || key),
+    counterText: `${special.name}克${special.keys.map((key) => fallbackRootByKey[key]?.name || key).join("、")}，不受其他灵根相克。`
+  }))
+};
+const catalogRoots = computed(() => catalog.value.roots?.length ? catalog.value.roots : fallbackRoots);
+const catalogRootRules = computed(() => {
+  const rules = catalog.value.rootRules || {};
+  return {
+    cycle: rules.cycle?.length ? rules.cycle : fallbackRootRules.cycle,
+    specialRoots: rules.specialRoots?.length ? rules.specialRoots : fallbackRootRules.specialRoots
+  };
+});
 const adminCultivators = computed(() => cultivators.value);
 const normalizedAdminSearch = computed(() => adminSearch.value.trim().toLowerCase());
 const filteredAdminCultivators = computed(() => {
@@ -3188,6 +3526,7 @@ const todaySpiritHighlight = computed(() => {
     .sort((a, b) => b.spirit - a.spirit || a.personIndex - b.personIndex)[0] || null;
 });
 const dailyTickerItems = computed(() => {
+  if (homeSummary.value.ticker?.length) return homeSummary.value.ticker;
   const items = [];
   const drops = todayEquipmentDrops.value;
   if (drops.length) {
@@ -3219,11 +3558,14 @@ const dailyTickerItems = computed(() => {
   if (todaySkillUpgradeHighlight.value) {
     const { person, record } = todaySkillUpgradeHighlight.value;
     const count = todaySkillUpgrades.value.length;
+    const succeeded = skillUpgradeRecordSucceeded(record);
     items.push({
       key: "skill-upgrade",
       label: "技能",
       name: person.name,
-      text: `将「${record.skillName || skillName(record.skillId)}」升至 ${skillRankText(record.toRank)}，今日共 ${count} 人技能升阶`
+      text: succeeded
+        ? `将「${record.skillName || skillName(record.skillId)}」升至 ${skillRankText(record.toRank)}，今日共 ${count} 次技能尝试`
+        : `尝试将「${record.skillName || skillName(record.skillId)}」升至 ${skillRankText(record.toRank)}失败，今日共 ${count} 次技能尝试`
     });
   }
   if (todaySpiritHighlight.value) {
@@ -3242,6 +3584,10 @@ const equipmentList = computed(() => {
   const source = gameState.value.equipment?.length ? gameState.value.equipment : catalogSource;
   return normalizeEquipmentDisplayItems(source);
 });
+const equipmentCollectionCount = computed(() => ({
+  acquired: equipmentList.value.filter((item) => item.ownerName).length,
+  total: equipmentList.value.length
+}));
 const filteredEquipment = computed(() => equipmentList.value
   .filter((item) => !equipmentTierFilter.value || String(item.tier) === equipmentTierFilter.value)
   .filter((item) => !equipmentSlotFilter.value || item.slot === equipmentSlotFilter.value)
@@ -3341,7 +3687,7 @@ const homeSectTerritorySummary = computed(() => {
     .filter((province) => province.owner === sectName)
     .sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name, "zh-Hans-CN"));
   if (!provinces.length) return "当前暂无占领城市";
-  const names = provinces.slice(0, 3).map((province) => province.name.replace(/省|市|自治区|特别行政区/g, ""));
+  const names = provinces.slice(0, 3).map((province) => provinceShortName(province.name));
   const rest = provinces.length - names.length;
   return `占领 ${names.join("、")}${rest > 0 ? ` 等 ${provinces.length} 城` : ""}`;
 });
@@ -3355,6 +3701,12 @@ const sectTerritoryRanking = computed(() => sectSummaries.value
       name: sect.name,
       provinceCount: provinces.length,
       provinceNames: provinces.map((province) => province.name),
+      provinceHighlights: provinces.slice(0, 5).map((province) => ({
+        id: province.id,
+        name: province.name,
+        shortName: provinceShortName(province.name),
+        tier: provinceGdpTier(province.rank)
+      })),
       spirit: spiritItems.reduce((sum, item) => sum + (Number(item.value) || 0), 0),
       xp: xpItems.reduce((sum, item) => sum + (Number(item.value) || 0), 0),
       breakthrough: breakthroughItems.reduce((sum, item) => sum + (Number(item.value) || 0), 0),
@@ -3398,6 +3750,14 @@ const provinceWarDayOptions = computed(() => {
 });
 const provinceWarDateOptions = computed(() => provinceWarDayOptions.value.map((day) => ({ day, date: dateForDay(day) })));
 const selectedProvinceWarDayRecord = computed(() => provinceWarDayRecords.value.find((record) => record.day === selectedProvinceWarDay.value));
+const todayProvinceWarSummary = computed(() => {
+  const wars = provinceWarDayRecords.value.find((record) => record.day === gameState.value.day)?.wars || [];
+  return wars.reduce((summary, war) => {
+    if (war.captured) summary.captured += 1;
+    else summary.defended += 1;
+    return summary;
+  }, { captured: 0, defended: 0 });
+});
 const normalizedProvinceWarSearch = computed(() => provinceWarSearch.value.trim().toLowerCase());
 const filteredProvinceWars = computed(() => {
   const wars = selectedProvinceWarDayRecord.value?.wars || [];
@@ -3422,8 +3782,10 @@ const normalizedDuelSearch = computed(() => duelSearch.value.trim().toLowerCase(
 const filteredDuelMatches = computed(() => {
   const matches = selectedDuelRecord.value?.matches || [];
   const keyword = normalizedDuelSearch.value;
-  if (!keyword) return matches;
-  return matches.filter((match) => duelMatchSearchText(match).includes(keyword));
+  const filtered = keyword
+    ? matches.filter((match) => duelMatchSearchText(match).includes(keyword))
+    : matches;
+  return sortDuelMatchesByRank(filtered);
 });
 const duelPreviewIndex = computed(() => filteredDuelMatches.value.findIndex((match) => match.type === "battle" && (match.hasReplay || match.replay)));
 const duelPreviewMatch = computed(() => {
@@ -3553,7 +3915,7 @@ const isMaxRealm = computed(() => {
 const hasBreakthroughXp = computed(() => Number(player.value.xp || 0) >= Number(derived.value.xpNeed || 0));
 const attemptedBreakthroughToday = computed(() => Number(player.value.lastBreakthroughDay || 0) === Number(gameState.value.day || 0));
 const breakthroughAttemptsToday = computed(() => (
-  !isMaxRealm.value && hasBreakthroughXp.value && !attemptedBreakthroughToday.value ? 1 : 0
+  !isMaxRealm.value && !attemptedBreakthroughToday.value ? 1 : 0
 ));
 const breakthroughAttemptHint = computed(() => {
   if (isMaxRealm.value) return "已至当前境界尽头";
@@ -3588,12 +3950,17 @@ function skillById(id) {
   return combatSkills.value.find((skill) => skill.id === id) || combatSkills.value[0];
 }
 
+function localSkillRank(skill) {
+  return Math.max(1, Math.min(10, Math.floor(Number(player.value.skillRanks?.[skill.id] || skill.rank || 1) || 1)));
+}
+
 function skillPlan(skill) {
+  const rank = localSkillRank(skill);
   return skillUpgradePlan.value.find((item) => item.skillId === skill.id) || {
     skillId: skill.id,
-    rank: 1,
-    targetRank: 2,
-    current: skill,
+    rank,
+    targetRank: Math.min(10, rank + 1),
+    current: { ...skill, rank },
     next: null,
     requirementRealm: realmName(0),
     cost: 0,
@@ -3948,8 +4315,6 @@ function voidHallBattles(record) {
   return [];
 }
 
-const fallbackRootCycle = ["metal", "wood", "earth", "water", "fire", "heaven"];
-
 function rootKeyFromName(name) {
   return catalogRoots.value.find((root) => root.name === name)?.key || "";
 }
@@ -4287,6 +4652,7 @@ function voidHallMemberSpiritText(record) {
 
 function openVoidHallRecord(record) {
   selectedVoidHallSect.value = record?.sect || "";
+  clearBattleReplay();
 }
 
 async function openSectVoidHallRecord(record) {
@@ -4303,6 +4669,7 @@ async function openSectVoidHallRecord(record) {
 
 function closeVoidHallRecord() {
   selectedVoidHallSect.value = "";
+  clearBattleReplay();
 }
 
 function bloodCaveEntries(cave) {
@@ -4434,6 +4801,11 @@ function skillEffectTitle(event) {
   return `${skill.name} · 术法爆发`;
 }
 
+function skillDamageText(event) {
+  const value = Number(event?.damage) || 0;
+  return value > 0 ? `${value} 伤害` : "";
+}
+
 function skillEffectImage(event) {
   return skillAssetPath(skillForEvent(event));
 }
@@ -4449,21 +4821,22 @@ function skillEffectGlyph(event) {
 }
 
 function provinceEffect(province) {
-  const rank = province.rank || 99;
-  const tier = rank <= 5 ? 1 : rank <= 12 ? 0.82 : rank <= 22 ? 0.62 : 0.42;
+  const rank = Math.max(1, Math.min((catalog.value.provinces || []).length || 34, Number(province.rank) || 34));
+  const provinceCount = Math.max(1, (catalog.value.provinces || []).length || 34);
+  const tier = Number((0.38 + 0.62 * ((provinceCount - rank) / Math.max(1, provinceCount - 1))).toFixed(4));
   if (province.type === "spirit") {
-    const value = 10 + Math.round(10 * tier);
+    const value = Math.round(8 + 16 * tier);
     return { type: province.type, value, text: `灵石包基准 +${value}/人` };
   }
   if (province.type === "xp") {
-    const value = Number((0.4 + 0.2 * tier).toFixed(2));
+    const value = Number((0.36 + 0.28 * tier).toFixed(3));
     return { type: province.type, value, text: `经验包基准 +${Math.round(value * 100)}%/人` };
   }
   if (province.type === "breakthrough") {
-    const value = Number((0.025 + 0.035 * tier).toFixed(3));
+    const value = Number((0.02 + 0.045 * tier).toFixed(4));
     return { type: province.type, value, text: `突破包基准 +${Math.round(value * 100)}%/人` };
   }
-  const value = 10 + Math.round(10 * tier);
+  const value = Math.round(8 + 16 * tier);
   return { type: "spirit", value, text: `灵石包基准 +${value}/人` };
 }
 
@@ -4475,6 +4848,10 @@ function provinceGdpTier(rank) {
   if (value <= 21) return "C";
   if (value <= 28) return "D";
   return "E";
+}
+
+function provinceShortName(name) {
+  return String(name || "").replace(/省|市|自治区|特别行政区/g, "");
 }
 
 function bonusItemsText(items, type) {
@@ -4571,7 +4948,11 @@ const cultivators = computed(() => [
   ...(gameState.value.npcs || []).map((npc) => withDuelRank({ ...npc, power: personPower({ ...npc, isPlayer: false }), isPlayer: false }))
 ]);
 
-const selectedPerson = computed(() => cultivators.value.find((item) => item.id === selectedPersonId.value));
+const selectedPerson = computed(() => {
+  const base = cultivators.value.find((item) => item.id === selectedPersonId.value);
+  const detail = personDetails.value[selectedPersonId.value];
+  return detailedPerson(base || detail?.person);
+});
 const selectedSect = computed(() => sectSummaries.value.find((sect) => sect.name === selectedSectName.value));
 const detailBackLabel = computed(() => {
   const last = detailReturnStack.value[detailReturnStack.value.length - 1];
@@ -4584,7 +4965,28 @@ const detailBackLabel = computed(() => {
 
 function personByRef(ref) {
   if (!ref) return null;
-  return cultivators.value.find((person) => person.id === ref.id || person.name === ref.name) || withDuelRank(ref);
+  const person = cultivators.value.find((item) => item.id === ref.id || item.name === ref.name);
+  const detail = personDetails.value[ref.id];
+  if (detail?.person) return detailedPerson(person || detail.person);
+  return detailedPerson(person) || withDuelRank(ref);
+}
+
+function detailedPerson(person) {
+  if (!person?.id) return person;
+  const detail = personDetails.value[person.id];
+  const merged = detail?.person
+    ? { ...person, ...detail.person, power: detail.power ?? detail.person.power ?? person.power }
+    : person;
+  return withDuelRank({
+    ...merged,
+    dailyRecords: merged.dailyRecords || [],
+    breakthroughs: merged.breakthroughs || [],
+    duelHistory: merged.duelHistory || [],
+    dungeonHistory: merged.dungeonHistory || [],
+    skillUpgrades: merged.skillUpgrades || [],
+    duelSeasonHistory: merged.duelSeasonHistory || [],
+    skillRanks: merged.skillRanks || {}
+  });
 }
 
 function withDuelRank(person) {
@@ -5120,6 +5522,53 @@ function duelRankName(person) {
   return season.rankName || "黑铁";
 }
 
+function duelRankScoreText(person) {
+  const season = person?.duelSeason || duelRankByScore(0);
+  return `${season.score || 0}分`;
+}
+
+function duelRankSortValue(person) {
+  const rankId = duelRankId(person);
+  const index = duelRankList.value.findIndex((rank) => rank.id === rankId);
+  return index >= 0 ? index : 0;
+}
+
+function duelMatchSortStats(match) {
+  const people = [matchPerson(match.left), matchPerson(match.right), matchPerson(match.winner)].filter(Boolean);
+  return people.reduce((best, person) => {
+    const rank = duelRankSortValue(person);
+    const score = Number(person.duelSeason?.score || 0);
+    const power = Number(person.power || 0);
+    return {
+      rank: Math.max(best.rank, rank),
+      score: Math.max(best.score, score),
+      power: Math.max(best.power, power)
+    };
+  }, { rank: 0, score: 0, power: 0 });
+}
+
+function duelMatchOriginalOrder(match, index) {
+  if (typeof match?.order === "number") return match.order;
+  const idOrder = String(match?.id || "").match(/match-(\d+)$/);
+  return idOrder ? Number(idOrder[1]) : index + 1;
+}
+
+function sortDuelMatchesByRank(matches) {
+  return [...matches]
+    .map((match, index) => ({
+      match,
+      order: duelMatchOriginalOrder(match, index),
+      stats: duelMatchSortStats(match)
+    }))
+    .sort((a, b) => (
+      b.stats.rank - a.stats.rank
+      || b.stats.score - a.stats.score
+      || b.stats.power - a.stats.power
+      || a.order - b.order
+    ))
+    .map((item) => item.match);
+}
+
 function genderLabel(gender) {
   if (gender === "female") return "女";
   if (gender === "unknown") return "未知";
@@ -5226,14 +5675,20 @@ function breakthroughRecordMetaText(record) {
 }
 
 function skillUpgradeRecordTitle(record) {
-  return `${shortDisplayDate(record)} · ${record.skillName || skillName(record.skillId)} · ${skillRankText(record.fromRank)} → ${skillRankText(record.toRank)}`;
+  const status = skillUpgradeRecordSucceeded(record) ? "" : " · 失败";
+  return `${shortDisplayDate(record)} · ${record.skillName || skillName(record.skillId)} · ${skillRankText(record.fromRank)} → ${skillRankText(record.toRank)}${status}`;
 }
 
 function skillUpgradeRecordMetaText(record) {
   const parts = [];
   if (record.cost) parts.push(`消耗 ${record.cost} 灵石`);
   if (typeof record.chance === "number") parts.push(`成功率 ${formatPercent(record.chance)}`);
-  return parts.join(" · ") || "升阶成功";
+  parts.push(skillUpgradeRecordSucceeded(record) ? "升阶成功" : `升阶失败，仍为 ${skillRankText(record.rank || record.fromRank)}`);
+  return parts.join(" · ");
+}
+
+function skillUpgradeRecordSucceeded(record) {
+  return record?.success !== false;
 }
 
 function duelRecordTitle(record) {
@@ -5490,6 +5945,7 @@ function switchTab(tabId) {
   }
   activeTab.value = tabId;
   resetTabHome(tabId);
+  if (tabId === "practice" && state.value) refresh("home");
 }
 
 function adminNumber(value, fallback = 0) {
@@ -5519,6 +5975,7 @@ function selectAdminCultivator(id) {
   const person = adminCultivators.value.find((item) => item.id === id);
   if (!person) return;
   syncAdminCultivatorDraft(person);
+  ensurePersonDetail(id);
 }
 
 function toggleAdminRoot(key) {
@@ -5665,6 +6122,7 @@ function openRankItem(item) {
   }
   selectedPersonId.value = item.id;
   openDetailFromCurrent("person");
+  ensurePersonDetail(item.id);
 }
 
 function openPracticeRankItem(item) {
@@ -5673,6 +6131,7 @@ function openPracticeRankItem(item) {
   selectedPersonId.value = item.id;
   activeTab.value = "rank";
   detailView.value = "person";
+  ensurePersonDetail(item.id);
 }
 
 function rankSearchText(item) {
@@ -5710,6 +6169,7 @@ function jumpRankPage() {
 function openPersonById(id) {
   selectedPersonId.value = id;
   openDetailFromCurrent("person");
+  ensurePersonDetail(id);
 }
 
 function openProgression() {
@@ -5760,6 +6220,15 @@ function battleStatsFromEffective(effective) {
   ];
 }
 
+function battleCompactStats(side) {
+  const stats = battleStatsFromEffective(side?.stats || side?.baseStats || {});
+  const shortLabels = { "攻击": "攻", "防御": "防", "神识": "神" };
+  return stats.map((stat) => ({
+    ...stat,
+    short: shortLabels[stat.label] || stat.label
+  }));
+}
+
 function personPower(person) {
   if (person.isPlayer) return derived.value.playerPower;
   return personInsight(person).power ?? derived.value.npcPowers?.[person.id] ?? powerFromEffectiveStats(personEffectiveStats(person));
@@ -5780,7 +6249,7 @@ function personPowerFormula(person, effective, power = personPower(person)) {
 }
 
 function rootName(key) {
-  return catalog.value.roots.find((root) => root.key === key)?.name || key;
+  return catalogRoots.value.find((root) => root.key === key)?.name || key;
 }
 
 function compactRootNames(names) {
@@ -5790,7 +6259,7 @@ function compactRootNames(names) {
 }
 
 const rootCycleNodes = computed(() => {
-  const cycle = catalog.value.rootRules?.cycle || [];
+  const cycle = catalogRootRules.value.cycle || [];
   const count = Math.max(1, cycle.length);
 
   return cycle.map((rule, index) => {
@@ -5844,16 +6313,17 @@ const rootAstrolabeNodes = computed(() => {
       : "未拥有"
   }));
 
-  const specialNodes = (catalog.value.rootRules?.specialRoots || []).map((special) => {
+  const specialNodes = (catalogRootRules.value.specialRoots || []).map((special) => {
     const active = activeSpecialId === special.id;
     const [x, y] = specialPositions[special.id] || [50, 50];
+    const keys = special.keys || [];
     return {
       key: special.id,
       id: special.id,
       name: special.name,
       shortName: String(special.name || "").replace(/灵根$/, ""),
       note: special.note,
-      keys: special.keys || [],
+      keys,
       childNames: special.childNames || [],
       x,
       y,
@@ -5865,7 +6335,7 @@ const rootAstrolabeNodes = computed(() => {
       restrains: false,
       highlighted: hoveredRootKey.value === special.id,
       badge: "特殊",
-      statusText: active ? "当前特殊灵根" : `需 ${special.keys.map(rootName).join("、")} 共鸣`
+      statusText: active ? "当前特殊灵根" : `需 ${keys.map(rootName).join("、") || "子灵根"} 共鸣`
     };
   });
 
@@ -5900,7 +6370,14 @@ const rootChartEdges = computed(() => {
 const hoveredRootDetail = computed(() => {
   const fallbackKey = personInsight(player.value).rootProfile.specialRoot?.id || primaryRoot(player.value).key || rootAstrolabeNodes.value[0]?.key;
   const key = hoveredRootKey.value || fallbackKey;
-  const node = rootAstrolabeNodes.value.find((item) => item.key === key) || rootAstrolabeNodes.value[0] || {};
+  const defaultNode = rootAstrolabeNodes.value[0] || {
+    key: primaryRoot(player.value).key || "wood",
+    name: primaryRoot(player.value).name || rootName("wood"),
+    shortName: String(primaryRoot(player.value).name || rootName("wood")).replace(/灵根$/, ""),
+    special: false,
+    statusText: "未拥有"
+  };
+  const node = rootAstrolabeNodes.value.find((item) => item.key === key) || defaultNode;
   if (node.special) {
     const targets = node.childNames?.length ? node.childNames : (node.keys || []).map(rootName);
     const targetLine = compactRootNames(targets);
@@ -5915,9 +6392,9 @@ const hoveredRootDetail = computed(() => {
     };
   }
 
-  const target = catalog.value.rootRules?.cycle?.find((rule) => rule.key === node.key);
-  const incoming = catalog.value.rootRules?.cycle?.find((rule) => rule.targetKey === node.key);
-  const root = catalog.value.roots.find((item) => item.key === node.key);
+  const target = catalogRootRules.value.cycle?.find((rule) => rule.key === node.key);
+  const incoming = catalogRootRules.value.cycle?.find((rule) => rule.targetKey === node.key);
+  const root = catalogRoots.value.find((item) => item.key === node.key);
   return {
     ...node,
     note: rootMoodText(node.key),
@@ -5977,7 +6454,8 @@ function rootMoodText(key) {
 }
 
 function specialRootCompositionText(special) {
-  return `由 ${special.keys.map(rootName).join("、")} 组成`;
+  const names = (special?.keys || []).map(rootName).filter(Boolean).join("、");
+  return names ? `由 ${names} 组成` : "特殊灵根共鸣";
 }
 
 function rootList(person) {
@@ -6070,14 +6548,16 @@ function rootCounterText(person) {
 
 function personInsight(person) {
   const fallbackBreakthrough = fallbackPersonBreakthroughChance(person);
-  return derived.value.personInsights?.[person?.id] || {
+  const fallback = {
     rootProfile: {
       roots: [person?.root].filter(Boolean),
       primaryRoot: person?.root || {},
       count: 1,
       cultivationMultiplier: 1,
       breakthroughMultiplier: 1,
+      combatRoot: person?.root ? { type: "root", key: person.root.key, name: person.root.name, childKeys: [person.root.key], root: person.root } : null,
       restrains: null,
+      restrainsList: [],
       restrainedBy: null,
       specialRoot: null,
       resonances: []
@@ -6086,6 +6566,24 @@ function personInsight(person) {
     power: null,
     tomorrowXp: { baseXp: person?.isPlayer ? 10 : 100, rootMultiplier: 1, sectMultiplier: 1, total: person?.isPlayer ? 10 : 100 },
     breakthrough: { realmBase: baseBreakthroughChance(person?.realm || 0), rootMultiplier: 1, sectMultiplier: 1, base: fallbackBreakthrough, bonus: 0, total: fallbackBreakthrough }
+  };
+  const insight = derived.value.personInsights?.[person?.id] || {};
+  const rootProfile = {
+    ...fallback.rootProfile,
+    ...(insight.rootProfile || {})
+  };
+  return {
+    ...fallback,
+    ...insight,
+    rootProfile,
+    tomorrowXp: {
+      ...fallback.tomorrowXp,
+      ...(insight.tomorrowXp || {})
+    },
+    breakthrough: {
+      ...fallback.breakthrough,
+      ...(insight.breakthrough || {})
+    }
   };
 }
 
@@ -6179,7 +6677,8 @@ function sectByName(name) {
 }
 
 function sectMemberCount(name) {
-  return sectByName(name)?.members?.length || cultivators.value.filter((person) => person.sect === name).length;
+  const sect = sectByName(name);
+  return sect?.memberCount || sect?.members?.length || cultivators.value.filter((person) => person.sect === name).length;
 }
 
 function sectTotalPower(name) {
@@ -6382,6 +6881,62 @@ function setActionPending(path, value) {
   pendingActions.value = next;
 }
 
+function mergeCultivatorDetail(detail) {
+  const id = detail?.person?.id;
+  if (!id) return;
+  personDetails.value = {
+    ...personDetails.value,
+    [id]: detail
+  };
+  if (!state.value) return;
+  const nextDerived = {
+    ...(state.value.derived || {}),
+    personInsights: {
+      ...(state.value.derived?.personInsights || {}),
+      [id]: detail.insight
+    },
+    equippedItems: {
+      ...(state.value.derived?.equippedItems || {}),
+      [id]: detail.equippedItems || []
+    },
+    duelRanks: {
+      ...(state.value.derived?.duelRanks || {}),
+      [id]: detail.duelRank || detail.person.duelSeason
+    },
+    npcPowers: id === "player"
+      ? (state.value.derived?.npcPowers || {})
+      : {
+        ...(state.value.derived?.npcPowers || {}),
+        [id]: detail.power ?? detail.person.power
+      },
+    playerPower: id === "player" ? (detail.power ?? detail.person.power ?? state.value.derived?.playerPower) : state.value.derived?.playerPower
+  };
+  state.value = {
+    ...state.value,
+    player: id === "player" ? { ...(state.value.player || {}), ...detail.person } : state.value.player,
+    npcs: id === "player"
+      ? (state.value.npcs || [])
+      : (state.value.npcs || []).map((npc) => npc.id === id ? { ...npc, ...detail.person } : npc),
+    derived: nextDerived
+  };
+}
+
+async function ensurePersonDetail(id) {
+  if (!id || personDetails.value[id] || personDetailLoading.value.has(id)) return;
+  const nextLoading = new Set(personDetailLoading.value);
+  nextLoading.add(id);
+  personDetailLoading.value = nextLoading;
+  try {
+    mergeCultivatorDetail(await getCultivatorDetail(id));
+  } catch (err) {
+    error.value = err.message;
+  } finally {
+    const doneLoading = new Set(personDetailLoading.value);
+    doneLoading.delete(id);
+    personDetailLoading.value = doneLoading;
+  }
+}
+
 function mergeGameState(current, incoming, options = {}) {
   if (!incoming) return current || null;
   if (options.replace) {
@@ -6397,7 +6952,7 @@ function mergeGameState(current, incoming, options = {}) {
     const { __scope, ...fullState } = incoming;
     return fullState;
   }
-  const { __scope, derived: incomingDerived, ...hotState } = incoming;
+  const { __scope, derived: incomingDerived, catalog: incomingCatalog, ...hotState } = incoming;
   return {
     ...current,
     ...hotState,
@@ -6412,8 +6967,11 @@ function mergeGameState(current, incoming, options = {}) {
     tasks: incoming.tasks || current.tasks || [],
     taskDefinitions: incoming.taskDefinitions || current.taskDefinitions || [],
     taskCompletions: incoming.taskCompletions || current.taskCompletions || [],
-    home: incoming.home || current.home || {},
-    catalog: current.catalog || {},
+    home: {
+      ...(current.home || {}),
+      ...(incoming.home || {})
+    },
+    catalog: incomingCatalog || current.catalog || {},
     derived: {
       ...(current.derived || {}),
       ...(incomingDerived || {})
@@ -6422,10 +6980,13 @@ function mergeGameState(current, incoming, options = {}) {
 }
 
 function applyState(nextState, options = {}) {
+  const shouldClearPersonDetails = options.replace || nextState?.__scope !== "home";
+  if (shouldClearPersonDetails) personDetails.value = {};
   state.value = mergeGameState(state.value, nextState, options);
   if (state.value && nextState?.__scope === "home") saveCachedState(state.value);
   if (!["home", "lite"].includes(nextState?.__scope)) fullStateStale.value = false;
   else fullStateStale.value = true;
+  if (state.value && detailView.value === "person" && selectedPersonId.value) ensurePersonDetail(selectedPersonId.value);
 }
 
 function syncSelectedDays() {
@@ -6440,16 +7001,27 @@ function syncSelectedDays() {
 
 async function refresh(scope = "full") {
   if (scope === "full" && fullStateRefreshing.value) return;
+  if (scope === "home" && homeStateRefreshing.value) return;
   if (scope === "full") fullStateRefreshing.value = true;
+  if (scope === "home") homeStateRefreshing.value = true;
   try {
     applyState(await getState(scope));
     syncSelectedDays();
     error.value = "";
   } catch (err) {
     error.value = err.message;
+    if (!state.value) {
+      const cachedState = getCachedState();
+      if (cachedState) {
+        state.value = cachedState;
+        fullStateStale.value = true;
+        syncSelectedDays();
+      }
+    }
   } finally {
     loading.value = false;
     if (scope === "full") fullStateRefreshing.value = false;
+    if (scope === "home") homeStateRefreshing.value = false;
   }
 }
 
@@ -6464,6 +7036,7 @@ async function act(path, body = {}, options = {}) {
   try {
     const response = await postAction(path, body, options);
     const nextState = response.state || (response.result !== undefined ? null : response);
+    const refreshHomeAfterAction = options.refreshHome !== false && shouldRefreshHomeState(path);
     if (nextState) {
       applyState(nextState, options);
       syncSelectedDays();
@@ -6475,6 +7048,7 @@ async function act(path, body = {}, options = {}) {
       fullStateStale.value = true;
       if (!options.deferFullRefresh && needsHeavyState(activeTab.value)) ensureFullState();
     }
+    if (refreshHomeAfterAction) await refresh("home");
     error.value = "";
     return response.result;
   } catch (err) {
@@ -6487,6 +7061,26 @@ async function act(path, body = {}, options = {}) {
 
 function shouldMarkFullStateStale(path) {
   return ["/api/day/advance", "/api/tasks"].includes(path);
+}
+
+function shouldRefreshHomeState(path) {
+  return [
+    "/api/reset",
+    "/api/day/advance",
+    "/api/tasks",
+    "/api/skills/upgrade",
+    "/api/rest",
+    "/api/dungeons/run",
+    "/api/sect/mission",
+    "/api/sect/war",
+    "/api/duel",
+    "/api/duels/day",
+    "/api/items/buy",
+    "/api/items/use",
+    "/api/player/portrait",
+    "/api/admin/cultivator",
+    "/api/admin/sect"
+  ].includes(path);
 }
 
 function needsHeavyState(tab = activeTab.value) {
@@ -6777,13 +7371,6 @@ onMounted(async () => {
     updateCountdown();
     if (countdown.value === "00:00:00") refresh();
   }, 1000);
-  const cachedState = getCachedState();
-  if (cachedState) {
-    state.value = cachedState;
-    loading.value = false;
-    fullStateStale.value = true;
-    syncSelectedDays();
-  }
   await refresh("home");
   if (needsHeavyState(activeTab.value)) ensureFullState();
   window.addEventListener("resize", resizeChinaMap);
@@ -6817,7 +7404,9 @@ watch(activeTab, () => {
   } else if (needsLiteState(activeTab.value) && state.value && fullStateStale.value) {
     refresh("lite");
   }
+  if (activeTab.value === "rank" && detailView.value === "person") ensurePersonDetail(selectedPersonId.value);
   if (activeTab.value === "admin") {
+    if (adminMode.value === "cultivators") ensurePersonDetail(adminCultivatorPerson.value?.id);
     if (adminMode.value === "cultivators") syncAdminCultivatorDraft(adminCultivatorPerson.value);
     if (adminMode.value === "sects") syncAdminSectDraft(adminSelectedSectName.value);
     if (adminMode.value === "tasks") syncAdminTaskDraft(adminTaskDefinition.value || filteredAdminTasks.value[0]);
@@ -6825,7 +7414,10 @@ watch(activeTab, () => {
 });
 
 watch([adminCultivatorPerson, () => player.value.portraitUrl], () => {
-  if (activeTab.value === "admin" && adminMode.value === "cultivators") syncAdminCultivatorDraft(adminCultivatorPerson.value);
+  if (activeTab.value === "admin" && adminMode.value === "cultivators") {
+    ensurePersonDetail(adminCultivatorPerson.value?.id);
+    syncAdminCultivatorDraft(adminCultivatorPerson.value);
+  }
 });
 
 watch([filteredAdminSects, adminSects], () => {
@@ -6834,9 +7426,16 @@ watch([filteredAdminSects, adminSects], () => {
 
 watch([adminSearch, adminMode], () => {
   if (activeTab.value !== "admin") return;
-  if (adminMode.value === "cultivators") syncAdminCultivatorDraft(adminCultivatorPerson.value);
+  if (adminMode.value === "cultivators") {
+    ensurePersonDetail(adminCultivatorPerson.value?.id);
+    syncAdminCultivatorDraft(adminCultivatorPerson.value);
+  }
   else if (adminMode.value === "sects") syncAdminSectDraft(adminSelectedSectName.value);
   else syncAdminTaskDraft(adminTaskDefinition.value || filteredAdminTasks.value[0]);
+});
+
+watch([detailView, selectedPersonId], () => {
+  if (detailView.value === "person") ensurePersonDetail(selectedPersonId.value);
 });
 
 watch([enabledTaskDefinitions, () => taskForm.category], () => {

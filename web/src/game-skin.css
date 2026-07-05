@@ -11,6 +11,45 @@
   --kenney: "/assets/kenney/ui-pack-rpg-expansion/PNG/";
 }
 
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(214, 177, 92, .78) rgba(15, 18, 15, .58);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(11, 17, 16, .88), rgba(32, 24, 13, .76));
+  box-shadow: inset 0 0 0 1px rgba(214, 177, 92, .16);
+}
+
+*::-webkit-scrollbar-thumb {
+  border: 2px solid rgba(12, 17, 16, .86);
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, #f7d77c, #b97824 46%, #6f4d20);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 248, 210, .72),
+    0 0 8px rgba(247, 215, 124, .22);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background:
+    linear-gradient(180deg, #ffe4a0, #d49634 48%, #825c25);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 252, 232, .82),
+    0 0 11px rgba(255, 214, 111, .36);
+}
+
+*::-webkit-scrollbar-corner {
+  background: rgba(10, 14, 13, .9);
+}
+
 /* Final xianxia game polish layer. Keep this at the end so list-heavy pages do not fall back to plain tables. */
 .view.active {
   animation: view-reveal .22s ease-out;
@@ -1338,6 +1377,37 @@ body::before {
   width: 100%;
 }
 
+.arena-surface.view.active .duel-command-bar .duel-search input {
+  color: #2b1b0d;
+  caret-color: #8a4b12;
+  background:
+    linear-gradient(180deg, rgba(255, 253, 245, .98), rgba(237, 221, 178, .96));
+  text-shadow: none;
+}
+
+.arena-surface.view.active .duel-command-bar .duel-search input::placeholder {
+  color: rgba(70, 45, 20, .72);
+  opacity: 1;
+}
+
+.arena-surface.view.active .duel-command-bar .search-clear {
+  color: #f8e7bb;
+  background: rgba(38, 28, 17, .72);
+  border-color: rgba(203, 147, 58, .58);
+}
+
+.arena-surface.view.active .duel-command-bar .duel-date-select select {
+  color: #2b1b0d;
+  background:
+    linear-gradient(180deg, rgba(255, 253, 245, .98), rgba(237, 221, 178, .96));
+  text-shadow: none;
+}
+
+.arena-surface.view.active .duel-command-bar .duel-date-select select option {
+  color: #2b1b0d;
+  background: #fff8e4;
+}
+
 .duel-system-grid {
   display: grid;
   grid-template-columns: minmax(580px, 1.55fr) minmax(430px, .95fr);
@@ -1348,7 +1418,7 @@ body::before {
 .duel-match-board,
 .duel-replay-panel {
   position: relative;
-  min-height: 600px;
+  min-height: 700px;
   border: 1px solid rgba(203, 147, 58, .5);
   background:
     linear-gradient(180deg, rgba(9, 16, 16, .96), rgba(7, 12, 12, .98)),
@@ -1390,7 +1460,7 @@ body::before {
   display: grid;
   gap: 9px;
   padding: 10px 12px 12px;
-  max-height: 548px;
+  max-height: 648px;
   overflow: auto;
 }
 
@@ -1484,6 +1554,15 @@ body::before {
   color: #3d2a13;
   font-size: 13px;
   font-weight: 900;
+}
+
+.duel-rank-stamp small {
+  display: block;
+  margin-top: -2px;
+  color: #6c4b1f;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
 }
 
 .duel-rank-stamp .duel-rank-medal {
@@ -1657,6 +1736,24 @@ body::before {
 .duel-fighter .meter {
   width: min(210px, 100%);
   margin-top: 3px;
+}
+
+.duel-fighter .meter-head {
+  color: #fff4cf;
+  font-weight: 900;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .9), 0 0 8px rgba(0, 0, 0, .58);
+}
+
+.duel-fighter .meter-label .stat-icon {
+  color: currentColor;
+}
+
+.duel-fighter .meter:has(.bar.health) .meter-head {
+  color: #ffd5c4;
+}
+
+.duel-fighter .meter:has(.bar.focus) .meter-head {
+  color: #cfe9ff;
 }
 
 .duel-live-center {
@@ -6107,7 +6204,7 @@ body::before {
 
 .progression-surface .realm-table-head,
 .progression-surface .realm-row {
-  grid-template-columns: minmax(130px, .82fr) minmax(190px, 1.18fr) minmax(150px, .9fr) minmax(150px, .86fr) minmax(130px, .72fr);
+  grid-template-columns: minmax(120px, .9fr) minmax(112px, .72fr) 74px minmax(320px, 2.35fr) 118px;
 }
 
 .progression-surface .realm-table-head {
@@ -6126,6 +6223,10 @@ body::before {
   min-width: 0;
   border-right: 1px solid rgba(119, 82, 39, .34);
   padding: 10px 12px;
+}
+
+.progression-surface .realm-table-head span:last-child {
+  white-space: nowrap;
 }
 
 .progression-surface .realm-table-head span:last-child,
@@ -6185,7 +6286,19 @@ body::before {
 .progression-surface .realm-row > span {
   color: inherit;
   font-size: 15px;
-  white-space: normal;
+  white-space: nowrap;
+}
+
+.progression-surface .realm-row > span:nth-child(4) {
+  font-size: 14px;
+  letter-spacing: 0;
+}
+
+.progression-surface .realm-table-head span:nth-child(3),
+.progression-surface .realm-table-head span:last-child,
+.progression-surface .realm-row > span:nth-child(3),
+.progression-surface .realm-row > span:last-child {
+  text-align: center;
 }
 
 .progression-surface .realm-row > span:last-child {
@@ -6213,7 +6326,8 @@ body::before {
   gap: 22px;
   align-items: center;
   align-self: stretch;
-  height: 100%;
+  height: auto;
+  margin-top: 0;
   min-height: 236px;
   padding: 20px 22px 18px;
   border: 1px solid rgba(154, 108, 49, .56);
@@ -6311,8 +6425,9 @@ body::before {
   align-content: start;
   gap: 14px;
   align-self: stretch;
-  height: 100%;
+  height: auto;
   margin-top: 0;
+  min-height: 236px;
   padding: 18px;
   border: 1px solid rgba(154, 108, 49, .56);
   border-radius: 4px;
@@ -6535,7 +6650,7 @@ body::before {
 
   .progression-surface .realm-table-head,
   .progression-surface .realm-row {
-    grid-template-columns: minmax(120px, 1fr) minmax(160px, 1.2fr) minmax(120px, .9fr) minmax(120px, .9fr) minmax(110px, .8fr);
+    grid-template-columns: minmax(110px, .9fr) minmax(98px, .68fr) 68px minmax(280px, 2.25fr) 112px;
   }
 }
 
@@ -7025,7 +7140,7 @@ body::before {
 
 .arena-surface.view.active .duel-console-shell .duel-match-card {
   display: grid;
-  grid-template-columns: minmax(0, 1.08fr) 54px 76px 54px minmax(0, 1.08fr) 72px 44px;
+  grid-template-columns: minmax(0, 1.04fr) 64px 72px 64px minmax(0, 1.04fr) 72px 44px;
   gap: 6px;
   width: 100%;
   min-width: 0;
@@ -7085,14 +7200,26 @@ body::before {
   font-size: 11px;
 }
 
+.arena-surface.view.active .duel-console-shell .duel-rank-stamp {
+  gap: 2px;
+  align-self: center;
+  line-height: 1;
+}
+
+.arena-surface.view.active .duel-console-shell .duel-rank-stamp small {
+  color: #1c8d86;
+  font-size: 10px;
+  letter-spacing: 0;
+}
+
 .arena-surface.view.active .duel-console-shell .duel-result-stamp {
   padding: 4px 8px;
   font-size: 20px;
 }
 
 .arena-surface.view.active .duel-console-shell .duel-rank-stamp .duel-rank-medal {
-  width: 38px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
   background: var(--rank-icon) center / contain no-repeat;
   border-radius: 0;
   box-shadow: none;
@@ -7105,8 +7232,8 @@ body::before {
 
 .arena-surface.view.active .duel-console-shell .duel-replay-panel.live {
   box-sizing: border-box;
-  height: 600px;
-  min-height: 600px;
+  height: 700px;
+  min-height: 700px;
   grid-template-rows: auto 292px 74px minmax(0, 1fr);
 }
 
@@ -7124,7 +7251,7 @@ body::before {
 
 .arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-fighter {
   display: grid;
-  grid-template-rows: 72px 22px 18px 18px 34px 34px;
+  grid-template-rows: 68px 21px 17px 17px minmax(17px, 36px) 34px 34px;
   align-content: start;
   gap: 3px;
   min-width: 0;
@@ -7149,6 +7276,45 @@ body::before {
 
 .arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-fighter strong {
   font-size: 16px;
+}
+
+.arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-fighter-attrs,
+.view.active.sect-war-room .sect-war-replay-panel .duel-fighter-attrs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 4px;
+  align-content: start;
+  width: min(178px, 100%);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-fighter.right .duel-fighter-attrs,
+.view.active.sect-war-room .sect-war-replay-panel .duel-fighter.right .duel-fighter-attrs {
+  justify-content: flex-end;
+}
+
+.arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-fighter-attrs span,
+.view.active.sect-war-room .sect-war-replay-panel .duel-fighter-attrs span {
+  box-sizing: border-box;
+  min-width: 0;
+  height: 17px;
+  padding: 1px 5px;
+  border: 1px solid rgba(247, 214, 124, .34);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(17, 21, 18, .82), rgba(5, 8, 8, .72));
+  color: #ffe3a6;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 13px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .72);
+  white-space: nowrap;
+}
+
+.arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-fighter-attrs .root,
+.view.active.sect-war-room .sect-war-replay-panel .duel-fighter-attrs .root {
+  border-color: rgba(100, 224, 172, .42);
+  color: #9ff3d0;
 }
 
 .arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-fighter .meter {
@@ -7192,7 +7358,7 @@ body::before {
 
 .arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-battle-feed {
   box-sizing: border-box;
-  min-height: 150px;
+  min-height: 250px;
   max-height: none;
   overflow: auto;
 }
@@ -7204,6 +7370,74 @@ body::before {
 .view.active.sect-war-room .sect-war-replay-shell {
   display: grid;
   gap: 12px;
+}
+
+.wheel-battle-console {
+  display: grid;
+  grid-template-columns: minmax(420px, 1.15fr) minmax(430px, .95fr);
+  gap: 12px;
+  align-items: stretch;
+  margin-top: 12px;
+}
+
+.wheel-battle-board,
+.wheel-replay-panel {
+  min-height: 640px;
+  border: 1px solid rgba(203, 147, 58, .58);
+  background:
+    linear-gradient(180deg, rgba(9, 16, 16, .96), rgba(7, 12, 12, .98)),
+    radial-gradient(circle at 50% 0, rgba(197, 139, 50, .15), transparent 16rem);
+  box-shadow:
+    inset 0 0 0 2px rgba(0, 0, 0, .52),
+    inset 0 0 28px rgba(0, 0, 0, .62);
+  overflow: hidden;
+}
+
+.wheel-replay-panel {
+  display: grid;
+  grid-template-rows: auto 292px 74px minmax(0, 1fr);
+}
+
+.wheel-match-list {
+  display: grid;
+  gap: 8px;
+  max-height: 586px;
+  padding: 10px 12px 12px;
+  overflow: auto;
+}
+
+.wheel-battle-link {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr) 44px minmax(0, 1fr);
+  gap: 6px 8px;
+  align-items: center;
+  min-height: 68px;
+  border: 1px solid rgba(206, 151, 64, .3);
+  background:
+    linear-gradient(90deg, rgba(242, 229, 198, .96), rgba(231, 211, 171, .94), rgba(242, 229, 198, .96));
+  color: #2b1b0d;
+}
+
+.wheel-battle-link.active,
+.wheel-battle-link:hover,
+.wheel-battle-link:focus-visible {
+  border-color: rgba(228, 175, 77, .78);
+  box-shadow: inset 4px 0 0 rgba(25, 135, 114, .82), 0 0 0 1px rgba(255, 236, 174, .3);
+}
+
+.wheel-battle-link:disabled {
+  cursor: default;
+  opacity: .56;
+}
+
+.wheel-battle-link .war-battle-summary {
+  grid-column: 2 / -1;
+  color: #6b4f2b;
+}
+
+.wheel-replay-empty .duel-fighter {
+  justify-items: center;
+  text-align: center;
 }
 
 .view.active.sect-war-room .sect-war-replay-panel {
@@ -7253,7 +7487,7 @@ body::before {
 
 .view.active.sect-war-room .sect-war-replay-panel .duel-fighter {
   display: grid;
-  grid-template-rows: 72px 22px 18px 18px 34px 34px;
+  grid-template-rows: 68px 21px 17px 17px minmax(17px, 36px) 34px 34px;
   align-content: start;
   gap: 3px;
   min-width: 0;
@@ -7326,8 +7560,191 @@ body::before {
   overflow: auto;
 }
 
+.wheel-replay-panel .duel-battle-feed {
+  box-sizing: border-box;
+  min-height: 200px;
+  max-height: none;
+  overflow: auto;
+}
+
 .view.active.sect-war-room .sect-war-replay-panel .duel-battle-feed .battle-event {
+  position: relative;
+  display: grid;
+  grid-template-columns: 70px 1fr 48px;
+  gap: 8px;
+  align-items: start;
   min-height: 35px;
+  padding: 7px 0 7px 18px;
+  border: 0;
+  border-left: 1px solid rgba(98, 162, 100, .48);
+  border-radius: 0;
+  color: #d8c18e;
+  background: transparent;
+  box-shadow: none;
+}
+
+.view.active.sect-war-room .sect-war-replay-panel .duel-battle-feed .battle-event::before {
+  content: "";
+  position: absolute;
+  left: -5px;
+  top: 16px;
+  bottom: auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #55d17b;
+  opacity: 1;
+  box-shadow: 0 0 0 2px rgba(13, 29, 20, .95), 0 0 8px rgba(85, 209, 123, .45);
+}
+
+.view.active.sect-war-room .sect-war-replay-panel .duel-battle-feed .battle-event.damage::before,
+.view.active.sect-war-room .sect-war-replay-panel .duel-battle-feed .battle-event.defeat::before {
+  background: #d94d42;
+  box-shadow: 0 0 0 2px rgba(31, 11, 9, .95), 0 0 8px rgba(217, 77, 66, .45);
+}
+
+.view.active.sect-war-room .sect-war-replay-panel .duel-battle-feed .battle-event span,
+.view.active.sect-war-room .sect-war-replay-panel .duel-battle-feed .battle-event time {
+  color: #c7a65f;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.view.active.sect-war-room .sect-war-replay-panel .duel-battle-feed .battle-event p {
+  margin: 0;
+  color: #e7d2a1;
+  font-size: 13px;
+  line-height: 1.45;
+  font-weight: 700;
+}
+
+.app {
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+}
+
+.arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-battle-feed .battle-event.skill,
+.view.active.sect-war-room .sect-war-replay-panel .duel-battle-feed .battle-event.skill {
+  isolation: isolate;
+  grid-template-columns: 78px minmax(0, 1fr);
+  min-height: 96px;
+  margin: 7px 0 9px;
+  padding: 14px 16px 14px 86px;
+  border: 1px solid rgba(var(--skill-rgb, 245, 158, 11), .55);
+  border-radius: 9px;
+  color: #ffe9b8;
+  background:
+    linear-gradient(90deg, rgba(7, 12, 14, .92), rgba(16, 21, 22, .72) 46%, rgba(var(--skill-rgb, 245, 158, 11), .18)),
+    radial-gradient(circle at 77% 48%, rgba(var(--skill-rgb, 245, 158, 11), .36), transparent 9rem),
+    var(--skill-image, linear-gradient(transparent, transparent)) right center / 46% 145% no-repeat;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 239, 184, .12),
+    inset 0 0 26px rgba(var(--skill-rgb, 245, 158, 11), .12),
+    0 10px 18px rgba(0, 0, 0, .34);
+  overflow: hidden;
+}
+
+.arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-battle-feed .battle-event.skill::before,
+.view.active.sect-war-room .sect-war-replay-panel .duel-battle-feed .battle-event.skill::before {
+  left: 18px;
+  top: 50%;
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(var(--skill-rgb, 245, 158, 11), .62);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, rgba(255, 255, 255, .9) 0 12%, rgba(var(--skill-rgb, 245, 158, 11), .52) 13% 28%, transparent 30%),
+    conic-gradient(from 20deg, transparent 0 11%, rgba(var(--skill-rgb, 245, 158, 11), .84) 12% 18%, transparent 19% 30%, rgba(255, 255, 255, .56) 31% 35%, transparent 36% 100%);
+  box-shadow:
+    0 0 0 6px rgba(var(--skill-rgb, 245, 158, 11), .08),
+    0 0 22px rgba(var(--skill-rgb, 245, 158, 11), .46);
+  transform: translateY(-50%);
+  animation: skill-sigil 1.5s ease both;
+}
+
+.arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-battle-feed .battle-event.skill::after,
+.view.active.sect-war-room .sect-war-replay-panel .duel-battle-feed .battle-event.skill::after {
+  content: "";
+  position: absolute;
+  inset: auto -12% 16px 76px;
+  z-index: 1;
+  height: 22px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .82), rgba(var(--skill-rgb, 245, 158, 11), .78), transparent);
+  filter: blur(.2px);
+  opacity: .72;
+  transform: skewX(-16deg);
+  animation: skill-sweep 1.35s ease both;
+}
+
+.arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-battle-feed .battle-event.skill > span,
+.view.active.sect-war-room .sect-war-replay-panel .duel-battle-feed .battle-event.skill > span {
+  display: none;
+}
+
+.arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-battle-feed .battle-event.skill > p,
+.view.active.sect-war-room .sect-war-replay-panel .duel-battle-feed .battle-event.skill > p {
+  z-index: 3;
+  grid-column: 1 / -1;
+  align-self: center;
+  color: #fff2c9;
+  font-size: 13.5px;
+  line-height: 1.5;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .72);
+}
+
+.arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-battle-feed .battle-event.skill .skill-cast,
+.view.active.sect-war-room .sect-war-replay-panel .duel-battle-feed .battle-event.skill .skill-cast {
+  z-index: 2;
+}
+
+.arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-battle-feed .battle-event.skill .skill-cast-art,
+.view.active.sect-war-room .sect-war-replay-panel .duel-battle-feed .battle-event.skill .skill-cast-art {
+  right: -10px;
+  top: -26px;
+  width: min(45%, 230px);
+  height: calc(100% + 52px);
+  opacity: .72;
+  mix-blend-mode: screen;
+  filter: saturate(1.28) contrast(1.12) drop-shadow(0 0 18px rgba(var(--skill-rgb, 245, 158, 11), .38));
+}
+
+.arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-battle-feed .battle-event.skill .skill-cast i.has-art,
+.view.active.sect-war-room .sect-war-replay-panel .duel-battle-feed .battle-event.skill .skill-cast i.has-art {
+  left: 13px;
+  right: auto;
+  top: 50%;
+  width: 50px;
+  height: 50px;
+  border: 1px solid rgba(var(--skill-rgb, 245, 158, 11), .58);
+  border-radius: 50%;
+  background: rgba(8, 13, 13, .82);
+  transform: translateY(-50%);
+}
+
+.arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-battle-feed .battle-event.skill .skill-cast b,
+.view.active.sect-war-room .sect-war-replay-panel .duel-battle-feed .battle-event.skill .skill-cast b {
+  left: 86px;
+  right: auto;
+  top: 12px;
+  color: #ffdc89;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: .02em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .78), 0 0 10px rgba(var(--skill-rgb, 245, 158, 11), .32);
+}
+
+.arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-battle-feed .battle-event.skill .skill-cast-damage,
+.view.active.sect-war-room .sect-war-replay-panel .duel-battle-feed .battle-event.skill .skill-cast-damage {
+  position: absolute;
+  right: 16px;
+  bottom: 10px;
+  color: #fff7d6;
+  font: 1000 18px/1 "Cinzel", "Georgia", serif;
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, .82),
+    0 0 14px rgba(var(--skill-rgb, 245, 158, 11), .56);
 }
 
 @media (max-width: 760px) {

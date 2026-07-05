@@ -115,27 +115,28 @@ export function breakthroughGrowthRange(fromRealm) {
   const major = safeRealm % 10 === 9;
 
   if (major) {
-    const defenseMin = 6 + stageIndex * 2;
-    const defenseMax = defenseMin + 4;
-    const attackMin = 14 + stageIndex * 3;
+    const defenseMin = 8 + stageIndex * 4;
+    const defenseMax = defenseMin + 6 + Math.floor(stageIndex / 2);
+    const attackMin = 18 + stageIndex * 6;
     return {
-      maxHp: [78 + stageIndex * 28, 108 + stageIndex * 34],
-      maxMana: [24 + stageIndex * 8, 38 + stageIndex * 10],
-      attack: [attackMin, attackMin + 7],
+      maxHp: [96 + stageIndex * 42, 136 + stageIndex * 52],
+      maxMana: [32 + stageIndex * 13, 48 + stageIndex * 18],
+      attack: [attackMin, attackMin + 10 + stageIndex],
       defense: [defenseMin, defenseMax],
-      divineSense: [7 + stageIndex * 2, 11 + stageIndex * 3]
+      divineSense: [9 + stageIndex * 4, 14 + stageIndex * 6]
     };
   }
 
-  const defenseMin = 1 + Math.floor(stageIndex / 2) + Math.floor(level / 6);
-  const defenseMax = defenseMin + 1;
-  const attackMin = defenseMax + 3 + Math.floor(stageIndex / 2);
+  const levelBand = Math.floor(level / 3);
+  const defenseMin = 2 + stageIndex + Math.floor(level / 5);
+  const defenseMax = defenseMin + 2 + Math.floor(stageIndex / 2);
+  const attackMin = defenseMax + 4 + stageIndex;
   return {
-    maxHp: [20 + stageIndex * 7 + Math.floor(level / 3) * 3, 32 + stageIndex * 8 + Math.floor(level / 3) * 3],
-    maxMana: [5 + stageIndex * 2 + Math.floor(level / 5), 9 + stageIndex * 3 + Math.floor(level / 5)],
-    attack: [attackMin, attackMin + 3],
+    maxHp: [26 + stageIndex * 12 + levelBand * 4, 42 + stageIndex * 14 + levelBand * 5],
+    maxMana: [7 + stageIndex * 4 + Math.floor(level / 4), 13 + stageIndex * 5 + Math.floor(level / 3)],
+    attack: [attackMin, attackMin + 4 + Math.floor(stageIndex / 2)],
     defense: [defenseMin, defenseMax],
-    divineSense: [1 + Math.ceil(stageIndex / 2), 3 + Math.ceil(stageIndex / 2)]
+    divineSense: [2 + stageIndex + Math.floor(level / 6), 5 + stageIndex + Math.floor(level / 4)]
   };
 }
 
@@ -642,7 +643,7 @@ function attemptSkillUpgrade(state, entity, { auto = false } = {}) {
     chance,
     success
   };
-  if (success) recordSkillUpgrade(state, entity, result);
+  recordSkillUpgrade(state, entity, result);
   if (!auto) {
     log(state, success
       ? `你耗费 ${cost} 灵石淬炼「${skill.name}」，成功升至 ${targetRank} 阶。`
@@ -660,8 +661,10 @@ function recordSkillUpgrade(state, entity, result) {
     skillName: result.name,
     fromRank: result.fromRank,
     toRank: result.targetRank,
+    rank: result.rank,
     cost: result.cost,
-    chance: result.chance
+    chance: result.chance,
+    success: result.success
   });
   entity.skillUpgrades = trimRecordsByDay(entity.skillUpgrades, state.day, growthRecordDays, growthRecordLimit);
 }
@@ -979,10 +982,10 @@ export function baseBreakthroughChance(realm) {
     stageIndex: Math.floor((realm || 0) / 10),
     level: ((realm || 0) % 10) + 1
   };
-  const levelPenalty = (info.level - 1) * 0.024;
-  const stagePenalty = info.stageIndex * 0.058;
-  const bottleneckPenalty = info.level === 10 ? 0.26 + info.stageIndex * 0.04 : 0;
-  return clamp(0.76 - levelPenalty - stagePenalty - bottleneckPenalty, 0.04, 0.86);
+  const levelPenalty = (info.level - 1) * 0.028;
+  const stagePenalty = info.stageIndex * 0.068;
+  const bottleneckPenalty = info.level === 10 ? 0.3 + info.stageIndex * 0.045 : 0;
+  return clamp(0.72 - levelPenalty - stagePenalty - bottleneckPenalty, 0.035, 0.82);
 }
 
 export function breakthroughChance(entity) {
@@ -991,7 +994,7 @@ export function breakthroughChance(entity) {
     .filter((root) => root.effect === "xp")
     .reduce((sum, root) => sum + ((root.breakMultiplier || 1.1) - 1) / rootCount(entity), 0);
   const rootMultiplier = (1 + waterBonus) * rootBreakthroughMultiplier(entity);
-  return clamp(base * rootMultiplier, 0.04, 0.88);
+  return clamp(base * rootMultiplier, 0.035, 0.82);
 }
 
 export function buildRealmProgression(entity) {
@@ -1050,6 +1053,11 @@ const sharedDungeonItemIds = equipmentCatalog.map((item) => item.id);
 const recentRecordDays = 30;
 const replayRetentionDays = 7;
 const battleRecordDays = 60;
+const publicBattleRecordDays = replayRetentionDays;
+const publicBattleRecordLimit = replayRetentionDays;
+const publicProvinceWarLimit = replayRetentionDays;
+const publicDuelDayLimit = replayRetentionDays;
+const publicDungeonDayLimit = replayRetentionDays;
 const growthRecordDays = 60;
 const detailRecordLimit = 600;
 const npcDungeonHistoryLimit = battleRecordDays;
@@ -1078,6 +1086,34 @@ function trimRecordsByDay(records, currentDay, days, limit = detailRecordLimit) 
     .filter((record) => isRecordWithinDays(record, currentDay, days))
     .sort((a, b) => (Number(b.day || 0) - Number(a.day || 0)))
     .slice(0, limit);
+}
+
+function duelHistoryKey(record) {
+  if (record?.replayId) return `replay:${record.replayId}`;
+  return [
+    "duel",
+    record?.day || "",
+    record?.foughtAt || "",
+    record?.opponentId || record?.opponent || "",
+    record?.result || "",
+    record?.scoreDelta ?? ""
+  ].join(":");
+}
+
+function trimDuelHistory(records, currentDay, limit = detailRecordLimit) {
+  return trimRecordsByDay(records, currentDay, battleRecordDays, limit);
+}
+
+function mergeDuelHistory(records, currentDay, limit = detailRecordLimit) {
+  const seen = new Set();
+  const merged = [];
+  for (const record of records || []) {
+    const key = duelHistoryKey(record);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(record);
+  }
+  return trimDuelHistory(merged, currentDay, limit);
 }
 
 const dungeonLootRules = {
@@ -1495,10 +1531,21 @@ function activeSectNames(state) {
 }
 
 function provinceTier(province) {
-  if ((province.rank || 99) <= 5) return 1;
-  if ((province.rank || 99) <= 12) return 0.82;
-  if ((province.rank || 99) <= 22) return 0.62;
-  return 0.42;
+  const rank = clamp(Number(province?.rank) || provinces.length, 1, provinces.length);
+  const ratio = (provinces.length - rank) / Math.max(1, provinces.length - 1);
+  return Number((0.38 + 0.62 * ratio).toFixed(4));
+}
+
+function provinceSpiritBaseValue(province) {
+  return Math.round(8 + 16 * provinceTier(province));
+}
+
+function provinceXpBaseValue(province) {
+  return Number((0.36 + 0.28 * provinceTier(province)).toFixed(3));
+}
+
+function provinceBreakthroughBaseValue(province) {
+  return Number((0.02 + 0.045 * provinceTier(province)).toFixed(4));
 }
 
 function provinceEffect(province) {
@@ -1512,20 +1559,20 @@ function provinceEffect(province) {
   };
   if (province.type === "spirit") {
     effect.label = "灵石";
-    effect.value = 10 + Math.round(10 * tier);
+    effect.value = provinceSpiritBaseValue(province);
     effect.text = `宗门灵石包基准 +${effect.value}/人`;
   } else if (province.type === "xp") {
     effect.label = "经验";
-    effect.value = Number((0.4 + 0.2 * tier).toFixed(2));
+    effect.value = provinceXpBaseValue(province);
     effect.text = `宗门经验包基准 +${Math.round(effect.value * 100)}%/人`;
   } else if (province.type === "breakthrough") {
     effect.label = "突破";
-    effect.value = Number((0.025 + 0.035 * tier).toFixed(3));
+    effect.value = provinceBreakthroughBaseValue(province);
     effect.text = `宗门突破包基准 +${Math.round(effect.value * 100)}%/人`;
   } else {
     effect.type = "spirit";
     effect.label = "灵石";
-    effect.value = 10 + Math.round(10 * tier);
+    effect.value = provinceSpiritBaseValue(province);
     effect.text = `宗门灵石包基准 +${effect.value}/人`;
   }
   return effect;
@@ -3248,7 +3295,7 @@ function ensureProvinceState(state) {
 
 function breakthroughChanceFor(state, entity) {
   const sectName = entity.id === "player" ? state.sect.name : entity.sect;
-  return clamp(breakthroughChance(entity) * (1 + sectBreakthroughBonus(state, sectName, entity)), 0.04, 0.88);
+  return clamp(breakthroughChance(entity) * (1 + sectBreakthroughBonus(state, sectName, entity)), 0.035, 0.82);
 }
 
 function breakthroughChanceParts(state, entity) {
@@ -3263,7 +3310,7 @@ function breakthroughChanceParts(state, entity) {
     sectMultiplier,
     base,
     bonus,
-    total: clamp(base * sectMultiplier, 0.04, 0.88)
+    total: clamp(base * sectMultiplier, 0.035, 0.82)
   };
 }
 
@@ -3310,6 +3357,25 @@ function rootRulesCatalog() {
       childNames: special.keys.map((key) => rootByKey(key).name),
       counterText: `${special.name}克${special.keys.map((key) => rootByKey(key).name).join("、")}，不受其他灵根相克。`
     }))
+  };
+}
+
+function staticCatalog() {
+  return {
+    realms,
+    realmStages,
+    roots,
+    rootRules: rootRulesCatalog(),
+    dungeons,
+    taskTemplates,
+    itemCatalog,
+    sects,
+    combatSkills,
+    provinces,
+    equipmentSlots,
+    equipmentTiers,
+    equipmentCatalog,
+    duelRanks
   };
 }
 
@@ -4368,10 +4434,7 @@ export function compactStateForStorage(state, options = {}) {
     entity.dailyRecords = trimRecordsByDay(entity.dailyRecords || [], state.day, growthRecordDays, growthRecordLimit);
     entity.breakthroughs = trimRecordsByDay(entity.breakthroughs || [], state.day, growthRecordDays, growthRecordLimit);
     entity.skillUpgrades = trimRecordsByDay(entity.skillUpgrades || [], state.day, growthRecordDays, growthRecordLimit);
-    entity.duelHistory = (entity.duelHistory || [])
-      .filter((record) => !record.season || record.season === duelSeasonOfDay(state.day || 1))
-      .filter((record) => isRecordWithinDays(record, state.day, battleRecordDays))
-      .slice(0, detailRecordLimit);
+    entity.duelHistory = mergeDuelHistory(entity.duelHistory || [], state.day, detailRecordLimit);
     entity.dungeonHistory = trimRecordsByDay(
       entity.dungeonHistory || [],
       state.day,
@@ -4476,6 +4539,7 @@ export function getPublicState(state, options = {}) {
   const nextRealm = realms[Math.min(state.player.realm + 1, realms.length - 1)];
   const currentRealmInfo = realmInfo(state.player.realm);
   const breakChance = breakthroughChanceFor(state, state.player);
+  const includeHeavyDerived = options.scope !== "lite";
   const sectSummaries = buildSectSummaries(state);
   const derivedBase = {
     xpNeed: xpNeed(state.player.realm),
@@ -4483,7 +4547,6 @@ export function getPublicState(state, options = {}) {
     realmProgression: buildRealmProgression(state.player),
     playerPower: powerOf(state.player, state),
     effectiveStats: effectiveStats(state.player, state),
-    dungeonLootPools: publicDungeonLootPools(state),
     duelSeason: {
       season: duelSeasonOfDay(state.day),
       seasonDay: duelSeasonDay(state.day),
@@ -4496,8 +4559,11 @@ export function getPublicState(state, options = {}) {
     breakChance,
     baseBreakChance: currentRealmInfo.baseBreakChance,
     skillUpgrade: previewSkillUpgradeForState(state, state.player),
-    skillUpgradePlan: skillUpgradePlanForState(state, state.player),
-    sects: options.scope === "lite" ? sectSummaries.map(compactSectSummary) : sectSummaries
+    sects: options.scope === "lite" ? sectSummaries.map(compactSectSummary) : sectSummaries,
+    ...(includeHeavyDerived ? {
+      dungeonLootPools: publicDungeonLootPools(state),
+      skillUpgradePlan: skillUpgradePlanForState(state, state.player)
+    } : {})
   };
 
   if (options.scope === "lite") {
@@ -4514,29 +4580,54 @@ export function getPublicState(state, options = {}) {
       log: state.log,
       bag: state.bag,
       equipmentTransfers: state.equipmentTransfers,
+      home: {
+        ticker: homeTickerForState(state)
+      },
       provinces: state.provinces,
       sectProfiles: publicSectProfiles(state),
+      catalog: staticCatalog(),
       derived: derivedBase
     };
   }
 
+  const { adminProfiles, ...publicState } = state;
   return {
-    ...state,
+    ...publicState,
     player: publicCultivator(state.player, state, { includeRecentReplays: true, kind: "player" }),
-    npcs: state.npcs.map((npc) => publicCultivator(npc, state, { kind: "npc" })),
+    npcs: state.npcs.map((npc) => publicCultivator(npc, state, { kind: "npc", compact: true })),
     equipment: state.equipment.map((item) => publicEquipment(item, state)),
-    duelDays: publicDuelDays(state.duelDays || [], state.day),
-    provinceWars: publicProvinceWars(state.provinceWars || [], state.day),
-    dungeonDays: publicDungeonDays(state.dungeonDays || [], state.day),
+    duelDays: publicDuelDays(state.duelDays || [], state.day, publicCultivatorRefMap(state)),
+    provinceWars: publicProvinceWars(state.provinceWars || [], state.day, publicCultivatorRefMap(state)),
+    dungeonDays: publicDungeonDays(state.dungeonDays || [], state.day, publicCultivatorRefMap(state)),
     sectProfiles: publicSectProfiles(state),
-    catalog: { realms, realmStages, roots, rootRules: rootRulesCatalog(), dungeons, taskTemplates, itemCatalog, sects, combatSkills, provinces, equipmentSlots, equipmentTiers, equipmentCatalog, duelRanks },
+    home: {
+      ticker: homeTickerForState(state)
+    },
+    catalog: staticCatalog(),
     derived: {
       ...derivedBase,
-      personInsights: Object.fromEntries(allCultivators(state).map(({ entity }) => [entity.id, personInsight(state, entity)])),
-      equippedItems: Object.fromEntries(allCultivators(state).map(({ entity }) => [entity.id, equippedItemsFor(state, entity).map((item) => publicEquipment(item, state))])),
+      personInsights: { [state.player.id]: personInsight(state, state.player) },
+      equippedItems: { [state.player.id]: equippedItemsFor(state, state.player).map((item) => publicEquipment(item, state)) },
       duelRanks: Object.fromEntries(allCultivators(state).map(({ entity }) => [entity.id, duelRankSnapshot(entity)])),
       npcPowers: Object.fromEntries(state.npcs.map((npc) => [npc.id, powerOf(npc, state)])),
     }
+  };
+}
+
+export function getPublicCultivatorDetail(state, id) {
+  ensureStateShape(state);
+  const match = allCultivators(state).find((item) => item.entity.id === id);
+  if (!match) throw new Error("未找到该人物");
+  const person = publicCultivator(match.entity, state, {
+    includeRecentReplays: true,
+    kind: match.kind
+  });
+  return {
+    person,
+    insight: personInsight(state, match.entity),
+    equippedItems: equippedItemsFor(state, match.entity).map((item) => publicEquipment(item, state)),
+    duelRank: duelRankSnapshot(match.entity),
+    power: powerOf(match.entity, state)
   };
 }
 
@@ -4548,7 +4639,7 @@ function getHomeState(state) {
     day: state.day,
     calendarStartDate: state.calendarStartDate,
     lastSettlementDate: state.lastSettlementDate,
-    player: publicCultivator(state.player, state, { includeRecentReplays: true, kind: "player", dungeonHistoryLimit: 6, duelHistoryLimit: 12 }),
+    player: publicCultivator(state.player, state, { kind: "player", dungeonHistoryLimit: 6, duelHistoryLimit: 12 }),
     sect: state.sect,
     tasks: state.tasks,
     taskDefinitions: state.taskDefinitions,
@@ -4557,6 +4648,7 @@ function getHomeState(state) {
     bag: state.bag,
     equipmentTransfers: state.equipmentTransfers,
     home: buildHomeSummary(state),
+    catalog: staticCatalog(),
     derived: {
       xpNeed: xpNeed(state.player.realm),
       currentRealmInfo,
@@ -4591,7 +4683,7 @@ function buildHomeSummary(state) {
       sect: item.isPlayer ? state.sect.name : item.entity.sect,
       realm: item.entity.realm,
       gender: item.entity.gender,
-      portraitUrl: item.entity.portraitUrl || "",
+      portraitUrl: compactPortraitUrl(item.entity.portraitUrl, item.entity.id),
       value: item.power,
       rank: index + 1,
       isPlayer: item.isPlayer
@@ -4609,8 +4701,107 @@ function buildHomeSummary(state) {
     sectTerritorySummary: homeSectTerritorySummaryForState(state),
     dungeonSummary: homeDungeonSummaryForState(state),
     equipment: homeEquipmentForState(state),
+    ticker: homeTickerForState(state),
     logs: (state.log || []).slice(0, 30)
   };
+}
+
+function homeTickerForState(state) {
+  const today = state.day || 1;
+  const items = [];
+  const drops = (state.equipmentTransfers || [])
+    .filter((drop) => drop.day === today && drop.itemName)
+    .slice(0, 12);
+
+  if (drops.length) {
+    items.push(...drops.slice(0, 6).map((drop) => ({
+      key: `equipment-${drop.winnerId || drop.winnerName}-${drop.itemId || drop.itemName}-${equipmentTransferKind(drop)}`,
+      label: "装备",
+      name: drop.winnerName || drop.receiverName || "未知修士",
+      text: `在 ${equipmentTransferSource(drop)} 获得${drop.tierName || "法器"}「${drop.itemName}」 · ${drop.slotName || "未知部位"} · ${drop.statName || "属性"} +${formatPercentText(drop.bonus || 0)}${equipmentTransferKind(drop) === "steal" && drop.loserName ? ` · 来自 ${drop.loserName}` : ""}`
+    })));
+    if (drops.length > 6) {
+      items.push({
+        key: "equipment-more",
+        label: "装备",
+        name: "今日掉落",
+        text: `共 ${drops.length} 件法宝流转，更多可在装备记录查看`
+      });
+    }
+  }
+
+  const people = allCultivators(state).map(({ entity }, index) => ({ entity, index }));
+  const breakthroughs = people.flatMap(({ entity, index }) => (entity.breakthroughs || [])
+    .map((record, recordIndex) => ({ entity, record, index, recordIndex, targetRealm: realms.indexOf(record.to) }))
+    .filter((item) => item.record.day === today && item.record.success));
+  const breakthrough = breakthroughs
+    .sort((a, b) => b.targetRealm - a.targetRealm || a.index - b.index || a.recordIndex - b.recordIndex)[0];
+  if (breakthrough) {
+    items.push({
+      key: "breakthrough",
+      label: "突破",
+      name: breakthrough.entity.name,
+      text: `突破至 ${breakthrough.record.to}，今日共 ${breakthroughs.length} 人突破成功`
+    });
+  }
+
+  const skillUpgrades = people.flatMap(({ entity, index }) => (entity.skillUpgrades || [])
+    .map((record, recordIndex) => ({ entity, record, index, recordIndex }))
+    .filter((item) => item.record.day === today));
+  const skillUpgrade = skillUpgrades
+    .sort((a, b) => (b.record.toRank || 0) - (a.record.toRank || 0) || a.index - b.index || a.recordIndex - b.recordIndex)[0];
+  if (skillUpgrade) {
+    const { entity, record } = skillUpgrade;
+    const skillName = record.skillName || findSkill(record.skillId).name;
+    const targetRank = skillRankText(record.toRank);
+    items.push({
+      key: "skill-upgrade",
+      label: "技能",
+      name: entity.name,
+      text: record.success === false
+        ? `尝试将「${skillName}」升至 ${targetRank}失败，今日共 ${skillUpgrades.length} 次技能尝试`
+        : `将「${skillName}」升至 ${targetRank}，今日共 ${skillUpgrades.length} 次技能尝试`
+    });
+  }
+
+  const spirit = people
+    .map(({ entity, index }) => ({
+      entity,
+      index,
+      spirit: Number((entity.dailyRecords || []).find((record) => record.day === today)?.spirit || 0)
+    }))
+    .filter((item) => item.spirit > 0)
+    .sort((a, b) => b.spirit - a.spirit || a.index - b.index)[0];
+  if (spirit) {
+    items.push({
+      key: "spirit",
+      label: "灵石",
+      name: spirit.entity.name,
+      text: `今日获取最多，入账 ${spirit.spirit} 灵石`
+    });
+  }
+
+  return items;
+}
+
+function equipmentTransferKind(drop) {
+  if (drop?.type) return drop.type;
+  return drop?.loserId ? "steal" : "dungeon";
+}
+
+function equipmentTransferSource(drop) {
+  const kind = equipmentTransferKind(drop);
+  if (kind === "steal") return drop?.context ? `抢夺 · ${drop.context}` : "抢夺";
+  if (drop?.context) return `副本 · ${drop.context}`;
+  return "副本掉落";
+}
+
+function formatPercentText(value) {
+  return typeof value === "number" ? `${Math.round(value * 100)}%` : "未记录";
+}
+
+function skillRankText(rank) {
+  return `${Math.max(1, Number(rank) || 1)}阶`;
 }
 
 function homeSectTerritorySummaryForState(state) {
@@ -4633,28 +4824,48 @@ function homeDungeonSummaryForState(state) {
     summary: [{ key: "none", icon: "今", text: "今日副本尚未结算" }]
   };
   const playerId = state.player.id;
-  const bloodCave = day.bloodTrial?.caves?.find((cave) => (cave.clears || []).some((entry) => entry.id === playerId)) || day.bloodTrial?.caves?.[0];
+  const bloodCaves = day.bloodTrial?.caves || [];
+  const playerSolo = (day.solo || []).find((entry) => entry.id === playerId);
+  const playerClearedCaves = bloodCaves.filter((cave) => (cave.clears || []).some((entry) => entry.id === playerId));
+  const bloodTotal = bloodCaves.length;
+  const bloodCleared = playerClearedCaves.length;
+  const bloodTitle = playerClearedCaves.at(-1)?.name || day.bloodTrial?.name || "血色禁地";
+  const bloodText = playerSolo
+    ? (bloodTotal && bloodCleared >= bloodTotal
+      ? `血色通关 ${bloodCleared}/${bloodTotal}`
+      : `血色${playerSolo.result || "未通关"} ${bloodCleared}/${bloodTotal || "?"} 关`)
+    : "血色未入场";
   const playerSectRecord = (day.sects || []).find((record) => record.sect === state.sect.name);
   const publicRecord = day.public || null;
+  const playerTeam = publicRecord?.teams?.find((team) => (team.members || []).some((member) => member.id === playerId));
+  const playerTeamRank = playerTeam?.rank || publicRecord?.playerTeamRank || publicRecord?.rank;
   return {
-    title: bloodCave?.name || "血色外谷",
+    title: bloodTitle,
     summary: [
-      { key: "blood", icon: "血", text: bloodCave ? `${bloodCave.name} ${(bloodCave.clears || []).length}/${(bloodCave.challengers || []).length || 1} 关` : "血色禁地未结算" },
+      { key: "blood", icon: "血", text: bloodText },
       { key: "void", icon: "殿", text: playerSectRecord ? `虚天殿${playerSectRecord.success ? "通关" : "未通关"}` : "虚天殿未结算" },
-      { key: "sea", icon: "海", text: publicRecord ? `乱星海队伍第${publicRecord.playerTeamRank || publicRecord.rank || "?"}` : "乱星海未结算" }
+      { key: "sea", icon: "海", text: publicRecord ? `乱星海队伍第${playerTeamRank || "-"}` : "乱星海未结算" }
     ]
   };
 }
 
 function homeEquipmentForState(state) {
-  return (state.equipment || [])
-    .filter((item) => item.ownerId === state.player.id)
-    .sort((a, b) => (b.tier || 0) - (a.tier || 0) || (b.bonus || 0) - (a.bonus || 0))
+  return [...(state.equipment || [])]
+    .sort(compareEquipmentBestFirst)
     .slice(0, 10)
     .map((item) => publicEquipment(item, state));
 }
 
+function compareEquipmentBestFirst(a, b) {
+  return (b.tier || 0) - (a.tier || 0)
+    || equipmentValue(b) - equipmentValue(a)
+    || equipmentSlots.findIndex((slot) => slot.id === equipmentSlot(a).id) - equipmentSlots.findIndex((slot) => slot.id === equipmentSlot(b).id)
+    || (b.bonus || 0) - (a.bonus || 0)
+    || String(a.name || "").localeCompare(String(b.name || ""), "zh-Hans-CN");
+}
+
 function compactSectSummary(sect) {
+  const members = compactSectMembers(sect);
   return {
     name: sect.name,
     portraitUrl: sect.portraitUrl || "",
@@ -4668,16 +4879,8 @@ function compactSectSummary(sect) {
     leader: sect.leader || sect.leaderName || "无",
     elderIds: sect.elderIds || [],
     elderNames: sect.elderNames || [],
-    members: (sect.members || []).map((member) => ({
-      id: member.id,
-      name: member.name,
-      gender: member.gender,
-      sect: member.sect,
-      realm: member.realm,
-      portraitUrl: member.portraitUrl || "",
-      power: member.power || 0,
-      isPlayer: Boolean(member.isPlayer)
-    })),
+    memberCount: sect.members?.length || sect.memberCount || 0,
+    members,
     provinces: (sect.provinces || []).map((province) => ({
       id: province.id,
       name: province.name,
@@ -4685,13 +4888,119 @@ function compactSectSummary(sect) {
       defenders: province.defenders || []
     })),
     effects: [],
+    resourcePlan: compactResourcePlan(sect.resourcePlan),
     totalPower: sect.totalPower || 0
+  };
+}
+
+function compactResourcePlan(resourcePlan = {}) {
+  return {
+    spirit: compactResourceSummary(resourcePlan.spirit),
+    xp: compactResourceSummary(resourcePlan.xp),
+    breakthrough: compactResourceSummary(resourcePlan.breakthrough)
+  };
+}
+
+function compactResourceSummary(summary = {}) {
+  return {
+    total: summary.total || 0,
+    base: summary.base || 0,
+    defenderBonus: summary.defenderBonus || 0,
+    leaderShare: summary.leaderShare || 0,
+    elderShare: summary.elderShare || 0,
+    memberShare: summary.memberShare || 0
+  };
+}
+
+function compactSectMembers(sect) {
+  const members = [...(sect.members || [])].sort((a, b) => (b.power || 0) - (a.power || 0));
+  const keepIds = new Set([sect.leaderId, ...(sect.elderIds || [])].filter(Boolean));
+  for (const member of members.slice(0, 5)) keepIds.add(member.id);
+  return members
+    .filter((member) => keepIds.has(member.id) || member.isPlayer)
+    .slice(0, 10)
+    .map(compactCultivatorRef);
+}
+
+function compactCultivatorRef(member = {}) {
+  return {
+    id: member.id,
+    name: member.name,
+    gender: member.gender,
+    sect: member.sect,
+    realm: member.realm,
+    portraitUrl: compactPortraitUrl(member.portraitUrl, member.id),
+    power: member.power || 0,
+    isPlayer: Boolean(member.isPlayer)
+  };
+}
+
+function compactPortraitUrl(url = "", id = "") {
+  const text = String(url || "");
+  if (!text) return "";
+  if (!text.startsWith("data:")) return text;
+  if (!id) return "";
+  return `/api/cultivators/portrait?id=${encodeURIComponent(id)}`;
+}
+
+export function getCultivatorPortrait(state, id) {
+  ensureStateShape(state);
+  const match = allCultivators(state).find((item) => item.entity.id === id);
+  if (!match?.entity?.portraitUrl) return null;
+  const text = String(match.entity.portraitUrl || "");
+  const dataMatch = text.match(/^data:(image\/(?:png|jpe?g|webp));base64,([A-Za-z0-9+/=]+)$/i);
+  if (!dataMatch) return { url: text };
+  return {
+    contentType: dataMatch[1].toLowerCase(),
+    buffer: Buffer.from(dataMatch[2], "base64")
   };
 }
 
 function publicCultivator(entity, state, options = {}) {
   const currentDay = state.day || 1;
+  const compact = Boolean(options.compact);
   const dungeonHistoryLimit = options.dungeonHistoryLimit || (options.kind === "player" ? detailRecordLimit : npcDungeonHistoryLimit);
+  if (compact) {
+    return {
+      id: entity.id,
+      name: entity.name,
+      gender: entity.gender,
+      sect: entity.sect,
+      realm: entity.realm,
+      layer: entity.layer,
+      xp: entity.xp,
+      hp: entity.hp,
+      maxHp: entity.maxHp,
+      mana: entity.mana,
+      maxMana: entity.maxMana,
+      spirit: entity.spirit,
+      reputation: entity.reputation,
+      body: entity.body,
+      wisdom: entity.wisdom,
+      attack: entity.attack,
+      defense: entity.defense,
+      divineSense: entity.divineSense,
+      chance: entity.chance,
+      wealth: entity.wealth,
+      heartDemon: entity.heartDemon,
+      mood: entity.mood,
+      root: entity.root,
+      roots: entity.roots,
+      primaryRootKey: entity.primaryRootKey,
+      skillId: entity.skillId,
+      skillRanks: entity.skillRanks || {},
+      skillRank: skillRankOf(entity, entity.skillId),
+      portraitUrl: compactPortraitUrl(entity.portraitUrl, entity.id),
+      duelWins: entity.duelWins || 0,
+      duelLosses: entity.duelLosses || 0,
+      duelSeason: entity.duelSeason || null,
+      duelSeasonHistory: entity.duelSeasonHistory || [],
+      dungeonClears: entity.dungeonClears || 0,
+      bestDungeonPower: entity.bestDungeonPower || 0,
+      bestDungeonName: entity.bestDungeonName || "",
+      power: powerOf(entity, state)
+    };
+  }
   return {
     ...entity,
     dailyRecords: trimRecordsByDay(entity.dailyRecords || [], currentDay, growthRecordDays, growthRecordLimit),
@@ -4718,23 +5027,30 @@ function publicDungeonHistory(records, options = {}) {
 function publicDuelHistory(records, options = {}) {
   const replayLimit = options.includeRecentReplays ? replayRetentionDays : 0;
   const currentDay = options.currentDay || 1;
-  return trimRecordsByDay(records, currentDay, battleRecordDays, options.limit || detailRecordLimit).map((record, index) => ({
+  const people = options.people || null;
+  return trimDuelHistory(records, currentDay, options.limit || detailRecordLimit).map((record, index) => ({
     ...record,
     replayId: record.replayId || "",
     hasReplay: Boolean(record.replay || record.replayId) && isReplayWithinDays(record, currentDay),
-    replay: index < replayLimit && isReplayWithinDays(record, currentDay) ? publicReplay(record.replay) : null
+    replay: index < replayLimit && isReplayWithinDays(record, currentDay) ? publicReplay(record.replay, people) : null
   }));
 }
 
-function publicDuelDays(records, currentDay = 1) {
-  return trimRecordsByDay(records, currentDay, battleRecordDays, battleRecordDays).map((record, recordIndex) => ({
+function publicCultivatorRefMap(state) {
+  return new Map(allCultivators(state).map(({ entity }) => [entity.id, entity]));
+}
+
+function publicDuelDays(records, currentDay = 1, people = null) {
+  const refPeople = mergeRefMaps(people, cultivatorMapFromRefs(records));
+  return trimRecordsByDay(records, currentDay, publicBattleRecordDays, publicDuelDayLimit).map((record, recordIndex) => ({
     ...record,
     matches: (record.matches || []).map((match, matchIndex) => ({
       ...match,
-      left: publicEntityRef(match.left),
-      right: publicEntityRef(match.right),
-      winner: publicEntityRef(match.winner),
-      loser: publicEntityRef(match.loser),
+      order: match.order || matchIndex + 1,
+      left: publicEntityRef(match.left, refPeople),
+      right: publicEntityRef(match.right, refPeople),
+      winner: publicEntityRef(match.winner, refPeople),
+      loser: publicEntityRef(match.loser, refPeople),
       replayId: match.replayId || "",
       hasReplay: Boolean(match.replay || match.replayId) && isReplayWithinDays(record, currentDay),
       replay: null
@@ -4742,40 +5058,42 @@ function publicDuelDays(records, currentDay = 1) {
   }));
 }
 
-function publicDungeonDays(records, currentDay = 1) {
-  return trimRecordsByDay(records || [], currentDay, battleRecordDays, battleRecordDays).map((record) => ({
+function publicDungeonDays(records, currentDay = 1, people = null) {
+  return trimRecordsByDay(records || [], currentDay, publicBattleRecordDays, publicDungeonDayLimit).map((record) => ({
     day: record.day,
     date: record.date,
     bloodTrial: record.bloodTrial ? {
       name: record.bloodTrial.name,
-      caves: (record.bloodTrial.caves || []).map((cave) => publicBloodCaveRecord(cave, currentDay, record.day))
+      caves: (record.bloodTrial.caves || []).map((cave) => publicBloodCaveRecord(cave, currentDay, record.day, people))
     } : null,
     solo: (record.solo || []).slice(0, 20).map((entry) => publicDungeonHistoryEntry(entry, currentDay, record.day)),
-    sects: (record.sects || []).map((sectRecord) => publicSectDungeonRecord(sectRecord, currentDay, record.day)),
+    sects: (record.sects || []).map((sectRecord) => publicSectDungeonRecord(sectRecord, currentDay, record.day, people)),
     voidHallSpiritPools: record.voidHallSpiritPools || [],
-    public: record.public ? publicStarSeaRecord(record.public, currentDay, record.day) : null
+    public: record.public ? publicStarSeaRecord(record.public, currentDay, record.day, people) : null
   }));
 }
 
-function publicBloodCaveRecord(cave, currentDay, parentDay) {
+function publicBloodCaveRecord(cave, currentDay, parentDay, people = null) {
   return {
     cave: cave.cave,
     name: cave.name,
     monster: cave.monster,
     spiritPool: cave.spiritPool,
-    clears: (cave.clears || []).map((entry) => publicBloodEntry(entry, currentDay, parentDay)),
-    challengers: (cave.challengers || []).map((entry) => publicBloodEntry(entry, currentDay, parentDay))
+    clears: (cave.clears || []).map((entry) => publicBloodEntry(entry, currentDay, parentDay, people)),
+    challengers: (cave.challengers || []).map((entry) => publicBloodEntry(entry, currentDay, parentDay, people))
   };
 }
 
-function publicBloodEntry(entry, currentDay, parentDay) {
+function publicBloodEntry(entry, currentDay, parentDay, people = null) {
   const replayRecord = { ...entry, day: entry.day || parentDay };
+  const person = people?.get(entry.id);
   return {
     id: entry.id,
     name: entry.name,
     sect: entry.sect,
     realm: entry.realm,
     gender: entry.gender,
+    portraitUrl: compactPortraitUrl(entry.portraitUrl || person?.portraitUrl, entry.id),
     primaryRootKey: entry.primaryRootKey,
     skillId: entry.skillId,
     output: entry.output,
@@ -4793,15 +5111,16 @@ function publicBloodEntry(entry, currentDay, parentDay) {
 
 function publicDungeonHistoryEntry(record, currentDay = 1, parentDay = null) {
   const replayRecord = { ...record, day: record.day || parentDay };
+  const { replay, winner, loser, ...summary } = record || {};
   return {
-    ...record,
+    ...summary,
     replayId: record.replayId || "",
     hasReplay: Boolean(record.replay || record.replayId) && isReplayWithinDays(replayRecord, currentDay),
     replay: null
   };
 }
 
-function publicSectDungeonRecord(record, currentDay = 1, parentDay = null) {
+function publicSectDungeonRecord(record, currentDay = 1, parentDay = null, people = null) {
   const replayRecord = { ...record, day: record.day || parentDay };
   return {
     type: record.type,
@@ -4828,7 +5147,7 @@ function publicSectDungeonRecord(record, currentDay = 1, parentDay = null) {
     top: (record.top || []).map((entry) => ({ id: entry.id, name: entry.name, damage: entry.damage })),
     battles: (record.battles || []).map((battle) => ({
       order: battle.order,
-      challenger: publicEntityRef(battle.challenger),
+      challenger: publicEntityRef(battle.challenger, people),
       damage: battle.damage,
       monsterStartHp: battle.monsterStartHp,
       monsterStartMana: battle.monsterStartMana,
@@ -4850,7 +5169,7 @@ function publicSectDungeonRecord(record, currentDay = 1, parentDay = null) {
   };
 }
 
-function publicStarSeaRecord(record, currentDay = 1, parentDay = null) {
+function publicStarSeaRecord(record, currentDay = 1, parentDay = null, people = null) {
   const replayRecord = { ...record, day: record.day || parentDay };
   return {
     type: record.type,
@@ -4869,8 +5188,8 @@ function publicStarSeaRecord(record, currentDay = 1, parentDay = null) {
     spiritPoolRange: record.spiritPoolRange,
     spiritPool: record.spiritPool,
     dropChance: record.dropChance,
-    teams: (record.teams || []).map((team) => publicStarSeaTeam(team, currentDay, replayRecord.day)),
-    top: (record.top || []).map(publicStarSeaMember),
+    teams: (record.teams || []).map((team) => publicStarSeaTeam(team, currentDay, replayRecord.day, people)),
+    top: (record.top || []).map((member) => publicStarSeaMember(member, people)),
     item: record.item || "",
     itemOwner: record.itemOwner || "",
     tierName: record.tierName || "",
@@ -4882,7 +5201,7 @@ function publicStarSeaRecord(record, currentDay = 1, parentDay = null) {
   };
 }
 
-function publicStarSeaTeam(record, currentDay = 1, parentDay = null) {
+function publicStarSeaTeam(record, currentDay = 1, parentDay = null, people = null) {
   const replayRecord = { ...record, day: record.day || parentDay };
   return {
     id: record.id,
@@ -4896,8 +5215,8 @@ function publicStarSeaTeam(record, currentDay = 1, parentDay = null) {
     monsterRemainingHp: record.monsterRemainingHp,
     monsterMaxHp: record.monsterMaxHp,
     spirit: record.spirit || 0,
-    members: (record.members || []).map(publicStarSeaMember),
-    top: (record.top || []).map(publicStarSeaMember),
+    members: (record.members || []).map((member) => publicStarSeaMember(member, people)),
+    top: (record.top || []).map((member) => publicStarSeaMember(member, people)),
     item: record.item || "",
     itemOwner: record.itemOwner || "",
     itemValue: record.itemValue || 0,
@@ -4908,13 +5227,15 @@ function publicStarSeaTeam(record, currentDay = 1, parentDay = null) {
   };
 }
 
-function publicStarSeaMember(member) {
+function publicStarSeaMember(member, people = null) {
+  const person = people?.get(member.id);
   return {
     id: member.id,
     name: member.name,
     sect: member.sect,
     realm: member.realm,
     gender: member.gender,
+    portraitUrl: compactPortraitUrl(member.portraitUrl || person?.portraitUrl, member.id),
     teamName: member.teamName,
     teamRank: member.teamRank,
     damage: member.damage || 0,
@@ -4933,7 +5254,7 @@ export function getDuelReplay(state, day, matchId) {
   const match = (record.matches || []).find((item) => item.id === matchId);
   if (!match || match.type !== "battle") throw new Error("未找到该场切磋");
   if (!match.replay) throw new Error("该场切磋尚未保存回放");
-  return publicReplay(match.replay);
+  return publicReplay(match.replay, publicCultivatorRefMap(state));
 }
 
 export function getDuelReplayId(state, day, matchId) {
@@ -4970,17 +5291,17 @@ export function replayDayFromId(replayId) {
   return 0;
 }
 
-function publicProvinceWars(records, currentDay = 1) {
-  return trimRecordsByDay(records, currentDay, battleRecordDays).map((record, recordIndex) => ({
+function publicProvinceWars(records, currentDay = 1, people = null) {
+  return trimRecordsByDay(records, currentDay, publicBattleRecordDays, publicProvinceWarLimit).map((record, recordIndex) => ({
     ...record,
-    attackerLineup: (record.attackerLineup || []).map(publicEntityRef),
-    defenderLineup: (record.defenderLineup || []).map(publicEntityRef),
+    attackerLineup: (record.attackerLineup || []).map((ref) => publicEntityRef(ref, people)),
+    defenderLineup: (record.defenderLineup || []).map((ref) => publicEntityRef(ref, people)),
     battles: (record.battles || []).map((battle, battleIndex) => ({
       ...battle,
-      attacker: publicEntityRef(battle.attacker),
-      defender: publicEntityRef(battle.defender),
-      winner: publicEntityRef(battle.winner),
-      loser: publicEntityRef(battle.loser),
+      attacker: publicEntityRef(battle.attacker, people),
+      defender: publicEntityRef(battle.defender, people),
+      winner: publicEntityRef(battle.winner, people),
+      loser: publicEntityRef(battle.loser, people),
       replayId: battle.replayId || "",
       hasReplay: Boolean(battle.replay || battle.replayId) && isReplayWithinDays({ ...battle, day: battle.day || record.day }, currentDay),
       replay: null
@@ -4988,22 +5309,78 @@ function publicProvinceWars(records, currentDay = 1) {
   }));
 }
 
-function publicReplay(replay) {
+function publicReplay(replay, people = null) {
   if (!replay) return null;
+  const refPeople = people && typeof people.get === "function" ? people : null;
   const eventLimit = replay.kind === "starSeaTeam" ? 80 : 40;
-  return {
+  const result = {
     ...replay,
     replayId: replay.replayId || makeReplayId("battle", timestampKey(), Math.random().toString(36).slice(2, 8)),
     events: (replay.events || []).slice(0, eventLimit)
   };
+  for (const key of ["left", "right", "winner", "loser", "attacker", "defender", "challenger"]) {
+    if (result[key]) result[key] = publicReplayEntityRef(result[key], refPeople);
+  }
+  if (result.team) {
+    result.team = {
+      ...result.team,
+      members: (result.team.members || []).map((member) => publicReplayEntityRef(member, refPeople)),
+      top: (result.team.top || []).map((member) => publicReplayEntityRef(member, refPeople))
+    };
+  }
+  if (Array.isArray(result.members)) {
+    result.members = result.members.map((member) => publicReplayEntityRef(member, refPeople));
+  }
+  if (Array.isArray(result.top)) {
+    result.top = result.top.map((member) => publicReplayEntityRef(member, refPeople));
+  }
+  return result;
 }
 
-export function getPublicReplay(replay) {
-  return publicReplay(replay);
+function publicReplayEntityRef(ref, people = null) {
+  if (!ref || typeof ref !== "object") return ref;
+  if (ref.kind === "monster") return { ...ref, portraitUrl: compactPortraitUrl(ref.portraitUrl, ref.id) };
+  const publicRef = publicEntityRef(ref, people);
+  return {
+    ...ref,
+    ...publicRef,
+    portraitUrl: publicRef?.portraitUrl || compactPortraitUrl(ref.portraitUrl, ref.id)
+  };
 }
 
-function publicEntityRef(ref) {
+export function getPublicReplay(replay, stateOrPeople = null) {
+  const people = stateOrPeople?.player || stateOrPeople?.npcs
+    ? publicCultivatorRefMap(stateOrPeople)
+    : stateOrPeople;
+  return publicReplay(replay, people);
+}
+
+function cultivatorMapFromRefs(records) {
+  const map = new Map();
+  for (const record of records || []) {
+    for (const match of record.matches || []) {
+      for (const ref of [match.left, match.right, match.winner, match.loser, match.attacker, match.defender, match.challenger]) {
+        if (ref?.id && ref.portraitUrl) map.set(ref.id, ref);
+      }
+    }
+  }
+  return map;
+}
+
+function mergeRefMaps(...maps) {
+  const merged = new Map();
+  for (const map of maps) {
+    for (const [key, value] of map || []) {
+      if (!merged.has(key) || !merged.get(key)?.portraitUrl) merged.set(key, value);
+    }
+  }
+  return merged;
+}
+
+function publicEntityRef(ref, people = null) {
   if (!ref) return ref;
+  const fallback = people && typeof people.get === "function" ? people.get(ref.id) : null;
+  const portraitSource = ref.portraitUrl || fallback?.portraitUrl || "";
   const rank = ref.duelSeason ? duelRankForScore(ref.duelSeason.score || 0) : null;
   return {
     kind: ref.kind,
@@ -5011,12 +5388,20 @@ function publicEntityRef(ref) {
     name: ref.name,
     realm: ref.realm,
     sect: ref.sect,
+    portraitUrl: compactPortraitUrl(portraitSource, ref.id),
     rankId: ref.rankId || ref.duelSeason?.rankId || rank?.id || "",
     rankColor: ref.rankColor || ref.duelSeason?.rankColor || rank?.color || "",
-    duelSeason: ref.duelSeason || null,
+    duelSeason: ref.duelSeason ? {
+      season: ref.duelSeason.season,
+      score: ref.duelSeason.score || 0,
+      wins: ref.duelSeason.wins || 0,
+      losses: ref.duelSeason.losses || 0,
+      rankId: ref.duelSeason.rankId || rank?.id || "",
+      rankName: ref.duelSeason.rankName || rank?.name || "",
+      rankColor: ref.duelSeason.rankColor || rank?.color || ""
+    } : null,
     skillId: ref.skillId,
-    skillRank: skillRankOf(ref, ref.skillId),
-    effectiveSkill: effectiveSkillForEntity(ref)
+    skillRank: skillRankOf(ref, ref.skillId)
   };
 }
 
@@ -5096,7 +5481,7 @@ function buildSectSummaries(state) {
       roots: member.roots,
       primaryRootKey: member.primaryRootKey,
       skillId: member.skillId,
-      portraitUrl: member.portraitUrl || "",
+      portraitUrl: compactPortraitUrl(member.portraitUrl, member.id),
       power: member.power,
       isPlayer: member.isPlayer
     });
@@ -5116,10 +5501,11 @@ function buildSectSummaries(state) {
         .sort((a, b) => b.power - a.power || a.name.localeCompare(b.name, "zh-Hans-CN"));
       return {
         ...sect,
+        members: sect.members.map(compactCultivatorRef),
         leaderId: leader?.id || "",
         leaderName: leader?.name || "无",
         leader: leader?.name || "无",
-        elders,
+        elders: elders.map(compactCultivatorRef),
         elderIds: elders.map((member) => member.id),
         elderNames: elders.map((member) => member.name),
         provinces: (state.provinces || [])
@@ -5817,6 +6203,7 @@ function entityRef(entity, kind) {
     name: entity.name,
     realm: entity.realm,
     sect: kind === "player" ? entity.sect || "黄枫谷" : entity.sect,
+    portraitUrl: compactPortraitUrl(entity.portraitUrl, entity.id),
     root: entity.root,
     roots: profile.roots,
     primaryRootKey: profile.primaryRootKey,
@@ -5943,8 +6330,8 @@ function runDuelMatch(state, left, right, options = {}) {
     scoreAfter: right.duelSeason?.score || 0,
     replayId
   });
-  left.duelHistory = left.duelHistory.filter((record) => record.season === duelSeasonOfDay(state.day)).slice(0, detailRecordLimit);
-  right.duelHistory = right.duelHistory.filter((record) => record.season === duelSeasonOfDay(state.day)).slice(0, detailRecordLimit);
+  left.duelHistory = mergeDuelHistory(left.duelHistory, state.day, detailRecordLimit);
+  right.duelHistory = mergeDuelHistory(right.duelHistory, state.day, detailRecordLimit);
 
   return { replay, winner, loser, result: leftResult, winnerScoreDelta, loserScoreDelta };
 }
@@ -5966,14 +6353,19 @@ function replayResultFor(replay, entityId) {
 function syncDuelDayRecords(state) {
   const map = cultivatorMap(state);
   const records = [...(state.duelDays || [])].sort((a, b) => a.day - b.day);
-  const currentSeason = duelSeasonOfDay(state.day);
+  const previousHistory = new Map(
+    [...map.values()].map((entity) => [
+      entity.id,
+      (entity.duelHistory || []).filter((record) => !record.matchId && !record.duelDayMatchId)
+    ])
+  );
   for (const entity of map.values()) {
     entity.duelHistory = [];
     normalizeDuelSeason(entity, state.day);
   }
 
   for (const record of records) {
-    if (duelSeasonOfDay(record.day || state.day) !== currentSeason) continue;
+    const recordSeason = duelSeasonOfDay(record.day || state.day);
     for (const match of record.matches || []) {
       if (match.type === "bye") continue;
       const leftRef = match.left || match.replay?.left;
@@ -5993,7 +6385,8 @@ function syncDuelDayRecords(state) {
 
       left.duelHistory.unshift({
         day: record.day,
-        season: currentSeason,
+        season: recordSeason,
+        duelDayMatchId: match.id || "",
         foughtAt,
         opponent: right.name,
         opponentId: right.id,
@@ -6005,7 +6398,8 @@ function syncDuelDayRecords(state) {
       });
       right.duelHistory.unshift({
         day: record.day,
-        season: currentSeason,
+        season: recordSeason,
+        duelDayMatchId: match.id || "",
         foughtAt,
         opponent: left.name,
         opponentId: left.id,
@@ -6020,9 +6414,11 @@ function syncDuelDayRecords(state) {
 
   for (const entity of map.values()) {
     normalizeDuelSeason(entity, state.day);
-    entity.duelHistory = entity.duelHistory
-      .filter((record) => record.season === currentSeason)
-      .slice(0, detailRecordLimit);
+    entity.duelHistory = mergeDuelHistory(
+      [...entity.duelHistory, ...(previousHistory.get(entity.id) || [])],
+      state.day,
+      detailRecordLimit
+    );
   }
 }
 
@@ -6090,6 +6486,7 @@ export function runDailyDuels(state) {
     matches.push({
       id: matchId,
       type: "battle",
+      order,
       left: entityRef(left.entity, left.kind),
       right: entityRef(right.entity, right.kind),
       winner: entityRef(winner, winner.id === "player" ? "player" : "npc"),

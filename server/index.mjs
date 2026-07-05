@@ -12,6 +12,8 @@ import {
   duel,
   getDuelReplay,
   getDuelReplayId,
+  getCultivatorPortrait,
+  getPublicCultivatorDetail,
   getPublicReplay,
   assertReplayDayAllowed,
   replayDayFromId,
@@ -27,7 +29,7 @@ import {
   upgradePlayerSkill,
   useItem
 } from "./gameLogic.mjs";
-import { mutateState, publicState, readBattleReplay, readReplayMeta, readState, resetState } from "./store.mjs";
+import { mutateState, publicState, readBattleReplay, readState, resetState } from "./store.mjs";
 
 const port = Number(process.env.PORT || 8787);
 const rootDir = fileURLToPath(new URL("../", import.meta.url));
@@ -53,12 +55,38 @@ function sendJson(res, status, data) {
   const body = JSON.stringify(data);
   res.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store, max-age=0",
+    "pragma": "no-cache",
+    "expires": "0",
     "access-control-allow-origin": "*",
     "access-control-allow-methods": "GET,POST,OPTIONS",
     "access-control-allow-headers": "content-type",
     "content-length": Buffer.byteLength(body)
   });
   res.end(body);
+}
+
+function sendImage(res, portrait) {
+  if (!portrait) {
+    sendJson(res, 404, { error: "头像不存在" });
+    return;
+  }
+  if (portrait.url) {
+    res.writeHead(302, {
+      location: portrait.url,
+      "cache-control": "no-store, max-age=0"
+    });
+    res.end();
+    return;
+  }
+  res.writeHead(200, {
+    "content-type": portrait.contentType || "image/webp",
+    "cache-control": "no-store, max-age=0",
+    "pragma": "no-cache",
+    "expires": "0",
+    "content-length": portrait.buffer.length
+  });
+  res.end(portrait.buffer);
 }
 
 function readJson(req) {
@@ -103,13 +131,29 @@ async function handleApi(req, res, url) {
     return;
   }
 
+  if (req.method === "GET" && url.pathname === "/api/cultivators/detail") {
+    const id = url.searchParams.get("id");
+    if (!id) throw new Error("缺少人物 ID");
+    const state = await readState("default");
+    sendJson(res, 200, getPublicCultivatorDetail(state, id));
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/cultivators/portrait") {
+    const id = url.searchParams.get("id");
+    if (!id) throw new Error("缺少人物 ID");
+    const state = await readState("default");
+    sendImage(res, getCultivatorPortrait(state, id));
+    return;
+  }
+
   if (req.method === "GET" && url.pathname === "/api/duels/replay") {
     const replayId = url.searchParams.get("id");
     if (replayId) {
-      const state = await readReplayMeta("default");
+      const state = await readState("default");
       const replay = await readBattleReplay(replayId);
       assertReplayDayAllowed(state, replay.day || replayDayFromId(replayId));
-      sendJson(res, 200, { replay: getPublicReplay(replay) });
+      sendJson(res, 200, { replay: getPublicReplay(replay, state) });
       return;
     }
     const day = url.searchParams.get("day");
@@ -119,7 +163,7 @@ async function handleApi(req, res, url) {
     if (existingReplayId) {
       const replay = await readBattleReplay(existingReplayId);
       assertReplayDayAllowed(state, replay.day || Number(day));
-      sendJson(res, 200, { replay: getPublicReplay(replay) });
+      sendJson(res, 200, { replay: getPublicReplay(replay, state) });
       return;
     }
     sendJson(res, 200, { replay: getDuelReplay(state, day, match) });
@@ -129,10 +173,10 @@ async function handleApi(req, res, url) {
   if (req.method === "GET" && url.pathname === "/api/battles/replay") {
     const replayId = url.searchParams.get("id");
     if (!replayId) throw new Error("缺少战斗回放 ID");
-    const state = await readReplayMeta("default");
+    const state = await readState("default");
     const replay = await readBattleReplay(replayId);
     assertReplayDayAllowed(state, replay.day || replayDayFromId(replayId));
-    sendJson(res, 200, { replay: getPublicReplay(replay) });
+    sendJson(res, 200, { replay: getPublicReplay(replay, state) });
     return;
   }
 

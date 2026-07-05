@@ -1,6 +1,6 @@
 <template>
   <section class="log">
-    <div v-for="entry in logs" :key="`${entry.day}-${entry.time}-${entry.text}`">
+    <div v-for="(entry, index) in logs" :key="`${entry.day}-${entry.time || ''}-${entry.text}-${index}`">
       {{ entry.date || "未知日期" }} {{ entry.time }}｜{{ entry.text }}
     </div>
   </section>

@@ -3489,6 +3489,25 @@ button.event {
   letter-spacing: .03em;
 }
 
+.sect-rank-table .sect-territory-card p.sect-province-highlights {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sect-province-highlight {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.sect-province-highlight span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .territory-stats.compact {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 7px;
@@ -3635,6 +3654,13 @@ button.event {
 
 .gdp-tier-badge.tier-e {
   --tier-color: #68717d;
+}
+
+.gdp-tier-badge.compact {
+  width: 23px;
+  height: 20px;
+  border-radius: 5px;
+  font-size: 12px;
 }
 
 .sect-province-panel .province-table-row strong {
@@ -5405,10 +5431,11 @@ button.event {
 
 .realm-table-head {
   display: grid;
-  grid-template-columns: minmax(104px, 1fr) minmax(104px, .95fr) minmax(78px, .7fr) minmax(255px, 1.9fr) minmax(72px, .62fr);
-  gap: 8px;
+  grid-template-columns: minmax(92px, 1fr) minmax(76px, .72fr) 60px minmax(340px, 2.8fr) 62px;
+  gap: 6px;
   color: var(--muted);
   font-size: 12px;
+  font-weight: 800;
   padding: 0 8px 6px;
 }
 
@@ -5419,8 +5446,8 @@ button.event {
 
 .realm-row {
   display: grid;
-  grid-template-columns: minmax(104px, 1fr) minmax(104px, .95fr) minmax(78px, .7fr) minmax(255px, 1.9fr) minmax(72px, .62fr);
-  gap: 8px;
+  grid-template-columns: minmax(92px, 1fr) minmax(76px, .72fr) 60px minmax(340px, 2.8fr) 62px;
+  gap: 6px;
   align-items: center;
   border: 1px solid rgba(120, 91, 43, .2);
   border-radius: 7px;
@@ -5430,6 +5457,16 @@ button.event {
 
 .realm-row > span {
   white-space: nowrap;
+}
+
+.realm-row > div {
+  min-width: 0;
+}
+
+.realm-row > span:nth-child(2),
+.realm-row > span:nth-child(3),
+.realm-row > span:last-child {
+  text-align: center;
 }
 
 .realm-row.current {

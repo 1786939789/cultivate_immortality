@@ -128,7 +128,7 @@ function inferGender(name) {
 
 export const npcGenders = Object.fromEntries(npcNames.map((name) => [name, inferGender(name)]));
 
-export const provinceVersion = 2;
+export const provinceVersion = 3;
 
 export const provinces = [
   { id: "xinjiang", name: "新疆", rank: 23, type: "xp", x: 12, y: 26 },

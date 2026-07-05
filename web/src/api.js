@@ -8,6 +8,7 @@ async function fetchJson(path, options = {}) {
   try {
     const response = await fetch(path, {
       headers: { "content-type": "application/json" },
+      cache: "no-store",
       ...options,
       body: options.body ? JSON.stringify(options.body) : undefined
     });
@@ -48,8 +49,16 @@ export function clearCachedState() {
 }
 
 export function getState(scope = "full") {
-  const suffix = scope === "full" ? "" : `?scope=${encodeURIComponent(scope)}`;
+  const params = new URLSearchParams();
+  if (scope !== "full") params.set("scope", scope);
+  params.set("_", String(Date.now()));
+  const suffix = `?${params.toString()}`;
   return request(`/api/state${suffix}`);
+}
+
+export function getCultivatorDetail(id) {
+  const params = new URLSearchParams({ id, _: String(Date.now()) });
+  return request(`/api/cultivators/detail?${params.toString()}`);
 }
 
 export function getDuelReplay(day, matchId) {
