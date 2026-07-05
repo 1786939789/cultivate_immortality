@@ -745,6 +745,30 @@
             </button>
           </div>
 
+          <section class="panel dungeon-bestiary-panel" aria-label="副本妖物图鉴">
+            <div class="section-head compact">
+              <div>
+                <h3>副本妖物图鉴</h3>
+                <p>九境妖域 · {{ monsterImageEntries.length }} 种妖物</p>
+              </div>
+              <span class="tag">{{ dungeonMonsterStages.length }} 阶</span>
+            </div>
+            <div class="dungeon-bestiary-grid">
+              <article class="bestiary-stage" v-for="stage in dungeonMonsterStages" :key="stage.name">
+                <div class="bestiary-stage-title">
+                  <strong>{{ stage.name }}</strong>
+                  <span>第 {{ stage.stage + 1 }} 阶</span>
+                </div>
+                <div class="bestiary-monster-list">
+                  <span class="bestiary-monster" v-for="monster in stage.monsters" :key="monster.name">
+                    <MonsterEmblem :monster="monster" size="sm" />
+                    <b>{{ monster.name }}</b>
+                  </span>
+                </div>
+              </article>
+            </div>
+          </section>
+
           <div v-if="selectedDungeonDay && activeDungeonRecordTab === 'blood'" class="panel dungeon-record-panel">
             <div class="section-head compact">
               <div>
@@ -1106,13 +1130,16 @@
               <div class="panel flat star-sea-overview-panel">
                 <h3>猎妖概览</h3>
                 <div class="star-sea-overview-line">
-                <div class="monster-strip compact-monster-strip" v-if="selectedDungeonDay.public?.monsters?.length">
-                  <div class="monster-chip" v-for="monster in selectedDungeonDay.public.monsters" :key="monster.id || monster.name">
-                    <strong>{{ monster.name }}</strong>
-                    <span>{{ monster.realm }} · {{ monster.rootName }}</span>
-                    <small>血 {{ monster.maxHp }} / 攻 {{ monster.attack }} / 防 {{ monster.defense }} / 神 {{ monster.divineSense }}</small>
+                  <div class="monster-strip compact-monster-strip" v-if="selectedDungeonDay.public?.monsters?.length">
+                    <div class="monster-chip with-emblem" v-for="monster in selectedDungeonDay.public.monsters" :key="monster.id || monster.name">
+                      <MonsterEmblem :monster="monster" size="sm" />
+                      <span>
+                        <strong>{{ monster.name }}</strong>
+                        <span>{{ monster.realm }} · {{ monster.rootName }}</span>
+                        <small>血 {{ monster.maxHp }} / 攻 {{ monster.attack }} / 防 {{ monster.defense }} / 神 {{ monster.divineSense }}</small>
+                      </span>
+                    </div>
                   </div>
-                </div>
                   <div class="star-sea-summary-chip" v-if="selectedDungeonDay.public?.cycle">
                     <span>队伍周期</span>
                     <b>第 {{ selectedDungeonDay.public.cycle }} 期</b>
@@ -2871,6 +2898,7 @@ import LogPanel from "./components/LogPanel.vue";
 import Meter from "./components/Meter.vue";
 import MonsterEmblem from "./components/MonsterEmblem.vue";
 import StatIcon, { statIconComponent } from "./components/StatIcon.vue";
+import { monsterImageEntries, monsterStageNames } from "./monsterImages";
 import { equipmentCatalog as fallbackEquipmentCatalog, equipmentSlots as fallbackEquipmentSlots, equipmentTiers as fallbackEquipmentTiers } from "../../shared/equipmentData.mjs";
 import { duelLossScore, duelRanks, duelRankForScore, duelSeasonDay, duelSeasonLength, duelSeasonMaxScore, duelSeasonOfDay, duelWinScore } from "../../shared/duelSeasonData.mjs";
 
@@ -3368,6 +3396,11 @@ const dungeonRecordTabs = [
   { id: "sea", label: "乱星海猎妖" }
 ];
 const starSeaDropChance = 0.1;
+const dungeonMonsterStages = monsterStageNames.map((stageName, stage) => ({
+  stage,
+  name: stageName,
+  monsters: monsterImageEntries.filter((monster) => monster.stage === stage)
+}));
 const dungeonDays = computed(() => gameState.value.dungeonDays || []);
 const selectedDungeonDay = computed(() => dungeonDays.value[dungeonDayIndex.value] || null);
 const canShowPreviousDungeonDay = computed(() => dungeonDayIndex.value < dungeonDays.value.length - 1);
