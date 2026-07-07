@@ -642,7 +642,7 @@
             <div class="panel battle-header">
               <div>
                 <h3>副本回合</h3>
-                <p>{{ lastBattle.left.name }} 对阵 {{ lastBattle.right.name }}，{{ battleStatusText }}</p>
+                <p>{{ battleDisplayName(lastBattle.left) }} 对阵 {{ battleDisplayName(lastBattle.right) }}，{{ battleStatusText }}</p>
               </div>
               <div class="actions">
                 <button class="secondary" @click="replayBattle">重播</button>
@@ -652,8 +652,9 @@
 
             <div class="battle-line live">
               <div class="fighter">
-                <CharacterPortrait :person="battlePerson(lastBattle.left)" size="lg" />
-                <strong>{{ lastBattle.left.name }}</strong>
+                <MonsterEmblem v-if="isBattleMonster(lastBattle.left)" :monster="lastBattle.left" size="lg" />
+                <CharacterPortrait v-else :person="battlePerson(lastBattle.left)" size="lg" />
+                <strong>{{ battleDisplayName(lastBattle.left) }}</strong>
                 <small>{{ realmName(lastBattle.left.realm) }} · 战力 {{ lastBattle.left.power }}</small>
                 <div class="battle-stats">
                   <span v-for="stat in battleStatsFromEffective(lastBattle.left.stats)" :key="stat.label" :aria-label="`${stat.label} ${stat.value}`">
@@ -671,8 +672,9 @@
               </div>
               <div class="vs">{{ battleOutcomeLabel }}</div>
               <div class="fighter">
-                <CharacterPortrait :person="battlePerson(lastBattle.right)" size="lg" />
-                <strong>{{ lastBattle.right.name }}</strong>
+                <MonsterEmblem v-if="isBattleMonster(lastBattle.right)" :monster="lastBattle.right" size="lg" />
+                <CharacterPortrait v-else :person="battlePerson(lastBattle.right)" size="lg" />
+                <strong>{{ battleDisplayName(lastBattle.right) }}</strong>
                 <small>{{ realmName(lastBattle.right.realm) }} · 战力 {{ lastBattle.right.power }}</small>
                 <div class="battle-stats">
                   <span v-for="stat in battleStatsFromEffective(lastBattle.right.stats)" :key="stat.label" :aria-label="`${stat.label} ${stat.value}`">
@@ -780,24 +782,34 @@
             <div class="dungeon-cave-list" v-if="selectedDungeonDay.bloodTrial?.caves?.length">
               <article class="dungeon-cave-card" v-for="cave in selectedDungeonDay.bloodTrial?.caves || []" :key="cave.cave">
                 <div class="dungeon-monster-card">
-                  <div>
-                    <MonsterEmblem :monster="cave.monster" />
+                  <div class="monster-card-topline">
                     <span class="tag">第 {{ cave.cave }} 关</span>
+                    <h3>{{ cave.name }}</h3>
                     <span class="tag cave-clear-tag" tabindex="0">
-                      通关 {{ cave.clears?.length || 0 }} 人
+                      本日通过 {{ bloodCaveClearCount(cave) }} 人
                       <span class="cave-clear-tip" role="tooltip">
-                        <template v-if="bloodCaveClearNames(cave).length">{{ bloodCaveClearNames(cave).join("、") }}</template>
+                        <template v-if="bloodCaveClearNames(cave).length">
+                          {{ bloodCaveClearNames(cave).join("、") }}<template v-if="bloodCaveClearCount(cave) > bloodCaveClearNames(cave).length"> 等 {{ bloodCaveClearCount(cave) }} 人</template>
+                        </template>
                         <template v-else>暂无通关者</template>
                       </span>
                     </span>
-                    <h3>{{ cave.name }}</h3>
-                    <p :title="`${cave.monster?.name || ''} · ${cave.monster?.realm || ''} · ${cave.monster?.rootName || ''}`">{{ cave.monster?.name }} · {{ cave.monster?.realm }} · {{ cave.monster?.rootName }}</p>
                   </div>
-                  <div class="monster-stats">
-                    <span v-for="stat in monsterStatItems(cave.monster)" :key="stat.icon" :aria-label="`${stat.label} ${stat.value}`" :title="`${stat.label}：${stat.value}`">
-                      <StatIcon :name="stat.icon" :class="`detail-icon-${stat.icon}`" />
-                      <b>{{ stat.value }}</b>
-                    </span>
+                  <div class="monster-portrait">
+                    <MonsterEmblem :monster="cave.monster" />
+                  </div>
+                  <div class="monster-info-panel">
+                    <div class="monster-identity-copy">
+                      <h4 :title="cave.monster?.name || ''">{{ monsterShortName(cave.monster?.name) }}</h4>
+                      <p :title="`${cave.monster?.realm || ''} · ${cave.monster?.rootName || ''}`">{{ cave.monster?.realm }} · {{ cave.monster?.rootName }}</p>
+                    </div>
+                    <div class="monster-stats">
+                      <span v-for="stat in monsterStatItems(cave.monster)" :key="stat.icon" :aria-label="`${stat.label} ${stat.value}`" :title="`${stat.label}：${stat.value}`">
+                        <StatIcon :name="stat.icon" :class="`detail-icon-${stat.icon}`" />
+                        <em>{{ stat.label }}</em>
+                        <b>{{ stat.value }}</b>
+                      </span>
+                    </div>
                   </div>
                 </div>
                 <div class="cave-spirit-summary">
@@ -891,19 +903,45 @@
                   </div>
                   <div class="match-list wheel-match-list">
                     <button
-                      class="war-battle-link wheel-battle-link"
+                      class="match-card duel-match-card void-battle-card"
                       type="button"
                       v-for="battle in voidHallBattles(selectedVoidHallRecord)"
                       :key="`${selectedVoidHallRecord.sect}-${battle.order}`"
                       :disabled="!hasReplay(battle)"
-                      :class="{ active: lastBattle?.replayId && battle.replayId === lastBattle.replayId }"
+                      :class="{
+                        active: lastBattle?.replayId && battle.replayId === lastBattle.replayId,
+                        replayable: hasReplay(battle),
+                        'left-won': voidHallBattleLeftWon(battle),
+                        'right-won': !voidHallBattleLeftWon(battle)
+                      }"
                       @click="openReplay(battle, null, captureBattleReturn())"
                     >
-                      <span class="war-battle-order">第 {{ battle.order }} 战</span>
-                      <strong class="war-battle-name left">{{ battle.challenger?.name || battle.name || "参战修士" }}</strong>
-                      <span class="war-battle-vs">VS</span>
-                      <strong class="war-battle-name right">{{ selectedVoidHallRecord.monster }}</strong>
-                      <small class="war-battle-summary">输出 {{ battle.damage || 0 }}<span v-if="battle.winnerName"> · 胜者：{{ battle.winnerName }}</span></small>
+                      <div class="match-person duel-combatant void-combatant" :class="{ winner: voidHallBattleLeftWon(battle) }">
+                        <CharacterPortrait :person="voidHallBattleChallengerPerson(battle)" size="sm" />
+                        <div class="duel-person-copy">
+                          <strong>{{ battle.challenger?.name || battle.name || "参战修士" }}<span v-if="battle.challenger?.id === player.id">我</span></strong>
+                          <small>{{ realmName(voidHallBattleChallengerPerson(battle).realm) }}</small>
+                          <small>战力 {{ personPower(voidHallBattleChallengerPerson(battle)) }}</small>
+                        </div>
+                      </div>
+                      <div class="duel-match-vs void-match-vs">
+                        <strong>VS</strong>
+                        <span>第 {{ battle.order }} 战</span>
+                      </div>
+                      <div class="match-person duel-combatant void-combatant void-monster-combatant" :class="{ winner: !voidHallBattleLeftWon(battle) }">
+                        <MonsterEmblem :monster="voidHallBattleMonster(selectedVoidHallRecord)" size="sm" />
+                        <div class="duel-person-copy">
+                          <strong>{{ selectedVoidHallRecord.monster }}</strong>
+                          <small>{{ selectedVoidHallRecord.monsterRealm }}</small>
+                          <small>战力 {{ voidHallMonsterPower(selectedVoidHallRecord) }}</small>
+                        </div>
+                      </div>
+                      <div class="duel-result-stamp" :class="voidHallBattleLeftWon(battle) ? 'win' : 'loss'">{{ voidHallBattleLeftWon(battle) ? "胜利" : "失败" }}</div>
+                      <div class="void-output-stamp">
+                        <span>输出</span>
+                        <strong>{{ battle.damage || 0 }}</strong>
+                      </div>
+                      <span class="duel-replay-button" aria-hidden="true"><i>▶</i><b>回放</b></span>
                     </button>
                   </div>
                 </section>
@@ -911,7 +949,7 @@
                   <div class="duel-replay-title">
                     <div>
                       <h3>虚天殿实况</h3>
-                      <p>{{ lastBattle ? `${lastBattle.left.name} 对阵 ${lastBattle.right.name}，${battleStatusText}` : "选择左侧场次查看战斗回放。" }}</p>
+                      <p>{{ lastBattle ? `${battleDisplayName(lastBattle.left)} 对阵 ${battleDisplayName(lastBattle.right)}，${battleStatusText}` : "选择左侧场次查看战斗回放。" }}</p>
                     </div>
                     <div class="duel-replay-actions" v-if="lastBattle">
                       <button class="secondary" @click="replayBattle">重播</button>
@@ -928,11 +966,12 @@
                   <template v-else-if="lastBattle">
                     <div class="duel-arena-stage">
                       <div class="duel-fighter left">
-                        <CharacterPortrait :person="battlePerson(lastBattle.left)" size="lg" />
-                        <strong>{{ lastBattle.left.name }}</strong>
-                        <small>{{ lastBattle.left.sect }}</small>
+                        <MonsterEmblem v-if="isBattleMonster(lastBattle.left)" :monster="lastBattle.left" size="lg" />
+                        <CharacterPortrait v-else :person="battlePerson(lastBattle.left)" size="lg" />
+                        <strong>{{ battleDisplayName(lastBattle.left) }}</strong>
+                        <small v-if="lastBattle.left.sect">{{ lastBattle.left.sect }}</small>
                         <small>{{ realmName(lastBattle.left.realm) }}</small>
-                        <div class="duel-fighter-attrs" :aria-label="`${lastBattle.left.name} 战斗属性`">
+                        <div class="duel-fighter-attrs" :aria-label="`${battleDisplayName(lastBattle.left)} 战斗属性`">
                           <span class="root">{{ battleRootName(lastBattle.left) }}</span>
                           <span v-for="stat in battleCompactStats(lastBattle.left)" :key="stat.label">{{ stat.short }} {{ stat.value }}</span>
                         </div>
@@ -945,11 +984,12 @@
                         <small>{{ battleStatusText }}</small>
                       </div>
                       <div class="duel-fighter right">
-                        <CharacterPortrait :person="battlePerson(lastBattle.right)" size="lg" />
-                        <strong>{{ lastBattle.right.name }}</strong>
-                        <small>{{ lastBattle.right.sect }}</small>
+                        <MonsterEmblem v-if="isBattleMonster(lastBattle.right)" :monster="lastBattle.right" size="lg" />
+                        <CharacterPortrait v-else :person="battlePerson(lastBattle.right)" size="lg" />
+                        <strong>{{ battleDisplayName(lastBattle.right) }}</strong>
+                        <small v-if="lastBattle.right.sect">{{ lastBattle.right.sect }}</small>
                         <small>{{ realmName(lastBattle.right.realm) }}</small>
-                        <div class="duel-fighter-attrs" :aria-label="`${lastBattle.right.name} 战斗属性`">
+                        <div class="duel-fighter-attrs" :aria-label="`${battleDisplayName(lastBattle.right)} 战斗属性`">
                           <span class="root">{{ battleRootName(lastBattle.right) }}</span>
                           <span v-for="stat in battleCompactStats(lastBattle.right)" :key="stat.label">{{ stat.short }} {{ stat.value }}</span>
                         </div>
@@ -1011,10 +1051,11 @@
                       <div class="duel-live-center">
                         <strong>VS</strong>
                         <span>{{ selectedVoidHallRecord.monsterRealm }}</span>
-                        <small>{{ selectedVoidHallRecord.monster }}</small>
+                        <small>{{ monsterShortName(selectedVoidHallRecord.monster) }}</small>
                       </div>
                       <div class="duel-fighter right">
-                        <strong>{{ selectedVoidHallRecord.monster }}</strong>
+                        <MonsterEmblem :monster="voidHallBattleMonster(selectedVoidHallRecord)" size="lg" />
+                        <strong>{{ monsterShortName(selectedVoidHallRecord.monster) }}</strong>
                         <small>虚天殿妖物</small>
                       </div>
                     </div>
@@ -1048,17 +1089,26 @@
                 </div>
                 <div class="attribute-list compact">
                   <button class="dungeon-monster-card compact void-monster-button" type="button" @click="openVoidHallRecord(record)">
-                    <div>
-                      <MonsterEmblem :monster="{ name: record.monster, rootName: record.monsterStats?.rootName }" size="sm" />
+                    <div class="monster-card-topline">
                       <span class="tag">妖兽</span>
-                      <h3>{{ record.monster }}</h3>
-                      <p :title="`${record.monsterRealm} · ${record.monsterStats?.rootName || '未知灵根'}`">{{ record.monsterRealm }} · {{ record.monsterStats?.rootName || "未知灵根" }}</p>
+                      <h3>虚天殿</h3>
+                      <span class="tag">{{ record.success ? "已通关" : "未通关" }}</span>
                     </div>
-                    <div class="monster-stats">
-                      <span v-for="stat in monsterStatItems(record.monsterStats)" :key="stat.icon" :aria-label="`${stat.label} ${stat.value}`" :title="`${stat.label}：${stat.value}`">
-                        <StatIcon :name="stat.icon" :class="`detail-icon-${stat.icon}`" />
-                        <b>{{ stat.value }}</b>
-                      </span>
+                    <div class="monster-portrait">
+                      <MonsterEmblem :monster="{ name: record.monster, rootName: record.monsterStats?.rootName }" />
+                    </div>
+                    <div class="monster-info-panel">
+                      <div class="monster-identity-copy">
+                        <h4 :title="record.monster">{{ monsterShortName(record.monster) }}</h4>
+                        <p :title="`${record.monsterRealm} · ${record.monsterStats?.rootName || '未知灵根'}`">{{ record.monsterRealm }} · {{ record.monsterStats?.rootName || "未知灵根" }}</p>
+                      </div>
+                      <div class="monster-stats">
+                        <span v-for="stat in monsterStatItems(record.monsterStats)" :key="stat.icon" :aria-label="`${stat.label} ${stat.value}`" :title="`${stat.label}：${stat.value}`">
+                          <StatIcon :name="stat.icon" :class="`detail-icon-${stat.icon}`" />
+                          <em>{{ stat.label }}</em>
+                          <b>{{ stat.value }}</b>
+                        </span>
+                      </div>
                     </div>
                   </button>
                   <div class="attribute-row">
@@ -1528,12 +1578,44 @@
                     <span>{{ selectedProvinceWar.captured ? "攻城成功" : "守城成功" }}</span>
                   </div>
                   <div class="match-list wheel-match-list">
-                    <button class="war-battle-link wheel-battle-link" v-for="battle in selectedProvinceWar.battles" :key="`${selectedProvinceWar.id}-${battle.order}`" type="button" :class="{ active: lastBattle?.replayId && battle.replayId === lastBattle.replayId }" @click="openProvinceBattle(battle)">
-                      <span class="war-battle-order">第 {{ battle.order }} 战</span>
-                      <strong class="war-battle-name left">{{ battleName(battle, "attacker") }}</strong>
-                      <span class="war-battle-vs">VS</span>
-                      <strong class="war-battle-name right">{{ battleName(battle, "defender") }}</strong>
-                      <small class="war-battle-summary">胜者：{{ battle.winnerName || battleWinnerName(battle) }}</small>
+                    <button
+                      class="match-card duel-match-card siege-battle-card"
+                      v-for="battle in selectedProvinceWar.battles"
+                      :key="`${selectedProvinceWar.id}-${battle.order}`"
+                      type="button"
+                      :disabled="!hasReplay(battle)"
+                      :class="{
+                        active: lastBattle?.replayId && battle.replayId === lastBattle.replayId,
+                        replayable: hasReplay(battle),
+                        'left-won': battle.winnerSide === 'attacker' || battle.replay?.winner === 'left',
+                        'right-won': battle.winnerSide === 'defender' || battle.replay?.winner === 'right'
+                      }"
+                      @click="openProvinceBattle(battle)"
+                    >
+                      <div class="match-person duel-combatant" :class="{ winner: battle.winnerSide === 'attacker' || battle.replay?.winner === 'left' }">
+                        <CharacterPortrait :person="battlePerson(battle.attacker)" size="sm" />
+                        <div class="duel-person-copy">
+                          <strong>{{ battleName(battle, "attacker") }}<span v-if="battle.attacker?.id === player.id">我</span></strong>
+                          <small>{{ realmName(battlePerson(battle.attacker).realm) }}</small>
+                          <small>{{ selectedProvinceWar.attacker }}</small>
+                        </div>
+                      </div>
+                      <div class="duel-match-vs">
+                        <strong>VS</strong>
+                        <span>第 {{ battle.order }} 战</span>
+                      </div>
+                      <div class="match-person duel-combatant" :class="{ winner: battle.winnerSide === 'defender' || battle.replay?.winner === 'right' }">
+                        <CharacterPortrait :person="battlePerson(battle.defender)" size="sm" />
+                        <div class="duel-person-copy">
+                          <strong>{{ battleName(battle, "defender") }}<span v-if="battle.defender?.id === player.id">我</span></strong>
+                          <small>{{ realmName(battlePerson(battle.defender).realm) }}</small>
+                          <small>{{ selectedProvinceWar.defender }}</small>
+                        </div>
+                      </div>
+                      <div class="duel-result-stamp" :class="(battle.winnerSide === 'attacker' || battle.replay?.winner === 'left') ? 'win' : 'loss'">
+                        {{ (battle.winnerSide === 'attacker' || battle.replay?.winner === 'left') ? "胜利" : "失败" }}
+                      </div>
+                      <span class="duel-replay-button" aria-hidden="true"><i>▶</i><b>回放</b></span>
                     </button>
                   </div>
                 </section>
@@ -2107,7 +2189,7 @@
             <div class="panel battle-header">
               <div>
                 <h3>副本回合</h3>
-                <p>{{ lastBattle.left.name }} 对阵 {{ lastBattle.right.name }}，{{ battleStatusText }}</p>
+                <p>{{ battleDisplayName(lastBattle.left) }} 对阵 {{ battleDisplayName(lastBattle.right) }}，{{ battleStatusText }}</p>
               </div>
               <div class="actions">
                 <button class="secondary" @click="replayBattle">重播</button>
@@ -2117,8 +2199,9 @@
 
             <div class="battle-line live">
               <div class="fighter">
-                <CharacterPortrait :person="battlePerson(lastBattle.left)" size="lg" />
-                <strong>{{ lastBattle.left.name }}</strong>
+                <MonsterEmblem v-if="isBattleMonster(lastBattle.left)" :monster="lastBattle.left" size="lg" />
+                <CharacterPortrait v-else :person="battlePerson(lastBattle.left)" size="lg" />
+                <strong>{{ battleDisplayName(lastBattle.left) }}</strong>
                 <small>{{ realmName(lastBattle.left.realm) }} · 战力 {{ lastBattle.left.power }}</small>
                 <div class="battle-stats">
                   <span v-for="stat in battleStatsFromEffective(lastBattle.left.stats)" :key="stat.label" :aria-label="`${stat.label} ${stat.value}`">
@@ -2136,8 +2219,9 @@
               </div>
               <div class="vs">{{ battleOutcomeLabel }}</div>
               <div class="fighter">
-                <CharacterPortrait :person="battlePerson(lastBattle.right)" size="lg" />
-                <strong>{{ lastBattle.right.name }}</strong>
+                <MonsterEmblem v-if="isBattleMonster(lastBattle.right)" :monster="lastBattle.right" size="lg" />
+                <CharacterPortrait v-else :person="battlePerson(lastBattle.right)" size="lg" />
+                <strong>{{ battleDisplayName(lastBattle.right) }}</strong>
                 <small>{{ realmName(lastBattle.right.realm) }} · 战力 {{ lastBattle.right.power }}</small>
                 <div class="battle-stats">
                   <span v-for="stat in battleStatsFromEffective(lastBattle.right.stats)" :key="stat.label" :aria-label="`${stat.label} ${stat.value}`">
@@ -3405,7 +3489,7 @@ const dungeonDays = computed(() => gameState.value.dungeonDays || []);
 const selectedDungeonDay = computed(() => dungeonDays.value[dungeonDayIndex.value] || null);
 const canShowPreviousDungeonDay = computed(() => dungeonDayIndex.value < dungeonDays.value.length - 1);
 const canShowNextDungeonDay = computed(() => dungeonDayIndex.value > 0);
-const bloodTrialClearCount = computed(() => (selectedDungeonDay.value?.bloodTrial?.caves || []).reduce((sum, cave) => sum + (cave.clears?.length || 0), 0));
+const bloodTrialClearCount = computed(() => (selectedDungeonDay.value?.bloodTrial?.caves || []).reduce((sum, cave) => sum + bloodCaveClearCount(cave), 0));
 const sortedVoidHallRecords = computed(() => [...(selectedDungeonDay.value?.sects || [])].sort((a, b) => (
   Number(b.success) - Number(a.success) ||
   voidHallMonsterPower(a) - voidHallMonsterPower(b) ||
@@ -4151,7 +4235,11 @@ function voidHallItemChanceLines(item) {
 
 function bloodCaveSpiritText(cave) {
   const pool = cave?.spiritPool;
-  if (pool) return `基础包 ${pool.base} 灵石，前三奖金包 ${pool.bonus} 灵石，总计 ${pool.total}。`;
+  if (pool) {
+    const base = Math.max(bloodCaveClearCount(cave), Number(pool.base || 0));
+    const bonus = Math.max(0, Number(pool.bonus || 0));
+    return `基础包 ${base} 灵石，前三奖金包 ${bonus} 灵石，总计 ${base + bonus}。`;
+  }
   const stage = stageIndexFromRealm(cave?.monster?.realmIndex);
   const caveIndex = Number(cave?.cave || 1);
   const baseMin = 22 + stage * 24 + caveIndex * 14;
@@ -4287,6 +4375,11 @@ function monsterStatItems(monster = {}) {
   ];
 }
 
+function monsterShortName(name) {
+  const text = String(name || "").trim();
+  return text.includes("·") ? text.split("·").pop() || text : text || "未知妖物";
+}
+
 function voidHallTopEntries(record) {
   const ranked = [...(record?.top || [])]
     .sort((a, b) => (b.damage || 0) - (a.damage || 0))
@@ -4346,6 +4439,32 @@ function voidHallBattles(record) {
     }));
   }
   return [];
+}
+
+function voidHallBattleChallengerPerson(battle) {
+  const ref = battle?.challenger || {};
+  const person = matchPerson(ref);
+  return {
+    ...person,
+    ...ref,
+    name: ref.name || person?.name || battle?.name || "参战修士",
+    realm: Number(ref.realm ?? person?.realm ?? 0),
+    sect: ref.sect || person?.sect || ""
+  };
+}
+
+function voidHallBattleLeftWon(battle) {
+  const challengerName = battle?.challenger?.name || battle?.name || "";
+  return Boolean(challengerName && battle?.winnerName === challengerName);
+}
+
+function voidHallBattleMonster(record) {
+  const stats = record?.monsterStats || {};
+  return {
+    ...stats,
+    name: record?.monster || stats.name || "虚天殿妖物",
+    rootName: stats.rootName || stats.root?.name || "妖气"
+  };
 }
 
 function rootKeyFromName(name) {
@@ -4717,13 +4836,30 @@ function bloodCaveEntries(cave) {
   return ranked;
 }
 
+function bloodCaveClearCount(cave) {
+  return Number(cave?.clearCount ?? cave?.clears?.length ?? 0);
+}
+
 function compareBloodCaveEntry(a, b) {
   const successDelta = Number(b.success) - Number(a.success);
   if (successDelta) return successDelta;
   if (a.success && b.success) {
-    return (a.rounds || 999) - (b.rounds || 999) || (b.output || 0) - (a.output || 0);
+    return compareBloodClearScore(a, b);
   }
   return (b.output || 0) - (a.output || 0) || (a.rounds || 999) - (b.rounds || 999);
+}
+
+function compareBloodClearScore(a, b) {
+  return (a.rounds || 999) - (b.rounds || 999)
+    || bloodClearHpLossRate(a) - bloodClearHpLossRate(b)
+    || (b.output || 0) - (a.output || 0);
+}
+
+function bloodClearHpLossRate(entry) {
+  const startHp = Number(entry?.startHp || 0);
+  if (!Number.isFinite(startHp) || startHp <= 0) return 1;
+  const endHp = Math.max(0, Math.min(startHp, Number(entry?.endHp ?? startHp)));
+  return Math.max(0, Math.min(1, (startHp - endHp) / startHp));
 }
 
 function bloodCaveClearNames(cave) {
@@ -5262,6 +5398,15 @@ function duelMatchSearchText(match) {
 
 function battlePerson(ref) {
   return personByRef(ref);
+}
+
+function isBattleMonster(ref) {
+  return ref?.kind === "monster" || String(ref?.id || "").startsWith("monster-");
+}
+
+function battleDisplayName(ref) {
+  if (!ref) return "";
+  return isBattleMonster(ref) ? monsterShortName(ref.name) : ref.name;
 }
 
 function battleMax(side, kind) {
@@ -6806,7 +6951,7 @@ function chinaMapOption() {
       borderWidth: 0,
       backgroundColor: "rgba(255, 253, 246, .96)",
       textStyle: { color: "#17324a", fontSize: 12 },
-      extraCssText: "box-shadow:0 12px 28px rgba(31,41,51,.22);border-radius:8px;padding:9px 11px;",
+      extraCssText: "z-index:10001;box-shadow:0 12px 28px rgba(31,41,51,.22);border-radius:8px;padding:9px 11px;",
       formatter: mapTooltipHtml
     },
     series: [

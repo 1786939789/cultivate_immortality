@@ -1438,6 +1438,7 @@ button {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr));
   gap: 10px;
   margin-top: 12px;
+  overflow: visible;
 }
 
 .dungeon-cave-card,
@@ -1449,6 +1450,11 @@ button {
   padding: 10px;
 }
 
+.dungeon-cave-card:hover,
+.dungeon-cave-card:focus-within {
+  z-index: 40;
+}
+
 .sect-dungeon-card.success {
   border-color: rgba(15, 118, 110, .35);
   background: rgba(236, 253, 245, .58);
@@ -1457,30 +1463,102 @@ button {
 .dungeon-monster-card {
   position: relative;
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 7px;
-  align-items: start;
+  grid-template-columns: minmax(118px, .58fr) minmax(0, 1.42fr);
+  gap: 10px 14px;
+  align-items: stretch;
   margin-bottom: 7px;
-  padding: 8px;
+  min-height: 176px;
+  padding: 10px 12px 12px;
   border-radius: 8px;
   background: linear-gradient(135deg, rgba(255, 248, 232, .72), rgba(236, 253, 245, .42));
 }
 
-.dungeon-monster-card > div:first-child {
-  display: flex;
-  flex-wrap: wrap;
+.monster-card-topline {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(82px, 1fr) auto minmax(82px, 1fr);
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
-.dungeon-monster-card > div:first-child h3,
-.dungeon-monster-card > div:first-child p {
-  flex-basis: 100%;
+.monster-card-topline h3 {
+  justify-self: center;
+  margin: 0;
+  max-width: 100%;
+  color: #6b3f16;
+  font-size: 15px;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.monster-card-topline .tag:first-child {
+  justify-self: start;
+}
+
+.monster-card-topline .tag:last-child {
+  justify-self: end;
+}
+
+.monster-portrait {
+  min-width: 0;
+  display: grid;
+  align-items: center;
+  justify-content: center;
+}
+
+.monster-portrait .monster-emblem {
+  --monster-size: 118px;
+  flex: 0 0 auto;
+  border-radius: 16px;
+  box-shadow:
+    0 18px 32px rgba(35, 29, 18, .25),
+    inset 0 0 0 1px rgba(255, 247, 214, .38),
+    0 0 20px hsl(var(--monster-hue, 190) 70% 42% / .24);
+}
+
+.monster-info-panel {
+  min-width: 0;
+  align-self: center;
+  display: grid;
+  align-content: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.monster-identity-copy {
+  width: 100%;
+  min-width: 0;
+}
+
+.monster-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 5px;
+  margin-bottom: 5px;
+}
+
+.monster-info-panel .monster-identity-copy h3,
+.monster-info-panel .monster-identity-copy h4,
+.monster-info-panel .monster-identity-copy p {
   margin: 0;
   min-width: 0;
 }
 
-.dungeon-monster-card > div:first-child p {
+.monster-info-panel .monster-identity-copy h4 {
+  color: #6b3f16;
+  font-size: 18px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.monster-info-panel .monster-identity-copy p {
+  margin-top: 4px;
+  color: #6f5a3c;
+  font-size: 12.5px;
+  font-weight: 800;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1491,12 +1569,14 @@ button {
   display: inline-flex;
   margin-left: 6px;
   cursor: help;
+  z-index: 2;
 }
 
 .cave-clear-tip {
   position: absolute;
-  z-index: 16;
-  left: 0;
+  z-index: 4000;
+  left: auto;
+  right: 0;
   top: calc(100% + 6px);
   width: max-content;
   max-width: min(360px, 72vw);
@@ -1525,12 +1605,24 @@ button {
   visibility: visible;
 }
 
+.cave-clear-tag:hover,
+.cave-clear-tag:focus,
+.cave-clear-tag:focus-within {
+  z-index: 4000;
+}
+
 .dungeon-monster-card.compact {
-  grid-template-columns: 1fr;
-  padding: 8px;
+  grid-template-columns: minmax(110px, .58fr) minmax(0, 1.42fr);
+  min-height: 160px;
+  padding: 10px;
   border: 1px solid rgba(120, 91, 43, .16);
   border-radius: 7px;
   background: rgba(255, 253, 246, .62);
+}
+
+.dungeon-monster-card.compact .monster-portrait .monster-emblem {
+  --monster-size: 104px;
+  border-radius: 14px;
 }
 
 .dungeon-bestiary-panel {
@@ -1692,33 +1784,48 @@ button {
 }
 
 .monster-stats {
+  align-self: center;
+  min-width: 0;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 5px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 10px;
+  padding: 2px 0;
 }
 
 .monster-stats span {
   min-width: 0;
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  border: 1px solid rgba(120, 91, 43, .16);
-  border-radius: 6px;
-  background: rgba(255, 253, 246, .72);
-  padding: 4px 6px;
+  gap: 3px;
   color: #5b4630;
-  font-size: 11px;
+  font-size: 12px;
+  line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
-.monster-stats .stat-icon {
-  width: 16px;
-  height: 16px;
+.monster-stats em {
+  color: #7d6745;
+  font-style: normal;
+  font-weight: 700;
 }
 
 .monster-stats b {
   min-width: 0;
+  color: #3f2b16;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.monster-stats .stat-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.monster-stats b {
+  min-width: 0;
+  font-weight: 800;
   overflow-wrap: anywhere;
 }
 
@@ -4442,18 +4549,24 @@ button.event {
 }
 
 .detail-overview {
+  position: relative;
+  z-index: 4;
   display: grid;
   grid-template-columns: minmax(142px, .68fr) minmax(430px, 1.64fr) minmax(142px, .68fr);
   gap: 10px;
   align-items: stretch;
   margin: 12px 0;
+  overflow: visible;
 }
 
 .detail-side-stats {
+  position: relative;
+  z-index: 2;
   display: grid;
   grid-template-rows: repeat(5, minmax(0, 1fr));
   gap: 8px;
   align-content: stretch;
+  overflow: visible;
 }
 
 .detail-side-stats .detail-box {
@@ -5605,6 +5718,7 @@ button.event {
 
 .detail-box {
   position: relative;
+  z-index: 1;
   display: flex;
   min-width: 0;
   min-height: 50px;
@@ -5615,6 +5729,12 @@ button.event {
   border-radius: 7px;
   padding: 8px;
   outline: none;
+}
+
+.detail-box:hover,
+.detail-box:focus,
+.detail-box:focus-visible {
+  z-index: 30;
 }
 
 .detail-box b {
@@ -5700,7 +5820,7 @@ button.event {
   position: absolute;
   right: 0;
   top: calc(100% + 8px);
-  z-index: 8;
+  z-index: 80;
   width: min(320px, 76vw);
   opacity: 0;
   pointer-events: none;
@@ -5714,6 +5834,16 @@ button.event {
   padding: 9px 10px;
   font-size: 12px;
   line-height: 1.55;
+}
+
+.detail-side-stats .detail-box .detail-tip {
+  top: auto;
+  bottom: calc(100% + 8px);
+}
+
+.detail-side-stats .detail-box:nth-child(-n + 2) .detail-tip {
+  top: calc(100% + 8px);
+  bottom: auto;
 }
 
 .detail-tip strong,
@@ -5731,12 +5861,15 @@ button.event {
 }
 
 .detail-box:hover .detail-tip,
+.detail-box:focus .detail-tip,
 .detail-box:focus-visible .detail-tip {
   opacity: 1;
   transform: translateY(0);
 }
 
 .detail-sections {
+  position: relative;
+  z-index: 1;
   margin-top: 12px;
 }
 
@@ -6237,7 +6370,8 @@ button.event {
   grid-column: 2;
 }
 
-.fighter > .character-portrait {
+.fighter > .character-portrait,
+.fighter > .monster-emblem {
   grid-row: 1 / span 2;
 }
 
@@ -6454,6 +6588,392 @@ button.event {
   line-height: 1.5;
 }
 
+.wheel-battle-console {
+  display: grid;
+  grid-template-columns: minmax(420px, .95fr) minmax(0, 1.25fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.wheel-battle-board,
+.wheel-replay-panel {
+  min-width: 0;
+}
+
+.duel-board-title,
+.duel-replay-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.duel-board-title h3,
+.duel-replay-title h3 {
+  margin: 0;
+}
+
+.duel-board-title span,
+.duel-replay-title p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.duel-replay-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.wheel-match-list {
+  max-height: 680px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.duel-match-card {
+  position: relative;
+  grid-template-columns: minmax(124px, 1.12fr) 60px minmax(76px, .58fr) minmax(124px, 1.12fr) 54px 34px;
+  min-height: 96px;
+  gap: 7px;
+  padding: 8px;
+  border-color: rgba(126, 92, 37, .34);
+  background:
+    linear-gradient(180deg, rgba(254, 246, 218, .92), rgba(227, 207, 159, .78)),
+    radial-gradient(circle at 50% 30%, rgba(255, 255, 255, .42), transparent 230px);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .28);
+}
+
+.duel-match-card.active,
+.duel-match-card:not(:disabled):hover,
+.duel-match-card:not(:disabled):focus-visible {
+  border-color: rgba(15, 118, 110, .72);
+  background:
+    linear-gradient(180deg, rgba(246, 255, 240, .95), rgba(218, 237, 203, .82)),
+    radial-gradient(circle at 50% 30%, rgba(255, 255, 255, .5), transparent 230px);
+}
+
+.duel-combatant {
+  border-left-color: rgba(126, 92, 37, .28);
+}
+
+.duel-combatant.winner {
+  border-left-color: var(--jade);
+}
+
+.duel-person-copy {
+  min-width: 0;
+}
+
+.duel-match-card .character-portrait.sm {
+  --portrait-size: 32px;
+}
+
+.duel-match-card .monster-emblem.sm {
+  --monster-size: 30px;
+}
+
+.duel-match-card .match-person {
+  gap: 2px 6px;
+  padding-left: 6px;
+}
+
+.duel-match-card .match-person strong {
+  font-size: 13px;
+}
+
+.duel-match-card .match-person small {
+  font-size: 10px;
+  line-height: 1.25;
+}
+
+.duel-person-copy strong span {
+  flex: 0 0 auto;
+  border: 1px solid rgba(15, 118, 110, .34);
+  border-radius: 999px;
+  padding: 1px 5px;
+  background: rgba(236, 253, 245, .82);
+  color: #0f766e;
+  font-size: 11px;
+}
+
+.duel-match-vs {
+  display: grid;
+  place-items: center;
+  gap: 3px;
+  color: #4a2711;
+  text-align: center;
+}
+
+.duel-match-vs strong {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 27px;
+  line-height: 1;
+  color: #3b1f0c;
+  text-shadow: 0 2px 0 rgba(255, 247, 219, .8);
+}
+
+.duel-match-vs span {
+  color: #6d4b2a;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.void-monster-stamp {
+  min-width: 0;
+  display: grid;
+  place-items: center;
+  gap: 3px;
+  text-align: center;
+  color: #6b3f0a;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.void-monster-stamp span,
+.void-monster-stamp small {
+  display: block;
+}
+
+.void-output-stamp {
+  min-width: 0;
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  text-align: center;
+  color: #6b3f0a;
+  font-weight: 900;
+  line-height: 1.05;
+}
+
+.void-output-stamp span {
+  font-size: 10px;
+}
+
+.void-output-stamp strong {
+  font-size: 15px;
+}
+
+.duel-result-stamp {
+  justify-self: center;
+  border: 1px solid currentColor;
+  padding: 4px 7px;
+  color: #9a3412;
+  font-size: 14px;
+  font-weight: 900;
+  transform: rotate(-4deg);
+  white-space: nowrap;
+  background: rgba(255, 253, 246, .58);
+}
+
+.duel-result-stamp.win {
+  color: #b91c1c;
+}
+
+.duel-result-stamp.loss {
+  color: #0f766e;
+}
+
+.duel-replay-button {
+  display: grid;
+  place-items: center;
+  gap: 3px;
+  color: #5b3a19;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.duel-replay-button i {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #5b3a19;
+  color: #fef3c7;
+  font-style: normal;
+}
+
+.siege-battle-card {
+  grid-template-columns: minmax(124px, 1.14fr) 62px minmax(124px, 1.14fr) minmax(52px, auto) 34px;
+}
+
+.wheel-replay-panel {
+  border: 1px solid rgba(214, 177, 91, .42);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(32, 54, 73, .72), transparent 330px),
+    linear-gradient(180deg, rgba(8, 12, 16, .98), rgba(0, 6, 8, .98));
+  background-color: #020608;
+  color: #fef3c7;
+  padding: 14px;
+  box-shadow: inset 0 0 0 1px rgba(255, 236, 178, .08), 0 16px 36px rgba(0, 0, 0, .2);
+}
+
+.wheel-replay-panel .duel-replay-title {
+  border-bottom: 1px solid rgba(214, 177, 91, .22);
+  padding-bottom: 10px;
+}
+
+.wheel-replay-panel .duel-replay-title h3,
+.wheel-replay-panel .duel-live-center strong,
+.wheel-replay-panel .duel-fighter strong {
+  color: #fde68a;
+}
+
+.wheel-replay-panel .duel-replay-title p,
+.wheel-replay-panel .duel-fighter small,
+.wheel-replay-panel .duel-live-center small,
+.wheel-replay-panel .duel-live-center span,
+.wheel-replay-panel .muted-row span {
+  color: rgba(255, 247, 219, .78);
+}
+
+.duel-arena-stage {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 108px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  min-height: 230px;
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(3, 7, 12, .82), rgba(15, 23, 42, .54), rgba(3, 7, 12, .82)),
+    url("/assets/home-cards/duel-arena.png") center / cover no-repeat;
+  padding: 16px;
+}
+
+.duel-fighter {
+  display: grid;
+  gap: 5px;
+  justify-items: center;
+  text-align: center;
+  min-width: 0;
+}
+
+.duel-fighter.left {
+  justify-items: start;
+  text-align: left;
+}
+
+.duel-fighter.right {
+  justify-items: end;
+  text-align: right;
+}
+
+.duel-fighter .meter {
+  width: 100%;
+}
+
+.duel-fighter-attrs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 5px;
+  margin: 4px 0;
+}
+
+.duel-fighter.left .duel-fighter-attrs {
+  justify-content: flex-start;
+}
+
+.duel-fighter.right .duel-fighter-attrs {
+  justify-content: flex-end;
+}
+
+.duel-fighter-attrs span {
+  border: 1px solid rgba(253, 230, 138, .22);
+  border-radius: 999px;
+  padding: 2px 6px;
+  color: #fef3c7;
+  background: rgba(0, 0, 0, .22);
+  font-size: 11px;
+}
+
+.duel-live-center {
+  display: grid;
+  gap: 5px;
+  justify-items: center;
+  text-align: center;
+}
+
+.duel-live-center strong {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 46px;
+  line-height: 1;
+}
+
+.duel-skill-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+  overflow: visible;
+  z-index: 12000;
+}
+
+.wheel-replay-panel .skill-chip {
+  width: 100%;
+  justify-content: center;
+  border-color: rgba(37, 99, 235, .38);
+  border-radius: 7px;
+  background: rgba(8, 29, 46, .72);
+  color: #dbeafe;
+}
+
+.skill-chip-icon {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: rgba(251, 191, 36, .16);
+}
+
+.skill-chip-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.wheel-replay-panel .duel-battle-feed {
+  max-height: 330px;
+  padding-right: 6px;
+}
+
+.wheel-replay-panel .battle-event {
+  border-left-color: rgba(15, 118, 110, .7);
+  background: rgba(1, 10, 12, .78);
+  color: #fef3c7;
+}
+
+.wheel-replay-panel .battle-event span {
+  color: #86efac;
+}
+
+.wheel-replay-panel .battle-event.skill {
+  background:
+    radial-gradient(circle at 82% 22%, rgba(var(--skill-rgb, 245, 158, 11), .24), transparent 9rem),
+    linear-gradient(135deg, rgba(20, 10, 5, .92), rgba(var(--skill-rgb, 245, 158, 11), .16));
+}
+
+.wheel-replay-empty .duel-arena-stage.preview {
+  min-height: 190px;
+  opacity: .86;
+}
+
+.muted-row {
+  color: rgba(255, 247, 219, .72);
+  text-align: center;
+}
+
 .match-person {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -6543,6 +7063,7 @@ button.event {
 
 .skill-chip {
   position: relative;
+  z-index: 1;
   margin-top: 8px;
   display: inline-flex;
   align-items: center;
@@ -6562,12 +7083,18 @@ button.event {
   box-shadow: 0 0 0 2px rgba(15, 118, 110, .14);
 }
 
+.skill-chip:hover,
+.skill-chip:focus,
+.skill-chip:focus-visible {
+  z-index: 10000;
+}
+
 .skill-tip {
   position: absolute;
   left: 0;
   top: calc(100% + 8px);
-  z-index: 10;
-  width: min(280px, 72vw);
+  z-index: 10001;
+  width: min(340px, 78vw);
   opacity: 0;
   pointer-events: none;
   transform: translateY(-3px);
@@ -6580,6 +7107,16 @@ button.event {
   padding: 9px 10px;
   font-size: 12px;
   line-height: 1.55;
+}
+
+.duel-skill-row .skill-chip:nth-child(2) .skill-tip {
+  left: auto;
+  right: 0;
+}
+
+.duel-skill-row .skill-chip:nth-child(2) .skill-tip::before {
+  left: auto;
+  right: 16px;
 }
 
 .skill-tip::before {
@@ -6596,6 +7133,7 @@ button.event {
 }
 
 .skill-chip:hover .skill-tip,
+.skill-chip:focus .skill-tip,
 .skill-chip:focus-visible .skill-tip {
   opacity: 1;
   transform: translateY(0);
@@ -6648,6 +7186,8 @@ button.event {
 }
 
 .battle-feed {
+  position: relative;
+  z-index: 1;
   display: grid;
   gap: 8px;
   max-height: 420px;
@@ -7149,6 +7689,10 @@ button.event {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .wheel-battle-console {
+    grid-template-columns: 1fr;
+  }
+
   .realm-table-head {
     display: none;
   }
@@ -7270,6 +7814,17 @@ button.event {
 
   .star-sea-feed .battle-event {
     grid-template-columns: 1fr;
+  }
+
+  .duel-match-card,
+  .siege-battle-card,
+  .duel-arena-stage,
+  .duel-skill-row {
+    grid-template-columns: 1fr;
+  }
+
+  .duel-match-vs {
+    min-height: 46px;
   }
 
   .star-sea-feed .battle-event > span,

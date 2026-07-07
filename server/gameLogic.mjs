@@ -107,6 +107,10 @@ function growthRangeText(range) {
   return `血${statRangeText(range.maxHp)} 攻${statRangeText(range.attack)} 防${statRangeText(range.defense)} 神${statRangeText(range.divineSense)} 法${statRangeText(range.maxMana)}`;
 }
 
+function scaleStatRange([min, max], multiplier) {
+  return [Math.round(min * multiplier), Math.round(max * multiplier)];
+}
+
 export function breakthroughGrowthRange(fromRealm) {
   const safeRealm = clamp(Math.floor(fromRealm || 0), 0, realms.length - 1);
   const targetRealm = Math.min(safeRealm + 1, realms.length - 1);
@@ -118,13 +122,17 @@ export function breakthroughGrowthRange(fromRealm) {
     const defenseMin = 8 + stageIndex * 4;
     const defenseMax = defenseMin + 6 + Math.floor(stageIndex / 2);
     const attackMin = 18 + stageIndex * 6;
-    return {
+    const majorLeapMultiplier = 1.35 + stageIndex * 0.08;
+    const baseGrowth = {
       maxHp: [96 + stageIndex * 42, 136 + stageIndex * 52],
       maxMana: [32 + stageIndex * 13, 48 + stageIndex * 18],
       attack: [attackMin, attackMin + 10 + stageIndex],
       defense: [defenseMin, defenseMax],
       divineSense: [9 + stageIndex * 4, 14 + stageIndex * 6]
     };
+    return Object.fromEntries(
+      Object.entries(baseGrowth).map(([stat, range]) => [stat, scaleStatRange(range, majorLeapMultiplier)])
+    );
   }
 
   const levelBand = Math.floor(level / 3);
@@ -1055,7 +1063,7 @@ const replayRetentionDays = 7;
 const battleRecordDays = 60;
 const publicBattleRecordDays = replayRetentionDays;
 const publicBattleRecordLimit = replayRetentionDays;
-const publicProvinceWarLimit = replayRetentionDays;
+const publicProvinceWarLimit = replayRetentionDays * Math.max(sects.length, 1);
 const publicDuelDayLimit = replayRetentionDays;
 const publicDungeonDayLimit = replayRetentionDays;
 const growthRecordDays = 60;
@@ -1893,12 +1901,32 @@ function rollSpiritFromRange(range) {
   return Math.floor((range?.min || 0) + Math.random() * Math.max(1, (range?.max || 0) - (range?.min || 0) + 1));
 }
 
+function bloodClearHpLossRate(entry) {
+  const startHp = Number(entry?.startHp || 0);
+  if (!Number.isFinite(startHp) || startHp <= 0) return 1;
+  const endHp = clamp(Number(entry?.endHp ?? startHp), 0, startHp);
+  return Math.max(0, Math.min(1, (startHp - endHp) / startHp));
+}
+
+function compareBloodClearScore(a, b) {
+  return (a.rounds || 999) - (b.rounds || 999)
+    || bloodClearHpLossRate(a) - bloodClearHpLossRate(b)
+    || (b.output || 0) - (a.output || 0);
+}
+
+function compareBloodEntry(a, b) {
+  const successDelta = Number(Boolean(b.success)) - Number(Boolean(a.success));
+  if (successDelta) return successDelta;
+  if (a.success && b.success) return compareBloodClearScore(a, b);
+  return (b.output || 0) - (a.output || 0) || (a.rounds || 999) - (b.rounds || 999);
+}
+
 function distributeBasePool(total, entries) {
   if (!entries.length || total <= 0) return;
   const base = Math.max(1, Math.floor(total / entries.length));
   for (const entry of entries) entry.spirit = (entry.spirit || 0) + base;
   let remainder = Math.max(0, total - base * entries.length);
-  const priority = [...entries].sort((a, b) => (a.rounds || 999) - (b.rounds || 999) || (b.output || 0) - (a.output || 0));
+  const priority = [...entries].sort(compareBloodClearScore);
   for (let index = 0; remainder > 0; index = (index + 1) % priority.length) {
     priority[index].spirit += 1;
     remainder -= 1;
@@ -1907,7 +1935,7 @@ function distributeBasePool(total, entries) {
 
 function distributeBonusPool(total, entries) {
   const winners = [...entries]
-    .sort((a, b) => (a.rounds || 999) - (b.rounds || 999) || (b.output || 0) - (a.output || 0))
+    .sort(compareBloodClearScore)
     .slice(0, 3);
   if (!winners.length || total <= 0) return;
   const weights = [5, 3, 2].slice(0, winners.length);
@@ -1926,7 +1954,8 @@ function settleBloodTrialRewards(state, caves) {
     const stage = stageIndexOfRealm(cave.monster?.realm || 0);
     const poolRange = dungeonLootRules.blood_trial.spiritRange({ cave: cave.cave, stage });
     const bonusRange = dungeonLootRules.blood_trial.bonusRange({ cave: cave.cave, stage });
-    const basePool = rollSpiritFromRange(poolRange);
+    const clears = cave.clears || [];
+    const basePool = Math.max(clears.length, rollSpiritFromRange(poolRange));
     const bonusPool = rollSpiritFromRange(bonusRange);
     cave.spiritPool = {
       base: basePool,
@@ -1935,7 +1964,6 @@ function settleBloodTrialRewards(state, caves) {
       baseRange: poolRange,
       bonusRange
     };
-    const clears = cave.clears || [];
     distributeBasePool(basePool, clears);
     distributeBonusPool(bonusPool, clears);
     for (const clear of clears) {
@@ -3015,11 +3043,13 @@ function runDailyDungeons(state, date) {
       name: cave.name,
       monster: publicMonster(cave.monster),
       spiritPool: cave.spiritPool,
+      clearCount: cave.clears.length,
+      challengerCount: cave.challengers.length,
       clears: cave.clears
-        .sort((a, b) => (a.rounds || 999) - (b.rounds || 999) || b.output - a.output)
+        .sort(compareBloodClearScore)
         .slice(0, 12),
       challengers: cave.challengers
-        .sort((a, b) => Number(b.success) - Number(a.success) || (a.success ? (a.rounds || 999) - (b.rounds || 999) : (b.output || 0) - (a.output || 0)) || (b.output || 0) - (a.output || 0))
+        .sort(compareBloodEntry)
         .slice(0, 12)
     }))
   };
@@ -3487,13 +3517,16 @@ function runWheelBattle(state, province, attackerSect, defenderSect) {
 function runProvinceSieges(state, settlementDate) {
   state.provinceWars ??= [];
   const targeted = new Set();
+  const siegePlans = [];
   const wars = [];
   for (const attackerSect of shuffle(activeSectNames(state))) {
-    if (provinceIdsForSect(state, attackerSect).length >= membersForSect(state, attackerSect).length) continue;
     const candidates = shuffle((state.provinces || []).filter((item) => item.owner !== attackerSect && !targeted.has(item.id)));
     const target = candidates[0];
     if (!target) continue;
     targeted.add(target.id);
+    siegePlans.push({ attackerSect, target });
+  }
+  for (const { attackerSect, target } of siegePlans) {
     const province = provinceById(target.id);
     if (!province) continue;
     const defenderSect = target.owner;
@@ -4461,6 +4494,7 @@ function compactDungeonHistoryRecord(record) {
     day: record.day,
     date: record.date,
     result: record.result || "",
+    clears: clearDepthFromDungeonHistory(record),
     spirit: record.spirit || 0,
     damage: record.damage || 0,
     teamName: record.teamName || "",
@@ -5074,14 +5108,73 @@ function publicDungeonDays(records, currentDay = 1, people = null) {
 }
 
 function publicBloodCaveRecord(cave, currentDay, parentDay, people = null) {
+  const clearCount = Math.max(Number(cave.clearCount || 0), bloodCaveClearCountFromHistory(cave, parentDay, people));
+  const challengerCount = Math.max(
+    Number(cave.challengerCount || 0),
+    bloodCaveChallengeCountFromHistory(cave, parentDay, people),
+    (cave.challengers || []).length
+  );
+  const spiritPool = normalizeBloodCaveSpiritPool(cave.spiritPool, clearCount);
   return {
     cave: cave.cave,
     name: cave.name,
     monster: cave.monster,
-    spiritPool: cave.spiritPool,
-    clears: (cave.clears || []).map((entry) => publicBloodEntry(entry, currentDay, parentDay, people)),
-    challengers: (cave.challengers || []).map((entry) => publicBloodEntry(entry, currentDay, parentDay, people))
+    spiritPool,
+    clearCount,
+    challengerCount,
+    clears: [...(cave.clears || [])].sort(compareBloodClearScore).map((entry) => publicBloodEntry(entry, currentDay, parentDay, people)),
+    challengers: [...(cave.challengers || [])].sort(compareBloodEntry).map((entry) => publicBloodEntry(entry, currentDay, parentDay, people))
   };
+}
+
+function normalizeBloodCaveSpiritPool(pool, clearCount = 0) {
+  if (!pool) return pool;
+  const minimumBase = Math.max(0, Number(clearCount || 0));
+  const base = Math.max(minimumBase, Number(pool.base || 0));
+  const bonus = Math.max(0, Number(pool.bonus || 0));
+  return {
+    ...pool,
+    base,
+    bonus,
+    total: base + bonus
+  };
+}
+
+function clearDepthFromDungeonHistory(record) {
+  const explicit = Number(record?.clears);
+  if (Number.isFinite(explicit) && explicit > 0) return explicit;
+  const parsed = Number(String(record?.result || "").match(/连破\s*(\d+)\s*洞/)?.[1] || 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function bloodCaveClearCountFromHistory(cave, parentDay, people = null) {
+  const listedCount = (cave.clears || []).length;
+  if (!people?.size) return listedCount;
+  const caveIndex = Number(cave.cave || 0);
+  if (!caveIndex) return listedCount;
+  let count = 0;
+  for (const person of people.values()) {
+    const record = (person.dungeonHistory || []).find((item) => item.day === parentDay && item.type === "solo" && item.name === "血色禁地");
+    if (!record) continue;
+    const clears = clearDepthFromDungeonHistory(record);
+    if (clears >= caveIndex) count += 1;
+  }
+  return Math.max(listedCount, count);
+}
+
+function bloodCaveChallengeCountFromHistory(cave, parentDay, people = null) {
+  const listedCount = (cave.challengers || []).length;
+  if (!people?.size) return listedCount;
+  const caveIndex = Number(cave.cave || 0);
+  if (!caveIndex) return listedCount;
+  let count = 0;
+  for (const person of people.values()) {
+    const record = (person.dungeonHistory || []).find((item) => item.day === parentDay && item.type === "solo" && item.name === "血色禁地");
+    if (!record) continue;
+    const clears = clearDepthFromDungeonHistory(record);
+    if (caveIndex === 1 || clears >= caveIndex - 1) count += 1;
+  }
+  return Math.max(listedCount, count);
 }
 
 function publicBloodEntry(entry, currentDay, parentDay, people = null) {
@@ -6215,6 +6308,12 @@ function entityRef(entity, kind) {
   };
 }
 
+function replayEntityKind(entity) {
+  if (entity?.kind) return entity.kind;
+  if (String(entity?.id || "").startsWith("monster-")) return "monster";
+  return entity?.id === "player" ? "player" : "npc";
+}
+
 function buildReplay(left, right, battle, result, foughtAt, state) {
   const leftBefore = { ...left };
   const rightBefore = { ...right };
@@ -6226,7 +6325,7 @@ function buildReplay(left, right, battle, result, foughtAt, state) {
     winner: battle.winner,
     foughtAt,
     left: {
-      ...entityRef(leftBefore, leftBefore.id === "player" ? "player" : "npc"),
+      ...entityRef(leftBefore, replayEntityKind(leftBefore)),
       power: powerOf(leftBefore, state),
       stats: battle.leftStart,
       baseStats: effectiveStats(leftBefore, state),
@@ -6237,7 +6336,7 @@ function buildReplay(left, right, battle, result, foughtAt, state) {
       endMana: battle.leftMana
     },
     right: {
-      ...entityRef(rightBefore, rightBefore.id === "player" ? "player" : "npc"),
+      ...entityRef(rightBefore, replayEntityKind(rightBefore)),
       power: powerOf(rightBefore, state),
       stats: battle.rightStart,
       baseStats: effectiveStats(rightBefore, state),
@@ -6442,7 +6541,7 @@ function findDuelOpponentIndex(state, queue, current) {
     if (!canDuelMatch(current.entity, candidate.entity)) continue;
     const rankGap = duelRankGap(current.entity, candidate.entity);
     const powerGap = Math.abs(powerOf(current.entity, state) - powerOf(candidate.entity, state));
-    const score = rankGap * 100000 + powerGap + index * 0.01;
+    const score = powerGap * 100 + rankGap * 10 + index * 0.01;
     if (score < bestScore) {
       bestScore = score;
       bestIndex = index;
@@ -6487,10 +6586,10 @@ export function runDailyDuels(state) {
       id: matchId,
       type: "battle",
       order,
-      left: entityRef(left.entity, left.kind),
-      right: entityRef(right.entity, right.kind),
-      winner: entityRef(winner, winner.id === "player" ? "player" : "npc"),
-      loser: entityRef(loser, loser.id === "player" ? "player" : "npc"),
+      left: replay.left,
+      right: replay.right,
+      winner: replay.winner === "left" ? replay.left : replay.right,
+      loser: replay.winner === "left" ? replay.right : replay.left,
       winnerScoreDelta,
       loserScoreDelta,
       replayId: replay.replayId,
