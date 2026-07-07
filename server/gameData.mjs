@@ -268,7 +268,7 @@ export const itemCatalog = {
     basePrice: 120,
     effect: { type: "breakthroughBonus", bonus: 0.08 },
     limit: { type: "daily", max: 2, days: 1 },
-    text: "下次突破成功率 +8%，突破后失效。"
+    text: "下次突破成功率 ×108%，突破后失效。"
   },
   ningyuan_dan: {
     name: "凝元丹",
@@ -277,7 +277,7 @@ export const itemCatalog = {
     basePrice: 260,
     effect: { type: "breakthroughBonus", bonus: 0.15 },
     limit: { type: "daily", max: 1, days: 1 },
-    text: "下次突破成功率 +15%，突破后失效。"
+    text: "下次突破成功率 ×115%，突破后失效。"
   },
   zhuji_dan: {
     name: "筑基丹",
@@ -286,7 +286,7 @@ export const itemCatalog = {
     basePrice: 620,
     effect: { type: "breakthroughBonus", bonus: 0.25 },
     limit: { type: "realm", max: 1, days: 0 },
-    text: "下次突破成功率 +25%，本境界限购 1 枚。"
+    text: "下次突破成功率 ×125%，本境界限购 1 枚。"
   },
   jiangchen_dan: {
     name: "降尘丹",
@@ -295,7 +295,7 @@ export const itemCatalog = {
     basePrice: 1200,
     effect: { type: "breakthroughBonus", bonus: 0.35 },
     limit: { type: "realm", max: 1, days: 0 },
-    text: "下次突破成功率 +35%，本境界限购 1 枚。"
+    text: "下次突破成功率 ×135%，本境界限购 1 枚。"
   },
   huiyuan_xumai_dan: {
     name: "回元续脉丹",

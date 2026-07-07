@@ -130,6 +130,28 @@
           <span>今日可突破</span>
           <strong>{{ breakthroughAttemptsToday }} 次</strong>
           <small>{{ breakthroughAttemptHint }}</small>
+          <button
+            class="breakthrough-action"
+            type="button"
+            :disabled="!canBreakthroughNow || isActionPending('/api/breakthrough')"
+            @click="submitBreakthrough"
+          >
+            {{ breakthroughActionText }}
+          </button>
+        </section>
+
+        <section v-if="sidebarElixirEffects.length" class="elixir-effect-card" aria-label="当前丹药加成">
+          <div class="elixir-effect-head">
+            <span>丹药加成</span>
+            <strong>{{ sidebarElixirEffects.length }} 项生效</strong>
+          </div>
+          <div class="elixir-effect-list">
+            <div v-for="effect in sidebarElixirEffects" :key="effect.label" class="elixir-effect-item">
+              <span>{{ effect.label }}</span>
+              <strong>{{ effect.value }}</strong>
+              <small>{{ effect.note }}</small>
+            </div>
+          </div>
         </section>
       </aside>
 
@@ -235,13 +257,32 @@
             <article class="panel game-card log-home">
               <div class="section-head compact">
                 <h3>战斗日志</h3>
+                <label class="log-day-select" v-if="homeLogDayRecords.length">
+                  <span>日期</span>
+                  <input
+                    v-model="selectedHomeLogDate"
+                    type="date"
+                    :min="homeLogMinDate"
+                    :max="homeLogMaxDate"
+                    step="1"
+                    aria-label="选择日志日期"
+                  />
+                </label>
               </div>
-              <div class="battle-log-list">
+              <div class="battle-log-list" v-if="homeLogs.length">
                 <div v-for="(entry, index) in homeLogs" :key="`${entry.day}-${entry.time || ''}-${entry.text}-${index}`" :class="logTone(entry)">
                   <b>{{ logTone(entry) === "loss" ? "败" : "胜" }}</b>
-                  <span>{{ entry.text }}</span>
-                  <time>{{ entry.date || currentDate }}</time>
+                  <span
+                    class="home-log-text"
+                    :class="{ 'is-long': isLongHomeLogText(entry.text) }"
+                    :title="homeLogTooltip(entry)"
+                  >{{ entry.text }}</span>
+                  <time :datetime="logEntryDateTime(entry)">{{ logEntryTimeText(entry) }}</time>
                 </div>
+              </div>
+              <div class="battle-log-empty" v-else>
+                <b>{{ selectedHomeLogDayRecord?.date || currentDate }}</b>
+                <span>本日暂无战斗日志</span>
               </div>
               <LogPanel class="home-log-fallback" :logs="mainLogs" />
             </article>
@@ -430,6 +471,9 @@
               <div v-if="selectedTaskDefinition" class="task-preview">
                 <strong>+{{ taskRewardPreview.xp }} 经验</strong>
                 <strong>+{{ taskRewardPreview.spirit }} 灵石</strong>
+                <span v-if="taskRewardPreview.elixirMultiplier > 1" class="task-preview-multiplier">
+                  丹药 x{{ formatMultiplier(taskRewardPreview.elixirMultiplier) }} · 基础 +{{ taskRewardPreview.baseXp }}
+                </span>
               </div>
               <button class="primary" :disabled="isActionPending('/api/tasks') || !selectedTaskDefinition">{{ isActionPending("/api/tasks") ? "结算中..." : "完成" }}</button>
             </form>
@@ -1748,27 +1792,39 @@
           </div>
 
           <div v-else class="panel sect-system-panel sect-war-log-panel">
-            <div class="section-head compact sect-panel-title">
-              <div>
+            <div class="section-head compact sect-panel-title war-log-head">
+              <div class="war-log-title-copy">
                 <h3>每日攻城记录</h3>
+                <p>{{ selectedProvinceWarDate }} · {{ selectedProvinceWarSummary.total }} 处战事</p>
               </div>
-              <div class="arena-toolbar compact war-log-toolbar">
-                <div class="war-log-date-controls">
-                  <button class="secondary" type="button" @click="changeProvinceWarDay(-1)">前一天</button>
-                  <label>查看日期
-                    <select v-model.number="selectedProvinceWarDay">
-                      <option v-for="option in provinceWarDateOptions" :key="option.day" :value="option.day">{{ option.date }}</option>
-                    </select>
-                  </label>
-                  <button class="secondary" type="button" :disabled="selectedProvinceWarDay >= state.day" @click="changeProvinceWarDay(1)">后一天</button>
-                </div>
-                <label class="war-search">搜索省份 / 宗门
-                  <span class="search-field">
-                    <input v-model.trim="provinceWarSearch" type="search" placeholder="例如：贵州、黄枫谷、妙音门">
-                    <button v-if="provinceWarSearch" class="search-clear" type="button" aria-label="清空攻城记录搜索" @click="provinceWarSearch = ''">×</button>
-                  </span>
+              <div class="war-log-summary-strip">
+                <span><b>{{ selectedProvinceWarSummary.captured }}</b> 易主</span>
+                <span><b>{{ selectedProvinceWarSummary.defended }}</b> 守住</span>
+                <span><b>{{ filteredProvinceWars.length }}</b> 当前显示</span>
+              </div>
+            </div>
+
+            <div class="war-log-toolbar">
+              <div class="war-log-date-controls">
+                <button class="secondary" type="button" @click="changeProvinceWarDay(-1)">前一天</button>
+                <label>查看日期
+                  <input
+                    v-model="selectedProvinceWarDateInput"
+                    type="date"
+                    :min="provinceWarMinDate"
+                    :max="provinceWarMaxDate"
+                    step="1"
+                    aria-label="选择攻城记录日期"
+                  >
                 </label>
+                <button class="secondary" type="button" :disabled="selectedProvinceWarDay >= state.day" @click="changeProvinceWarDay(1)">后一天</button>
               </div>
+              <label class="war-search">搜索省份 / 宗门
+                <span class="search-field">
+                  <input v-model.trim="provinceWarSearch" type="search" placeholder="例如：贵州、黄枫谷、妙音门">
+                  <button v-if="provinceWarSearch" class="search-clear" type="button" aria-label="清空攻城记录搜索" @click="provinceWarSearch = ''">×</button>
+                </span>
+              </label>
             </div>
 
             <div class="war-day-list" v-if="selectedProvinceWarDayRecord">
@@ -2173,7 +2229,7 @@
                     <span class="market-product-icon" :class="`market-icon-${item.category}`" aria-hidden="true"></span>
                     <span class="market-product-main">
                       <b>{{ item.name }}</b>
-                      <small>{{ item.text }}</small>
+                      <small>{{ marketItemText(item) }}</small>
                     </span>
                     <span class="market-price-tag">
                       <b>{{ item.price }}</b>
@@ -2191,13 +2247,13 @@
                 <div class="market-shelf-head">
                   <div>
                     <span>随身丹匣</span>
-                    <strong>背包</strong>
+                    <strong>{{ activeShopGroup?.label || "背包" }}</strong>
                   </div>
-                  <p>共 {{ bagItemCount }} 枚丹药，服用后才会生效。</p>
+                  <p>当前分类持有 {{ activeBagItemCount }} 枚，全部丹药共 {{ bagItemCount }} 枚。</p>
                 </div>
-                <div class="market-item-grid" v-if="bagItems.length">
+                <div class="market-item-grid" v-if="activeBagItems.length">
                   <button
-                    v-for="entry in bagItems"
+                    v-for="entry in activeBagItems"
                     :key="entry.id"
                     type="button"
                     class="market-product-card bag-item-card"
@@ -2207,7 +2263,7 @@
                     <span class="market-product-icon" :class="`market-icon-${entry.item.category}`" aria-hidden="true"></span>
                     <span class="market-product-main">
                       <b>{{ entry.item.name }}</b>
-                      <small>{{ entry.item.text }}</small>
+                      <small>{{ marketItemText(entry.item) }}</small>
                     </span>
                     <span class="market-price-tag">
                       <b>{{ entry.count }}</b>
@@ -2219,14 +2275,14 @@
                     </span>
                   </button>
                 </div>
-                <div v-else class="market-empty">丹匣尚空，可先去商城购入丹药。</div>
+                <div v-else class="market-empty">当前分类暂无丹药，可切换分类或去商城购入。</div>
               </main>
 
               <aside class="market-detail-panel" v-if="selectedMarketItem">
                 <div class="market-detail-orb" :class="`market-icon-${selectedMarketItem.category}`" aria-hidden="true"></div>
                 <span>{{ selectedMarketItem.categoryName }}</span>
                 <h4>{{ selectedMarketItem.name }}</h4>
-                <p>{{ selectedMarketItem.text }}</p>
+                <p>{{ marketItemText(selectedMarketItem) }}</p>
                 <dl>
                   <div>
                     <dt>今日价格</dt>
@@ -2252,10 +2308,10 @@
                 <div class="market-bag-dock">
                   <div class="market-bag-dock-head">
                     <span>丹匣</span>
-                    <strong>{{ bagItemCount }} 枚</strong>
+                    <strong>{{ activeBagItemCount }} 枚</strong>
                   </div>
                   <button
-                    v-for="entry in bagItems.slice(0, 3)"
+                    v-for="entry in activeBagItems.slice(0, 3)"
                     :key="entry.id"
                     type="button"
                     class="market-bag-mini"
@@ -2265,7 +2321,7 @@
                     <b>{{ entry.item.name }}</b>
                     <small>x{{ entry.count }}</small>
                   </button>
-                  <div v-if="!bagItems.length" class="market-bag-mini empty-mini">暂无丹药</div>
+                  <div v-if="!activeBagItems.length" class="market-bag-mini empty-mini">当前分类暂无丹药</div>
                 </div>
                 <button
                   v-if="marketSubTab === 'shop'"
@@ -3257,6 +3313,7 @@ const emptyState = {
   taskDefinitions: [],
   taskCompletions: [],
   log: [],
+  logDays: [],
   bag: {},
   equipment: [],
   equipmentTransfers: [],
@@ -3354,6 +3411,7 @@ const selectedRealmStage = ref("");
 const selectedDuelDay = ref(null);
 const duelSearch = ref("");
 const selectedProvinceWarDay = ref(null);
+const selectedHomeLogDay = ref(null);
 const selectedProvinceWarId = ref("");
 const provinceWarSearch = ref("");
 const provinceResourceTypeFilter = ref("");
@@ -3533,15 +3591,19 @@ const recentTaskDays = computed(() => {
 });
 const taskRewardPreview = computed(() => {
   const task = selectedTaskDefinition.value;
-  if (!task) return { xp: 0, spirit: 0, multiplier: 0 };
+  if (!task) return { xp: 0, baseXp: 0, spirit: 0, multiplier: 0, elixirMultiplier: 1 };
   const amount = task.type === "measurable" ? Math.max(0, Number(taskForm.completedAmount) || 0) : 1;
   const target = Math.max(0.01, Number(task.targetAmount) || 1);
   const maxMultiplier = Math.max(0.01, Number(task.maxMultiplier) || 1);
   const multiplier = task.type === "measurable" ? Math.min(amount / target, maxMultiplier) : 1;
+  const baseXp = Math.floor((Number(task.xpReward) || 0) * multiplier);
+  const elixirMultiplier = Math.max(1, Number(shopDerived.value.activeEffects?.cultivationMultiplier) || 1);
   return {
-    xp: Math.floor((Number(task.xpReward) || 0) * multiplier),
+    xp: Math.floor(baseXp * elixirMultiplier),
+    baseXp,
     spirit: Math.floor((Number(task.spiritReward) || 0) * multiplier),
-    multiplier
+    multiplier,
+    elixirMultiplier
   };
 });
 const playerPortraitUrl = computed(() => {
@@ -3935,14 +3997,42 @@ const todayDungeonSummary = computed(() => {
     { key: "sea", icon: "海", text: playerStarSeaSummary(day) }
   ];
 });
-const homeLogs = computed(() => {
-  if (homeSummary.value.logs?.length) return homeSummary.value.logs;
-  const currentDay = Number(gameState.value.day || 0);
-  const recentFloor = currentDay > 0 ? Math.max(1, currentDay - 2) : 0;
-  return mainLogs.value
-    .filter((entry) => !recentFloor || !Number.isFinite(Number(entry.day)) || Number(entry.day) >= recentFloor)
-    .slice(0, 30);
+const homeLogDayRecords = computed(() => {
+  const currentDay = Math.max(1, Number(gameState.value.day || 1));
+  const firstDay = Math.max(1, currentDay - 29);
+  const source = homeSummary.value.logDays?.length
+    ? homeSummary.value.logDays
+    : gameState.value.logDays?.length ? gameState.value.logDays : [];
+  const sourceByDay = new Map(source.map((record) => [Number(record.day), record]));
+  const flatLogs = gameState.value.log || [];
+  const records = [];
+  for (let day = currentDay; day >= firstDay; day -= 1) {
+    const saved = sourceByDay.get(day);
+    const logs = (saved?.logs?.length ? saved.logs : flatLogs.filter((entry) => Number(entry.day) === day))
+      .filter(shouldShowHomeLog)
+      .slice(0, 30);
+    records.push({
+      day,
+      date: saved?.date || logs[0]?.date || dateForDay(day),
+      logs
+    });
+  }
+  return records;
 });
+const selectedHomeLogDayRecord = computed(() => {
+  if (!homeLogDayRecords.value.length) return null;
+  return homeLogDayRecords.value.find((record) => record.day === selectedHomeLogDay.value) || homeLogDayRecords.value[0];
+});
+const homeLogMinDate = computed(() => homeLogDayRecords.value.at(-1)?.date || currentDate.value);
+const homeLogMaxDate = computed(() => homeLogDayRecords.value[0]?.date || currentDate.value);
+const selectedHomeLogDate = computed({
+  get: () => selectedHomeLogDayRecord.value?.date || currentDate.value,
+  set: (value) => {
+    const match = homeLogDayRecords.value.find((record) => record.date === value);
+    if (match) selectedHomeLogDay.value = match.day;
+  }
+});
+const homeLogs = computed(() => selectedHomeLogDayRecord.value?.logs || []);
 const homeRanking = computed(() => {
   if (homeSummary.value.ranking?.length) {
     const top = homeSummary.value.ranking.map((item) => ({ ...item, kind: "person" }));
@@ -4067,6 +4157,15 @@ const provinceWarDayOptions = computed(() => {
 });
 const provinceWarDateOptions = computed(() => provinceWarDayOptions.value.map((day) => ({ day, date: dateForDay(day) })));
 const selectedProvinceWarDayRecord = computed(() => provinceWarDayRecords.value.find((record) => record.day === selectedProvinceWarDay.value));
+const provinceWarMinDate = computed(() => provinceWarDateOptions.value.at(-1)?.date || currentDate.value);
+const provinceWarMaxDate = computed(() => provinceWarDateOptions.value[0]?.date || currentDate.value);
+const selectedProvinceWarDateInput = computed({
+  get: () => selectedProvinceWarDate.value,
+  set: (value) => {
+    const match = provinceWarDateOptions.value.find((option) => option.date === value);
+    if (match) selectedProvinceWarDay.value = match.day;
+  }
+});
 const todayProvinceWarSummary = computed(() => {
   const wars = provinceWarDayRecords.value.find((record) => record.day === gameState.value.day)?.wars || [];
   return wars.reduce((summary, war) => {
@@ -4074,6 +4173,15 @@ const todayProvinceWarSummary = computed(() => {
     else summary.defended += 1;
     return summary;
   }, { captured: 0, defended: 0 });
+});
+const selectedProvinceWarSummary = computed(() => {
+  const wars = selectedProvinceWarDayRecord.value?.wars || [];
+  return wars.reduce((summary, war) => {
+    if (war.captured) summary.captured += 1;
+    else summary.defended += 1;
+    summary.total += 1;
+    return summary;
+  }, { captured: 0, defended: 0, total: 0 });
 });
 const normalizedProvinceWarSearch = computed(() => provinceWarSearch.value.trim().toLowerCase());
 const filteredProvinceWars = computed(() => {
@@ -4085,6 +4193,15 @@ const filteredProvinceWars = computed(() => {
 const selectedProvinceWar = computed(() => selectedProvinceWarDayRecord.value?.wars.find((war) => war.id === selectedProvinceWarId.value));
 const selectedProvinceWarDate = computed(() => selectedProvinceWarDayRecord.value?.date || dateForDay(selectedProvinceWarDay.value));
 const mainLogs = computed(() => gameState.value.log.filter((entry) => !isNpcBreakthroughLog(entry)));
+watch(homeLogDayRecords, (records) => {
+  if (!records.length) {
+    selectedHomeLogDay.value = null;
+    return;
+  }
+  if (!records.some((record) => record.day === selectedHomeLogDay.value)) {
+    selectedHomeLogDay.value = records[0].day;
+  }
+}, { immediate: true });
 const duelRecords = computed(() => gameState.value.duelDays || []);
 const duelDayOptions = computed(() => {
   if (activeTab.value !== "arena") return [];
@@ -4241,10 +4358,12 @@ const bagItems = computed(() => Object.entries(gameState.value.bag || {})
   }))
   .filter((entry) => entry.count > 0 && entry.item));
 const bagItemCount = computed(() => bagItems.value.reduce((sum, entry) => sum + entry.count, 0));
-const selectedBagEntry = computed(() => bagItems.value.find((entry) => entry.id === selectedMarketItemId.value) || bagItems.value[0] || null);
+const activeBagItems = computed(() => bagItems.value.filter((entry) => entry.item?.category === activeMarketCategory.value));
+const activeBagItemCount = computed(() => activeBagItems.value.reduce((sum, entry) => sum + entry.count, 0));
+const selectedBagEntry = computed(() => activeBagItems.value.find((entry) => entry.id === selectedMarketItemId.value) || activeBagItems.value[0] || null);
 const selectedMarketItem = computed(() => {
-  if (marketSubTab.value === "bag") return selectedBagEntry.value?.item || bagItems.value[0]?.item || activeShopItems.value[0] || shopItems.value[0] || null;
-  return shopItems.value.find((item) => item.id === selectedMarketItemId.value) || activeShopItems.value[0] || shopItems.value[0] || null;
+  if (marketSubTab.value === "bag") return selectedBagEntry.value?.item || activeShopItems.value[0] || shopItems.value[0] || null;
+  return activeShopItems.value.find((item) => item.id === selectedMarketItemId.value) || activeShopItems.value[0] || shopItems.value[0] || null;
 });
 const marketStatusCards = computed(() => {
   const effects = shopDerived.value.activeEffects || {};
@@ -4257,7 +4376,7 @@ const marketStatusCards = computed(() => {
     },
     {
       label: "下次突破",
-      value: `+${Math.round(Number(effects.nextBreakthroughBonus || 0) * 100)}%`,
+      value: breakthroughMultiplierText(Number(effects.nextBreakthroughBonus || 0)),
       note: "突破后失效"
     },
     {
@@ -4271,6 +4390,37 @@ const marketStatusCards = computed(() => {
       note: "购买后可在背包服用"
     }
   ];
+});
+const sidebarElixirEffects = computed(() => {
+  const effects = shopDerived.value.activeEffects || {};
+  const attempts = shopDerived.value.breakthroughAttempts || {};
+  const cards = [];
+  const cultivationMultiplier = Number(effects.cultivationMultiplier || 1);
+  const cultivationDaysLeft = Number(effects.cultivationMultiplierDaysLeft || 0);
+  if (cultivationMultiplier > 1 && cultivationDaysLeft > 0) {
+    cards.push({
+      label: "任务修为收益",
+      value: `x${cultivationMultiplier.toFixed(cultivationMultiplier % 1 ? 1 : 0)}`,
+      note: `剩余 ${cultivationDaysLeft} 天，持续到第 ${effects.cultivationMultiplierUntilDay || gameState.value.day} 天`
+    });
+  }
+  const breakthroughBonus = Number(effects.nextBreakthroughBonus || 0);
+  if (breakthroughBonus > 0) {
+    cards.push({
+      label: "下次突破成功率",
+      value: breakthroughMultiplierText(breakthroughBonus),
+      note: "突破后失效，成败都会消耗药力"
+    });
+  }
+  const extraAttempts = Number(effects.extraBreakthroughAttemptsToday || attempts.extra || 0);
+  if (extraAttempts > 0) {
+    cards.push({
+      label: "今日额外突破",
+      value: `+${extraAttempts} 次`,
+      note: `今日可用 ${attempts.remaining ?? 0} / ${attempts.total ?? 1} 次`
+    });
+  }
+  return cards;
 });
 
 const stats = computed(() => [
@@ -4290,11 +4440,19 @@ const isMaxRealm = computed(() => {
 const hasBreakthroughXp = computed(() => Number(player.value.xp || 0) >= Number(derived.value.xpNeed || 0));
 const breakthroughAttemptState = computed(() => shopDerived.value.breakthroughAttempts || {});
 const breakthroughAttemptsToday = computed(() => isMaxRealm.value ? 0 : Math.max(0, Number(breakthroughAttemptState.value.remaining) || 0));
+const canBreakthroughNow = computed(() => !isMaxRealm.value && breakthroughAttemptsToday.value > 0 && hasBreakthroughXp.value);
 const breakthroughAttemptHint = computed(() => {
   if (isMaxRealm.value) return "已至当前境界尽头";
   if (breakthroughAttemptsToday.value <= 0) return "今日已冲关，明日再试";
   if (!hasBreakthroughXp.value) return `还需修为 ${remainingXp.value}`;
   return "修为圆满，可待冲关";
+});
+const breakthroughActionText = computed(() => {
+  if (isActionPending("/api/breakthrough")) return "冲关中...";
+  if (isMaxRealm.value) return "已至尽头";
+  if (breakthroughAttemptsToday.value <= 0) return "次数用尽";
+  if (!hasBreakthroughXp.value) return "修为不足";
+  return "突破";
 });
 
 function realmName(index) {
@@ -5084,11 +5242,42 @@ function bloodCaveEntries(cave) {
   const clears = (cave?.clears || []).map((entry) => ({ ...entry, success: true }));
   const challengers = (cave?.challengers || []).map((entry) => ({ ...entry, success: Boolean(entry.success) }));
   const successful = challengers.filter((entry) => entry.success);
-  const source = successful.length ? successful : challengers.length ? challengers : clears.length ? clears : previousBloodCaveClears(cave);
+  const source = clears.length ? withBloodCaveDisplayRewards(cave, clears) : successful.length ? successful : challengers.length ? challengers : previousBloodCaveClears(cave);
   const ranked = source
     .sort(compareBloodCaveEntry)
     .slice(0, 3)
     .map((entry, index) => ({ ...entry, rank: index + 1 }));
+  return ranked;
+}
+
+function withBloodCaveDisplayRewards(cave, entries) {
+  const ranked = entries
+    .map((entry) => ({ ...entry, score: bloodClearScoreValue(entry), spirit: 0, bonusSpirit: 0 }))
+    .sort(compareBloodCaveEntry);
+  const pool = cave?.spiritPool || {};
+  const clearCount = Math.max(bloodCaveClearCount(cave), ranked.length, 1);
+  const basePool = Math.max(clearCount, Number(pool.base || 0));
+  const baseShare = Math.max(1, Math.floor(basePool / clearCount));
+  for (const entry of ranked) entry.spirit = baseShare;
+  let baseRemainder = Math.max(0, basePool - baseShare * clearCount);
+  for (let index = 0; baseRemainder > 0 && index < ranked.length; index += 1) {
+    ranked[index].spirit += 1;
+    baseRemainder -= 1;
+  }
+  const podium = ranked.slice(0, 3);
+  const bonusPool = Math.max(0, Number(pool.bonus || 0));
+  if (podium.length && bonusPool > 0) {
+    const weights = [5, 3, 2].slice(0, podium.length);
+    const weightTotal = weights.reduce((sum, weight) => sum + weight, 0);
+    let assigned = 0;
+    podium.forEach((entry, index) => {
+      const share = index === podium.length - 1 ? bonusPool - assigned : Math.floor(bonusPool * weights[index] / weightTotal);
+      const safeShare = Math.max(0, share);
+      entry.spirit += safeShare;
+      entry.bonusSpirit += safeShare;
+      assigned += safeShare;
+    });
+  }
   return ranked;
 }
 
@@ -5106,9 +5295,24 @@ function compareBloodCaveEntry(a, b) {
 }
 
 function compareBloodClearScore(a, b) {
-  return (a.rounds || 999) - (b.rounds || 999)
+  return bloodClearScoreValue(b) - bloodClearScoreValue(a)
+    || (a.rounds || 999) - (b.rounds || 999)
     || bloodClearHpLossRate(a) - bloodClearHpLossRate(b)
     || (b.output || 0) - (a.output || 0);
+}
+
+function bloodClearScoreValue(entry) {
+  const explicit = Number(entry?.score);
+  if (Number.isFinite(explicit) && explicit > 0) return Math.floor(explicit);
+  const output = Math.max(0, Number(entry?.output) || 0);
+  if (!output) return 0;
+  const rounds = Math.max(1, Number(entry?.rounds) || 999);
+  const hpRemainRate = 1 - bloodClearHpLossRate(entry);
+  const manaRemainRate = bloodClearManaRemainRate(entry);
+  const survivalScore = Math.round(output * 0.38 * hpRemainRate);
+  const manaScore = Math.round(output * 0.12 * manaRemainRate);
+  const speedScore = Math.round(output * 0.18 / Math.sqrt(rounds));
+  return Math.max(1, output + survivalScore + manaScore + speedScore);
 }
 
 function bloodClearHpLossRate(entry) {
@@ -5116,6 +5320,13 @@ function bloodClearHpLossRate(entry) {
   if (!Number.isFinite(startHp) || startHp <= 0) return 1;
   const endHp = Math.max(0, Math.min(startHp, Number(entry?.endHp ?? startHp)));
   return Math.max(0, Math.min(1, (startHp - endHp) / startHp));
+}
+
+function bloodClearManaRemainRate(entry) {
+  const startMana = Number(entry?.startMana || 0);
+  if (!Number.isFinite(startMana) || startMana <= 0) return 0;
+  const endMana = Math.max(0, Math.min(startMana, Number(entry?.endMana ?? startMana)));
+  return Math.max(0, Math.min(1, endMana / startMana));
 }
 
 function bloodCaveClearNames(cave) {
@@ -5148,7 +5359,7 @@ function bloodEntryResultText(entry) {
 
 function bloodEntryBattleText(entry) {
   if (entry.pending) return "待挑战";
-  if (entry.success) return `通关 · ${entry.rounds || "?"} 回合`;
+  if (entry.success) return `评分 ${bloodClearScoreValue(entry)} · ${entry.rounds || "?"} 回合`;
   return `败退 · 输出 ${entry.output || 0}`;
 }
 
@@ -5904,9 +6115,52 @@ function isNpcBreakthroughLog(entry) {
   return (gameState.value.npcs || []).some((npc) => entry.text.includes(`${npc.name}在${npc.sect}`));
 }
 
+function shouldShowHomeLog(entry) {
+  const text = String(entry?.text || "");
+  if (!text || isNpcBreakthroughLog(entry)) return false;
+  if (text.startsWith("后台")) return false;
+
+  const dailyFlavorLogs = [
+    "坊市传来秘境流言",
+    "宗门执事清点物资",
+    "山雨压城",
+    "散修在擂台连胜"
+  ];
+  if (dailyFlavorLogs.some((keyword) => text.includes(keyword))) return false;
+
+  const dailySettlementLogs = [
+    "子时已过",
+    "手动推进了一天",
+    "今日副本结算",
+    "九州攻守结算",
+    "全员切磋完成"
+  ];
+  if (dailySettlementLogs.some((keyword) => text.includes(keyword))) return true;
+
+  if (text.startsWith("在坊市购得")) return true;
+  if (text.startsWith("完成「")) return true;
+  if (/^完成.+任务，获得/.test(text)) return true;
+  if (text.includes("自动突破至") || text.includes("自动冲击境界失败")) return true;
+  if (text.includes("服下「") || text.includes("炼化「")) return true;
+  if (text.includes("通关") || text.includes("险象环生")) return true;
+  if (text.includes("击退") || text.includes("攻势凌厉")) return true;
+  if (text.includes("回合切磋") || text.includes("血量见底")) return true;
+  if (text.includes("夺得") && text.includes("「")) return true;
+  if (text.includes("竞得") && text.includes("「")) return true;
+  if (text.includes("获得") && text.includes("「")) return true;
+  if (text.includes("得「") && text.includes("」")) return true;
+  if (entry?.type === "bad") return true;
+  return false;
+}
+
 function formatPercent(value) {
   if (typeof value !== "number") return "未记录";
   return `${Math.round(value * 100)}%`;
+}
+
+function formatMultiplier(value) {
+  const number = Math.max(1, Number(value) || 1);
+  return number.toFixed(number % 1 ? 1 : 0);
 }
 
 function formatLootPercent(value) {
@@ -5934,6 +6188,34 @@ function formatCompact(value) {
 
 function equipmentShortName(name = "") {
   return String(name).replace(/[「」]/g, "").replace(/^(血煞|玄天|青冥|九幽|太乙|赤霄|天罡|坤元)/, "");
+}
+
+function isLongHomeLogText(text = "") {
+  return String(text || "").trim().length > 34;
+}
+
+function homeLogTooltip(entry) {
+  const text = String(entry?.text || "").trim();
+  return isLongHomeLogText(text) ? text : null;
+}
+
+function logEntryMinute(time = "") {
+  const text = String(time || "").trim();
+  const match = text.match(/(\d{1,2}):(\d{2})/);
+  if (!match) return "";
+  return `${match[1].padStart(2, "0")}:${match[2]}`;
+}
+
+function logEntryTimeText(entry) {
+  const date = entry?.date || currentDate.value;
+  const minute = logEntryMinute(entry?.time);
+  return minute ? `${date} ${minute}` : date;
+}
+
+function logEntryDateTime(entry) {
+  const date = entry?.date || currentDate.value;
+  const minute = logEntryMinute(entry?.time);
+  return minute ? `${date}T${minute}` : date;
 }
 
 function logTone(entry) {
@@ -7080,7 +7362,8 @@ function tomorrowXpText(person) {
 function breakthroughPartsText(person) {
   const parts = personInsight(person).breakthrough;
   const sectMultiplier = parts.sectMultiplier ?? (1 + (parts.bonus || 0));
-  return `境界基础 ${formatPercent(parts.realmBase)} × 灵根 ${formatPercent(parts.rootMultiplier)} × 宗门 ${formatPercent(sectMultiplier)} = ${formatPercent(parts.total)}`;
+  const potionText = Number(parts.potionMultiplier || 1) > 1 ? ` × 丹药 ${formatPercent(parts.potionMultiplier)}` : "";
+  return `境界基础 ${formatPercent(parts.realmBase)} × 灵根 ${formatPercent(parts.rootMultiplier)} × 宗门 ${formatPercent(sectMultiplier)}${potionText} = ${formatPercent(parts.total)}`;
 }
 
 function statWithBonus(total, bonus = 0) {
@@ -7494,7 +7777,7 @@ async function act(path, body = {}, options = {}) {
 }
 
 function shouldMarkFullStateStale(path) {
-  return ["/api/day/advance", "/api/tasks"].includes(path);
+  return ["/api/day/advance", "/api/tasks", "/api/breakthrough"].includes(path);
 }
 
 function shouldRefreshHomeState(path) {
@@ -7502,6 +7785,7 @@ function shouldRefreshHomeState(path) {
     "/api/reset",
     "/api/day/advance",
     "/api/tasks",
+    "/api/breakthrough",
     "/api/skills/upgrade",
     "/api/rest",
     "/api/dungeons/run",
@@ -7655,6 +7939,11 @@ async function submitTask() {
   taskForm.completedAmount = task.type === "measurable" ? task.targetAmount : 1;
 }
 
+async function submitBreakthrough() {
+  if (!canBreakthroughNow.value) return;
+  await act("/api/breakthrough");
+}
+
 async function advanceDay() {
   await act("/api/day/advance");
 }
@@ -7674,6 +7963,18 @@ async function useMarketItem(id) {
 function remainingText(item) {
   if (item.remaining === null || item.remaining === undefined) return "不限";
   return `${item.remaining} / ${item.limitMax}`;
+}
+
+function breakthroughMultiplierText(bonus = 0) {
+  return `×${Math.round((1 + Math.max(0, Number(bonus) || 0)) * 100)}%`;
+}
+
+function marketItemText(item = {}) {
+  if (item.effect?.type === "breakthroughBonus") {
+    const suffix = String(item.text || "").includes("本境界") ? "本境界限购 1 枚。" : "突破后失效。";
+    return `下次突破成功率 ${breakthroughMultiplierText(item.effect.bonus)}，${suffix}`;
+  }
+  return item.text || "";
 }
 
 function priceFactorText(item) {

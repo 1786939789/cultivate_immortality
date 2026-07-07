@@ -4541,83 +4541,142 @@ button.event {
   transform: translate(-50%, 0);
 }
 
-.sect-war-log-panel .arena-toolbar {
-  margin: 0;
+.sect-war-log-panel .war-log-head {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 0;
+  padding: 0 0 12px;
 }
 
-.sect-war-log-panel .arena-toolbar.compact {
+.sect-war-log-panel .war-log-title-copy {
+  min-width: 0;
+}
+
+.sect-war-log-panel .war-log-title-copy p {
+  margin: 0;
+  color: #6d5433;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.sect-war-log-panel .war-log-summary-strip {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
+  gap: 8px;
+}
+
+.sect-war-log-panel .war-log-summary-strip span {
+  min-width: 74px;
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  padding: 7px 10px;
+  border: 1px solid rgba(89, 61, 25, .24);
+  border-radius: 5px;
+  background:
+    linear-gradient(180deg, rgba(255, 248, 219, .84), rgba(205, 176, 116, .42)),
+    rgba(101, 73, 31, .08);
+  color: #65461e;
+  font-size: 12px;
+  font-weight: 800;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .34);
+}
+
+.sect-war-log-panel .war-log-summary-strip b {
+  color: #2f2111;
+  font-size: 18px;
+  line-height: 1;
 }
 
 .sect-war-log-panel .war-log-toolbar {
-  width: min(430px, 100%);
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 8px;
-  align-items: stretch;
-  justify-items: stretch;
-  padding: 10px;
-  border: 1px solid rgba(101, 73, 31, .2);
-  border-radius: 5px;
-  background: rgba(247, 239, 207, .52);
+  grid-template-columns: minmax(320px, .92fr) minmax(280px, 1fr);
+  gap: 12px;
+  align-items: end;
+  margin: 0 0 14px;
+  padding: 12px;
+  border: 1px solid rgba(91, 67, 31, .26);
+  border-radius: 6px;
+  background:
+    radial-gradient(circle at 0 0, rgba(255, 250, 222, .55), transparent 18rem),
+    linear-gradient(180deg, rgba(246, 237, 202, .9), rgba(221, 204, 164, .76));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 252, 232, .42),
+    0 8px 16px rgba(57, 40, 17, .08);
 }
 
 .sect-war-log-panel .war-log-date-controls {
   display: grid;
-  grid-template-columns: 82px minmax(130px, 1fr) 82px;
+  grid-template-columns: 84px minmax(148px, 1fr) 84px;
   gap: 8px;
   align-items: end;
-}
-
-.sect-war-log-panel .arena-toolbar label {
   min-width: 0;
-  color: #5c4120;
-  font-size: 12px;
-  font-weight: 800;
 }
 
 .sect-war-log-panel .war-log-date-controls label,
 .sect-war-log-panel .war-search {
+  min-width: 0;
   display: grid;
-  gap: 4px;
-}
-
-.sect-war-log-panel .war-search {
-  width: 100%;
-  justify-self: stretch;
+  gap: 5px;
+  color: #5c4120;
+  font-size: 12px;
+  font-weight: 900;
 }
 
 .sect-war-log-panel .war-log-date-controls button {
-  width: 82px;
+  width: 84px;
   min-width: 0;
-  min-height: 34px;
+  min-height: 36px;
   padding-inline: 8px;
 }
 
-.sect-war-log-panel select,
 .sect-war-log-panel input {
   width: 100%;
   min-width: 0;
-  border-color: rgba(93, 68, 31, .3);
-  border-radius: 3px;
-  background: rgba(255, 248, 226, .86);
+  min-height: 36px;
+  border: 1px solid rgba(93, 68, 31, .3);
+  border-radius: 5px;
+  background:
+    linear-gradient(180deg, rgba(255, 251, 235, .95), rgba(241, 226, 185, .82));
   color: #35230e;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .52);
+}
+
+.sect-war-log-panel input[type="date"] {
+  padding-inline: 10px;
+  color-scheme: light;
+}
+
+.sect-war-log-panel input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: .72;
 }
 
 .sect-war-log-panel .search-field {
   min-width: 0;
   display: flex;
   align-items: center;
+  border-radius: 5px;
 }
 
 .sect-war-log-panel .search-field input {
   flex: 1 1 auto;
+  padding-right: 34px;
 }
 
 .sect-war-log-panel .search-clear {
   flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  margin-left: -32px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(92, 58, 24, .12);
+  color: #5c3a18;
+  font-weight: 900;
 }
 
 .war-matchup-card {
@@ -8354,6 +8413,20 @@ button.event {
 
   .province-table-head {
     display: none;
+  }
+
+  .sect-war-log-panel .war-log-head,
+  .sect-war-log-panel .war-log-toolbar,
+  .sect-war-log-panel .war-log-date-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .sect-war-log-panel .war-log-summary-strip {
+    justify-content: flex-start;
+  }
+
+  .sect-war-log-panel .war-log-date-controls button {
+    width: 100%;
   }
 
   .china-map {

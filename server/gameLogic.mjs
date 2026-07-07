@@ -1067,6 +1067,9 @@ const publicProvinceWarLimit = replayRetentionDays * Math.max(sects.length, 1);
 const publicDuelDayLimit = replayRetentionDays;
 const publicDungeonDayLimit = replayRetentionDays;
 const growthRecordDays = 60;
+const logRecordDays = 30;
+const flatLogLimit = 80;
+const logRecordLimitPerDay = 80;
 const detailRecordLimit = 600;
 const npcDungeonHistoryLimit = battleRecordDays;
 const growthRecordLimit = 120;
@@ -1908,8 +1911,30 @@ function bloodClearHpLossRate(entry) {
   return Math.max(0, Math.min(1, (startHp - endHp) / startHp));
 }
 
+function bloodClearManaRemainRate(entry) {
+  const startMana = Number(entry?.startMana || 0);
+  if (!Number.isFinite(startMana) || startMana <= 0) return 0;
+  const endMana = clamp(Number(entry?.endMana ?? startMana), 0, startMana);
+  return Math.max(0, Math.min(1, endMana / startMana));
+}
+
+function bloodClearScoreValue(entry) {
+  const explicit = Number(entry?.score);
+  if (Number.isFinite(explicit) && explicit > 0) return Math.floor(explicit);
+  const output = Math.max(0, Number(entry?.output) || 0);
+  if (!output) return 0;
+  const rounds = Math.max(1, Number(entry?.rounds) || 999);
+  const hpRemainRate = 1 - bloodClearHpLossRate(entry);
+  const manaRemainRate = bloodClearManaRemainRate(entry);
+  const survivalScore = Math.round(output * 0.38 * hpRemainRate);
+  const manaScore = Math.round(output * 0.12 * manaRemainRate);
+  const speedScore = Math.round(output * 0.18 / Math.sqrt(rounds));
+  return Math.max(1, output + survivalScore + manaScore + speedScore);
+}
+
 function compareBloodClearScore(a, b) {
-  return (a.rounds || 999) - (b.rounds || 999)
+  return bloodClearScoreValue(b) - bloodClearScoreValue(a)
+    || (a.rounds || 999) - (b.rounds || 999)
     || bloodClearHpLossRate(a) - bloodClearHpLossRate(b)
     || (b.output || 0) - (a.output || 0);
 }
@@ -2004,7 +2029,7 @@ function runSoloDungeonFor(state, entity, date, caves) {
     finalReplay = publicReplay(replay);
     const output = Math.max(1, Math.floor(monster.maxHp - battle.rightHp));
     const rounds = Math.max(1, Math.max(...battle.events.map((event) => event.round || 1)));
-    cave.challengers.push({
+    const challengeEntry = {
       id: entity.id,
       name: entity.name,
       sect: entity.id === "player" ? state.sect.name : entity.sect,
@@ -2025,7 +2050,9 @@ function runSoloDungeonFor(state, entity, date, caves) {
       item: "",
       tierName: "",
       replay: finalReplay
-    });
+    };
+    challengeEntry.score = battle.winner === "left" ? bloodClearScoreValue(challengeEntry) : output;
+    cave.challengers.push(challengeEntry);
     if (battle.winner !== "left") break;
     runHp = clamp(battle.leftHp + Math.floor(maxHp * 0.5), 1, maxHp);
     runMana = clamp(battle.leftMana + Math.floor(maxMana * 0.5), 0, maxMana);
@@ -2038,7 +2065,7 @@ function runSoloDungeonFor(state, entity, date, caves) {
     finalRounds = rounds;
     const challenger = cave.challengers.find((item) => item.id === entity.id);
     if (challenger) challenger.spirit = spirit;
-    cave.clears.push({
+    const clearEntry = {
       id: entity.id,
       name: entity.name,
       sect: entity.id === "player" ? state.sect.name : entity.sect,
@@ -2058,7 +2085,9 @@ function runSoloDungeonFor(state, entity, date, caves) {
       item: candidate?.name || "",
       tierName: candidate ? equipmentTier(candidate).name : "",
       replay: finalReplay
-    });
+    };
+    clearEntry.score = bloodClearScoreValue(clearEntry);
+    cave.clears.push(clearEntry);
   }
 
   const score = clears ? finalRealm + clears * 8 : stageIndexOfRealm(entity.realm) * 10;
@@ -3325,10 +3354,11 @@ function ensureProvinceState(state) {
 
 function breakthroughChanceFor(state, entity) {
   const sectName = entity.id === "player" ? state.sect.name : entity.sect;
-  const potionBonus = entity.id === "player" ? activeBreakthroughBonus(state) : 0;
+  const potionMultiplier = entity.id === "player" ? activeBreakthroughMultiplier(state) : 1;
   const divineSenseBonus = entity.id === "player" ? divineSenseBreakthroughBonus(entity, state) : 0;
+  const beforePotion = breakthroughChance(entity) * (1 + sectBreakthroughBonus(state, sectName, entity)) + divineSenseBonus;
   return clamp(
-    breakthroughChance(entity) * (1 + sectBreakthroughBonus(state, sectName, entity)) + potionBonus + divineSenseBonus,
+    beforePotion * potionMultiplier,
     0.035,
     entity.id === "player" ? 0.95 : 0.82
   );
@@ -3341,7 +3371,9 @@ function breakthroughChanceParts(state, entity) {
   const bonus = sectBreakthroughBonus(state, sectName, entity);
   const sectMultiplier = 1 + bonus;
   const potionBonus = entity.id === "player" ? activeBreakthroughBonus(state) : 0;
+  const potionMultiplier = 1 + potionBonus;
   const divineSenseBonus = entity.id === "player" ? divineSenseBreakthroughBonus(entity, state) : 0;
+  const beforePotion = base * sectMultiplier + divineSenseBonus;
   return {
     realmBase,
     rootMultiplier: base / Math.max(0.0001, realmBase),
@@ -3349,8 +3381,9 @@ function breakthroughChanceParts(state, entity) {
     base,
     bonus,
     potionBonus,
+    potionMultiplier,
     divineSenseBonus,
-    total: clamp(base * sectMultiplier + potionBonus + divineSenseBonus, 0.035, entity.id === "player" ? 0.95 : 0.82)
+    total: clamp(beforePotion * potionMultiplier, 0.035, entity.id === "player" ? 0.95 : 0.82)
   };
 }
 
@@ -3586,6 +3619,10 @@ function activeCultivationMultiplier(state) {
 
 function activeBreakthroughBonus(state) {
   return publicElixirEffects(state).nextBreakthroughBonus;
+}
+
+function activeBreakthroughMultiplier(state) {
+  return 1 + activeBreakthroughBonus(state);
 }
 
 function divineSenseBreakthroughBonus(entity, state) {
@@ -4053,14 +4090,89 @@ function makeNpc(name, index) {
 }
 
 function log(state, text, type = "") {
-  state.log.unshift({
+  const entry = normalizeLogEntry(state, {
     text,
     type,
     day: state.day,
     date: stateDateForDay(state),
     time: new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
   });
-  state.log = state.log.slice(0, 80);
+  state.log ??= [];
+  state.log.unshift(entry);
+  state.log = state.log.slice(0, flatLogLimit);
+  addLogDayEntry(state, entry);
+}
+
+function normalizeLogEntry(state, entry = {}) {
+  const day = Math.max(1, Math.floor(Number(entry.day || state.day || 1) || 1));
+  return {
+    text: String(entry.text || ""),
+    type: entry.type || "",
+    day,
+    date: entry.date || stateDateForDay(state, day),
+    time: entry.time || ""
+  };
+}
+
+function buildLogDaysFromFlatLog(state, logs = state.log) {
+  const grouped = new Map();
+  for (const rawEntry of logs || []) {
+    const entry = normalizeLogEntry(state, rawEntry);
+    if (!grouped.has(entry.day)) {
+      grouped.set(entry.day, {
+        day: entry.day,
+        date: entry.date || stateDateForDay(state, entry.day),
+        logs: []
+      });
+    }
+    grouped.get(entry.day).logs.push(entry);
+  }
+  return trimLogDays([...grouped.values()], state);
+}
+
+function trimLogDays(logDays = [], stateOrDay = 1) {
+  const state = typeof stateOrDay === "object" && stateOrDay ? stateOrDay : { day: stateOrDay };
+  const currentDay = state.day || 1;
+  const minDayToKeep = minDayForWindow(currentDay, logRecordDays);
+  return [...(logDays || [])]
+    .map((dayRecord) => {
+      const day = Math.max(1, Math.floor(Number(dayRecord?.day || currentDay || 1) || 1));
+      return {
+        day,
+        date: dayRecord?.date || stateDateForDay(state, day),
+        logs: (dayRecord?.logs || [])
+          .map((entry) => normalizeLogEntry(state, { ...entry, day: entry?.day || day, date: entry?.date || dayRecord?.date }))
+          .slice(0, logRecordLimitPerDay)
+      };
+    })
+    .filter((dayRecord) => dayRecord.day >= minDayToKeep)
+    .sort((a, b) => b.day - a.day)
+    .slice(0, logRecordDays);
+}
+
+function addLogDayEntry(state, entry) {
+  state.logDays = trimLogDays(state.logDays || [], state);
+  let dayRecord = state.logDays.find((record) => record.day === entry.day);
+  if (!dayRecord) {
+    dayRecord = {
+      day: entry.day,
+      date: entry.date || stateDateForDay(state, entry.day),
+      logs: []
+    };
+    state.logDays.unshift(dayRecord);
+  }
+  dayRecord.logs.unshift(entry);
+  dayRecord.logs = dayRecord.logs.slice(0, logRecordLimitPerDay);
+  state.logDays = trimLogDays(state.logDays, state);
+}
+
+function publicLogDays(state) {
+  return trimLogDays(state.logDays?.length ? state.logDays : buildLogDaysFromFlatLog(state), state)
+    .map((dayRecord) => ({
+      day: dayRecord.day,
+      date: dayRecord.date,
+      logs: (dayRecord.logs || []).slice(0, logRecordLimitPerDay)
+    }));
 }
 
 function makeId(prefix = "id") {
@@ -4127,6 +4239,8 @@ export function createDefaultState() {
   const openingLog = rootSet.roots.length > 1
     ? `你在山脚租下一间小屋，翻开第一卷长生札记。本世灵根为${rootSetNameLine(rootSet)}。`
     : `你在山脚租下一间小屋，翻开第一卷长生札记。本世灵根为${root.name}。`;
+  const openingDate = dateKey();
+  const openingEntry = { text: openingLog, type: "", day: 1, date: openingDate, time: "初入" };
 
   return {
     day: 1,
@@ -4201,9 +4315,10 @@ export function createDefaultState() {
     provinceWars: [],
     provinceIncomeLog: [],
     duelDays: [],
-    calendarStartDate: dateKey(),
-    lastSettlementDate: dateKey(),
-    log: [{ text: openingLog, type: "", day: 1, date: dateKey(), time: "初入" }]
+    calendarStartDate: openingDate,
+    lastSettlementDate: openingDate,
+    log: [openingEntry],
+    logDays: [{ day: 1, date: openingDate, logs: [openingEntry] }]
   };
 }
 
@@ -4311,13 +4426,15 @@ function rememberSectProfiles(state) {
 function resetOpeningLogForProfile(state) {
   const roots = normalizeRootSet(state.player);
   const rootText = roots.roots.length > 1 ? rootSetNameLine(roots) : roots.primaryRoot?.name || state.player.root?.name || "未知灵根";
-  state.log = [{
+  const openingEntry = {
     text: `你在山脚租下一间小屋，翻开第一卷长生札记。本世灵根为${rootText}。`,
     type: "",
     day: 1,
     date: dateKey(),
     time: "初入"
-  }];
+  };
+  state.log = [openingEntry];
+  state.logDays = [{ day: 1, date: openingEntry.date, logs: [openingEntry] }];
 }
 
 function rebuildSectProfilesForReset(state, previousState) {
@@ -4443,8 +4560,18 @@ export function ensureStateShape(state) {
     }
     return false;
   };
-  if (Array.isArray(state.log)) {
-    for (const entry of state.log) changed = ensureDatedRecord(entry) || changed;
+  const logBefore = JSON.stringify(state.log || []);
+  state.log = (Array.isArray(state.log) ? state.log : [])
+    .map((entry) => normalizeLogEntry(state, entry))
+    .slice(0, flatLogLimit);
+  if (JSON.stringify(state.log) !== logBefore) changed = true;
+  if (!Array.isArray(state.logDays)) {
+    state.logDays = buildLogDaysFromFlatLog(state);
+    changed = true;
+  } else {
+    const logDaysBefore = JSON.stringify(state.logDays);
+    state.logDays = trimLogDays(state.logDays, state);
+    if (JSON.stringify(state.logDays) !== logDaysBefore) changed = true;
   }
   if (Array.isArray(state.tasks)) {
     for (const task of state.tasks) changed = ensureDatedRecord(task) || changed;
@@ -4709,7 +4836,8 @@ export function compactStateForStorage(state, options = {}) {
   state.provinceWars = trimRecordsByDay(state.provinceWars || [], state.day || 1, battleRecordDays).map(compactProvinceWarRecord);
   state.dungeonDays = trimRecordsByDay(state.dungeonDays || [], state.day || 1, battleRecordDays, battleRecordDays);
   state.equipmentTransfers = trimRecordsByDay(state.equipmentTransfers || [], state.day || 1, recentRecordDays);
-  state.log = (state.log || []).slice(0, 80);
+  state.log = (state.log || []).map((entry) => normalizeLogEntry(state, entry)).slice(0, flatLogLimit);
+  state.logDays = trimLogDays(state.logDays?.length ? state.logDays : buildLogDaysFromFlatLog(state), state);
   state.tasks = (state.tasks || []).slice(0, 16);
   state.taskCompletions = (state.taskCompletions || []).slice(0, taskCompletionLimit);
   state.taskDefinitions = (state.taskDefinitions || []).slice(0, taskDefinitionLimit);
@@ -4843,6 +4971,7 @@ export function getPublicState(state, options = {}) {
       taskDefinitions: state.taskDefinitions,
       taskCompletions: state.taskCompletions,
       log: state.log,
+      logDays: publicLogDays(state),
       bag: state.bag,
       equipmentTransfers: state.equipmentTransfers,
       home: {
@@ -4910,6 +5039,7 @@ function getHomeState(state) {
     taskDefinitions: state.taskDefinitions,
     taskCompletions: state.taskCompletions,
     log: state.log,
+    logDays: publicLogDays(state),
     bag: state.bag,
     equipmentTransfers: state.equipmentTransfers,
     home: buildHomeSummary(state),
@@ -4938,6 +5068,7 @@ function getHomeState(state) {
 
 function buildHomeSummary(state) {
   const playerPower = powerOf(state.player, state);
+  const logDays = publicLogDays(state);
   const ranking = [
     { entity: state.player, isPlayer: true, power: playerPower },
     ...(state.npcs || []).map((npc) => ({ entity: npc, isPlayer: false, power: powerOf(npc, state) }))
@@ -4968,7 +5099,8 @@ function buildHomeSummary(state) {
     dungeonSummary: homeDungeonSummaryForState(state),
     equipment: homeEquipmentForState(state),
     ticker: homeTickerForState(state),
-    logs: (state.log || []).slice(0, 30)
+    logDays,
+    logs: (logDays[0]?.logs || state.log || []).slice(0, 30)
   };
 }
 
@@ -5347,6 +5479,7 @@ function publicBloodCaveRecord(cave, currentDay, parentDay, people = null) {
     (cave.challengers || []).length
   );
   const spiritPool = normalizeBloodCaveSpiritPool(cave.spiritPool, clearCount);
+  const displayClears = publicBloodClearsForDisplay(cave, spiritPool, clearCount);
   return {
     cave: cave.cave,
     name: cave.name,
@@ -5354,7 +5487,7 @@ function publicBloodCaveRecord(cave, currentDay, parentDay, people = null) {
     spiritPool,
     clearCount,
     challengerCount,
-    clears: [...(cave.clears || [])].sort(compareBloodClearScore).map((entry) => publicBloodEntry(entry, currentDay, parentDay, people)),
+    clears: displayClears.map((entry) => publicBloodEntry(entry, currentDay, parentDay, people)),
     challengers: [...(cave.challengers || [])].sort(compareBloodEntry).map((entry) => publicBloodEntry(entry, currentDay, parentDay, people))
   };
 }
@@ -5370,6 +5503,41 @@ function normalizeBloodCaveSpiritPool(pool, clearCount = 0) {
     bonus,
     total: base + bonus
   };
+}
+
+function publicBloodClearsForDisplay(cave, spiritPool, clearCount) {
+  const clears = [...(cave.clears || [])].map((entry) => ({
+    ...entry,
+    success: true,
+    score: bloodClearScoreValue(entry),
+    spirit: 0,
+    bonusSpirit: 0
+  })).sort(compareBloodClearScore);
+  if (!clears.length) return clears;
+  const totalClears = Math.max(clearCount || 0, clears.length);
+  const basePool = Math.max(totalClears, Number(spiritPool?.base || 0));
+  const baseShare = Math.max(1, Math.floor(basePool / Math.max(1, totalClears)));
+  for (const entry of clears) entry.spirit = baseShare;
+  let baseRemainder = Math.max(0, basePool - baseShare * totalClears);
+  for (let index = 0; baseRemainder > 0 && index < clears.length; index += 1) {
+    clears[index].spirit += 1;
+    baseRemainder -= 1;
+  }
+  const podium = clears.slice(0, 3);
+  const bonusPool = Math.max(0, Number(spiritPool?.bonus || 0));
+  if (podium.length && bonusPool > 0) {
+    const weights = [5, 3, 2].slice(0, podium.length);
+    const weightTotal = weights.reduce((sum, weight) => sum + weight, 0);
+    let assigned = 0;
+    podium.forEach((entry, index) => {
+      const share = index === podium.length - 1 ? bonusPool - assigned : Math.floor(bonusPool * weights[index] / weightTotal);
+      const safeShare = Math.max(0, share);
+      entry.spirit += safeShare;
+      entry.bonusSpirit += safeShare;
+      assigned += safeShare;
+    });
+  }
+  return clears;
 }
 
 function clearDepthFromDungeonHistory(record) {
@@ -5423,6 +5591,7 @@ function publicBloodEntry(entry, currentDay, parentDay, people = null) {
     skillId: entry.skillId,
     output: entry.output,
     rounds: entry.rounds,
+    score: bloodClearScoreValue(entry),
     success: Boolean(entry.success),
     spirit: entry.spirit || 0,
     bonusSpirit: entry.bonusSpirit || 0,
@@ -6907,7 +7076,7 @@ export function useItem(state, kind) {
     }
     p.elixirEffects.nextBreakthroughBonus = nextBonus;
     state.bag[kind] -= 1;
-    log(state, `服下「${item.name}」，下次突破成功率提高 ${Math.round(nextBonus * 100)}%。`, "gold");
+    log(state, `服下「${item.name}」，下次突破成功率变为原来的 ${Math.round((1 + nextBonus) * 100)}%。`, "gold");
     return;
   }
 

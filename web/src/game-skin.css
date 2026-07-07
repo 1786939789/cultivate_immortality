@@ -3260,7 +3260,7 @@ body::before {
 
 .battle-log-list > div {
   width: 100%;
-  grid-template-columns: 34px minmax(0, 1fr) minmax(92px, auto);
+  grid-template-columns: 34px minmax(0, 1fr) minmax(126px, auto);
   padding: 0 10px;
 }
 
@@ -3286,9 +3286,15 @@ body::before {
   white-space: nowrap;
 }
 
+.battle-log-list .home-log-text.is-long {
+  cursor: help;
+}
+
 .battle-log-list time {
   color: #897963;
+  font-size: 12px;
   text-align: right;
+  white-space: nowrap;
 }
 
 .home-log-fallback {
@@ -3851,6 +3857,7 @@ body::before {
 .tasks-surface .task-preview {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   min-width: 0;
   min-height: 38px;
@@ -3864,6 +3871,21 @@ body::before {
 .tasks-surface .task-preview strong {
   white-space: nowrap;
   color: #5b3a18;
+}
+
+.tasks-surface .task-preview-multiplier {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  border: 1px solid rgba(69, 132, 83, .32);
+  border-radius: 999px;
+  color: #2f713d;
+  background:
+    linear-gradient(180deg, rgba(232, 255, 223, .84), rgba(181, 225, 164, .42));
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
 }
 
 .tasks-surface .cards {
@@ -5495,7 +5517,8 @@ body::before {
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas:
     "label count"
-    "hint hint";
+    "hint hint"
+    "action action";
   align-items: center;
   gap: 6px 12px;
   padding: 14px 16px;
@@ -5548,6 +5571,135 @@ body::before {
   color: #c49b55;
   font-size: 15px;
   font-weight: 900;
+}
+
+.breakthrough-action {
+  position: relative;
+  z-index: 1;
+  grid-area: action;
+  min-height: 34px;
+  margin-top: 2px;
+  border: 1px solid rgba(124, 212, 139, .45);
+  border-radius: 4px;
+  color: #f1ffe7;
+  background:
+    linear-gradient(180deg, rgba(73, 161, 92, .96), rgba(33, 91, 58, .96)),
+    #2d7146;
+  box-shadow:
+    inset 0 1px 0 rgba(234, 255, 211, .32),
+    0 0 16px rgba(74, 196, 101, .16);
+  font-size: 14px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.breakthrough-action:hover:not(:disabled),
+.breakthrough-action:focus-visible:not(:disabled) {
+  border-color: rgba(174, 245, 147, .72);
+  outline: 2px solid rgba(112, 231, 129, .2);
+  outline-offset: 2px;
+  filter: brightness(1.08);
+}
+
+.breakthrough-action:disabled {
+  cursor: not-allowed;
+  color: rgba(232, 211, 161, .62);
+  border-color: rgba(205, 151, 71, .26);
+  background:
+    linear-gradient(180deg, rgba(73, 64, 43, .82), rgba(28, 28, 24, .86));
+  box-shadow: inset 0 1px 0 rgba(255, 236, 176, .08);
+}
+
+.elixir-effect-card {
+  position: relative;
+  margin-top: 8px;
+  display: grid;
+  gap: 7px;
+  padding: 10px 12px;
+  border: 1px solid rgba(111, 180, 121, .34);
+  border-radius: 4px;
+  color: #e8d3a1;
+  background:
+    radial-gradient(circle at 10% 0%, rgba(103, 210, 145, .18), transparent 88px),
+    linear-gradient(135deg, rgba(22, 28, 23, .95), rgba(9, 12, 10, .92));
+  box-shadow:
+    inset 0 0 0 1px rgba(230, 255, 210, .07),
+    0 8px 16px rgba(0, 0, 0, .12);
+  overflow: hidden;
+}
+
+.elixir-effect-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(12, 15, 12, .24), transparent 58%),
+    radial-gradient(circle at 100% 78%, rgba(228, 181, 86, .15), transparent 80px);
+}
+
+.elixir-effect-head,
+.elixir-effect-list,
+.elixir-effect-item {
+  position: relative;
+  z-index: 1;
+}
+
+.elixir-effect-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(205, 151, 71, .22);
+}
+
+.elixir-effect-head span {
+  color: #d1b371;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.elixir-effect-head strong {
+  color: #8bdf98;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.elixir-effect-list {
+  display: grid;
+  gap: 6px;
+}
+
+.elixir-effect-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px 8px;
+  padding: 7px 8px;
+  border: 1px solid rgba(141, 113, 55, .2);
+  border-radius: 4px;
+  background: rgba(255, 244, 196, .055);
+}
+
+.elixir-effect-item span {
+  color: #d7bd7d;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.elixir-effect-item strong {
+  color: #92e0a0;
+  font-size: 17px;
+  line-height: 1;
+  text-align: right;
+}
+
+.elixir-effect-item small {
+  grid-column: 1 / -1;
+  color: #b88e4c;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
 }
 
 .main {
@@ -5798,6 +5950,82 @@ body::before {
   background: rgba(170, 98, 67, .22);
 }
 
+.log-home .section-head {
+  align-items: center;
+  gap: 10px;
+}
+
+.log-day-select {
+  display: inline-grid;
+  grid-template-columns: auto minmax(132px, 170px);
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.log-day-select span {
+  color: rgba(82, 52, 22, .72);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.log-day-select input[type="date"] {
+  width: 100%;
+  min-height: 32px;
+  padding: 5px 8px 5px 9px;
+  border: 1px solid rgba(92, 58, 24, .24);
+  border-radius: 6px;
+  background:
+    linear-gradient(180deg, rgba(246, 229, 183, .78), rgba(177, 140, 82, .34)),
+    rgba(93, 59, 24, .08);
+  color: #5f3d19;
+  font-size: 12px;
+  font-weight: 800;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 245, 210, .48),
+    0 5px 10px rgba(73, 45, 18, .08);
+  cursor: pointer;
+  color-scheme: light;
+}
+
+.log-day-select input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: .72;
+}
+
+.log-day-select input[type="date"]:hover,
+.log-day-select input[type="date"]:focus-visible {
+  border-color: rgba(130, 90, 37, .5);
+  outline: 2px solid rgba(111, 68, 24, .18);
+  outline-offset: 2px;
+}
+
+.battle-log-empty {
+  display: grid;
+  place-items: center;
+  min-height: 156px;
+  margin-top: 12px;
+  border: 1px dashed rgba(83, 53, 23, .28);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 50% 0, rgba(255, 244, 198, .34), transparent 11rem),
+    rgba(96, 65, 31, .075);
+  color: rgba(72, 46, 21, .76);
+  text-align: center;
+}
+
+.battle-log-empty b {
+  display: block;
+  margin-bottom: 4px;
+  color: #5f3d19;
+  font-size: 14px;
+}
+
+.battle-log-empty span {
+  display: block;
+  font-size: 13px;
+}
+
 @media (max-width: 1280px) {
   .app {
     padding-inline: 12px;
@@ -5968,6 +6196,11 @@ body::before {
   .home-rank-list strong,
   .battle-log-list time {
     grid-column: 2;
+  }
+
+  .log-day-select {
+    grid-template-columns: auto minmax(0, 1fr);
+    width: 100%;
   }
 }
 
@@ -7175,7 +7408,8 @@ body::before {
 .sidebar .profile-scroll,
 .sidebar .stats,
 .sidebar .next-realm-card,
-.sidebar .breakthrough-count-card {
+.sidebar .breakthrough-count-card,
+.sidebar .elixir-effect-card {
   position: relative;
   z-index: 1;
   flex: none;
@@ -7189,7 +7423,8 @@ body::before {
 .sidebar .profile-scroll,
 .sidebar .stats,
 .sidebar .next-realm-card,
-.sidebar .breakthrough-count-card {
+.sidebar .breakthrough-count-card,
+.sidebar .elixir-effect-card {
   transform: none;
 }
 
