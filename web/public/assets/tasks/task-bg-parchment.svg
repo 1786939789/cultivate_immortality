@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" preserveAspectRatio="none" role="img" aria-label="parchment background">
+  <defs>
+    <radialGradient id="paperWarm" cx="50%" cy="42%" r="75%">
+      <stop offset="0" stop-color="#fff8e4"/>
+      <stop offset=".7" stop-color="#f3dfb9"/>
+      <stop offset="1" stop-color="#ddbf83"/>
+    </radialGradient>
+    <pattern id="fiber" width="56" height="56" patternUnits="userSpaceOnUse">
+      <path d="M8 13c12 2 23-3 37 1M2 39c18-5 31 3 50-2M17 52c7-6 16-4 27-7" fill="none" stroke="#9e7b42" stroke-width="1.2" opacity=".16"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="720" fill="url(#paperWarm)"/>
+  <rect width="1200" height="720" fill="url(#fiber)"/>
+  <path d="M0 0h1200v720H0Z" fill="none" stroke="#a77738" stroke-width="28" opacity=".18"/>
+</svg>

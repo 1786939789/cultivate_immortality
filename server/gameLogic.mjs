@@ -43,10 +43,10 @@ const xpModeVersion = 2;
 const playerDailyBaseXp = 10;
 const taskDefinitionLimit = 80;
 const taskCompletionLimit = 120;
-const taskCategories = ["生活", "工作", "运动"];
+const taskCategories = ["生活", "学习", "工作", "运动"];
 const defaultTaskDefinitions = [
   { id: "task-work-hour", name: "加班", detail: "按实际投入时间记录额外工作。", type: "measurable", category: "工作", unitName: "小时", targetAmount: 1, xpReward: 100, spiritReward: 10, maxMultiplier: 4, enabled: true },
-  { id: "task-reading-pages", name: "看书", detail: "读完指定页数，沉淀现实里的悟性。", type: "measurable", category: "生活", unitName: "页", targetAmount: 10, xpReward: 50, spiritReward: 5, maxMultiplier: 5, enabled: true },
+  { id: "task-reading-pages", name: "看书", detail: "读完指定页数，沉淀现实里的悟性。", type: "measurable", category: "学习", unitName: "页", targetAmount: 10, xpReward: 50, spiritReward: 5, maxMultiplier: 5, enabled: true },
   { id: "task-fitness", name: "运动一次", detail: "完整完成一次计划内运动。", type: "complete", category: "运动", unitName: "次", targetAmount: 1, xpReward: 80, spiritReward: 6, maxMultiplier: 1, enabled: true },
   { id: "task-writing", name: "写作一段", detail: "完成一段可交付的创作或复盘。", type: "complete", category: "生活", unitName: "次", targetAmount: 1, xpReward: 120, spiritReward: 8, maxMultiplier: 1, enabled: true }
 ];
@@ -4182,9 +4182,15 @@ function makeId(prefix = "id") {
 function normalizeTaskCategory(value) {
   const text = String(value || "").trim();
   if (taskCategories.includes(text)) return text;
+  if (["学习", "读书", "看书", "阅读", "study"].includes(text)) return "学习";
   if (["工作", "加班", "职业"].includes(text)) return "工作";
   if (["运动", "锻炼", "健身", "修行", "body"].includes(text)) return "运动";
   return "生活";
+}
+
+function migrateDefaultTaskCategory(definition) {
+  if (definition?.id === "task-reading-pages") return { ...definition, category: "学习" };
+  return definition;
 }
 
 function normalizeTaskDefinition(definition = {}, fallback = {}) {
@@ -4220,7 +4226,9 @@ function ensureTaskSystem(state) {
     state.taskDefinitions = defaultRealityTasks();
     changed = true;
   } else {
-    state.taskDefinitions = state.taskDefinitions.map((definition) => normalizeTaskDefinition(definition)).slice(0, taskDefinitionLimit);
+    const before = JSON.stringify(state.taskDefinitions);
+    state.taskDefinitions = state.taskDefinitions.map((definition) => normalizeTaskDefinition(migrateDefaultTaskCategory(definition))).slice(0, taskDefinitionLimit);
+    changed = changed || before !== JSON.stringify(state.taskDefinitions);
   }
   if (!Array.isArray(state.taskCompletions)) {
     state.taskCompletions = Array.isArray(state.tasks) ? [...state.tasks] : [];

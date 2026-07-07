@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520" preserveAspectRatio="xMaxYMax meet" role="img" aria-label="ink mountains background">
+  <path d="M0 520h900V180c-75 52-132 108-204 111-74 3-97-62-174-52-67 9-91 66-157 69-70 3-107-55-176-36-66 19-104 100-189 118Z" fill="#1e5f5b" opacity=".18"/>
+  <path d="M190 520h710V238c-55 45-92 90-153 90-69 0-95-72-156-62-54 9-76 76-132 85-70 11-112-73-177-52-51 17-66 83-92 221Z" fill="#164c4c" opacity=".24"/>
+  <path d="M420 520h480V298c-47 38-76 86-132 91-57 5-79-43-129-34-55 9-70 66-118 88-41 19-72 14-101 77Z" fill="#8f3925" opacity=".1"/>
+  <path d="M78 383c55-20 100-18 147 2M470 276c50-28 96-34 139-7M640 351c52-22 99-20 141 6" fill="none" stroke="#2c6560" stroke-width="7" stroke-linecap="round" opacity=".22"/>
+</svg>

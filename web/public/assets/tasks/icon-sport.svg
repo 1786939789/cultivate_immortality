@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="training task icon">
+  <circle cx="48" cy="48" r="42" fill="#f8eed6" stroke="#8f6b32" stroke-width="4"/>
+  <path d="M24 57h48" fill="none" stroke="#1e5e5a" stroke-width="8" stroke-linecap="round"/>
+  <path d="M27 43v28M69 43v28M17 50v14M79 50v14" fill="none" stroke="#8f3925" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="48" cy="31" r="9" fill="#d9b56c" stroke="#704829" stroke-width="4"/>
+</svg>

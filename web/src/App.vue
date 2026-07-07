@@ -442,80 +442,233 @@
           </section>
         </section>
 
-        <section v-if="activeTab === 'tasks'" class="view active cultivation-surface tasks-surface">
-          <div class="panel">
-            <div class="section-head">
-              <div>
-                <h3>记录今日任务</h3>
-                <p>今日完成 {{ todayTaskSummary.count }} 项，获得 {{ todayTaskSummary.xp }} 经验与 {{ todayTaskSummary.spirit }} 灵石。</p>
+        <section v-if="activeTab === 'tasks'" class="view active cultivation-surface tasks-surface quest-surface">
+          <div class="panel task-command-panel">
+            <header class="section-head task-page-head">
+              <div class="task-title-block">
+                <h3>现实任务</h3>
+                <p>把现实里的行动结成修为、灵石与半月札记</p>
               </div>
-              <span class="tag">{{ currentDate }}</span>
-            </div>
-            <form class="task-form" @submit.prevent="submitTask">
-              <label class="task-field-category">类别
-                <select v-model="taskForm.category">
-                  <option v-for="category in frontTaskCategories" :key="category.id" :value="category.id">{{ category.label }}</option>
-                </select>
-              </label>
-              <label class="task-field-name">任务
-                <select v-model="taskForm.taskId">
-                  <option v-for="task in filteredTaskDefinitions" :key="task.id" :value="task.id">{{ task.name }}</option>
-                </select>
-              </label>
-              <label v-if="selectedTaskDefinition?.type === 'measurable'" class="task-field-amount">完成量
-                <span class="amount-input-wrap">
-                  <input v-model.number="taskForm.completedAmount" type="number" min="0" step="0.01" :placeholder="`标准 ${selectedTaskDefinition.targetAmount}`">
-                  <span class="amount-unit">{{ selectedTaskDefinition.unitName }}</span>
-                </span>
-              </label>
-              <div v-if="selectedTaskDefinition" class="task-preview">
-                <strong>+{{ taskRewardPreview.xp }} 经验</strong>
-                <strong>+{{ taskRewardPreview.spirit }} 灵石</strong>
-                <span v-if="taskRewardPreview.elixirMultiplier > 1" class="task-preview-multiplier">
-                  丹药 x{{ formatMultiplier(taskRewardPreview.elixirMultiplier) }} · 基础 +{{ taskRewardPreview.baseXp }}
-                </span>
-              </div>
-              <button class="primary" :disabled="isActionPending('/api/tasks') || !selectedTaskDefinition">{{ isActionPending("/api/tasks") ? "结算中..." : "完成" }}</button>
-            </form>
-          </div>
-          <div class="cards task-history">
-            <section
-              v-for="day in recentTaskDays"
-              :key="day.day"
-              class="task-day-group"
-              :class="{ today: day.isToday, 'no-records': !day.tasks.length }"
-            >
-              <header class="task-day-head">
-                <div>
-                  <strong>{{ day.date }}</strong>
-                  <span>{{ day.isToday ? "今日" : day.day >= 1 ? `第 ${day.day} 天` : "开局前" }}</span>
+
+              <div class="task-status-strip" aria-label="今日现实任务摘要">
+                <div v-for="item in taskStatusCards" :key="item.label" class="task-status-card" :class="item.tone">
+                  <img v-if="item.asset" class="task-ai-small-icon" :src="item.asset" alt="" aria-hidden="true">
+                  <component v-else :is="item.icon" :size="18" :stroke-width="2.35" aria-hidden="true" />
+                  <span>{{ item.label }}</span>
+                  <strong>{{ item.value }}</strong>
+                  <small>{{ item.note }}</small>
                 </div>
-                <em v-if="day.tasks.length">{{ day.count }} 项 · +{{ day.xp }} 经验 · +{{ day.spirit }} 灵石</em>
-                <em v-else>未记录</em>
-              </header>
-              <article class="card" v-for="task in day.tasks" :key="task.id || `${task.day}-${task.name}-${task.xp}`">
-                <div>
-                  <div class="task-card-head">
-                    <h3>{{ task.name }}</h3>
-                    <span class="task-rewards" aria-label="任务收益">
-                      <span class="task-reward xp">
-                        <Sprout :size="13" :stroke-width="2.4" aria-hidden="true" />
-                        +{{ task.xp }} 经验
-                      </span>
-                      <span class="task-reward spirit">
-                        <Gem :size="13" :stroke-width="2.4" aria-hidden="true" />
-                        +{{ task.spirit || 0 }} 灵石
-                      </span>
-                    </span>
+              </div>
+
+              <div class="task-date-card">
+                <strong>第 {{ gameState.day }} 天</strong>
+                <span>{{ currentDateLabel }}</span>
+                <button class="icon-button task-admin-button" type="button" title="管理现实任务" aria-label="管理现实任务" @click="openTaskAdmin">
+                  <Settings :size="17" :stroke-width="2.4" aria-hidden="true" />
+                </button>
+              </div>
+            </header>
+
+            <div class="task-system-grid">
+              <section class="task-bounty-board" aria-label="今日悬赏">
+                <header class="task-board-head">
+                  <span>今日悬赏</span>
+                </header>
+
+                <div class="task-category-tabs" role="tablist" aria-label="现实任务类别">
+                  <button
+                    v-for="category in frontTaskCategories"
+                    :key="category.id"
+                    type="button"
+                    class="task-category-tab"
+                    :class="{ active: taskForm.category === category.id }"
+                    role="tab"
+                    :aria-selected="taskForm.category === category.id"
+                    @click="selectTaskCategory(category.id)"
+                  >
+                    <img class="task-ai-round-icon" :src="taskCategoryAsset(category.id)" alt="" aria-hidden="true">
+                    <span>{{ category.label }}</span>
+                    <small>{{ taskCategoryCounts[category.id] || 0 }}</small>
+                  </button>
+                </div>
+
+                <div v-if="enabledTaskDefinitions.length" class="task-bounty-layout">
+                  <div v-if="filteredTaskDefinitions.length > 1" class="task-picker-panel" aria-label="可完成任务">
+                    <header class="task-picker-head">
+                      <span>{{ normalizedTaskCategory(taskForm.category) }}清单</span>
+                      <small>{{ filteredTaskDefinitions.length }} 项</small>
+                    </header>
+                    <div class="task-scroll-list" role="list">
+                      <button
+                        v-for="task in filteredTaskDefinitions"
+                        :key="task.id"
+                        type="button"
+                        class="task-scroll-item"
+                        :class="{ active: selectedTaskDefinition?.id === task.id }"
+                        :title="task.name"
+                        :data-task-name="task.name"
+                        @click="selectTaskDefinition(task.id)"
+                      >
+                        <span class="task-scroll-icon">
+                          <img :src="taskIconAsset(task)" alt="" aria-hidden="true">
+                        </span>
+                        <span>
+                          <strong>{{ task.name }}</strong>
+                          <small>{{ task.type === "measurable" ? `标准 ${task.targetAmount} ${task.unitName}` : "完整完成一次" }}</small>
+                        </span>
+                        <em>修为 +{{ task.xpReward }}</em>
+                      </button>
+                    </div>
                   </div>
-                  <p class="meta">
-                    {{ task.category || task.type }}
-                    <template v-if="task.type === 'measurable'"> · {{ task.completedAmount }} / {{ task.targetAmount }} {{ task.unitName }}</template>
-                  </p>
+
+                  <form v-if="selectedTaskDefinition" class="task-bounty-detail" @submit.prevent="submitTask">
+                    <span class="task-selected-ribbon">已选择</span>
+                    <div class="task-detail-title">
+                      <span class="task-detail-icon">
+                        <img :src="taskIconAsset(selectedTaskDefinition)" alt="" aria-hidden="true">
+                      </span>
+                      <div>
+                        <h4>{{ selectedTaskDefinition.name }}</h4>
+                        <p>{{ selectedTaskDefinition.detail || selectedTaskTypeText }}</p>
+                      </div>
+                    </div>
+
+                    <div class="task-detail-meta">
+                      <span>{{ normalizedTaskCategory(selectedTaskDefinition.category) }}</span>
+                      <span>{{ selectedTaskTypeText }}</span>
+                      <span v-if="selectedTaskDefinition.type === 'measurable'">上限 x{{ formatMultiplier(selectedTaskDefinition.maxMultiplier || 1) }}</span>
+                    </div>
+
+                    <div v-if="selectedTaskDefinition.type === 'measurable'" class="task-amount-panel">
+                      <div class="task-amount-head">
+                        <span>任务量</span>
+                        <strong>{{ formatTaskAmount(taskForm.completedAmount) }} {{ selectedTaskDefinition.unitName }}</strong>
+                      </div>
+                      <div class="task-amount-controls">
+                        <button class="icon-button" type="button" aria-label="减少完成量" @click="adjustTaskAmount(-taskAmountStep)">
+                          <Minus :size="16" :stroke-width="2.5" aria-hidden="true" />
+                        </button>
+                        <span class="task-amount-value">{{ formatTaskAmount(taskForm.completedAmount) }}</span>
+                        <input
+                          v-model.number="taskForm.completedAmount"
+                          type="range"
+                          min="0"
+                          :max="taskAmountMax"
+                          :step="taskAmountStep"
+                          aria-label="完成量"
+                        >
+                        <button class="icon-button" type="button" aria-label="增加完成量" @click="adjustTaskAmount(taskAmountStep)">
+                          <Plus :size="16" :stroke-width="2.5" aria-hidden="true" />
+                        </button>
+                        <span class="amount-unit">{{ selectedTaskDefinition.unitName }}</span>
+                      </div>
+                      <div class="task-progress-track" aria-hidden="true">
+                        <span :style="{ width: `${taskAmountProgress}%` }"></span>
+                      </div>
+                      <div class="task-range-marks" aria-hidden="true">
+                        <span v-for="mark in taskAmountMarks" :key="mark">{{ mark }}</span>
+                      </div>
+                      <label class="task-amount-input">手动输入
+                        <input v-model.number="taskForm.completedAmount" type="number" min="0" :max="taskAmountMax" :step="taskAmountStep" :placeholder="`标准 ${selectedTaskDefinition.targetAmount}`">
+                      </label>
+                    </div>
+
+                    <div v-else class="task-complete-panel">
+                      <CheckCircle2 :size="28" :stroke-width="2.2" aria-hidden="true" />
+                      <div>
+                        <strong>完整完成一次</strong>
+                        <span>该任务按一次结算，不需要填写完成量。</span>
+                      </div>
+                    </div>
+
+                    <h4 class="task-reward-heading">奖励预览</h4>
+                    <div class="task-reward-preview" aria-label="任务收益预览">
+                      <div class="task-reward-token xp">
+                        <img src="/assets/tasks/icon-life.svg" alt="" aria-hidden="true">
+                        <span>修为经验</span>
+                        <strong>+{{ taskRewardPreview.xp }}</strong>
+                      </div>
+                      <div class="task-reward-token spirit">
+                        <img src="/assets/tasks/icon-crystal.svg" alt="" aria-hidden="true">
+                        <span>灵石</span>
+                        <strong>+{{ taskRewardPreview.spirit }}</strong>
+                      </div>
+                      <div class="task-reward-token elixir" :class="{ muted: taskRewardPreview.elixirMultiplier <= 1 }">
+                        <img src="/assets/tasks/icon-elixir.svg" alt="" aria-hidden="true">
+                        <span>加成</span>
+                        <strong>x{{ formatMultiplier(taskRewardPreview.elixirMultiplier) }}</strong>
+                      </div>
+                    </div>
+
+                    <div class="task-detail-footer">
+                      <span v-if="taskRewardPreview.elixirMultiplier > 1">基础 +{{ taskRewardPreview.baseXp }}，药力加成后结算。</span>
+                      <span v-else>当前未服用修为丹，按基础收益结算。</span>
+                      <button class="primary task-complete-button" :disabled="isActionPending('/api/tasks') || !selectedTaskDefinition">
+                        {{ isActionPending("/api/tasks") ? "结算中..." : "完成任务" }}
+                      </button>
+                    </div>
+                  </form>
                 </div>
-              </article>
-              <div v-if="!day.tasks.length" class="task-day-empty">这一天还没有记录任务。</div>
-            </section>
+
+                <div v-else class="task-empty-state">
+                  <ScrollText :size="28" :stroke-width="2.2" aria-hidden="true" />
+                  <strong>暂无可用现实任务</strong>
+                  <span>可到后台添加任务定义，历史完成记录会继续保留。</span>
+                  <button class="secondary" type="button" @click="openTaskAdmin">去后台配置</button>
+                </div>
+              </section>
+
+              <section class="task-journal-panel" aria-label="半月札记（15天）">
+                <div class="task-panel-ribbon">
+                  <span>半月札记（15天）</span>
+                </div>
+
+                <div class="task-journal-list">
+                  <section
+                    v-for="day in recentTaskDays"
+                    :key="day.day"
+                    class="task-day-group"
+                    :class="{ today: day.isToday, open: isTaskDayOpen(day), 'no-records': !day.tasks.length }"
+                  >
+                    <button
+                      class="task-day-head"
+                      type="button"
+                      :aria-expanded="isTaskDayOpen(day)"
+                      @click="toggleTaskDay(day)"
+                    >
+                      <div>
+                        <strong>{{ day.isToday ? `第 ${day.day} 天` : day.day >= 1 ? `第 ${day.day} 天` : "开局前" }}</strong>
+                        <span>{{ shortTaskDate(day.date) }}</span>
+                      </div>
+                      <em v-if="day.tasks.length">已完成</em>
+                      <em v-else>未记录</em>
+                      <component :is="ChevronDown" class="task-day-chevron" :size="18" :stroke-width="2.4" aria-hidden="true" />
+                    </button>
+
+                    <div v-if="day.tasks.length && isTaskDayOpen(day)" class="task-day-records">
+                      <article class="task-record-card" v-for="task in day.tasks" :key="task.id || `${task.day}-${task.name}-${task.xp}`">
+                        <span class="task-record-icon">
+                          <img :src="taskIconAsset(task)" alt="" aria-hidden="true">
+                        </span>
+                        <div>
+                          <div class="task-card-head">
+                            <h3>{{ task.name }}</h3>
+                            <small v-if="task.type === 'measurable'">{{ formatTaskAmount(task.completedAmount) }} {{ task.unitName }}</small>
+                            <small v-else>1 次</small>
+                          </div>
+                          <span class="task-rewards" aria-label="任务收益">
+                            <span class="task-reward xp">+经验 {{ task.xp }}</span>
+                            <span class="task-reward spirit">+灵石 {{ task.spirit || 0 }}</span>
+                          </span>
+                        </div>
+                      </article>
+                    </div>
+
+                    <div v-else-if="isTaskDayOpen(day)" class="task-day-empty">今日尚未完成任务</div>
+                  </section>
+                </div>
+              </section>
+            </div>
           </div>
         </section>
 
@@ -3193,6 +3346,9 @@
 import {
   BadgeCent,
   Backpack,
+  BookOpen,
+  CheckCircle2,
+  ChevronDown,
   CircleUserRound,
   Cloud,
   Coins,
@@ -3203,9 +3359,11 @@ import {
   ImagePlus,
   Landmark,
   Leaf,
+  Minus,
   Mountain,
   Orbit,
   Package,
+  Plus,
   ShoppingBag,
   Route,
   ScrollText,
@@ -3234,8 +3392,8 @@ import { duelLossScore, duelRanks, duelRankForScore, duelSeasonDay, duelSeasonLe
 
 const tabs = [
   { id: "practice", label: "首页", icon: Sprout },
-  { id: "cultivation", label: "修行体系", icon: Orbit },
-  { id: "tasks", label: "现实任务", icon: ScrollText },
+  { id: "cultivation", label: "修行", icon: Orbit },
+  { id: "tasks", label: "任务", icon: ScrollText },
   { id: "dungeon", label: "副本", icon: Sword },
   { id: "sect", label: "宗门", icon: Landmark },
   { id: "arena", label: "切磋", icon: Swords },
@@ -3258,6 +3416,7 @@ const marketSubTabs = [
 
 const taskCategoryOptions = [
   { id: "生活", label: "生活", icon: Leaf },
+  { id: "学习", label: "学习", icon: BookOpen },
   { id: "工作", label: "工作", icon: Landmark },
   { id: "运动", label: "运动", icon: Dumbbell }
 ];
@@ -3423,6 +3582,8 @@ const battleCursor = ref(0);
 const invalidReplayIds = ref(new Set());
 const countdown = ref("--:--:--");
 const taskForm = reactive({ category: "", taskId: "", completedAmount: 1 });
+const collapsedTaskDays = ref(new Set());
+const expandedTaskDays = ref(new Set());
 const adminMode = ref("cultivators");
 const adminSearch = ref("");
 const adminSelectedCultivatorId = ref("player");
@@ -3539,8 +3700,10 @@ const fallbackDuelRankMap = computed(() => {
   }]));
 });
 const currentDate = computed(() => dateForDay(gameState.value.day));
+const currentDateLabel = computed(() => formatDateLabel(currentDate.value));
 const taskDefinitions = computed(() => gameState.value.taskDefinitions || []);
 const enabledTaskDefinitions = computed(() => taskDefinitions.value.filter((task) => task.enabled !== false));
+const taskDailyGoal = computed(() => Math.max(6, enabledTaskDefinitions.value.length || 0));
 const frontTaskCategories = computed(() => {
   const categories = [];
   for (const task of enabledTaskDefinitions.value) {
@@ -3553,11 +3716,45 @@ const frontTaskCategories = computed(() => {
     icon: Leaf
   });
 });
+const taskJournalDays = 15;
+const taskRecentDayFloor = computed(() => Math.max(1, (Number(gameState.value.day) || 1) - taskJournalDays + 1));
+const taskDefinitionFrequency = computed(() => {
+  const currentDay = Math.max(1, Number(gameState.value.day) || 1);
+  const floorDay = taskRecentDayFloor.value;
+  const stats = new Map();
+  for (const task of taskCompletions.value) {
+    const day = Number(task.day) || 0;
+    if (day < floorDay || day > currentDay) continue;
+    const key = task.taskId || task.name;
+    if (!key) continue;
+    const entry = stats.get(key) || { count: 0, lastDay: 0 };
+    entry.count += 1;
+    entry.lastDay = Math.max(entry.lastDay, day);
+    stats.set(key, entry);
+  }
+  return stats;
+});
 const filteredTaskDefinitions = computed(() => {
   const category = taskForm.category || frontTaskCategories.value[0]?.id || "";
-  return enabledTaskDefinitions.value.filter((task) => normalizedTaskCategory(task.category) === category);
+  const stats = taskDefinitionFrequency.value;
+  return enabledTaskDefinitions.value
+    .map((task, index) => ({ task, index }))
+    .filter(({ task }) => normalizedTaskCategory(task.category) === category)
+    .sort((a, b) => {
+      const aStats = stats.get(a.task.id) || stats.get(a.task.name) || { count: 0, lastDay: 0 };
+      const bStats = stats.get(b.task.id) || stats.get(b.task.name) || { count: 0, lastDay: 0 };
+      if (bStats.count !== aStats.count) return bStats.count - aStats.count;
+      if (bStats.lastDay !== aStats.lastDay) return bStats.lastDay - aStats.lastDay;
+      return a.index - b.index;
+    })
+    .map(({ task }) => task);
 });
 const selectedTaskDefinition = computed(() => filteredTaskDefinitions.value.find((task) => task.id === taskForm.taskId) || filteredTaskDefinitions.value[0] || null);
+const taskCategoryCounts = computed(() => enabledTaskDefinitions.value.reduce((counts, task) => {
+  const category = normalizedTaskCategory(task.category);
+  counts[category] = (counts[category] || 0) + 1;
+  return counts;
+}, {}));
 const taskCompletions = computed(() => gameState.value.taskCompletions?.length ? gameState.value.taskCompletions : gameState.value.tasks || []);
 const todayTaskCompletions = computed(() => taskCompletions.value.filter((task) => task.day === gameState.value.day));
 const todayTaskSummary = computed(() => todayTaskCompletions.value.reduce((summary, task) => ({
@@ -3568,7 +3765,7 @@ const todayTaskSummary = computed(() => todayTaskCompletions.value.reduce((summa
 const recentTaskDays = computed(() => {
   const currentDay = Math.max(1, Number(gameState.value.day) || 1);
   const currentTaskDate = dateForDay(currentDay);
-  return Array.from({ length: 7 }, (_, index) => {
+  return Array.from({ length: taskJournalDays }, (_, index) => {
     const day = currentDay - index;
     const tasks = day >= 1
       ? taskCompletions.value
@@ -3582,6 +3779,7 @@ const recentTaskDays = computed(() => {
     }), { count: 0, xp: 0, spirit: 0 });
     return {
       day,
+      index,
       date: addDays(currentTaskDate, -index),
       isToday: day === currentDay,
       tasks,
@@ -3605,6 +3803,64 @@ const taskRewardPreview = computed(() => {
     multiplier,
     elixirMultiplier
   };
+});
+const selectedTaskTypeText = computed(() => {
+  const task = selectedTaskDefinition.value;
+  if (!task) return "未选择任务";
+  return task.type === "measurable" ? `量化结算 · ${task.unitName || "单位"}` : "完成型任务";
+});
+const taskAmountStep = computed(() => {
+  const unit = selectedTaskDefinition.value?.unitName || "";
+  return unit === "小时" ? 0.25 : 1;
+});
+const taskAmountMax = computed(() => {
+  const task = selectedTaskDefinition.value;
+  if (!task || task.type !== "measurable") return 1;
+  const target = Math.max(0.01, Number(task.targetAmount) || 1);
+  const maxMultiplier = Math.max(1, Number(task.maxMultiplier) || 1);
+  return Math.max(target, Number((target * maxMultiplier).toFixed(2)));
+});
+const taskAmountProgress = computed(() => {
+  const task = selectedTaskDefinition.value;
+  if (!task || task.type !== "measurable") return 100;
+  const max = Math.max(0.01, taskAmountMax.value);
+  return Math.max(0, Math.min(100, ((Number(taskForm.completedAmount) || 0) / max) * 100));
+});
+const taskAmountMarks = computed(() => {
+  const task = selectedTaskDefinition.value;
+  if (!task || task.type !== "measurable") return [];
+  const max = Math.max(1, Number(taskAmountMax.value) || 1);
+  const target = Math.max(0.01, Number(task.targetAmount) || 1);
+  const step = max <= 6 ? Math.max(taskAmountStep.value, 1) : Math.max(1, Math.round(max / 5));
+  const marks = new Set([0, target, max]);
+  for (let value = step; value < max; value += step) marks.add(Number(value.toFixed(2)));
+  return [...marks]
+    .sort((a, b) => a - b)
+    .slice(0, 7)
+    .map(formatTaskAmount);
+});
+const taskStatusCards = computed(() => {
+  const effects = shopDerived.value.activeEffects || {};
+  const multiplier = Math.max(1, Number(effects.cultivationMultiplier) || 1);
+  const daysLeft = Math.max(0, Number(effects.cultivationMultiplierDaysLeft) || 0);
+  return [
+    { label: "今日完成", value: `${todayTaskSummary.value.count}/${taskDailyGoal.value}`, note: "现实任务", icon: CheckCircle2, asset: "/assets/tasks/icon-scroll.svg", tone: "count" },
+    { label: "今日修为", value: `+${todayTaskSummary.value.xp}`, note: "经验入账", icon: Sprout, asset: "/assets/tasks/icon-life.svg", tone: "xp" },
+    { label: "今日灵石", value: `+${todayTaskSummary.value.spirit}`, note: "可用于坊市", icon: Gem, asset: "/assets/tasks/icon-crystal.svg", tone: "spirit" },
+    {
+      label: "药力加成",
+      value: `x${formatMultiplier(multiplier)}`,
+      note: daysLeft > 0 ? `剩余 ${daysLeft} 天` : "暂无修为丹",
+      icon: Sparkles,
+      asset: "/assets/tasks/icon-elixir.svg",
+      tone: multiplier > 1 ? "elixir active" : "elixir"
+    }
+  ];
+});
+const taskTodayHint = computed(() => {
+  if (!todayTaskSummary.value.count) return "今日札记未开笔，先完成一项现实任务积攒修为。";
+  if (taskRewardPreview.value.elixirMultiplier > 1) return "修为丹药力正在生效，现实任务会获得额外修为。";
+  return "今日已有任务入账，可继续补记现实进度。";
 });
 const playerPortraitUrl = computed(() => {
   if (player.value.portraitUrl) return player.value.portraitUrl;
@@ -4524,6 +4780,7 @@ function skillRankChanceText(rank) {
 
 function normalizedTaskCategory(category) {
   if (taskCategoryOptions.some((option) => option.id === category)) return category;
+  if (["学习", "读书", "看书", "阅读", "study"].includes(category)) return "学习";
   if (["运动", "锻炼", "健身", "修行", "body"].includes(category)) return "运动";
   if (["工作", "加班", "职业", "work"].includes(category)) return "工作";
   return "生活";
@@ -4531,6 +4788,90 @@ function normalizedTaskCategory(category) {
 
 function taskCategoryIcon(category) {
   return taskCategoryOptions.find((option) => option.id === normalizedTaskCategory(category))?.icon || Leaf;
+}
+
+function taskCategoryAsset(category) {
+  const normalized = normalizedTaskCategory(category);
+  if (normalized === "学习") return "/assets/tasks/icon-book.svg";
+  if (normalized === "工作") return "/assets/tasks/icon-work.svg";
+  if (normalized === "运动") return "/assets/tasks/icon-sport.svg";
+  return "/assets/tasks/icon-life.svg";
+}
+
+function taskIconAsset(task = {}) {
+  const name = String(task.name || "");
+  if (/看书|读书|阅读/.test(name)) return "/assets/tasks/icon-book.svg";
+  if (/写作|创作|复盘/.test(name)) return "/assets/tasks/icon-scroll.svg";
+  if (/运动|健身|锻炼/.test(name)) return "/assets/tasks/icon-sport.svg";
+  if (/加班|工作/.test(name)) return "/assets/tasks/icon-scroll.svg";
+  return taskCategoryAsset(task.category);
+}
+
+function shortTaskDate(dateText) {
+  const parts = String(dateText || "").split("-");
+  return parts.length >= 3 ? `${parts[1]}/${parts[2]}` : dateText;
+}
+
+function formatDateLabel(dateText) {
+  const parts = String(dateText || "").split("-");
+  if (parts.length < 3) return dateText || "";
+  return `${Number(parts[0])}年 ${Number(parts[1])}月 ${Number(parts[2])}日`;
+}
+
+function taskDayDefaultOpen(day) {
+  return Number(day?.index) < 4;
+}
+
+function isTaskDayOpen(day) {
+  const dayNumber = Number(day?.day);
+  if (!Number.isFinite(dayNumber)) return false;
+  if (collapsedTaskDays.value.has(dayNumber)) return false;
+  return taskDayDefaultOpen(day) || expandedTaskDays.value.has(dayNumber);
+}
+
+function toggleTaskDay(day) {
+  const dayNumber = Number(day?.day);
+  if (!Number.isFinite(dayNumber)) return;
+  const collapsed = new Set(collapsedTaskDays.value);
+  const expanded = new Set(expandedTaskDays.value);
+  if (isTaskDayOpen(day)) {
+    expanded.delete(dayNumber);
+    collapsed.add(dayNumber);
+  } else {
+    collapsed.delete(dayNumber);
+    expanded.add(dayNumber);
+  }
+  collapsedTaskDays.value = collapsed;
+  expandedTaskDays.value = expanded;
+}
+
+function selectTaskCategory(category) {
+  taskForm.category = category;
+  const next = filteredTaskDefinitions.value[0];
+  if (next) selectTaskDefinition(next.id);
+}
+
+function selectTaskDefinition(id) {
+  const task = enabledTaskDefinitions.value.find((item) => item.id === id);
+  if (!task) return;
+  taskForm.taskId = task.id;
+  taskForm.completedAmount = task.type === "measurable" ? Number(task.targetAmount) || 1 : 1;
+}
+
+function adjustTaskAmount(delta) {
+  const next = Math.max(0, Math.min(taskAmountMax.value, (Number(taskForm.completedAmount) || 0) + Number(delta || 0)));
+  taskForm.completedAmount = Number(next.toFixed(2));
+}
+
+function formatTaskAmount(value) {
+  const amount = Number(value) || 0;
+  return Number.isInteger(amount) ? String(amount) : amount.toFixed(2).replace(/\.?0+$/, "");
+}
+
+function openTaskAdmin() {
+  activeTab.value = "admin";
+  adminMode.value = "tasks";
+  syncAdminTaskDraft(adminTaskDefinition.value || filteredAdminTasks.value[0] || null);
 }
 
 function skillName(id) {

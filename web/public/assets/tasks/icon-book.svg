@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="reading task icon">
+  <circle cx="48" cy="48" r="42" fill="#f8eed6" stroke="#8f6b32" stroke-width="4"/>
+  <path d="M20 26h24c6 0 10 4 10 10v40c0-6-4-10-10-10H20Z" fill="#fff4d8" stroke="#6b4b2a" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M76 26H52c-6 0-10 4-10 10v40c0-6 4-10 10-10h24Z" fill="#f2d49b" stroke="#6b4b2a" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M30 40h12M30 52h12M55 40h12M55 52h12" fill="none" stroke="#8f3925" stroke-width="4" stroke-linecap="round"/>
+</svg>
