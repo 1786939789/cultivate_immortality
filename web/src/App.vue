@@ -2102,6 +2102,194 @@
           </div>
         </section>
 
+        <section v-if="activeTab === 'market'" class="view active market-surface">
+          <div class="market-stage">
+            <div class="market-topbar">
+              <div class="market-title-block">
+                <span>天南灵药阁</span>
+                <h3>坊市</h3>
+              </div>
+              <div class="market-mode-tabs" role="tablist" aria-label="坊市子导航">
+                <button
+                  v-for="tab in marketSubTabs"
+                  :key="tab.id"
+                  type="button"
+                  :class="{ active: marketSubTab === tab.id }"
+                  role="tab"
+                  :aria-selected="marketSubTab === tab.id"
+                  @click="marketSubTab = tab.id"
+                >
+                  <component :is="tab.icon" :size="15" :stroke-width="2.4" aria-hidden="true" />
+                  {{ tab.label }}
+                </button>
+              </div>
+              <div class="market-wallet">
+                <span>灵石</span>
+                <strong>{{ player.spirit || 0 }}</strong>
+                <small>第 {{ gameState.day || 1 }} 日行情</small>
+              </div>
+            </div>
+
+            <div class="market-buff-strip">
+              <div v-for="item in marketStatusCards" :key="item.label" class="market-buff-card">
+                <span>{{ item.label }}</span>
+                <strong>{{ item.value }}</strong>
+                <small>{{ item.note }}</small>
+              </div>
+            </div>
+
+            <div class="market-system-grid">
+              <aside class="market-category-rail" aria-label="丹药分类">
+                <button
+                  v-for="group in shopGroups"
+                  :key="group.id"
+                  type="button"
+                  :class="{ active: activeMarketCategory === group.id }"
+                  @click="activeMarketCategory = group.id"
+                >
+                  <span class="market-category-icon" :class="`market-icon-${group.id}`" aria-hidden="true"></span>
+                  <b>{{ group.label }}</b>
+                  <small>{{ group.items.length }} 件</small>
+                </button>
+              </aside>
+
+              <main class="market-shelf" v-if="marketSubTab === 'shop'">
+                <div class="market-shelf-head">
+                  <div>
+                    <span>今日行情</span>
+                    <strong>{{ activeShopGroup?.label || "丹药" }}</strong>
+                  </div>
+                  <p>{{ activeShopGroup?.note || "丹药价格随坊市行情小幅浮动。" }}</p>
+                </div>
+                <div class="market-item-grid">
+                  <button
+                    v-for="item in activeShopItems"
+                    :key="item.id"
+                    type="button"
+                    class="market-product-card"
+                    :class="{ selected: selectedMarketItemId === item.id, disabled: !item.canBuy }"
+                    @click="selectedMarketItemId = item.id"
+                  >
+                    <span class="market-product-icon" :class="`market-icon-${item.category}`" aria-hidden="true"></span>
+                    <span class="market-product-main">
+                      <b>{{ item.name }}</b>
+                      <small>{{ item.text }}</small>
+                    </span>
+                    <span class="market-price-tag">
+                      <b>{{ item.price }}</b>
+                      <small>灵石</small>
+                    </span>
+                    <span class="market-product-foot">
+                      <em>{{ remainingText(item) }}</em>
+                      <em>{{ item.countdownText }}</em>
+                    </span>
+                  </button>
+                </div>
+              </main>
+
+              <main class="market-shelf market-bag-main" v-else>
+                <div class="market-shelf-head">
+                  <div>
+                    <span>随身丹匣</span>
+                    <strong>背包</strong>
+                  </div>
+                  <p>共 {{ bagItemCount }} 枚丹药，服用后才会生效。</p>
+                </div>
+                <div class="market-item-grid" v-if="bagItems.length">
+                  <button
+                    v-for="entry in bagItems"
+                    :key="entry.id"
+                    type="button"
+                    class="market-product-card bag-item-card"
+                    :class="{ selected: selectedMarketItemId === entry.id }"
+                    @click="selectedMarketItemId = entry.id"
+                  >
+                    <span class="market-product-icon" :class="`market-icon-${entry.item.category}`" aria-hidden="true"></span>
+                    <span class="market-product-main">
+                      <b>{{ entry.item.name }}</b>
+                      <small>{{ entry.item.text }}</small>
+                    </span>
+                    <span class="market-price-tag">
+                      <b>{{ entry.count }}</b>
+                      <small>持有</small>
+                    </span>
+                    <span class="market-product-foot">
+                      <em>{{ entry.item.limitText }}</em>
+                      <em>{{ entry.item.countdownText }}</em>
+                    </span>
+                  </button>
+                </div>
+                <div v-else class="market-empty">丹匣尚空，可先去商城购入丹药。</div>
+              </main>
+
+              <aside class="market-detail-panel" v-if="selectedMarketItem">
+                <div class="market-detail-orb" :class="`market-icon-${selectedMarketItem.category}`" aria-hidden="true"></div>
+                <span>{{ selectedMarketItem.categoryName }}</span>
+                <h4>{{ selectedMarketItem.name }}</h4>
+                <p>{{ selectedMarketItem.text }}</p>
+                <dl>
+                  <div>
+                    <dt>今日价格</dt>
+                    <dd>{{ selectedMarketItem.price }} 灵石</dd>
+                  </div>
+                  <div>
+                    <dt>限购次数</dt>
+                    <dd>{{ selectedMarketItem.limitText }}</dd>
+                  </div>
+                  <div>
+                    <dt>本期剩余</dt>
+                    <dd>{{ remainingText(selectedMarketItem) }}</dd>
+                  </div>
+                  <div>
+                    <dt>限购时间</dt>
+                    <dd>{{ selectedMarketItem.countdownText }}</dd>
+                  </div>
+                  <div>
+                    <dt>今日浮动</dt>
+                    <dd>{{ priceFactorText(selectedMarketItem) }}</dd>
+                  </div>
+                </dl>
+                <div class="market-bag-dock">
+                  <div class="market-bag-dock-head">
+                    <span>丹匣</span>
+                    <strong>{{ bagItemCount }} 枚</strong>
+                  </div>
+                  <button
+                    v-for="entry in bagItems.slice(0, 3)"
+                    :key="entry.id"
+                    type="button"
+                    class="market-bag-mini"
+                    @click="selectedMarketItemId = entry.id; marketSubTab = 'bag'"
+                  >
+                    <span class="market-bag-mini-icon" :class="`market-icon-${entry.item.category}`" aria-hidden="true"></span>
+                    <b>{{ entry.item.name }}</b>
+                    <small>x{{ entry.count }}</small>
+                  </button>
+                  <div v-if="!bagItems.length" class="market-bag-mini empty-mini">暂无丹药</div>
+                </div>
+                <button
+                  v-if="marketSubTab === 'shop'"
+                  class="market-action"
+                  type="button"
+                  :disabled="!selectedMarketItem.canBuy || isActionPending('/api/items/buy')"
+                  @click="buyMarketItem(selectedMarketItem.id)"
+                >
+                  {{ selectedMarketItem.canBuy ? "购买" : selectedMarketItem.reason }}
+                </button>
+                <button
+                  v-else
+                  class="market-action"
+                  type="button"
+                  :disabled="!selectedBagEntry || isActionPending('/api/items/use')"
+                  @click="useMarketItem(selectedMarketItem.id)"
+                >
+                  使用
+                </button>
+              </aside>
+            </div>
+          </div>
+        </section>
+
         <section v-if="activeTab === 'equipment'" class="view active cultivation-surface equipment-surface">
           <div class="panel equipment-panel">
             <div class="section-head">
@@ -2948,6 +3136,7 @@
 <script setup>
 import {
   BadgeCent,
+  Backpack,
   CircleUserRound,
   Cloud,
   Coins,
@@ -2961,6 +3150,7 @@ import {
   Mountain,
   Orbit,
   Package,
+  ShoppingBag,
   Route,
   ScrollText,
   Settings,
@@ -2993,6 +3183,7 @@ const tabs = [
   { id: "dungeon", label: "副本", icon: Sword },
   { id: "sect", label: "宗门", icon: Landmark },
   { id: "arena", label: "切磋", icon: Swords },
+  { id: "market", label: "坊市", icon: ShoppingBag },
   { id: "equipment", label: "装备", icon: Package },
   { id: "rank", label: "榜单", icon: Trophy },
   { id: "admin", label: "后台", icon: Settings }
@@ -3002,6 +3193,11 @@ const cultivationSubTabs = [
   { id: "attributes", label: "灵根", icon: BadgeCent },
   { id: "progression", label: "境界", icon: Orbit },
   { id: "skills", label: "技能", icon: WandSparkles }
+];
+
+const marketSubTabs = [
+  { id: "shop", label: "商城", icon: ShoppingBag },
+  { id: "bag", label: "背包", icon: Backpack }
 ];
 
 const taskCategoryOptions = [
@@ -3061,6 +3257,7 @@ const emptyState = {
   taskDefinitions: [],
   taskCompletions: [],
   log: [],
+  bag: {},
   equipment: [],
   equipmentTransfers: [],
   provinces: [],
@@ -3129,6 +3326,9 @@ const personDetails = ref({});
 const personDetailLoading = ref(new Set());
 const activeTab = ref("practice");
 const cultivationSubTab = ref("attributes");
+const marketSubTab = ref("shop");
+const activeMarketCategory = ref("xp");
+const selectedMarketItemId = ref("");
 const activeSectSubTab = ref("map");
 const activeRankBoard = ref("power");
 const rankSearch = ref("");
@@ -4015,6 +4215,64 @@ const hudResources = computed(() => [
   { label: "灵石", value: player.value.spirit, icon: "spirit" }
 ]);
 
+const shopDerived = computed(() => derived.value.shop || { items: [], activeEffects: {}, breakthroughAttempts: {} });
+const shopItems = computed(() => shopDerived.value.items || []);
+const shopGroupMeta = [
+  { id: "xp", label: "修为丹", note: "只提升现实任务获得的修为，不影响其他来源。" },
+  { id: "breakthrough", label: "破境丹", note: "只对下一次突破生效，成败都会消耗药力。" },
+  { id: "attempt", label: "续脉丹", note: "增加今日可突破次数，价格明显高于破境丹。" },
+  { id: "permanent", label: "淬体丹", note: "永久提升基础属性，药性上限为 20 枚。" }
+];
+const shopGroups = computed(() => shopGroupMeta
+  .map((group) => ({
+    ...group,
+    items: shopItems.value.filter((item) => item.category === group.id)
+  }))
+  .filter((group) => group.items.length));
+const activeShopGroup = computed(() => (
+  shopGroups.value.find((group) => group.id === activeMarketCategory.value) || shopGroups.value[0] || null
+));
+const activeShopItems = computed(() => activeShopGroup.value?.items || []);
+const bagItems = computed(() => Object.entries(gameState.value.bag || {})
+  .map(([id, count]) => ({
+    id,
+    count: Math.max(0, Math.floor(Number(count) || 0)),
+    item: shopItems.value.find((item) => item.id === id) || catalog.value.itemCatalog?.[id]
+  }))
+  .filter((entry) => entry.count > 0 && entry.item));
+const bagItemCount = computed(() => bagItems.value.reduce((sum, entry) => sum + entry.count, 0));
+const selectedBagEntry = computed(() => bagItems.value.find((entry) => entry.id === selectedMarketItemId.value) || bagItems.value[0] || null);
+const selectedMarketItem = computed(() => {
+  if (marketSubTab.value === "bag") return selectedBagEntry.value?.item || bagItems.value[0]?.item || activeShopItems.value[0] || shopItems.value[0] || null;
+  return shopItems.value.find((item) => item.id === selectedMarketItemId.value) || activeShopItems.value[0] || shopItems.value[0] || null;
+});
+const marketStatusCards = computed(() => {
+  const effects = shopDerived.value.activeEffects || {};
+  const attempts = shopDerived.value.breakthroughAttempts || {};
+  return [
+    {
+      label: "修为丹药力",
+      value: `x${Number(effects.cultivationMultiplier || 1).toFixed(Number(effects.cultivationMultiplier || 1) % 1 ? 1 : 0)}`,
+      note: Number(effects.cultivationMultiplierDaysLeft || 0) > 0 ? `剩余 ${effects.cultivationMultiplierDaysLeft} 天` : "暂无修为丹药力"
+    },
+    {
+      label: "下次突破",
+      value: `+${Math.round(Number(effects.nextBreakthroughBonus || 0) * 100)}%`,
+      note: "突破后失效"
+    },
+    {
+      label: "今日突破",
+      value: `${attempts.remaining ?? 0} / ${attempts.total ?? 1}`,
+      note: `基础 ${attempts.base ?? 1} 次，额外 ${attempts.extra ?? 0} 次`
+    },
+    {
+      label: "背包丹药",
+      value: `${bagItemCount.value} 枚`,
+      note: "购买后可在背包服用"
+    }
+  ];
+});
+
 const stats = computed(() => [
   { label: "战斗力", icon: "power", value: derived.value.playerPower, help: powerFormula.value },
   { label: "血量", icon: "health", value: statTotal(derived.value.effectiveStats.maxHp), help: "切磋、副本、宗门战中归零即判负。" },
@@ -4030,13 +4288,11 @@ const isMaxRealm = computed(() => {
   return realmList.length > 0 && Number(player.value.realm || 0) >= realmList.length - 1;
 });
 const hasBreakthroughXp = computed(() => Number(player.value.xp || 0) >= Number(derived.value.xpNeed || 0));
-const attemptedBreakthroughToday = computed(() => Number(player.value.lastBreakthroughDay || 0) === Number(gameState.value.day || 0));
-const breakthroughAttemptsToday = computed(() => (
-  !isMaxRealm.value && !attemptedBreakthroughToday.value ? 1 : 0
-));
+const breakthroughAttemptState = computed(() => shopDerived.value.breakthroughAttempts || {});
+const breakthroughAttemptsToday = computed(() => isMaxRealm.value ? 0 : Math.max(0, Number(breakthroughAttemptState.value.remaining) || 0));
 const breakthroughAttemptHint = computed(() => {
   if (isMaxRealm.value) return "已至当前境界尽头";
-  if (attemptedBreakthroughToday.value) return "今日已冲关，明日再试";
+  if (breakthroughAttemptsToday.value <= 0) return "今日已冲关，明日再试";
   if (!hasBreakthroughXp.value) return `还需修为 ${remainingXp.value}`;
   return "修为圆满，可待冲关";
 });
@@ -7262,11 +7518,11 @@ function shouldRefreshHomeState(path) {
 }
 
 function needsHeavyState(tab = activeTab.value) {
-  return ["dungeon", "sect", "arena", "equipment", "rank", "admin"].includes(tab);
+  return ["dungeon", "sect", "arena", "market", "equipment", "rank", "admin"].includes(tab);
 }
 
 function needsLiteState(tab = activeTab.value) {
-  return ["cultivation", "tasks"].includes(tab);
+  return ["cultivation", "tasks", "market"].includes(tab);
 }
 
 function playBattle() {
@@ -7405,6 +7661,26 @@ async function advanceDay() {
 
 async function upgradeSkill() {
   await act("/api/skills/upgrade", {}, { scope: "lite" });
+}
+
+async function buyMarketItem(id) {
+  await act("/api/items/buy", { kind: id }, { scope: "lite" });
+}
+
+async function useMarketItem(id) {
+  await act("/api/items/use", { kind: id }, { scope: "lite" });
+}
+
+function remainingText(item) {
+  if (item.remaining === null || item.remaining === undefined) return "不限";
+  return `${item.remaining} / ${item.limitMax}`;
+}
+
+function priceFactorText(item) {
+  const factor = Number(item.priceFactor || 1);
+  const percent = Math.round((factor - 1) * 100);
+  if (percent === 0) return "持平";
+  return `${percent > 0 ? "+" : ""}${percent}%`;
 }
 
 function openImageEditor(event, target) {

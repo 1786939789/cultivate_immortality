@@ -207,7 +207,162 @@ export const combatSkills = [
 export { equipmentCatalog, equipmentSlots, equipmentTiers } from "../shared/equipmentData.mjs";
 
 export const itemCatalog = {
-  focus: { name: "凝神散", price: 30, text: "神识 +2，法力 +12" },
-  blood: { name: "养血丹", price: 35, text: "血量 +45" },
-  insight: { name: "悟道茶", price: 60, text: "神识 +1" }
+  huanglong_dan: {
+    name: "黄龙丹",
+    category: "xp",
+    categoryName: "修为丹",
+    basePrice: 80,
+    effect: { type: "xpMultiplier", multiplier: 1.5, days: 1 },
+    limit: { type: "daily", max: 1, days: 1 },
+    text: "现实任务修为收益 x1.5，持续 1 天。"
+  },
+  jinsui_wan: {
+    name: "金髓丸",
+    category: "xp",
+    categoryName: "修为丹",
+    basePrice: 180,
+    effect: { type: "xpMultiplier", multiplier: 2, days: 1 },
+    limit: { type: "daily", max: 1, days: 1 },
+    text: "现实任务修为收益 x2，持续 1 天。"
+  },
+  juling_dan: {
+    name: "聚灵丹",
+    category: "xp",
+    categoryName: "修为丹",
+    basePrice: 220,
+    effect: { type: "xpMultiplier", multiplier: 1.5, days: 3 },
+    limit: { type: "cycle", max: 1, days: 3 },
+    text: "现实任务修为收益 x1.5，持续 3 天。"
+  },
+  heqi_dan: {
+    name: "合气丹",
+    category: "xp",
+    categoryName: "修为丹",
+    basePrice: 520,
+    effect: { type: "xpMultiplier", multiplier: 2, days: 3 },
+    limit: { type: "cycle", max: 1, days: 3 },
+    text: "现实任务修为收益 x2，持续 3 天。"
+  },
+  shenling_dan: {
+    name: "参灵丹",
+    category: "xp",
+    categoryName: "修为丹",
+    basePrice: 600,
+    effect: { type: "xpMultiplier", multiplier: 1.5, days: 7 },
+    limit: { type: "cycle", max: 1, days: 7 },
+    text: "现实任务修为收益 x1.5，持续 7 天。"
+  },
+  jiuqiao_juyuan_dan: {
+    name: "九窍聚元丹",
+    category: "xp",
+    categoryName: "修为丹",
+    basePrice: 1380,
+    effect: { type: "xpMultiplier", multiplier: 2, days: 7 },
+    limit: { type: "cycle", max: 1, days: 7 },
+    text: "现实任务修为收益 x2，持续 7 天。"
+  },
+  humai_dan: {
+    name: "护脉丹",
+    category: "breakthrough",
+    categoryName: "破境丹",
+    basePrice: 120,
+    effect: { type: "breakthroughBonus", bonus: 0.08 },
+    limit: { type: "daily", max: 2, days: 1 },
+    text: "下次突破成功率 +8%，突破后失效。"
+  },
+  ningyuan_dan: {
+    name: "凝元丹",
+    category: "breakthrough",
+    categoryName: "破境丹",
+    basePrice: 260,
+    effect: { type: "breakthroughBonus", bonus: 0.15 },
+    limit: { type: "daily", max: 1, days: 1 },
+    text: "下次突破成功率 +15%，突破后失效。"
+  },
+  zhuji_dan: {
+    name: "筑基丹",
+    category: "breakthrough",
+    categoryName: "破境丹",
+    basePrice: 620,
+    effect: { type: "breakthroughBonus", bonus: 0.25 },
+    limit: { type: "realm", max: 1, days: 0 },
+    text: "下次突破成功率 +25%，本境界限购 1 枚。"
+  },
+  jiangchen_dan: {
+    name: "降尘丹",
+    category: "breakthrough",
+    categoryName: "破境丹",
+    basePrice: 1200,
+    effect: { type: "breakthroughBonus", bonus: 0.35 },
+    limit: { type: "realm", max: 1, days: 0 },
+    text: "下次突破成功率 +35%，本境界限购 1 枚。"
+  },
+  huiyuan_xumai_dan: {
+    name: "回元续脉丹",
+    category: "attempt",
+    categoryName: "续脉丹",
+    basePrice: 1200,
+    effect: { type: "breakthroughAttempts", amount: 1 },
+    limit: { type: "daily", max: 1, days: 1 },
+    text: "今日额外突破次数 +1。"
+  },
+  xuanyuan_butian_dan: {
+    name: "玄元补天丹",
+    category: "attempt",
+    categoryName: "续脉丹",
+    basePrice: 3200,
+    effect: { type: "breakthroughAttempts", amount: 2 },
+    limit: { type: "cycle", max: 1, days: 7 },
+    text: "今日额外突破次数 +2。"
+  },
+  qingyuan_jianwan: {
+    name: "青元剑丸",
+    category: "permanent",
+    categoryName: "淬体丹",
+    basePrice: 360,
+    priceStep: 120,
+    effect: { type: "permanentStat", stat: "attack", amount: 2 },
+    limit: { type: "permanent", max: 20, days: 0 },
+    text: "永久攻击 +2。"
+  },
+  xuanjia_dan: {
+    name: "玄甲丹",
+    category: "permanent",
+    categoryName: "淬体丹",
+    basePrice: 360,
+    priceStep: 120,
+    effect: { type: "permanentStat", stat: "defense", amount: 2 },
+    limit: { type: "permanent", max: 20, days: 0 },
+    text: "永久防御 +2。"
+  },
+  jingang_cuiti_dan: {
+    name: "金刚淬体丹",
+    category: "permanent",
+    categoryName: "淬体丹",
+    basePrice: 320,
+    priceStep: 100,
+    effect: { type: "permanentStat", stat: "maxHp", amount: 10 },
+    limit: { type: "permanent", max: 20, days: 0 },
+    text: "永久气血上限 +10。"
+  },
+  yanghun_dan: {
+    name: "养魂丹",
+    category: "permanent",
+    categoryName: "淬体丹",
+    basePrice: 520,
+    priceStep: 180,
+    effect: { type: "permanentStat", stat: "divineSense", amount: 2 },
+    limit: { type: "permanent", max: 20, days: 0 },
+    text: "永久神识 +2。"
+  },
+  zhenyuan_dan: {
+    name: "真元丹",
+    category: "permanent",
+    categoryName: "淬体丹",
+    basePrice: 520,
+    priceStep: 180,
+    effect: { type: "permanentStat", stat: "maxMana", amount: 10 },
+    limit: { type: "permanent", max: 20, days: 0 },
+    text: "永久法力上限 +10。"
+  }
 };

@@ -3325,7 +3325,13 @@ function ensureProvinceState(state) {
 
 function breakthroughChanceFor(state, entity) {
   const sectName = entity.id === "player" ? state.sect.name : entity.sect;
-  return clamp(breakthroughChance(entity) * (1 + sectBreakthroughBonus(state, sectName, entity)), 0.035, 0.82);
+  const potionBonus = entity.id === "player" ? activeBreakthroughBonus(state) : 0;
+  const divineSenseBonus = entity.id === "player" ? divineSenseBreakthroughBonus(entity, state) : 0;
+  return clamp(
+    breakthroughChance(entity) * (1 + sectBreakthroughBonus(state, sectName, entity)) + potionBonus + divineSenseBonus,
+    0.035,
+    entity.id === "player" ? 0.95 : 0.82
+  );
 }
 
 function breakthroughChanceParts(state, entity) {
@@ -3334,13 +3340,17 @@ function breakthroughChanceParts(state, entity) {
   const sectName = entity.id === "player" ? state.sect.name : entity.sect;
   const bonus = sectBreakthroughBonus(state, sectName, entity);
   const sectMultiplier = 1 + bonus;
+  const potionBonus = entity.id === "player" ? activeBreakthroughBonus(state) : 0;
+  const divineSenseBonus = entity.id === "player" ? divineSenseBreakthroughBonus(entity, state) : 0;
   return {
     realmBase,
     rootMultiplier: base / Math.max(0.0001, realmBase),
     sectMultiplier,
     base,
     bonus,
-    total: clamp(base * sectMultiplier, 0.035, 0.82)
+    potionBonus,
+    divineSenseBonus,
+    total: clamp(base * sectMultiplier + potionBonus + divineSenseBonus, 0.035, entity.id === "player" ? 0.95 : 0.82)
   };
 }
 
@@ -3406,6 +3416,198 @@ function staticCatalog() {
     equipmentTiers,
     equipmentCatalog,
     duelRanks
+  };
+}
+
+const baseBreakthroughAttempts = 1;
+const maxBreakthroughAttemptsPerDay = 4;
+
+function itemEntries() {
+  return Object.entries(itemCatalog);
+}
+
+function emptyBag() {
+  return Object.fromEntries(itemEntries().map(([id]) => [id, 0]));
+}
+
+function shopSeed(id, day) {
+  let hash = Math.max(1, Number(day) || 1) * 131;
+  for (const char of String(id)) hash = (hash * 31 + char.charCodeAt(0)) % 1000003;
+  return hash;
+}
+
+function shopPriceFactor(id, day) {
+  const normalized = (shopSeed(id, day) % 401) / 1000;
+  return Number((0.8 + normalized).toFixed(3));
+}
+
+function shopPriceFor(state, id) {
+  const item = itemCatalog[id];
+  if (!item) return 0;
+  const permanentBought = Number(state.shop?.permanentPurchases?.[id] || 0);
+  const base = Number(item.basePrice || item.price || 0) + permanentBought * Number(item.priceStep || 0);
+  return Math.max(1, Math.round(base * shopPriceFactor(id, state.day)));
+}
+
+function limitKeyFor(state, id, limit = itemCatalog[id]?.limit) {
+  if (!limit) return "none";
+  if (limit.type === "daily") return `day:${state.day}`;
+  if (limit.type === "cycle") {
+    const days = Math.max(1, Math.floor(Number(limit.days) || 1));
+    return `cycle:${days}:${Math.floor((Math.max(1, state.day) - 1) / days)}`;
+  }
+  if (limit.type === "realm") return `realm:${state.player?.realm || 0}`;
+  if (limit.type === "permanent") return "permanent";
+  return "none";
+}
+
+function limitResetDay(state, limit = {}) {
+  if (limit.type === "daily") return state.day + 1;
+  if (limit.type === "cycle") {
+    const days = Math.max(1, Math.floor(Number(limit.days) || 1));
+    const cycleStart = Math.floor((Math.max(1, state.day) - 1) / days) * days + 1;
+    return cycleStart + days;
+  }
+  return null;
+}
+
+function limitWindowText(limit = {}) {
+  if (limit.type === "daily") return "每日";
+  if (limit.type === "cycle") return `每 ${Math.max(1, Number(limit.days) || 1)} 天`;
+  if (limit.type === "realm") return "每境界";
+  if (limit.type === "permanent") return "永久药性";
+  return "不限";
+}
+
+function shopPurchaseRecord(state, id) {
+  state.shop ??= {};
+  state.shop.purchases ??= {};
+  const item = itemCatalog[id];
+  const key = limitKeyFor(state, id, item?.limit);
+  const record = state.shop.purchases[id];
+  if (!record || record.key !== key) {
+    state.shop.purchases[id] = { key, count: 0 };
+  }
+  return state.shop.purchases[id];
+}
+
+function shopItemState(state, id) {
+  const item = itemCatalog[id];
+  if (!item) return null;
+  const limit = item.limit || {};
+  const permanentBought = Number(state.shop?.permanentPurchases?.[id] || 0);
+  const permanentUsed = Number(state.shop?.permanentUses?.[id] || 0);
+  const record = shopPurchaseRecord(state, id);
+  const max = Math.max(0, Math.floor(Number(limit.max) || 0));
+  const used = limit.type === "permanent" ? permanentBought : Math.max(0, Math.floor(Number(record.count) || 0));
+  const remaining = max ? Math.max(0, max - used) : Infinity;
+  const resetDay = limitResetDay(state, limit);
+  const countdownDays = resetDay ? Math.max(0, resetDay - state.day) : null;
+  const price = shopPriceFor(state, id);
+  let canBuy = remaining > 0 && (limit.type !== "permanent" || permanentUsed < max);
+  let reason = "";
+  if (!canBuy) reason = limit.type === "permanent" && permanentUsed >= max ? "药性已满" : "限购已满";
+  else if (state.player.spirit < price) {
+    canBuy = false;
+    reason = "灵石不足";
+  }
+  return {
+    id,
+    price,
+    basePrice: item.basePrice || item.price || 0,
+    priceFactor: shopPriceFactor(id, state.day),
+    limitType: limit.type || "none",
+    limitText: `${limitWindowText(limit)}限购 ${max || "不限"} 枚`,
+    limitMax: max,
+    purchasedInWindow: Number.isFinite(used) ? used : 0,
+    remaining: Number.isFinite(remaining) ? remaining : null,
+    resetDay,
+    countdownDays,
+    countdownText: resetDay ? `${countdownDays} 天后重置` : (limit.type === "realm" ? "突破后进入新境界重置" : "不重置"),
+    canBuy,
+    reason
+  };
+}
+
+function publicShop(state) {
+  return {
+    day: state.day,
+    items: itemEntries().map(([id, item]) => ({
+      id,
+      ...item,
+      ...shopItemState(state, id)
+    })),
+    activeEffects: publicElixirEffects(state),
+    breakthroughAttempts: breakthroughAttemptInfo(state)
+  };
+}
+
+function defaultElixirEffects() {
+  return {
+    cultivationMultiplier: 1,
+    cultivationMultiplierUntilDay: 0,
+    nextBreakthroughBonus: 0,
+    extraBreakthroughAttemptsToday: 0,
+    breakthroughAttemptEffectDay: 0
+  };
+}
+
+function normalizeElixirEffects(state) {
+  state.player.elixirEffects = {
+    ...defaultElixirEffects(),
+    ...(state.player.elixirEffects || {})
+  };
+  const effects = state.player.elixirEffects;
+  if (Number(effects.cultivationMultiplierUntilDay || 0) < state.day) {
+    effects.cultivationMultiplier = 1;
+    effects.cultivationMultiplierUntilDay = 0;
+  }
+  if (Number(effects.breakthroughAttemptEffectDay || 0) !== Number(state.day || 0)) {
+    effects.extraBreakthroughAttemptsToday = 0;
+    effects.breakthroughAttemptEffectDay = 0;
+  }
+}
+
+function publicElixirEffects(state) {
+  normalizeElixirEffects(state);
+  const effects = state.player.elixirEffects;
+  return {
+    cultivationMultiplier: Math.max(1, Number(effects.cultivationMultiplier) || 1),
+    cultivationMultiplierUntilDay: Number(effects.cultivationMultiplierUntilDay) || 0,
+    cultivationMultiplierDaysLeft: Math.max(0, Number(effects.cultivationMultiplierUntilDay || 0) - state.day + 1),
+    nextBreakthroughBonus: Math.max(0, Number(effects.nextBreakthroughBonus) || 0),
+    extraBreakthroughAttemptsToday: Math.max(0, Math.floor(Number(effects.extraBreakthroughAttemptsToday) || 0))
+  };
+}
+
+function activeCultivationMultiplier(state) {
+  return publicElixirEffects(state).cultivationMultiplier;
+}
+
+function activeBreakthroughBonus(state) {
+  return publicElixirEffects(state).nextBreakthroughBonus;
+}
+
+function divineSenseBreakthroughBonus(entity, state) {
+  return clamp(Math.floor(effectiveDivineSense(entity, state) / 20) / 100, 0, 0.1);
+}
+
+function manaTaskBonus(entity, state) {
+  return clamp(Math.floor(effectiveMaxMana(entity, state) / 50) / 100, 0, 0.1);
+}
+
+function breakthroughAttemptInfo(state) {
+  normalizeElixirEffects(state);
+  const used = Math.max(0, Math.floor(Number(state.player.breakthroughAttemptsToday) || 0));
+  const extra = Math.max(0, Math.floor(Number(state.player.elixirEffects.extraBreakthroughAttemptsToday) || 0));
+  const total = Math.min(maxBreakthroughAttemptsPerDay, baseBreakthroughAttempts + extra);
+  return {
+    base: baseBreakthroughAttempts,
+    extra,
+    total,
+    used,
+    remaining: Math.max(0, total - used),
+    max: maxBreakthroughAttemptsPerDay
   };
 }
 
@@ -3945,6 +4147,8 @@ export function createDefaultState() {
       skillId,
       skillRanks: { [skillId]: 1 },
       lastSkillUpgradeDay: 0,
+      breakthroughAttemptsToday: 0,
+      elixirEffects: defaultElixirEffects(),
       spirit: 80,
       reputation: 0,
       body: innate.body,
@@ -3968,7 +4172,8 @@ export function createDefaultState() {
       skillUpgrades: [],
       duelHistory: []
     },
-    bag: { focus: 1, blood: 1, insight: 0 },
+    bag: emptyBag(),
+    shop: { purchases: {}, permanentPurchases: {}, permanentUses: {} },
     equipment: createEquipmentState(),
     equipmentVersion,
     equipmentTransfers: [],
@@ -4280,6 +4485,20 @@ export function ensureStateShape(state) {
   state.player.duelWins ??= 0;
   state.player.duelLosses ??= 0;
   state.player.lastBreakthroughDay ??= 0;
+  changed = ensureField(state.player, "breakthroughAttemptsToday", 0) || changed;
+  if (state.player.lastBreakthroughDay === state.day && state.player.breakthroughAttemptsToday <= 0) {
+    state.player.breakthroughAttemptsToday = 1;
+    changed = true;
+  }
+  if (state.player.lastBreakthroughDay !== state.day && state.player.breakthroughAttemptsToday !== 0) {
+    state.player.breakthroughAttemptsToday = 0;
+    changed = true;
+  }
+  if (!state.player.elixirEffects) {
+    state.player.elixirEffects = defaultElixirEffects();
+    changed = true;
+  }
+  normalizeElixirEffects(state);
   state.player.portraitVariant ??= 0;
   state.player.duelSeasonHistory ??= [];
   changed = normalizeDuelSeason(state.player, state.day) || changed;
@@ -4326,6 +4545,17 @@ export function ensureStateShape(state) {
   state.player.mana = Math.min(state.player.mana, effectiveMaxMana(state.player, state));
   state.sect.warWins ??= 0;
   state.sect.warLosses ??= 0;
+  state.shop ??= {};
+  state.shop.purchases ??= {};
+  state.shop.permanentPurchases ??= {};
+  state.shop.permanentUses ??= {};
+  const normalizedBag = emptyBag();
+  const currentBag = state.bag || {};
+  for (const id of Object.keys(normalizedBag)) normalizedBag[id] = Math.max(0, Math.floor(Number(currentBag[id]) || 0));
+  if (JSON.stringify(state.bag || {}) !== JSON.stringify(normalizedBag)) {
+    state.bag = normalizedBag;
+    changed = true;
+  }
   state.duelDays ??= [];
   state.duelDays = trimDuelDays(state.duelDays, state.day);
   state.sectNameMap ??= {};
@@ -4593,6 +4823,7 @@ export function getPublicState(state, options = {}) {
     breakChance,
     baseBreakChance: currentRealmInfo.baseBreakChance,
     skillUpgrade: previewSkillUpgradeForState(state, state.player),
+    shop: publicShop(state),
     sects: options.scope === "lite" ? sectSummaries.map(compactSectSummary) : sectSummaries,
     ...(includeHeavyDerived ? {
       dungeonLootPools: publicDungeonLootPools(state),
@@ -4699,7 +4930,8 @@ function getHomeState(state) {
       nextRealm,
       breakChance: breakthroughChanceFor(state, state.player),
       baseBreakChance: currentRealmInfo.baseBreakChance,
-      skillUpgrade: previewSkillUpgradeForState(state, state.player)
+      skillUpgrade: previewSkillUpgradeForState(state, state.player),
+      shop: publicShop(state)
     }
   };
 }
@@ -5635,6 +5867,8 @@ export function settleIfNeeded(state) {
 
 export function dailySettlement(state, options = {}) {
   state.day += 1;
+  state.player.breakthroughAttemptsToday = 0;
+  normalizeElixirEffects(state);
   const settlementDate = stateDateForDay(state);
   const events = [
     "坊市传来秘境流言，众修士人心浮动。",
@@ -5816,7 +6050,8 @@ export function addTask(state, payload) {
   const multiplier = definition.type === "measurable" ? clamp(rawMultiplier, 0, definition.maxMultiplier) : 1;
   const baseXpGain = Math.floor(definition.xpReward * multiplier);
   const spiritGain = Math.floor(definition.spiritReward * multiplier);
-  const xpGain = baseXpGain;
+  const xpMultiplier = activeCultivationMultiplier(state) * (1 + manaTaskBonus(p, state));
+  const xpGain = Math.floor(baseXpGain * xpMultiplier);
   p.xp += xpGain;
   p.spirit += spiritGain;
 
@@ -5848,7 +6083,8 @@ export function addTask(state, payload) {
     taskType: definition.category,
     spiritGain
   });
-  log(state, `完成「${definition.name}」，获得 ${xpGain} 经验与 ${spiritGain} 灵石。`, "gold");
+  const bonusText = xpGain > baseXpGain ? `（丹药/法力加成 +${xpGain - baseXpGain}）` : "";
+  log(state, `完成「${definition.name}」，获得 ${xpGain} 经验${bonusText}与 ${spiritGain} 灵石。`, "gold");
   autoAttemptPlayerBreakthrough(state);
 }
 
@@ -6153,12 +6389,15 @@ function autoAttemptPlayerBreakthrough(state) {
   if (p.xp < need) {
     return false;
   }
-  if (p.lastBreakthroughDay === state.day) {
+  const attempts = breakthroughAttemptInfo(state);
+  if (attempts.remaining <= 0) {
     return false;
   }
 
   const chance = breakthroughChanceFor(state, p);
   p.lastBreakthroughDay = state.day;
+  p.breakthroughAttemptsToday = attempts.used + 1;
+  p.elixirEffects.nextBreakthroughBonus = 0;
   if (Math.random() < chance) {
     const fromRealm = p.realm;
     p.realm += 1;
@@ -6612,34 +6851,96 @@ export function runDailyDuels(state) {
 }
 
 export function buyItem(state, kind) {
+  ensureStateShape(state);
   const item = itemCatalog[kind];
   if (!item) throw new Error("未知物品");
-  if (state.player.spirit < item.price) {
+  const itemState = shopItemState(state, kind);
+  if (!itemState.canBuy) {
+    log(state, itemState.reason || "今日不可购买。", "bad");
+    return;
+  }
+  if (state.player.spirit < itemState.price) {
     log(state, "灵石不足，掌柜只是笑着摇头。", "bad");
     return;
   }
-  state.player.spirit -= item.price;
-  state.bag[kind] += 1;
-  log(state, `购得${item.name}一份。`);
+  const record = shopPurchaseRecord(state, kind);
+  state.player.spirit -= itemState.price;
+  state.bag[kind] = Math.max(0, Math.floor(Number(state.bag[kind]) || 0)) + 1;
+  record.count = Math.max(0, Math.floor(Number(record.count) || 0)) + 1;
+  if (item.limit?.type === "permanent") {
+    state.shop.permanentPurchases ??= {};
+    state.shop.permanentPurchases[kind] = Math.max(0, Math.floor(Number(state.shop.permanentPurchases[kind]) || 0)) + 1;
+  }
+  log(state, `在坊市购得「${item.name}」一枚，花费 ${itemState.price} 灵石。`);
 }
 
 export function useItem(state, kind) {
+  ensureStateShape(state);
   if (!itemCatalog[kind]) throw new Error("未知物品");
   if (state.bag[kind] <= 0) return;
+  const item = itemCatalog[kind];
+  const effect = item.effect || {};
   const p = state.player;
-  state.bag[kind] -= 1;
+  normalizeElixirEffects(state);
 
-  if (kind === "focus") {
-    p.divineSense += 2;
-    p.mana = clamp((p.mana || 0) + 12, 0, effectiveMaxMana(p, state));
-    log(state, "服下凝神散，神识澄明，法力回涌。");
+  if (effect.type === "xpMultiplier") {
+    const current = publicElixirEffects(state);
+    const nextMultiplier = Number(effect.multiplier) || 1;
+    const nextUntilDay = state.day + Math.max(1, Math.floor(Number(effect.days) || 1)) - 1;
+    if (current.cultivationMultiplier > nextMultiplier) {
+      log(state, `当前修为丹药力更强，暂不服用「${item.name}」。`, "bad");
+      return;
+    }
+    p.elixirEffects.cultivationMultiplier = nextMultiplier;
+    p.elixirEffects.cultivationMultiplierUntilDay = Math.max(Number(p.elixirEffects.cultivationMultiplierUntilDay) || 0, nextUntilDay);
+    state.bag[kind] -= 1;
+    log(state, `服下「${item.name}」，现实任务修为收益提升至 x${nextMultiplier}，持续到第 ${p.elixirEffects.cultivationMultiplierUntilDay} 天。`, "gold");
+    return;
   }
-  if (kind === "blood") {
-    p.hp = clamp(p.hp + 45, 0, effectiveMaxHp(p, state));
-    log(state, "服下养血丹，血量回升。");
+
+  if (effect.type === "breakthroughBonus") {
+    const nextBonus = Math.max(0, Number(effect.bonus) || 0);
+    const currentBonus = Math.max(0, Number(p.elixirEffects.nextBreakthroughBonus) || 0);
+    if (currentBonus > nextBonus) {
+      log(state, `当前破境丹药力更强，暂不服用「${item.name}」。`, "bad");
+      return;
+    }
+    p.elixirEffects.nextBreakthroughBonus = nextBonus;
+    state.bag[kind] -= 1;
+    log(state, `服下「${item.name}」，下次突破成功率提高 ${Math.round(nextBonus * 100)}%。`, "gold");
+    return;
   }
-  if (kind === "insight") {
-    p.divineSense += 1;
-    log(state, "饮下悟道茶，神识更见通明。", "gold");
+
+  if (effect.type === "breakthroughAttempts") {
+    const info = breakthroughAttemptInfo(state);
+    if (info.total >= info.max) {
+      log(state, "今日经脉承载已至上限，不能再增加突破次数。", "bad");
+      return;
+    }
+    const added = Math.min(Math.max(1, Math.floor(Number(effect.amount) || 1)), info.max - info.total);
+    p.elixirEffects.extraBreakthroughAttemptsToday = info.extra + added;
+    p.elixirEffects.breakthroughAttemptEffectDay = state.day;
+    state.bag[kind] -= 1;
+    log(state, `服下「${item.name}」，今日额外突破次数 +${added}。`, "gold");
+    return;
+  }
+
+  if (effect.type === "permanentStat") {
+    state.shop.permanentPurchases ??= {};
+    state.shop.permanentUses ??= {};
+    const used = Math.max(0, Math.floor(Number(state.shop.permanentUses[kind]) || 0));
+    const max = Math.max(0, Math.floor(Number(item.limit?.max) || 0));
+    if (max && used >= max) {
+      log(state, "此丹药性已满，再服无益。", "bad");
+      return;
+    }
+    const amount = Math.max(1, Math.floor(Number(effect.amount) || 1));
+    const stat = effect.stat;
+    p[stat] = Math.max(0, Math.floor(Number(p[stat]) || 0)) + amount;
+    if (stat === "maxHp") p.hp = clamp((p.hp || 0) + amount, 0, effectiveMaxHp(p, state));
+    if (stat === "maxMana") p.mana = clamp((p.mana || 0) + amount, 0, effectiveMaxMana(p, state));
+    state.shop.permanentUses[kind] = used + 1;
+    state.bag[kind] -= 1;
+    log(state, `炼化「${item.name}」，${item.text}`, "gold");
   }
 }

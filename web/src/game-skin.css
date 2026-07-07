@@ -5560,7 +5560,7 @@ body::before {
 }
 
 .tabs {
-  grid-template-columns: repeat(9, minmax(82px, 1fr));
+  grid-template-columns: repeat(10, minmax(68px, 1fr));
   position: relative;
   z-index: 2;
   margin: 0 0 20px;
@@ -5577,15 +5577,19 @@ body::before {
 }
 
 .tab {
-  min-height: 72px;
+  box-sizing: border-box;
+  min-height: 54px;
   border-right: 1px solid rgba(196, 142, 68, .24);
+  padding: 5px 8px;
   color: #c7ad78;
   background:
     linear-gradient(180deg, rgba(255, 238, 180, .04), rgba(0, 0, 0, .08));
-  font-size: 18px;
+  font-size: 14px;
 }
 
 .tab svg {
+  width: 18px;
+  height: 18px;
   color: #c4a365;
   filter: drop-shadow(0 2px 2px rgba(0, 0, 0, .55));
 }
@@ -8226,4 +8230,26 @@ body::before {
   .equipment-inventory-grid
 ) {
   overflow: visible;
+}
+
+@media (min-width: 761px) {
+  .main > .tabs,
+  .layout:has(.market-surface) .tabs {
+    grid-template-columns: repeat(10, minmax(62px, 1fr));
+  }
+
+  .main > .tabs .tab,
+  .layout:has(.market-surface) .tabs .tab {
+    box-sizing: border-box;
+    min-height: 54px;
+    padding: 5px 8px;
+    font-size: 14px;
+    line-height: 1.15;
+  }
+
+  .main > .tabs .tab svg,
+  .layout:has(.market-surface) .tabs .tab svg {
+    width: 18px;
+    height: 18px;
+  }
 }
