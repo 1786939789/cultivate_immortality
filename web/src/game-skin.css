@@ -9007,3 +9007,340 @@ body::before {
     linear-gradient(180deg, rgba(255, 248, 226, .9), rgba(236, 216, 176, .78)),
     var(--dossier-cards) 100% 100% / 200% 200% no-repeat;
 }
+
+/* Character dossier concept fidelity pass. */
+.layout.dossier-layout {
+  grid-template-columns: minmax(0, 1fr);
+  margin-top: 0;
+}
+
+.layout.dossier-layout > .sidebar {
+  display: none;
+}
+
+.app:has(.layout.dossier-layout) > .topbar,
+.layout.dossier-layout > .main {
+  width: 100%;
+}
+
+.app:has(.layout.dossier-layout) > .topbar {
+  display: none;
+}
+
+.layout.dossier-layout > .main {
+  min-width: 0;
+}
+
+.layout.dossier-layout > .main > .tabs {
+  display: none;
+}
+
+.rank-surface.view.active > .character-dossier {
+  min-height: min(960px, calc(100vh - 18px));
+  padding: clamp(8px, .9vw, 14px);
+  border: 2px solid rgba(190, 151, 70, .78);
+  border-radius: 2px;
+  background:
+    linear-gradient(rgba(4, 37, 33, .16), rgba(4, 37, 33, .16)),
+    var(--dossier-bg) center top / 100% 100% no-repeat,
+    linear-gradient(180deg, #0d352f, #07302c);
+}
+
+.rank-surface.view.active > .character-dossier .back-button {
+  margin: 0;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-frame {
+  gap: clamp(7px, .75vw, 11px);
+}
+
+.rank-surface.view.active > .character-dossier .dossier-header {
+  display: grid;
+  grid-template-columns: auto minmax(430px, .72fr) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(12px, 1.35vw, 22px);
+  min-height: clamp(70px, 5.4vw, 86px);
+  padding: 8px 18px;
+  border: 2px solid rgba(139, 94, 33, .48);
+  border-radius: 3px;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-back-button {
+  min-width: clamp(118px, 8vw, 142px);
+  min-height: clamp(48px, 3.7vw, 58px);
+  border-radius: 28px;
+  font-size: clamp(18px, 1.28vw, 22px);
+  font-weight: 950;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-header h3 {
+  font-size: clamp(36px, 3.25vw, 54px);
+  letter-spacing: 0;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-header p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  max-width: none;
+  margin: 0;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-header-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.rank-surface.view.active > .character-dossier .equipment-count-tag {
+  color: #f5e5b8;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-overview {
+  grid-template-columns: minmax(330px, .92fr) minmax(520px, 1.2fr) minmax(330px, .92fr);
+  gap: clamp(10px, .95vw, 16px);
+  align-items: stretch;
+  min-height: 0;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-stat-bank {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+  align-content: start;
+  gap: clamp(8px, .7vw, 10px);
+}
+
+.rank-surface.view.active > .character-dossier .dossier-stat-bank .detail-box {
+  grid-template-columns: clamp(44px, 3.5vw, 54px) minmax(74px, 1fr);
+  min-width: 0;
+  min-height: clamp(82px, 6vw, 104px);
+  padding: clamp(9px, .85vw, 14px);
+  border-radius: 4px;
+  overflow: visible;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-stat-bank .detail-icon {
+  width: clamp(42px, 3.4vw, 52px);
+  height: clamp(42px, 3.4vw, 52px);
+}
+
+.rank-surface.view.active > .character-dossier .dossier-stat-bank .detail-label {
+  font-size: clamp(14px, 1.02vw, 17px);
+  white-space: nowrap;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-stat-bank .detail-box b {
+  max-width: 100%;
+  overflow: visible;
+  font-size: clamp(15px, 1.18vw, 20px);
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core {
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) auto;
+  align-content: stretch;
+  padding: clamp(10px, .85vw, 14px);
+  border: 2px solid rgba(166, 121, 45, .55);
+  border-radius: 3px;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core::before {
+  border: 0;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-paperdoll {
+  grid-template-columns: clamp(70px, 5.4vw, 88px) minmax(260px, 1fr) clamp(70px, 5.4vw, 88px);
+  gap: clamp(8px, .7vw, 10px);
+  min-height: clamp(300px, 22vw, 360px);
+  align-items: stretch;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card {
+  min-height: clamp(78px, 6.2vw, 96px);
+  grid-template-columns: 1fr;
+  justify-items: center;
+  padding: 6px;
+  border-radius: 3px;
+  text-align: center;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card::before {
+  width: 42px;
+  height: 42px;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card .equipment-icon {
+  left: 50%;
+  top: 28px;
+  transform: translate(-50%, -50%);
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card span,
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card strong,
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card small {
+  max-width: 100%;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card span {
+  font-size: 11px;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card strong {
+  font-size: 12px;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card small {
+  display: none;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-character-core {
+  min-height: clamp(300px, 22vw, 360px);
+  padding: clamp(8px, .75vw, 12px);
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-character-core .character-portrait.xl {
+  width: min(230px, 82%);
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-character-core b {
+  font-size: clamp(28px, 2vw, 34px);
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core .detail-meters {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 3px;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-records {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: clamp(7px, .7vw, 10px);
+}
+
+.rank-surface.view.active > .character-dossier .dossier-records > .panel {
+  min-width: 0;
+  min-height: clamp(260px, 25vh, 300px);
+  max-height: 330px;
+  padding: 12px 13px;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-records > .panel h3 {
+  margin-bottom: 8px;
+  font-size: clamp(18px, 1.38vw, 24px);
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-records .detail-scroll {
+  max-height: clamp(190px, 20vh, 236px);
+}
+
+.rank-surface.view.active > .character-dossier .root-chip-list,
+.rank-surface.view.active > .character-dossier .root-summary-list,
+.rank-surface.view.active > .character-dossier .attribute-list.compact {
+  max-height: clamp(190px, 20vh, 236px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.rank-surface.view.active > .character-dossier .attribute-row {
+  grid-template-columns: minmax(44px, auto) minmax(0, 1fr);
+  padding: 8px 9px;
+}
+
+.rank-surface.view.active > .character-dossier .attribute-row small {
+  grid-column: 1 / -1;
+}
+
+.rank-surface.view.active > .character-dossier .event,
+.rank-surface.view.active > .character-dossier .event-button,
+.rank-surface.view.active > .character-dossier .duel-record {
+  min-height: 0;
+  padding: 8px 9px;
+  font-size: 13px;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-record-group-label {
+  margin: 3px 0 6px;
+  color: #6c4a1f;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.rank-surface.view.active > .character-dossier .root-chip,
+.rank-surface.view.active > .character-dossier .attribute-row,
+.rank-surface.view.active > .character-dossier .event,
+.rank-surface.view.active > .character-dossier .event-button,
+.rank-surface.view.active > .character-dossier .event strong,
+.rank-surface.view.active > .character-dossier .event span,
+.rank-surface.view.active > .character-dossier .event small,
+.rank-surface.view.active > .character-dossier .event-button strong,
+.rank-surface.view.active > .character-dossier .event-button span,
+.rank-surface.view.active > .character-dossier .event-button small {
+  max-width: 100%;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1400px) {
+  .rank-surface.view.active > .character-dossier .dossier-overview {
+    grid-template-columns: minmax(0, .94fr) minmax(320px, 1.12fr) minmax(0, .94fr);
+  }
+
+  .rank-surface.view.active > .character-dossier .dossier-stat-bank {
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    grid-template-rows: none;
+  }
+
+  .rank-surface.view.active > .character-dossier .dossier-records {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1600px) {
+  .rank-surface.view.active > .character-dossier .dossier-overview {
+    grid-template-columns: minmax(318px, .86fr) minmax(500px, 1.2fr) minmax(318px, .86fr);
+  }
+
+  .rank-surface.view.active > .character-dossier .dossier-stat-bank {
+    grid-template-columns: repeat(2, minmax(150px, 1fr));
+  }
+
+  .rank-surface.view.active > .character-dossier .dossier-records {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .rank-surface.view.active > .character-dossier .dossier-header,
+  .rank-surface.view.active > .character-dossier .dossier-core .equipment-paperdoll {
+    grid-template-columns: 1fr;
+  }
+
+  .rank-surface.view.active > .character-dossier .dossier-header-tags {
+    justify-content: flex-start;
+  }
+
+  .rank-surface.view.active > .character-dossier .dossier-stat-bank,
+  .rank-surface.view.active > .character-dossier .dossier-records {
+    grid-template-columns: 1fr;
+  }
+}

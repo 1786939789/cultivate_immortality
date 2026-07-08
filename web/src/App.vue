@@ -116,7 +116,7 @@
 
     <div v-if="loading" class="loading">正在读取修行玉简...</div>
 
-    <div v-else-if="state" class="layout">
+    <div v-else-if="state" class="layout" :class="{ 'dossier-layout': activeTab === 'rank' && detailView === 'person' }">
       <aside class="sidebar">
         <section class="avatar hero-profile-card">
           <CharacterPortrait :person="playerPortraitPerson" size="xl" />
@@ -2800,24 +2800,31 @@
           </div>
 
           <div class="panel character-dossier" v-else-if="detailView === 'person' && selectedPerson">
-            <button class="secondary back-button" @click="returnFromDetail">{{ detailBackLabel }}</button>
             <div class="dossier-frame">
               <div class="detail-hero compact dossier-header">
+                <button class="secondary back-button dossier-back-button" @click="returnFromDetail">{{ detailBackLabel }}</button>
                 <div>
                   <h3>{{ selectedPerson.name }}</h3>
-                  <p>{{ selectedPerson.sect }} · {{ genderLabel(selectedPerson.gender) }} · {{ realmName(selectedPerson.realm) }} · {{ rootLine(selectedPerson) }}</p>
-                  <span class="tag skill-detail-tag" :title="skillTip(selectedPerson)">本命技能：{{ skillNameForDisplay(selectedPerson) }}</span>
-                  <span class="tag rank-tag" :class="`duel-rank-${duelRankId(selectedPerson)}`">{{ duelRankText(selectedPerson) }}</span>
-                  <span class="tag">{{ rootCounterText(selectedPerson) }}</span>
+                  <p>
+                    <span>宗门：{{ selectedPerson.sect }}</span>
+                    <span>性别：{{ genderLabel(selectedPerson.gender) }}</span>
+                    <span>境界：{{ realmName(selectedPerson.realm) }}</span>
+                    <span>根线：{{ rootLine(selectedPerson) }}</span>
+                  </p>
                 </div>
-                <span class="tag equipment-count-tag">{{ equippedFor(selectedPerson).length }}/{{ equipmentSlots.length }}</span>
+                <div class="dossier-header-tags">
+                  <span class="tag skill-detail-tag" :title="skillTip(selectedPerson)">本命神通：{{ skillNameForDisplay(selectedPerson) }}</span>
+                  <span class="tag rank-tag" :class="`duel-rank-${duelRankId(selectedPerson)}`">斗法排名：{{ duelRankText(selectedPerson) }}</span>
+                  <span class="tag">{{ rootCounterText(selectedPerson) }}</span>
+                  <span class="tag equipment-count-tag">装备：{{ equippedFor(selectedPerson).length }}/{{ equipmentSlots.length }}</span>
+                </div>
               </div>
 
               <div class="detail-overview dossier-overview">
                 <div class="detail-side-stats dossier-stat-bank">
                 <div
                   class="detail-box"
-                  v-for="item in personStats(selectedPerson).slice(0, Math.ceil(personStats(selectedPerson).length / 2))"
+                  v-for="item in personStats(selectedPerson).slice(0, 6)"
                   :key="item.label"
                   tabindex="0"
                   :aria-label="item.help ? `${item.label}：${item.value}。${item.help}` : `${item.label}：${item.value}`"
@@ -2872,7 +2879,7 @@
               <div class="detail-side-stats dossier-stat-bank">
                 <div
                   class="detail-box"
-                  v-for="item in personStats(selectedPerson).slice(Math.ceil(personStats(selectedPerson).length / 2))"
+                  v-for="item in personStats(selectedPerson).slice(6)"
                   :key="item.label"
                   tabindex="0"
                   :aria-label="item.help ? `${item.label}：${item.value}。${item.help}` : `${item.label}：${item.value}`"
@@ -2891,9 +2898,9 @@
               </div>
             </div>
 
-            <div class="grid detail-sections dossier-insight">
+            <div class="grid detail-sections record-sections dossier-records">
               <div class="panel flat">
-                <h3>灵根命盘</h3>
+                <h3>根盘</h3>
                 <div class="root-chip-list">
                   <span class="root-chip" v-for="root in rootList(selectedPerson)" :key="`${selectedPerson.id}-${root.key}`" :class="{ primary: root.key === primaryRoot(selectedPerson).key }">
                     {{ root.name }}<small>{{ root.key === primaryRoot(selectedPerson).key ? "主" : "副" }} · {{ rootBonusText(selectedPerson, root) }}</small>
@@ -2918,9 +2925,6 @@
                   </div>
                 </div>
               </div>
-            </div>
-
-            <div class="grid detail-sections record-sections dossier-records">
               <div class="panel flat">
                 <h3>每日成长</h3>
                 <div class="timeline detail-scroll">
@@ -2971,8 +2975,9 @@
                 </div>
               </div>
               <div class="panel flat">
-                <h3>副本闯关</h3>
+                <h3>秘境记录</h3>
                 <div class="timeline detail-scroll">
+                  <div class="dossier-record-group-label">副本闯关</div>
                   <button
                     class="event event-button"
                     :class="{ bad: dungeonRecordFailed(record), gold: dungeonRecordSucceeded(record), replayable: hasReplay(record) }"
@@ -2987,11 +2992,7 @@
                     <small v-if="record.item">{{ record.tierName }}「{{ record.item }}」</small>
                   </button>
                   <div v-if="!selectedPerson.dungeonHistory?.length" class="empty">暂无副本闯关记录。</div>
-                </div>
-              </div>
-              <div class="panel flat">
-                <h3>技能升阶</h3>
-                <div class="timeline detail-scroll">
+                  <div class="dossier-record-group-label">技能升阶</div>
                   <div class="event" :class="{ gold: skillUpgradeRecordSucceeded(record), bad: !skillUpgradeRecordSucceeded(record) }" v-for="record in selectedPerson.skillUpgrades || []" :key="`${record.day}-${record.skillId}-${record.toRank}-${record.success === false ? 'fail' : 'success'}`">
                     <strong>{{ skillUpgradeRecordTitle(record) }}</strong>
                     <span>{{ skillUpgradeRecordMetaText(record) }}</span>
