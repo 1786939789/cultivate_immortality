@@ -9157,15 +9157,18 @@ body::before {
 }
 
 .rank-surface.view.active > .character-dossier .dossier-core .equipment-paperdoll {
-  grid-template-columns: clamp(70px, 5.4vw, 88px) minmax(260px, 1fr) clamp(70px, 5.4vw, 88px);
+  grid-template-columns: clamp(108px, 7.6vw, 126px) minmax(180px, 1fr) clamp(108px, 7.6vw, 126px);
   gap: clamp(8px, .7vw, 10px);
   min-height: clamp(300px, 22vw, 360px);
   align-items: stretch;
 }
 
 .rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card {
-  min-height: clamp(78px, 6.2vw, 96px);
+  width: 100%;
+  min-height: 0;
+  aspect-ratio: 1;
   grid-template-columns: 1fr;
+  align-content: center;
   justify-items: center;
   padding: 6px;
   border-radius: 3px;
@@ -9173,8 +9176,8 @@ body::before {
 }
 
 .rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card::before {
-  width: 42px;
-  height: 42px;
+  width: clamp(46px, 3.7vw, 58px);
+  height: clamp(46px, 3.7vw, 58px);
 }
 
 .rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card .equipment-icon {
@@ -9196,10 +9199,12 @@ body::before {
 
 .rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card span {
   font-size: 11px;
+  line-height: 1.15;
 }
 
 .rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card strong {
   font-size: 12px;
+  line-height: 1.15;
 }
 
 .rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card small {
