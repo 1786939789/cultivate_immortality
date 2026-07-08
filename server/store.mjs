@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,6 +9,8 @@ const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const dataDir = join(rootDir, "data");
 const dbPath = process.env.GAME_DB_PATH || join(dataDir, "game.sqlite");
 const wasmPath = join(rootDir, "node_modules", "sql.js", "dist", "sql-wasm.wasm");
+const defaultRegistrationCode = "Rushac";
+const sessionMaxAgeSeconds = 60 * 60 * 24 * 30;
 
 mkdirSync(dataDir, { recursive: true });
 
@@ -53,12 +55,54 @@ async function openDb() {
           updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
       `);
+      db.run(`
+        CREATE TABLE IF NOT EXISTS auth_users (
+          id TEXT PRIMARY KEY,
+          username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+          password_hash TEXT NOT NULL,
+          password_salt TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          last_login_at TEXT
+        );
+      `);
+      db.run(`
+        CREATE TABLE IF NOT EXISTS auth_registration_codes (
+          code TEXT PRIMARY KEY,
+          active INTEGER NOT NULL DEFAULT 1,
+          max_uses INTEGER,
+          used_count INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+      db.run(`
+        CREATE TABLE IF NOT EXISTS auth_sessions (
+          token_hash TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          expires_at TEXT NOT NULL
+        );
+      `);
       db.run("CREATE INDEX IF NOT EXISTS idx_battle_replays_save ON battle_replays (save_id);");
+      db.run("CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions (user_id);");
+      seedRegistrationCode(db);
       persist(db);
       return db;
     });
   }
   return dbPromise;
+}
+
+function seedRegistrationCode(db) {
+  const statement = db.prepare(`
+    INSERT INTO auth_registration_codes (code, active, max_uses, used_count)
+    VALUES ($code, 1, NULL, 0)
+    ON CONFLICT(code) DO NOTHING
+  `);
+  try {
+    statement.run({ $code: defaultRegistrationCode });
+  } finally {
+    statement.free();
+  }
 }
 
 function persist(db) {
@@ -133,6 +177,220 @@ function writeSaveMeta(db, state, id = "default") {
   } finally {
     statement.free();
   }
+}
+
+function normalizeUsername(value) {
+  return String(value || "").trim();
+}
+
+function assertUsername(username) {
+  if (username.length < 2 || username.length > 24) throw new Error("账号名需为 2-24 个字符");
+  if (/[\s\x00-\x1f]/.test(username)) throw new Error("账号名不能包含空白或控制字符");
+}
+
+function assertPassword(password) {
+  if (typeof password !== "string" || password.length < 6) throw new Error("密码至少需要 6 位");
+  if (password.length > 72) throw new Error("密码最多 72 位");
+}
+
+function hashPassword(password, salt = randomBytes(16).toString("base64url")) {
+  const hash = scryptSync(password, salt, 64).toString("base64url");
+  return { hash, salt };
+}
+
+function verifyPassword(password, salt, expectedHash) {
+  const actual = Buffer.from(hashPassword(password, salt).hash, "base64url");
+  const expected = Buffer.from(expectedHash, "base64url");
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
+function hashSessionToken(token) {
+  return createHash("sha256").update(token).digest("base64url");
+}
+
+function sessionExpiryDate() {
+  return new Date(Date.now() + sessionMaxAgeSeconds * 1000).toISOString();
+}
+
+function publicUser(row) {
+  if (!row) return null;
+  const [id, username, createdAt, lastLoginAt] = row;
+  return {
+    id,
+    username,
+    saveId: id,
+    createdAt,
+    lastLoginAt: lastLoginAt || ""
+  };
+}
+
+function readUserByName(db, username) {
+  const result = db.exec(
+    "SELECT id, username, password_hash, password_salt, created_at, last_login_at FROM auth_users WHERE username = $username COLLATE NOCASE LIMIT 1",
+    { $username: username }
+  );
+  return result.length && result[0].values.length ? result[0].values[0] : null;
+}
+
+function userCount(db) {
+  const result = db.exec("SELECT COUNT(*) FROM auth_users");
+  return result.length ? Number(result[0].values[0][0] || 0) : 0;
+}
+
+function assertRegistrationCode(db, code) {
+  const text = String(code || "").trim();
+  if (!text) throw new Error("请输入注册码");
+  const result = db.exec(
+    "SELECT active, max_uses, used_count FROM auth_registration_codes WHERE code = $code LIMIT 1",
+    { $code: text }
+  );
+  if (!result.length || !result[0].values.length) throw new Error("注册码无效");
+  const [active, maxUses, usedCount] = result[0].values[0];
+  if (!Number(active)) throw new Error("注册码已停用");
+  if (maxUses !== null && Number(usedCount || 0) >= Number(maxUses)) throw new Error("注册码已用尽");
+  return text;
+}
+
+function incrementRegistrationCodeUse(db, code) {
+  const statement = db.prepare("UPDATE auth_registration_codes SET used_count = used_count + 1 WHERE code = $code");
+  try {
+    statement.run({ $code: code });
+  } finally {
+    statement.free();
+  }
+}
+
+function createSession(db, userId) {
+  const token = randomBytes(32).toString("base64url");
+  const tokenHash = hashSessionToken(token);
+  const expiresAt = sessionExpiryDate();
+  const statement = db.prepare(`
+    INSERT INTO auth_sessions (token_hash, user_id, expires_at)
+    VALUES ($tokenHash, $userId, $expiresAt)
+  `);
+  try {
+    statement.run({ $tokenHash: tokenHash, $userId: userId, $expiresAt: expiresAt });
+  } finally {
+    statement.free();
+  }
+  return { token, expiresAt, maxAge: sessionMaxAgeSeconds };
+}
+
+function touchUserLogin(db, userId) {
+  const statement = db.prepare("UPDATE auth_users SET last_login_at = datetime('now') WHERE id = $id");
+  try {
+    statement.run({ $id: userId });
+  } finally {
+    statement.free();
+  }
+}
+
+export function sessionCookie(session) {
+  return [
+    `csj_session=${session.token}`,
+    "HttpOnly",
+    "SameSite=Lax",
+    "Path=/",
+    `Max-Age=${session.maxAge}`
+  ].join("; ");
+}
+
+export function clearSessionCookie() {
+  return "csj_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0";
+}
+
+export async function getAuthSession(token) {
+  const text = String(token || "").trim();
+  if (!text) return null;
+  const db = await openDb();
+  const tokenHash = hashSessionToken(text);
+  const result = db.exec(`
+    SELECT u.id, u.username, u.created_at, u.last_login_at, s.expires_at
+    FROM auth_sessions s
+    JOIN auth_users u ON u.id = s.user_id
+    WHERE s.token_hash = $tokenHash
+    LIMIT 1
+  `, { $tokenHash: tokenHash });
+  if (!result.length || !result[0].values.length) return null;
+  const row = result[0].values[0];
+  const expiresAt = row[4] || "";
+  if (!expiresAt || Date.parse(expiresAt) <= Date.now()) {
+    await logoutSession(text);
+    return null;
+  }
+  return { user: publicUser(row.slice(0, 4)), expiresAt };
+}
+
+export async function registerUser({ username, password, registrationCode }) {
+  const db = await openDb();
+  const cleanUsername = normalizeUsername(username);
+  assertUsername(cleanUsername);
+  assertPassword(password);
+  const code = assertRegistrationCode(db, registrationCode);
+  if (readUserByName(db, cleanUsername)) throw new Error("账号名已存在");
+
+  const isFirstUser = userCount(db) === 0;
+  const id = `user-${randomUUID()}`;
+  const { hash, salt } = hashPassword(password);
+  const statement = db.prepare(`
+    INSERT INTO auth_users (id, username, password_hash, password_salt, last_login_at)
+    VALUES ($id, $username, $passwordHash, $passwordSalt, datetime('now'))
+  `);
+  try {
+    statement.run({
+      $id: id,
+      $username: cleanUsername,
+      $passwordHash: hash,
+      $passwordSalt: salt
+    });
+  } finally {
+    statement.free();
+  }
+  incrementRegistrationCodeUse(db, code);
+  const session = createSession(db, id);
+  persist(db);
+
+  if (isFirstUser) {
+    const defaultState = await readState("default");
+    await writeState(JSON.parse(JSON.stringify(defaultState)), id);
+  } else {
+    await readState(id);
+  }
+
+  return {
+    user: { id, username: cleanUsername, saveId: id, createdAt: new Date().toISOString(), lastLoginAt: new Date().toISOString() },
+    session
+  };
+}
+
+export async function loginUser({ username, password }) {
+  const db = await openDb();
+  const cleanUsername = normalizeUsername(username);
+  assertUsername(cleanUsername);
+  assertPassword(password);
+  const row = readUserByName(db, cleanUsername);
+  if (!row || !verifyPassword(password, row[3], row[2])) throw new Error("账号或密码错误");
+  touchUserLogin(db, row[0]);
+  const session = createSession(db, row[0]);
+  persist(db);
+  await readState(row[0]);
+  return {
+    user: { ...publicUser([row[0], row[1], row[4], new Date().toISOString()]) },
+    session
+  };
+}
+
+export async function logoutSession(token) {
+  const text = String(token || "").trim();
+  if (!text) return;
+  const db = await openDb();
+  const statement = db.prepare("DELETE FROM auth_sessions WHERE token_hash = $tokenHash");
+  try {
+    statement.run({ $tokenHash: hashSessionToken(text) });
+  } finally {
+    statement.free();
+  }
+  persist(db);
 }
 
 export async function readState(id = "default") {

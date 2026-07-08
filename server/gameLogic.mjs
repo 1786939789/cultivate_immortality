@@ -993,6 +993,8 @@ export function baseBreakthroughChance(realm) {
   const levelPenalty = (info.level - 1) * 0.028;
   const stagePenalty = info.stageIndex * 0.068;
   const bottleneckPenalty = info.level === 10 ? 0.3 + info.stageIndex * 0.045 : 0;
+  if (info.stageIndex === 1 && info.level === 10) return 0.1;
+  if (info.stageIndex === 2 && info.level === 10) return 0.06;
   return clamp(0.72 - levelPenalty - stagePenalty - bottleneckPenalty, 0.035, 0.82);
 }
 
@@ -3354,11 +3356,11 @@ function ensureProvinceState(state) {
 
 function breakthroughChanceFor(state, entity) {
   const sectName = entity.id === "player" ? state.sect.name : entity.sect;
-  const potionMultiplier = entity.id === "player" ? activeBreakthroughMultiplier(state) : 1;
+  const potionBonus = entity.id === "player" ? activeBreakthroughBonus(state) : 0;
   const divineSenseBonus = entity.id === "player" ? divineSenseBreakthroughBonus(entity, state) : 0;
   const beforePotion = breakthroughChance(entity) * (1 + sectBreakthroughBonus(state, sectName, entity)) + divineSenseBonus;
   return clamp(
-    beforePotion * potionMultiplier,
+    beforePotion + potionBonus,
     0.035,
     entity.id === "player" ? 0.95 : 0.82
   );
@@ -3371,7 +3373,6 @@ function breakthroughChanceParts(state, entity) {
   const bonus = sectBreakthroughBonus(state, sectName, entity);
   const sectMultiplier = 1 + bonus;
   const potionBonus = entity.id === "player" ? activeBreakthroughBonus(state) : 0;
-  const potionMultiplier = 1 + potionBonus;
   const divineSenseBonus = entity.id === "player" ? divineSenseBreakthroughBonus(entity, state) : 0;
   const beforePotion = base * sectMultiplier + divineSenseBonus;
   return {
@@ -3381,9 +3382,8 @@ function breakthroughChanceParts(state, entity) {
     base,
     bonus,
     potionBonus,
-    potionMultiplier,
     divineSenseBonus,
-    total: clamp(beforePotion * potionMultiplier, 0.035, entity.id === "player" ? 0.95 : 0.82)
+    total: clamp(beforePotion + potionBonus, 0.035, entity.id === "player" ? 0.95 : 0.82)
   };
 }
 
@@ -3454,6 +3454,7 @@ function staticCatalog() {
 
 const baseBreakthroughAttempts = 1;
 const maxBreakthroughAttemptsPerDay = 4;
+const maxBreakthroughBonusStacks = 4;
 
 function itemEntries() {
   return Object.entries(itemCatalog);
@@ -3480,6 +3481,18 @@ function shopPriceFor(state, id) {
   const permanentBought = Number(state.shop?.permanentPurchases?.[id] || 0);
   const base = Number(item.basePrice || item.price || 0) + permanentBought * Number(item.priceStep || 0);
   return Math.max(1, Math.round(base * shopPriceFactor(id, state.day)));
+}
+
+function shopSellPriceFor(state, id) {
+  const item = itemCatalog[id];
+  if (!item) return 0;
+  if (item.limit?.type !== "permanent") {
+    return Math.max(1, Math.floor(shopPriceFor(state, id) * 0.9));
+  }
+  const permanentBought = Math.max(0, Math.floor(Number(state.shop?.permanentPurchases?.[id]) || 0));
+  const soldUnitIndex = Math.max(0, permanentBought - 1);
+  const base = Number(item.basePrice || item.price || 0) + soldUnitIndex * Number(item.priceStep || 0);
+  return Math.max(1, Math.floor(Math.round(base * shopPriceFactor(id, state.day)) * 0.9));
 }
 
 function limitKeyFor(state, id, limit = itemCatalog[id]?.limit) {
@@ -3547,6 +3560,7 @@ function shopItemState(state, id) {
   return {
     id,
     price,
+    sellPrice: shopSellPriceFor(state, id),
     basePrice: item.basePrice || item.price || 0,
     priceFactor: shopPriceFactor(id, state.day),
     limitType: limit.type || "none",
@@ -3580,6 +3594,7 @@ function defaultElixirEffects() {
     cultivationMultiplier: 1,
     cultivationMultiplierUntilDay: 0,
     nextBreakthroughBonus: 0,
+    nextBreakthroughBonusStacks: [],
     extraBreakthroughAttemptsToday: 0,
     breakthroughAttemptEffectDay: 0
   };
@@ -3591,6 +3606,22 @@ function normalizeElixirEffects(state) {
     ...(state.player.elixirEffects || {})
   };
   const effects = state.player.elixirEffects;
+  const rawStacks = Array.isArray(effects.nextBreakthroughBonusStacks) ? effects.nextBreakthroughBonusStacks : [];
+  let stacks = rawStacks
+    .map((stack) => ({
+      itemId: typeof stack?.itemId === "string" ? stack.itemId : "",
+      name: typeof stack?.name === "string" ? stack.name : "破境丹",
+      bonus: Math.max(0, Number(stack?.bonus) || 0)
+    }))
+    .filter((stack) => stack.bonus > 0)
+    .slice(0, maxBreakthroughBonusStacks);
+  const legacyBonus = Math.max(0, Number(effects.nextBreakthroughBonus) || 0);
+  if (!stacks.length && legacyBonus > 0) {
+    stacks = [{ itemId: "", name: effects.nextBreakthroughBonusItem || "破境丹", bonus: legacyBonus }];
+  }
+  effects.nextBreakthroughBonusStacks = stacks;
+  effects.nextBreakthroughBonus = stacks.reduce((sum, stack) => sum + stack.bonus, 0);
+  effects.nextBreakthroughBonusItem = stacks.map((stack) => stack.name).filter(Boolean).join("、");
   if (Number(effects.cultivationMultiplierUntilDay || 0) < state.day) {
     effects.cultivationMultiplier = 1;
     effects.cultivationMultiplierUntilDay = 0;
@@ -3609,6 +3640,9 @@ function publicElixirEffects(state) {
     cultivationMultiplierUntilDay: Number(effects.cultivationMultiplierUntilDay) || 0,
     cultivationMultiplierDaysLeft: Math.max(0, Number(effects.cultivationMultiplierUntilDay || 0) - state.day + 1),
     nextBreakthroughBonus: Math.max(0, Number(effects.nextBreakthroughBonus) || 0),
+    nextBreakthroughBonusStacks: (effects.nextBreakthroughBonusStacks || []).map((stack) => ({ ...stack })),
+    nextBreakthroughBonusCount: (effects.nextBreakthroughBonusStacks || []).length,
+    nextBreakthroughBonusMax: maxBreakthroughBonusStacks,
     extraBreakthroughAttemptsToday: Math.max(0, Math.floor(Number(effects.extraBreakthroughAttemptsToday) || 0))
   };
 }
@@ -3623,6 +3657,13 @@ function activeBreakthroughBonus(state) {
 
 function activeBreakthroughMultiplier(state) {
   return 1 + activeBreakthroughBonus(state);
+}
+
+function clearBreakthroughBonusEffects(state) {
+  normalizeElixirEffects(state);
+  state.player.elixirEffects.nextBreakthroughBonus = 0;
+  state.player.elixirEffects.nextBreakthroughBonusStacks = [];
+  state.player.elixirEffects.nextBreakthroughBonusItem = "";
 }
 
 function divineSenseBreakthroughBonus(entity, state) {
@@ -5234,8 +5275,8 @@ function homeDungeonSummaryForState(state) {
   const playerSolo = (day.solo || []).find((entry) => entry.id === playerId);
   const playerClearedCaves = bloodCaves.filter((cave) => (cave.clears || []).some((entry) => entry.id === playerId));
   const bloodTotal = bloodCaves.length;
-  const bloodCleared = playerClearedCaves.length;
-  const bloodTitle = playerClearedCaves.at(-1)?.name || day.bloodTrial?.name || "血色禁地";
+  const bloodCleared = Math.max(playerClearedCaves.length, clearDepthFromDungeonHistory(playerSolo));
+  const bloodTitle = bloodCaves[Math.max(0, bloodCleared - 1)]?.name || playerClearedCaves.at(-1)?.name || day.bloodTrial?.name || "血色禁地";
   const bloodText = playerSolo
     ? (bloodTotal && bloodCleared >= bloodTotal
       ? `血色通关 ${bloodCleared}/${bloodTotal}`
@@ -5245,12 +5286,16 @@ function homeDungeonSummaryForState(state) {
   const publicRecord = day.public || null;
   const playerTeam = publicRecord?.teams?.find((team) => (team.members || []).some((member) => member.id === playerId));
   const playerTeamRank = playerTeam?.rank || publicRecord?.playerTeamRank || publicRecord?.rank;
+  const playerPersonalRank = (publicRecord?.top || []).findIndex((entry) => entry.id === playerId) + 1;
+  const starSeaText = publicRecord
+    ? `乱星海队伍第${playerTeamRank || "-"}${playerPersonalRank ? ` · 个人第${playerPersonalRank}` : ""}`
+    : "乱星海未结算";
   return {
     title: bloodTitle,
     summary: [
       { key: "blood", icon: "血", text: bloodText },
       { key: "void", icon: "殿", text: playerSectRecord ? `虚天殿${playerSectRecord.success ? "通关" : "未通关"}` : "虚天殿未结算" },
-      { key: "sea", icon: "海", text: publicRecord ? `乱星海队伍第${playerTeamRank || "-"}` : "乱星海未结算" }
+      { key: "sea", icon: "海", text: starSeaText }
     ]
   };
 }
@@ -5673,6 +5718,7 @@ function publicSectDungeonRecord(record, currentDay = 1, parentDay = null, peopl
 
 function publicStarSeaRecord(record, currentDay = 1, parentDay = null, people = null) {
   const replayRecord = { ...record, day: record.day || parentDay };
+  const replayId = record.replayId || record.replay?.replayId || "";
   return {
     type: record.type,
     name: record.name,
@@ -5697,7 +5743,7 @@ function publicStarSeaRecord(record, currentDay = 1, parentDay = null, people = 
     tierName: record.tierName || "",
     itemValue: record.itemValue || 0,
     auctionDividend: record.auctionDividend || 0,
-    replayId: record.replayId || "",
+    replayId,
     hasReplay: Boolean(record.replay || record.replayId) && isReplayWithinDays(replayRecord, currentDay),
     replay: null
   };
@@ -5705,6 +5751,7 @@ function publicStarSeaRecord(record, currentDay = 1, parentDay = null, people = 
 
 function publicStarSeaTeam(record, currentDay = 1, parentDay = null, people = null) {
   const replayRecord = { ...record, day: record.day || parentDay };
+  const replayId = record.replayId || record.replay?.replayId || "";
   return {
     id: record.id,
     name: record.name,
@@ -5723,7 +5770,7 @@ function publicStarSeaTeam(record, currentDay = 1, parentDay = null, people = nu
     itemOwner: record.itemOwner || "",
     itemValue: record.itemValue || 0,
     auctionDividend: record.auctionDividend || 0,
-    replayId: record.replayId || "",
+    replayId,
     hasReplay: Boolean(record.replay || record.replayId) && isReplayWithinDays(replayRecord, currentDay),
     replay: null
   };
@@ -6574,7 +6621,7 @@ function autoAttemptPlayerBreakthrough(state) {
   const chance = breakthroughChanceFor(state, p);
   p.lastBreakthroughDay = state.day;
   p.breakthroughAttemptsToday = attempts.used + 1;
-  p.elixirEffects.nextBreakthroughBonus = 0;
+  clearBreakthroughBonusEffects(state);
   if (Math.random() < chance) {
     const fromRealm = p.realm;
     p.realm += 1;
@@ -7051,6 +7098,28 @@ export function buyItem(state, kind) {
   log(state, `在坊市购得「${item.name}」一枚，花费 ${itemState.price} 灵石。`);
 }
 
+export function sellItem(state, kind) {
+  ensureStateShape(state);
+  const item = itemCatalog[kind];
+  if (!item) throw new Error("未知物品");
+  const count = Math.max(0, Math.floor(Number(state.bag[kind]) || 0));
+  if (count <= 0) {
+    log(state, `丹匣中没有「${item.name}」可售。`, "bad");
+    return;
+  }
+  const sellPrice = shopSellPriceFor(state, kind);
+  state.bag[kind] = count - 1;
+  state.player.spirit += sellPrice;
+  if (item.limit?.type === "permanent") {
+    state.shop ??= {};
+    state.shop.permanentPurchases ??= {};
+    const bought = Math.max(0, Math.floor(Number(state.shop.permanentPurchases[kind]) || 0));
+    const used = Math.max(0, Math.floor(Number(state.shop.permanentUses?.[kind]) || 0));
+    state.shop.permanentPurchases[kind] = Math.max(used, bought - 1);
+  }
+  log(state, `售出「${item.name}」一枚，按今日行情九折换得 ${sellPrice} 灵石。`, "gold");
+}
+
 export function useItem(state, kind) {
   ensureStateShape(state);
   if (!itemCatalog[kind]) throw new Error("未知物品");
@@ -7077,14 +7146,18 @@ export function useItem(state, kind) {
 
   if (effect.type === "breakthroughBonus") {
     const nextBonus = Math.max(0, Number(effect.bonus) || 0);
-    const currentBonus = Math.max(0, Number(p.elixirEffects.nextBreakthroughBonus) || 0);
-    if (currentBonus > nextBonus) {
-      log(state, `当前破境丹药力更强，暂不服用「${item.name}」。`, "bad");
+    const current = publicElixirEffects(state);
+    const stacks = Array.isArray(p.elixirEffects.nextBreakthroughBonusStacks) ? p.elixirEffects.nextBreakthroughBonusStacks : [];
+    if (stacks.length >= maxBreakthroughBonusStacks) {
+      log(state, `下次突破最多可叠加 ${maxBreakthroughBonusStacks} 枚破境丹，暂不服用「${item.name}」。`, "bad");
       return;
     }
-    p.elixirEffects.nextBreakthroughBonus = nextBonus;
+    const nextStacks = [...stacks, { itemId: kind, name: item.name, bonus: nextBonus }];
+    p.elixirEffects.nextBreakthroughBonusStacks = nextStacks;
+    p.elixirEffects.nextBreakthroughBonus = nextStacks.reduce((sum, stack) => sum + Math.max(0, Number(stack.bonus) || 0), 0);
+    p.elixirEffects.nextBreakthroughBonusItem = nextStacks.map((stack) => stack.name).join("、");
     state.bag[kind] -= 1;
-    log(state, `服下「${item.name}」，下次突破成功率变为原来的 ${Math.round((1 + nextBonus) * 100)}%。`, "gold");
+    log(state, `服下「${item.name}」，下次突破成功率额外 +${Math.round(nextBonus * 100)}%，当前累计 +${Math.round(p.elixirEffects.nextBreakthroughBonus * 100)}%（${current.nextBreakthroughBonusCount + 1}/${maxBreakthroughBonusStacks}）。`, "gold");
     return;
   }
 

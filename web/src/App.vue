@@ -1,5 +1,48 @@
 <template>
   <div class="app">
+    <div v-if="authLoading" class="loading auth-loading">正在叩问山门...</div>
+
+    <section v-else-if="!authUser" class="auth-shell" aria-label="登录注册">
+      <div class="auth-brand">
+        <span class="auth-seal" aria-hidden="true">长生</span>
+        <div>
+          <h1>长生札记</h1>
+          <p>入山先验令，登记道名后方可翻开本命札记。</p>
+        </div>
+      </div>
+
+      <form class="auth-panel" @submit.prevent="submitAuth">
+        <div class="auth-tabs" role="tablist" aria-label="账号入口">
+          <button type="button" :class="{ active: authMode === 'login' }" @click="switchAuthMode('login')">登录</button>
+          <button type="button" :class="{ active: authMode === 'register' }" @click="switchAuthMode('register')">注册</button>
+        </div>
+
+        <div class="auth-copy">
+          <h2>{{ authMode === "login" ? "道友归来" : "初入山门" }}</h2>
+          <p v-if="authMode === 'login'">输入账号密码，继续今日修行。</p>
+        </div>
+
+        <label>
+          <span>账号</span>
+          <input v-model.trim="authForm.username" autocomplete="username" maxlength="24" placeholder="请输入账号">
+        </label>
+        <label>
+          <span>密码</span>
+          <input v-model="authForm.password" type="password" autocomplete="current-password" maxlength="72" placeholder="至少 6 位">
+        </label>
+        <label v-if="authMode === 'register'">
+          <span>注册码</span>
+          <input v-model.trim="authForm.registrationCode" autocomplete="off" placeholder="请输入注册码">
+        </label>
+
+        <p v-if="authError" class="auth-error">{{ authError }}</p>
+        <button class="primary auth-submit" type="submit" :disabled="authPending">
+          {{ authPending ? "校验中..." : authMode === "login" ? "进入札记" : "注册并进入" }}
+        </button>
+      </form>
+    </section>
+
+    <template v-else>
     <header class="topbar">
       <section class="brand">
         <div class="sigil" aria-hidden="true">
@@ -59,6 +102,15 @@
         </div>
         <button class="secondary" :disabled="isActionPending('/api/day/advance')" @click="advanceDay">{{ isActionPending("/api/day/advance") ? "结算中..." : "推进一天" }}</button>
         <button class="danger" :disabled="isActionPending('/api/reset')" @click="resetGame">重开一世</button>
+        <div class="account-menu" :class="{ open: accountMenuOpen }" @click.stop>
+          <button class="account-trigger" type="button" :aria-expanded="accountMenuOpen" aria-label="账号菜单" @click="toggleAccountMenu">
+            <span class="account-avatar">{{ accountInitial }}</span>
+            <strong>{{ authUser.username }}</strong>
+          </button>
+          <div v-if="accountMenuOpen" class="account-popover">
+            <button class="secondary" type="button" :disabled="authPending" @click="handleLogout">退出账号</button>
+          </div>
+        </div>
       </section>
     </header>
 
@@ -1412,7 +1464,7 @@
               <div class="panel flat sea-team-rank">
                 <h3>队伍排名</h3>
                 <div class="timeline compact-list">
-                  <button class="event event-button" type="button" v-for="team in starSeaTeamRanking" :key="team.id || team.name" :disabled="!hasReplay(team) && !hasReplay(selectedDungeonDay.public)" @click="openReplay(team, selectedDungeonDay.public)">
+                  <button class="event event-button" type="button" v-for="team in starSeaTeamRanking" :key="team.id || team.name" :disabled="!hasReplay(team) && !hasReplay(selectedDungeonDay.public)" @click="openStarSeaTeamReplay(team)">
                     <strong>{{ team.rank }}. {{ team.name }}</strong>
                     <span>评分 {{ team.score }} · 输出 {{ team.damage }} · {{ team.success ? `${team.rounds} 回合击杀` : "未击杀" }} · 队伍 +{{ team.spirit }} 灵石</span>
                   </button>
@@ -2424,7 +2476,7 @@
                     </span>
                     <span class="market-product-foot">
                       <em>{{ entry.item.limitText }}</em>
-                      <em>{{ entry.item.countdownText }}</em>
+                      <em>售出 {{ entry.item.sellPrice || 0 }} 灵石</em>
                     </span>
                   </button>
                 </div>
@@ -2440,6 +2492,10 @@
                   <div>
                     <dt>今日价格</dt>
                     <dd>{{ selectedMarketItem.price }} 灵石</dd>
+                  </div>
+                  <div v-if="marketSubTab === 'bag'">
+                    <dt>售卖可得</dt>
+                    <dd>{{ selectedMarketItem.sellPrice || 0 }} 灵石</dd>
                   </div>
                   <div>
                     <dt>限购次数</dt>
@@ -2485,15 +2541,24 @@
                 >
                   {{ selectedMarketItem.canBuy ? "购买" : selectedMarketItem.reason }}
                 </button>
-                <button
-                  v-else
-                  class="market-action"
-                  type="button"
-                  :disabled="!selectedBagEntry || isActionPending('/api/items/use')"
-                  @click="useMarketItem(selectedMarketItem.id)"
-                >
-                  使用
-                </button>
+                <div v-else class="market-action-row">
+                  <button
+                    class="market-action"
+                    type="button"
+                    :disabled="!selectedBagEntry || isActionPending('/api/items/use')"
+                    @click="useMarketItem(selectedMarketItem.id)"
+                  >
+                    使用
+                  </button>
+                  <button
+                    class="market-action sell-action"
+                    type="button"
+                    :disabled="!selectedBagEntry || isActionPending('/api/items/sell')"
+                    @click="sellMarketItem(selectedMarketItem.id)"
+                  >
+                    售卖 +{{ selectedMarketItem.sellPrice || 0 }}
+                  </button>
+                </div>
               </aside>
             </div>
           </div>
@@ -2853,7 +2918,12 @@
               <div class="panel flat">
                 <h3>每日成长</h3>
                 <div class="timeline detail-scroll">
-                  <div class="event" v-for="record in personDailyRecords(selectedPerson)" :key="`${record.day}-${record.note}`">
+                  <div
+                    class="event"
+                    :class="{ bad: dailyRecordFailed(record), gold: dailyRecordSucceeded(record) }"
+                    v-for="record in personDailyRecords(selectedPerson)"
+                    :key="`${record.day}-${record.note}`"
+                  >
                     <strong>{{ shortDisplayDate(record) }} · {{ dailyRecordMainText(record) }}</strong>
                     <span v-if="dailyRecordMetaText(selectedPerson, record)">{{ dailyRecordMetaText(selectedPerson, record) }}</span>
                   </div>
@@ -2899,6 +2969,7 @@
                 <div class="timeline detail-scroll">
                   <button
                     class="event event-button"
+                    :class="{ bad: dungeonRecordFailed(record), gold: dungeonRecordSucceeded(record), replayable: hasReplay(record) }"
                     v-for="record in selectedPerson.dungeonHistory || []"
                     :key="`${record.day}-${record.type}-${record.name}-${record.result}`"
                     type="button"
@@ -3337,6 +3408,7 @@
         </div>
       </section>
     </div>
+    </template>
 
     <div v-if="error" class="toast">{{ error }}</div>
   </div>
@@ -3379,7 +3451,7 @@ import {
   Zap
 } from "lucide-vue-next";
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from "vue";
-import { clearCachedState, getBattleReplay, getCachedState, getCultivatorDetail, getDuelReplay, getState, postAction, saveCachedState } from "./api";
+import { clearCachedState, getBattleReplay, getCachedState, getCultivatorDetail, getCurrentUser, getDuelReplay, getState, login, logout, postAction, register, saveCachedState } from "./api";
 import CharacterPortrait from "./components/CharacterPortrait.vue";
 import EquipmentIcon from "./components/EquipmentIcon.vue";
 import LogPanel from "./components/LogPanel.vue";
@@ -3532,6 +3604,17 @@ const skillGlyphs = {
 };
 
 const state = shallowRef(null);
+const authLoading = ref(true);
+const authPending = ref(false);
+const authUser = ref(null);
+const authMode = ref("login");
+const authError = ref("");
+const accountMenuOpen = ref(false);
+const authForm = reactive({
+  username: "",
+  password: "",
+  registrationCode: ""
+});
 const loading = ref(true);
 const error = ref("");
 const pendingActions = ref(new Set());
@@ -3660,6 +3743,10 @@ const gameState = computed(() => state.value || emptyState);
 const player = computed(() => gameState.value.player);
 const derived = computed(() => gameState.value.derived || {});
 const catalog = computed(() => gameState.value.catalog || {});
+const accountInitial = computed(() => {
+  const name = String(authUser.value?.username || "?").trim();
+  return name ? name.slice(0, 1).toUpperCase() : "?";
+});
 const equipmentSlots = computed(() => catalog.value.equipmentSlots?.length ? catalog.value.equipmentSlots : fallbackEquipmentSlots);
 const equipmentTiers = computed(() => catalog.value.equipmentTiers?.length ? catalog.value.equipmentTiers : fallbackEquipmentTiers);
 const duelRankList = computed(() => catalog.value.duelRanks?.length ? catalog.value.duelRanks : duelRanks);
@@ -4632,8 +4719,8 @@ const marketStatusCards = computed(() => {
     },
     {
       label: "下次突破",
-      value: breakthroughMultiplierText(Number(effects.nextBreakthroughBonus || 0)),
-      note: "突破后失效"
+      value: breakthroughBonusText(Number(effects.nextBreakthroughBonus || 0)),
+      note: `${effects.nextBreakthroughBonusCount || 0} / ${effects.nextBreakthroughBonusMax || 4} 枚，突破后失效`
     },
     {
       label: "今日突破",
@@ -4664,8 +4751,8 @@ const sidebarElixirEffects = computed(() => {
   if (breakthroughBonus > 0) {
     cards.push({
       label: "下次突破成功率",
-      value: breakthroughMultiplierText(breakthroughBonus),
-      note: "突破后失效，成败都会消耗药力"
+      value: breakthroughBonusText(breakthroughBonus),
+      note: `${effects.nextBreakthroughBonusCount || 0} / ${effects.nextBreakthroughBonusMax || 4} 枚，成败都会消耗药力`
     });
   }
   const extraAttempts = Number(effects.extraBreakthroughAttemptsToday || attempts.extra || 0);
@@ -5035,13 +5122,22 @@ function voidHallMonsterPower(record) {
   return Number(record?.monsterPower || record?.monsterStats?.power || record?.requiredDamage || record?.monsterStats?.maxHp || 0);
 }
 
+function clearDepthFromDungeonHistory(record) {
+  const explicit = Number(record?.clears);
+  if (Number.isFinite(explicit) && explicit > 0) return explicit;
+  const parsed = Number(String(record?.result || "").match(/连破\s*(\d+)\s*洞/)?.[1] || 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 function playerBloodTrialSummary(day) {
   const solo = (day?.solo || []).find((entry) => entry.id === "player");
   if (!solo) return "血色未入场";
-  const cleared = (day?.bloodTrial?.caves || []).filter((cave) => (cave.clears || []).some((entry) => entry.id === "player")).length;
+  const listedCleared = (day?.bloodTrial?.caves || []).filter((cave) => (cave.clears || []).some((entry) => entry.id === "player")).length;
+  const resultCleared = clearDepthFromDungeonHistory(solo);
+  const cleared = Math.max(listedCleared, resultCleared);
   const total = day?.bloodTrial?.caves?.length || 0;
   if (total && cleared >= total) return `血色通关 ${cleared}/${total}`;
-  return `血色 ${cleared}/${total || "?"} 关`;
+  return `血色${solo.result || ""} ${cleared}/${total || "?"} 关`;
 }
 
 function playerVoidHallSummary(day) {
@@ -5052,12 +5148,10 @@ function playerVoidHallSummary(day) {
 
 function playerStarSeaSummary(day) {
   const top = day?.public?.top || [];
-  const topIndex = top.findIndex((entry) => entry.id === "player");
-  if (topIndex >= 0) return `乱星海输出第${topIndex + 1}`;
+  const personalRank = top.findIndex((entry) => entry.id === "player") + 1;
   const team = (day?.public?.teams || []).find((record) => (record.members || []).some((member) => member.id === "player"));
-  if (!team) return "乱星海未入榜";
-  const member = (team.members || []).find((item) => item.id === "player");
-  return `乱星海队伍第${team.rank || "?"}，输出 ${member?.damage || 0}`;
+  if (!team && !personalRank) return "乱星海未入榜";
+  return `乱星海队伍第${team?.rank || "-"}${personalRank ? ` · 个人第${personalRank}` : ""}`;
 }
 
 function sectDungeonRecords(sect) {
@@ -6709,6 +6803,23 @@ function dailyRecordMetaText(person, record) {
   return `装备 ${drops.slice(0, 2).join("、")}${drops.length > 2 ? `等${drops.length}件` : ""}`;
 }
 
+function recordTextFailed(text = "") {
+  return /(失败|败退|未破|未通关|撤出|负|逆冲|见底)/.test(String(text || ""));
+}
+
+function recordTextSucceeded(text = "") {
+  const value = String(text || "");
+  return !recordTextFailed(value) && /(成功|突破至|通关|连破|胜|斩妖|升至)/.test(value);
+}
+
+function dailyRecordFailed(record) {
+  return recordTextFailed(`${record?.note || ""} ${record?.result || ""}`);
+}
+
+function dailyRecordSucceeded(record) {
+  return recordTextSucceeded(`${record?.note || ""} ${record?.result || ""}`);
+}
+
 function growthCompactText(growth) {
   if (!growth) return "";
   const parts = [
@@ -6765,6 +6876,16 @@ function duelRecordMeta(record) {
 function dungeonRecordTitle(record) {
   const name = String(record.name || "副本").split(/[：·]/)[0].trim() || "副本";
   return `${shortDateText(record.date || (record.day ? `第${record.day}天` : ""))} · ${name} · ${record.result}`;
+}
+
+function dungeonRecordFailed(record) {
+  if (typeof record?.success === "boolean") return !record.success;
+  return recordTextFailed(record?.result);
+}
+
+function dungeonRecordSucceeded(record) {
+  if (typeof record?.success === "boolean") return record.success;
+  return recordTextSucceeded(record?.result);
 }
 
 function dungeonRecordMetaText(record) {
@@ -6949,6 +7070,10 @@ async function openReplay(record, fallbackRecord = null, target = captureBattleR
   } finally {
     setActionPending("/api/battles/replay", false);
   }
+}
+
+async function openStarSeaTeamReplay(team) {
+  await openReplay(team, selectedDungeonDay.value?.public || null, captureBattleReturn());
 }
 
 function returnFromBattle() {
@@ -7659,6 +7784,8 @@ function baseBreakthroughChance(realm) {
   const levelPenalty = (level - 1) * 0.024;
   const stagePenalty = stageIndex * 0.058;
   const bottleneckPenalty = level === 10 ? 0.26 + stageIndex * 0.04 : 0;
+  if (stageIndex === 1 && level === 10) return 0.1;
+  if (stageIndex === 2 && level === 10) return 0.06;
   return Math.max(0.04, Math.min(0.86, 0.76 - levelPenalty - stagePenalty - bottleneckPenalty));
 }
 
@@ -7703,7 +7830,7 @@ function tomorrowXpText(person) {
 function breakthroughPartsText(person) {
   const parts = personInsight(person).breakthrough;
   const sectMultiplier = parts.sectMultiplier ?? (1 + (parts.bonus || 0));
-  const potionText = Number(parts.potionMultiplier || 1) > 1 ? ` × 丹药 ${formatPercent(parts.potionMultiplier)}` : "";
+  const potionText = Number(parts.potionBonus || 0) > 0 ? ` + 丹药 ${formatPercent(parts.potionBonus)}` : "";
   return `境界基础 ${formatPercent(parts.realmBase)} × 灵根 ${formatPercent(parts.rootMultiplier)} × 宗门 ${formatPercent(sectMultiplier)}${potionText} = ${formatPercent(parts.total)}`;
 }
 
@@ -8057,6 +8184,91 @@ function syncSelectedDays() {
   else selectedProvinceWarDay.value = clampDay(selectedProvinceWarDay.value);
 }
 
+function switchAuthMode(mode) {
+  authMode.value = mode === "register" ? "register" : "login";
+  authError.value = "";
+}
+
+function toggleAccountMenu() {
+  accountMenuOpen.value = !accountMenuOpen.value;
+}
+
+function closeAccountMenu() {
+  accountMenuOpen.value = false;
+}
+
+function isAuthErrorMessage(message = "") {
+  return /请先登录|未登录/.test(String(message || ""));
+}
+
+function resetClientStateForAuth() {
+  clearCachedState();
+  state.value = null;
+  personDetails.value = {};
+  selectedPersonId.value = "player";
+  detailView.value = "rank";
+  activeTab.value = "practice";
+  fullStateStale.value = false;
+}
+
+async function loadGameAfterAuth(user) {
+  authUser.value = user;
+  loading.value = true;
+  resetClientStateForAuth();
+  authUser.value = user;
+  await refresh("home");
+  if (needsHeavyState(activeTab.value)) ensureFullState();
+}
+
+async function initializeAuth() {
+  authLoading.value = true;
+  try {
+    const result = await getCurrentUser();
+    await loadGameAfterAuth(result.user);
+    authError.value = "";
+  } catch {
+    authUser.value = null;
+    loading.value = false;
+  } finally {
+    authLoading.value = false;
+  }
+}
+
+async function submitAuth() {
+  if (authPending.value) return;
+  authPending.value = true;
+  authError.value = "";
+  try {
+    const result = authMode.value === "register"
+      ? await register(authForm.username, authForm.password, authForm.registrationCode)
+      : await login(authForm.username, authForm.password);
+    authForm.password = "";
+    authForm.registrationCode = "";
+    await loadGameAfterAuth(result.user);
+  } catch (err) {
+    authError.value = err.message;
+  } finally {
+    authPending.value = false;
+  }
+}
+
+async function handleLogout() {
+  if (authPending.value) return;
+  authPending.value = true;
+  try {
+    await logout();
+  } catch {
+    // Local logout should still clear the client if the server session is already gone.
+  } finally {
+    resetClientStateForAuth();
+    authUser.value = null;
+    accountMenuOpen.value = false;
+    loading.value = false;
+    authPending.value = false;
+    authError.value = "";
+  }
+}
+
 async function refresh(scope = "full") {
   if (scope === "full" && fullStateRefreshing.value) return;
   if (scope === "home" && homeStateRefreshing.value) return;
@@ -8068,6 +8280,11 @@ async function refresh(scope = "full") {
     error.value = "";
   } catch (err) {
     error.value = err.message;
+    if (isAuthErrorMessage(err.message)) {
+      resetClientStateForAuth();
+      authUser.value = null;
+      return;
+    }
     if (!state.value) {
       const cachedState = getCachedState();
       if (cachedState) {
@@ -8111,6 +8328,10 @@ async function act(path, body = {}, options = {}) {
     return response.result;
   } catch (err) {
     error.value = err.message;
+    if (isAuthErrorMessage(err.message)) {
+      resetClientStateForAuth();
+      authUser.value = null;
+    }
     return null;
   } finally {
     setActionPending(path, false);
@@ -8136,6 +8357,7 @@ function shouldRefreshHomeState(path) {
     "/api/duels/day",
     "/api/items/buy",
     "/api/items/use",
+    "/api/items/sell",
     "/api/player/portrait",
     "/api/admin/cultivator",
     "/api/admin/sect"
@@ -8301,19 +8523,23 @@ async function useMarketItem(id) {
   await act("/api/items/use", { kind: id }, { scope: "lite" });
 }
 
+async function sellMarketItem(id) {
+  await act("/api/items/sell", { kind: id }, { scope: "lite" });
+}
+
 function remainingText(item) {
   if (item.remaining === null || item.remaining === undefined) return "不限";
   return `${item.remaining} / ${item.limitMax}`;
 }
 
-function breakthroughMultiplierText(bonus = 0) {
-  return `×${Math.round((1 + Math.max(0, Number(bonus) || 0)) * 100)}%`;
+function breakthroughBonusText(bonus = 0) {
+  return `+${Math.round(Math.max(0, Number(bonus) || 0) * 100)}%`;
 }
 
 function marketItemText(item = {}) {
   if (item.effect?.type === "breakthroughBonus") {
     const suffix = String(item.text || "").includes("本境界") ? "本境界限购 1 枚。" : "突破后失效。";
-    return `下次突破成功率 ${breakthroughMultiplierText(item.effect.bonus)}，${suffix}`;
+    return `下次突破成功率 ${breakthroughBonusText(item.effect.bonus)}，可叠加，${suffix}`;
   }
   return item.text || "";
 }
@@ -8465,12 +8691,12 @@ onMounted(async () => {
   updateCountdown();
   timer = setInterval(() => {
     updateCountdown();
-    if (countdown.value === "00:00:00") refresh();
+    if (countdown.value === "00:00:00" && authUser.value) refresh();
   }, 1000);
-  await refresh("home");
-  if (needsHeavyState(activeTab.value)) ensureFullState();
+  await initializeAuth();
   window.addEventListener("resize", resizeChinaMap);
   window.addEventListener("keydown", handleMapFullscreenKey);
+  window.addEventListener("click", closeAccountMenu);
 });
 
 onUnmounted(() => {
@@ -8478,6 +8704,7 @@ onUnmounted(() => {
   clearInterval(battleTimer);
   window.removeEventListener("resize", resizeChinaMap);
   window.removeEventListener("keydown", handleMapFullscreenKey);
+  window.removeEventListener("click", closeAccountMenu);
   disposeChinaMap();
 });
 

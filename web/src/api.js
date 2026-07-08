@@ -9,6 +9,7 @@ async function fetchJson(path, options = {}) {
     const response = await fetch(path, {
       headers: { "content-type": "application/json" },
       cache: "no-store",
+      credentials: "include",
       ...options,
       body: options.body ? JSON.stringify(options.body) : undefined
     });
@@ -54,6 +55,22 @@ export function getState(scope = "full") {
   params.set("_", String(Date.now()));
   const suffix = `?${params.toString()}`;
   return request(`/api/state${suffix}`);
+}
+
+export function getCurrentUser() {
+  return request(`/api/auth/me?_=${Date.now()}`);
+}
+
+export function login(username, password) {
+  return request("/api/auth/login", { method: "POST", body: { username, password } });
+}
+
+export function register(username, password, registrationCode) {
+  return request("/api/auth/register", { method: "POST", body: { username, password, registrationCode } });
+}
+
+export function logout() {
+  return request("/api/auth/logout", { method: "POST", body: {} });
 }
 
 export function getCultivatorDetail(id) {
