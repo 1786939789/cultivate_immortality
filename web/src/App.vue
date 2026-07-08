@@ -2431,7 +2431,7 @@
                     :class="{ selected: selectedMarketItemId === item.id, disabled: !item.canBuy }"
                     @click="selectedMarketItemId = item.id"
                   >
-                    <span class="market-product-icon" :class="`market-icon-${item.category}`" aria-hidden="true"></span>
+                    <img class="market-product-icon" :src="marketItemIconSrc(item)" alt="" aria-hidden="true" loading="lazy">
                     <span class="market-product-main">
                       <b>{{ item.name }}</b>
                       <small>{{ marketItemText(item) }}</small>
@@ -2465,7 +2465,7 @@
                     :class="{ selected: selectedMarketItemId === entry.id }"
                     @click="selectedMarketItemId = entry.id"
                   >
-                    <span class="market-product-icon" :class="`market-icon-${entry.item.category}`" aria-hidden="true"></span>
+                    <img class="market-product-icon" :src="marketItemIconSrc(entry.item)" alt="" aria-hidden="true" loading="lazy">
                     <span class="market-product-main">
                       <b>{{ entry.item.name }}</b>
                       <small>{{ marketItemText(entry.item) }}</small>
@@ -2484,7 +2484,7 @@
               </main>
 
               <aside class="market-detail-panel" v-if="selectedMarketItem">
-                <div class="market-detail-orb" :class="`market-icon-${selectedMarketItem.category}`" aria-hidden="true"></div>
+                <img class="market-detail-orb" :src="marketItemIconSrc(selectedMarketItem)" alt="" aria-hidden="true" loading="lazy">
                 <span>{{ selectedMarketItem.categoryName }}</span>
                 <h4>{{ selectedMarketItem.name }}</h4>
                 <p>{{ marketItemText(selectedMarketItem) }}</p>
@@ -2526,7 +2526,7 @@
                     class="market-bag-mini"
                     @click="selectedMarketItemId = entry.id; marketSubTab = 'bag'"
                   >
-                    <span class="market-bag-mini-icon" :class="`market-icon-${entry.item.category}`" aria-hidden="true"></span>
+                    <img class="market-bag-mini-icon" :src="marketItemIconSrc(entry.item)" alt="" aria-hidden="true" loading="lazy">
                     <b>{{ entry.item.name }}</b>
                     <small>x{{ entry.count }}</small>
                   </button>
@@ -8564,6 +8564,10 @@ function marketItemText(item = {}) {
     return `下次突破成功率 ${breakthroughBonusText(item.effect.bonus)}，可叠加，${suffix}`;
   }
   return item.text || "";
+}
+
+function marketItemIconSrc(item = {}) {
+  return item.id ? `/assets/market/elixirs/${item.id}.png` : "/assets/market/elixir-category-sheet.png";
 }
 
 function priceFactorText(item) {

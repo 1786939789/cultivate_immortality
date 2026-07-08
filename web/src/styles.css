@@ -4909,9 +4909,6 @@ select {
 .market-category-icon,
 .market-product-icon,
 .market-detail-orb {
-  background-image: url("/assets/market/elixir-category-sheet.png");
-  background-size: 200% 200%;
-  background-repeat: no-repeat;
   box-shadow: inset 0 0 0 1px rgba(255, 244, 203, .58), 0 8px 18px rgba(37, 22, 11, .22);
 }
 
@@ -4919,6 +4916,9 @@ select {
   width: 48px;
   height: 48px;
   border-radius: 50%;
+  background-image: url("/assets/market/elixir-category-sheet.png");
+  background-size: 200% 200%;
+  background-repeat: no-repeat;
 }
 
 .market-icon-xp {
@@ -5023,6 +5023,8 @@ select {
   width: 68px;
   height: 68px;
   border-radius: 16px;
+  object-fit: contain;
+  background: radial-gradient(circle at 50% 45%, rgba(255, 244, 196, .22), rgba(53, 32, 16, .2));
 }
 
 .market-product-main {
@@ -5107,6 +5109,8 @@ select {
   border-radius: 24px;
   justify-self: center;
   margin-bottom: 2px;
+  object-fit: contain;
+  background: radial-gradient(circle at 50% 45%, rgba(255, 244, 196, .18), rgba(28, 18, 10, .2));
 }
 
 .market-detail-panel > span {
@@ -5232,9 +5236,9 @@ select {
   width: 30px;
   height: 30px;
   border-radius: 9px;
-  background-image: url("/assets/market/elixir-category-sheet.png");
-  background-size: 200% 200%;
-  background-repeat: no-repeat;
+  object-fit: contain;
+  background: rgba(255, 246, 218, .1);
+  box-shadow: inset 0 0 0 1px rgba(255, 244, 203, .28);
 }
 
 .market-bag-mini b,
