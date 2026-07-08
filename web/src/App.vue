@@ -7390,6 +7390,7 @@ function personStats(person) {
   const effective = personEffectiveStats(person);
   const power = personPower(person);
   const powerRank = personPowerRank(person);
+  const duelRankPosition = personDuelRankPosition(person);
   return [
     { label: "性别", value: genderLabel(person.gender), icon: "gender" },
     { label: "灵石", value: Math.floor(person.spirit || 0), icon: "spirit" },
@@ -7400,7 +7401,9 @@ function personStats(person) {
     { label: "神识", value: statWithBonus(effective.divineSense, effective.bonuses.divineSense), icon: "sense" },
     { label: "技能", value: skillCompactLabel(person), icon: "skill", help: skillTip(person) },
     { label: "战斗力", value: power, icon: "power", help: personPowerFormula(person, effective, power) },
-    { label: "战力排名", value: powerRank ? `#${powerRank}` : "未上榜", icon: "rank", help: powerRank ? `当前个人战力榜第 ${powerRank} 名。` : "当前不在个人战力榜中。" }
+    { label: "战力排名", value: powerRank ? `#${powerRank}` : "未上榜", icon: "rank", help: powerRank ? `当前个人战力榜第 ${powerRank} 名。` : "当前不在个人战力榜中。" },
+    { label: "段位", value: duelRankText(person), icon: "rank", help: `第 ${duelSeasonInfo.value.season} 赛季段位：${duelRankText(person)}。` },
+    { label: "段位排名", value: duelRankPosition ? `#${duelRankPosition}` : "未上榜", icon: "rank", help: duelRankPosition ? `当前切磋段位榜第 ${duelRankPosition} 名。` : "当前不在切磋段位榜中。" }
   ];
 }
 
@@ -7412,6 +7415,11 @@ function detailIconComponent(icon) {
 
 function personPowerRank(person) {
   const index = powerRanking.value.findIndex((item) => item.id === person?.id);
+  return index >= 0 ? index + 1 : 0;
+}
+
+function personDuelRankPosition(person) {
+  const index = duelRanking.value.findIndex((item) => item.id === person?.id);
   return index >= 0 ? index + 1 : 0;
 }
 
