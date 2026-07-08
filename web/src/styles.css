@@ -8734,6 +8734,31 @@ button.event {
   height: 286px;
 }
 
+.dossier-records {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+}
+
+.dossier-records > .panel {
+  min-height: 248px;
+}
+
+.dossier-records .root-chip {
+  min-width: min(100%, 132px);
+  max-width: 100%;
+}
+
+.dossier-records .attribute-row {
+  grid-template-columns: 56px minmax(58px, auto) minmax(0, 1fr);
+  align-items: start;
+}
+
+.dossier-records .attribute-row small {
+  min-width: 0;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
 .sect-detail-sections {
   grid-template-columns: 1fr;
 }
