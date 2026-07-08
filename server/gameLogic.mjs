@@ -986,6 +986,9 @@ export function realmInfo(realm) {
 }
 
 export function baseBreakthroughChance(realm) {
+  const lateMajorChance = lateMajorBreakthroughChance(realm);
+  if (lateMajorChance !== null) return lateMajorChance;
+
   const info = {
     stageIndex: Math.floor((realm || 0) / 10),
     level: ((realm || 0) % 10) + 1
@@ -998,13 +1001,25 @@ export function baseBreakthroughChance(realm) {
   return clamp(0.72 - levelPenalty - stagePenalty - bottleneckPenalty, 0.035, 0.82);
 }
 
+function lateMajorBreakthroughChance(realm) {
+  const safeRealm = clamp(Math.floor(realm || 0), 0, realms.length - 1);
+  if (safeRealm % 10 !== 9 || safeRealm + 1 >= realms.length) return null;
+  const targetStageIndex = Math.floor((safeRealm + 1) / 10);
+  if (targetStageIndex < 4) return null;
+  return 0.02 / Math.pow(2, targetStageIndex - 4);
+}
+
+function minimumBreakthroughChance(realm) {
+  return lateMajorBreakthroughChance(realm) === null ? 0.035 : 0;
+}
+
 export function breakthroughChance(entity) {
   const base = baseBreakthroughChance(entity.realm || 0);
   const waterBonus = normalizeRootSet(entity).roots
     .filter((root) => root.effect === "xp")
     .reduce((sum, root) => sum + ((root.breakMultiplier || 1.1) - 1) / rootCount(entity), 0);
   const rootMultiplier = (1 + waterBonus) * rootBreakthroughMultiplier(entity);
-  return clamp(base * rootMultiplier, 0.035, 0.82);
+  return clamp(base * rootMultiplier, minimumBreakthroughChance(entity.realm || 0), 0.82);
 }
 
 export function buildRealmProgression(entity) {
@@ -3361,7 +3376,7 @@ function breakthroughChanceFor(state, entity) {
   const beforePotion = breakthroughChance(entity) * (1 + sectBreakthroughBonus(state, sectName, entity)) + divineSenseBonus;
   return clamp(
     beforePotion + potionBonus,
-    0.035,
+    minimumBreakthroughChance(entity.realm || 0),
     entity.id === "player" ? 0.95 : 0.82
   );
 }
@@ -3383,7 +3398,7 @@ function breakthroughChanceParts(state, entity) {
     bonus,
     potionBonus,
     divineSenseBonus,
-    total: clamp(beforePotion + potionBonus, 0.035, entity.id === "player" ? 0.95 : 0.82)
+    total: clamp(beforePotion + potionBonus, minimumBreakthroughChance(entity.realm || 0), entity.id === "player" ? 0.95 : 0.82)
   };
 }
 

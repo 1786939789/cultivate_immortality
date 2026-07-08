@@ -2799,10 +2799,22 @@
             </div>
           </div>
 
-          <div class="panel" v-else-if="detailView === 'person' && selectedPerson">
+          <div class="panel character-dossier" v-else-if="detailView === 'person' && selectedPerson">
             <button class="secondary back-button" @click="returnFromDetail">{{ detailBackLabel }}</button>
-            <div class="detail-overview">
-              <div class="detail-side-stats">
+            <div class="dossier-frame">
+              <div class="detail-hero compact dossier-header">
+                <div>
+                  <h3>{{ selectedPerson.name }}</h3>
+                  <p>{{ selectedPerson.sect }} · {{ genderLabel(selectedPerson.gender) }} · {{ realmName(selectedPerson.realm) }} · {{ rootLine(selectedPerson) }}</p>
+                  <span class="tag skill-detail-tag" :title="skillTip(selectedPerson)">本命技能：{{ skillNameForDisplay(selectedPerson) }}</span>
+                  <span class="tag rank-tag" :class="`duel-rank-${duelRankId(selectedPerson)}`">{{ duelRankText(selectedPerson) }}</span>
+                  <span class="tag">{{ rootCounterText(selectedPerson) }}</span>
+                </div>
+                <span class="tag equipment-count-tag">{{ equippedFor(selectedPerson).length }}/{{ equipmentSlots.length }}</span>
+              </div>
+
+              <div class="detail-overview dossier-overview">
+                <div class="detail-side-stats dossier-stat-bank">
                 <div
                   class="detail-box"
                   v-for="item in personStats(selectedPerson).slice(0, Math.ceil(personStats(selectedPerson).length / 2))"
@@ -2811,8 +2823,10 @@
                   :aria-label="item.help ? `${item.label}：${item.value}。${item.help}` : `${item.label}：${item.value}`"
                 >
                   <span class="detail-icon" :class="`detail-icon-${item.icon || 'default'}`" aria-hidden="true">
+                    <span class="dossier-ai-icon" :class="`dossier-ai-icon-${item.icon || 'default'}`"></span>
                     <component :is="detailIconComponent(item.icon)" :size="16" :stroke-width="2.4" />
                   </span>
+                  <span class="detail-label">{{ item.label }}</span>
                   <b :title="`${item.label}：${item.value}`">{{ item.value }}</b>
                   <small class="detail-tip" role="tooltip">
                     <strong>{{ item.label }}：{{ item.value }}</strong>
@@ -2821,17 +2835,7 @@
                 </div>
               </div>
 
-              <div class="equipment-avatar-panel detail-equipment-top">
-                <div class="detail-hero compact">
-                  <div>
-                    <h3>{{ selectedPerson.name }}</h3>
-                    <p>{{ selectedPerson.sect }} · {{ genderLabel(selectedPerson.gender) }} · {{ realmName(selectedPerson.realm) }} · {{ rootLine(selectedPerson) }}</p>
-                    <span class="tag skill-detail-tag" :title="skillTip(selectedPerson)">本命技能：{{ skillNameForDisplay(selectedPerson) }}</span>
-                    <span class="tag rank-tag" :class="`duel-rank-${duelRankId(selectedPerson)}`">{{ duelRankText(selectedPerson) }}</span>
-                    <span class="tag">{{ rootCounterText(selectedPerson) }}</span>
-                  </div>
-                  <span class="tag">{{ equippedFor(selectedPerson).length }}/{{ equipmentSlots.length }}</span>
-                </div>
+              <div class="equipment-avatar-panel detail-equipment-top dossier-core">
                 <div class="equipment-paperdoll">
                   <div class="equipment-slot-column">
                     <div class="equipment-slot-card" v-for="slot in equipmentSlots.slice(0, 3)" :key="slot.id" :class="equipmentSlotCardClass(selectedPerson, slot)">
@@ -2865,7 +2869,7 @@
                 </div>
               </div>
 
-              <div class="detail-side-stats">
+              <div class="detail-side-stats dossier-stat-bank">
                 <div
                   class="detail-box"
                   v-for="item in personStats(selectedPerson).slice(Math.ceil(personStats(selectedPerson).length / 2))"
@@ -2874,8 +2878,10 @@
                   :aria-label="item.help ? `${item.label}：${item.value}。${item.help}` : `${item.label}：${item.value}`"
                 >
                   <span class="detail-icon" :class="`detail-icon-${item.icon || 'default'}`" aria-hidden="true">
+                    <span class="dossier-ai-icon" :class="`dossier-ai-icon-${item.icon || 'default'}`"></span>
                     <component :is="detailIconComponent(item.icon)" :size="16" :stroke-width="2.4" />
                   </span>
+                  <span class="detail-label">{{ item.label }}</span>
                   <b :title="`${item.label}：${item.value}`">{{ item.value }}</b>
                   <small class="detail-tip" role="tooltip">
                     <strong>{{ item.label }}：{{ item.value }}</strong>
@@ -2885,7 +2891,7 @@
               </div>
             </div>
 
-            <div class="grid detail-sections">
+            <div class="grid detail-sections dossier-insight">
               <div class="panel flat">
                 <h3>灵根命盘</h3>
                 <div class="root-chip-list">
@@ -2914,7 +2920,7 @@
               </div>
             </div>
 
-            <div class="grid detail-sections record-sections">
+            <div class="grid detail-sections record-sections dossier-records">
               <div class="panel flat">
                 <h3>每日成长</h3>
                 <div class="timeline detail-scroll">
@@ -2993,6 +2999,7 @@
                   <div v-if="!selectedPerson.skillUpgrades?.length" class="empty">暂无技能升阶记录。</div>
                 </div>
               </div>
+            </div>
             </div>
           </div>
 
@@ -6263,7 +6270,7 @@ function equipmentSlotSummary(person, slot) {
 
 function equipmentSlotCardClass(person, slot) {
   const item = equippedInSlot(person, slot.id);
-  return item ? `tier-${item.tier}` : "empty-slot";
+  return [item ? `tier-${item.tier}` : "empty-slot", `slot-${slot.id}`];
 }
 
 function equipmentBonus(person, stat) {
@@ -7774,11 +7781,14 @@ function personBreakthroughChance(person) {
 }
 
 function fallbackPersonBreakthroughChance(person) {
-  return Math.max(0.04, Math.min(0.88, baseBreakthroughChance(person?.realm || 0)));
+  return Math.max(minimumBreakthroughChance(person?.realm || 0), Math.min(0.88, baseBreakthroughChance(person?.realm || 0)));
 }
 
 function baseBreakthroughChance(realm) {
   const safeRealm = realm || 0;
+  const lateMajorChance = lateMajorBreakthroughChance(safeRealm);
+  if (lateMajorChance !== null) return lateMajorChance;
+
   const stageIndex = Math.floor(safeRealm / 10);
   const level = (safeRealm % 10) + 1;
   const levelPenalty = (level - 1) * 0.024;
@@ -7787,6 +7797,18 @@ function baseBreakthroughChance(realm) {
   if (stageIndex === 1 && level === 10) return 0.1;
   if (stageIndex === 2 && level === 10) return 0.06;
   return Math.max(0.04, Math.min(0.86, 0.76 - levelPenalty - stagePenalty - bottleneckPenalty));
+}
+
+function lateMajorBreakthroughChance(realm) {
+  const safeRealm = Math.max(0, Math.floor(realm || 0));
+  if (safeRealm % 10 !== 9 || safeRealm + 1 >= realmNames.length) return null;
+  const targetStageIndex = Math.floor((safeRealm + 1) / 10);
+  if (targetStageIndex < 4) return null;
+  return 0.02 / Math.pow(2, targetStageIndex - 4);
+}
+
+function minimumBreakthroughChance(realm) {
+  return lateMajorBreakthroughChance(realm) === null ? 0.04 : 0;
 }
 
 function rootBonus(root, fallback = 0) {
