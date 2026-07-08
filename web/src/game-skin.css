@@ -8950,12 +8950,12 @@ body::before {
 
 /* Final dossier asset lock: later theme rules also target `.view.active > .panel`. */
 .rank-surface.view.active > .character-dossier {
-  --dossier-bg: url("/assets/character-dossier/dossier-bg.png");
+  --dossier-bg: url("/assets/character-dossier/dossier-bg-v2.png");
   --dossier-icons: url("/assets/character-dossier/dossier-icons.png");
-  --dossier-cards: url("/assets/character-dossier/dossier-cards.png");
+  --dossier-cards: url("/assets/character-dossier/dossier-cards-v2.png");
   color: #31200e;
   background:
-    linear-gradient(rgba(8, 29, 26, .1), rgba(8, 29, 26, .1)),
+    linear-gradient(rgba(8, 29, 26, .06), rgba(8, 29, 26, .06)),
     var(--dossier-bg) center top / cover no-repeat,
     linear-gradient(180deg, #0d352f, #07302c);
 }
@@ -9041,7 +9041,7 @@ body::before {
   border: 2px solid rgba(190, 151, 70, .78);
   border-radius: 2px;
   background:
-    linear-gradient(rgba(4, 37, 33, .16), rgba(4, 37, 33, .16)),
+    linear-gradient(rgba(4, 37, 33, .08), rgba(4, 37, 33, .08)),
     var(--dossier-bg) center top / 100% 100% no-repeat,
     linear-gradient(180deg, #0d352f, #07302c);
 }
