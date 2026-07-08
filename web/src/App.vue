@@ -2759,9 +2759,12 @@
                   {{ powerSortDirection === "desc" ? "降序" : "升序" }}
                 </button>
               </div>
-              <span class="rank-count">共 {{ filteredRanking.length }} 条</span>
+              <span class="rank-count">{{ rankRosterReady ? `共 ${filteredRanking.length} 条` : "正在读取榜单" }}</span>
             </div>
-            <div class="rank-list">
+            <div v-if="!rankRosterReady" class="rank-loading-state">
+              正在读取天南修士名录...
+            </div>
+            <div v-else class="rank-list">
               <button
                 class="row rank-row"
                 :class="{ 'person-rank-row': item.kind === 'person', 'top-rank-row': rankPageStart + index < 3 }"
@@ -3629,6 +3632,8 @@ const pendingActions = ref(new Set());
 const fullStateRefreshing = ref(false);
 const homeStateRefreshing = ref(false);
 const fullStateStale = ref(false);
+let fullStateRefreshPromise = null;
+let homeStateRefreshPromise = null;
 const personDetails = ref({});
 const personDetailLoading = ref(new Set());
 const activeTab = ref("practice");
@@ -6412,8 +6417,20 @@ function rankPerson(item) {
   return personByRef(item);
 }
 
+const rankRosterReady = computed(() => {
+  if (activeRankBoard.value === "sect") return true;
+  if (!hasFullCultivatorRoster()) return false;
+  return activeRankingCandidateCount.value > 1;
+});
+
+const activeRankingCandidateCount = computed(() => {
+  if (activeRankBoard.value === "sect") return sectRanking.value.length;
+  return cultivators.value.length;
+});
+
 const activeRanking = computed(() => {
   if (!state.value) return [];
+  if (!rankRosterReady.value && activeRankBoard.value !== "sect") return [];
   if (activeRankBoard.value === "duel") return duelRanking.value;
   if (activeRankBoard.value === "sect") return sectRanking.value;
   if (activeRankBoard.value === "dungeon") return dungeonRanking.value;
@@ -7135,6 +7152,7 @@ function switchTab(tabId) {
   }
   activeTab.value = tabId;
   resetTabHome(tabId);
+  if (needsHeavyState(tabId) && state.value && (fullStateStale.value || !hasFullCultivatorRoster())) ensureFullState();
   if (tabId === "practice" && state.value) refresh("home");
 }
 
@@ -7802,7 +7820,8 @@ function baseBreakthroughChance(realm) {
 
 function lateMajorBreakthroughChance(realm) {
   const safeRealm = Math.max(0, Math.floor(realm || 0));
-  if (safeRealm % 10 !== 9 || safeRealm + 1 >= realmNames.length) return null;
+  const realmCount = catalog.value.realms?.length || safeRealm + 2;
+  if (safeRealm % 10 !== 9 || safeRealm + 1 >= realmCount) return null;
   const targetStageIndex = Math.floor((safeRealm + 1) / 10);
   if (targetStageIndex < 4) return null;
   return 0.02 / Math.pow(2, targetStageIndex - 4);
@@ -8293,8 +8312,20 @@ async function handleLogout() {
 }
 
 async function refresh(scope = "full") {
-  if (scope === "full" && fullStateRefreshing.value) return;
-  if (scope === "home" && homeStateRefreshing.value) return;
+  if (scope === "full" && fullStateRefreshPromise) return fullStateRefreshPromise;
+  if (scope === "home" && homeStateRefreshPromise) return homeStateRefreshPromise;
+  const run = refreshStateNow(scope);
+  if (scope === "full") fullStateRefreshPromise = run;
+  if (scope === "home") homeStateRefreshPromise = run;
+  try {
+    return await run;
+  } finally {
+    if (scope === "full" && fullStateRefreshPromise === run) fullStateRefreshPromise = null;
+    if (scope === "home" && homeStateRefreshPromise === run) homeStateRefreshPromise = null;
+  }
+}
+
+async function refreshStateNow(scope = "full") {
   if (scope === "full") fullStateRefreshing.value = true;
   if (scope === "home") homeStateRefreshing.value = true;
   try {
@@ -8324,7 +8355,6 @@ async function refresh(scope = "full") {
 }
 
 async function ensureFullState() {
-  if (fullStateRefreshing.value) return;
   await refresh("full");
 }
 
@@ -8389,6 +8419,10 @@ function shouldRefreshHomeState(path) {
 
 function needsHeavyState(tab = activeTab.value) {
   return ["dungeon", "sect", "arena", "market", "equipment", "rank", "admin"].includes(tab);
+}
+
+function hasFullCultivatorRoster() {
+  return Array.isArray(state.value?.npcs) && state.value.npcs.length > 0;
 }
 
 function needsLiteState(tab = activeTab.value) {
@@ -8749,7 +8783,7 @@ watch([state, activeTab, activeSectSubTab], async () => {
 });
 
 watch(activeTab, () => {
-  if (needsHeavyState(activeTab.value) && state.value && fullStateStale.value) {
+  if (needsHeavyState(activeTab.value) && state.value && (fullStateStale.value || !hasFullCultivatorRoster())) {
     ensureFullState();
   } else if (needsLiteState(activeTab.value) && state.value && fullStateStale.value) {
     refresh("lite");
@@ -8761,6 +8795,10 @@ watch(activeTab, () => {
     if (adminMode.value === "sects") syncAdminSectDraft(adminSelectedSectName.value);
     if (adminMode.value === "tasks") syncAdminTaskDraft(adminTaskDefinition.value || filteredAdminTasks.value[0]);
   }
+});
+
+watch([activeTab, activeRankBoard, () => state.value?.npcs?.length || 0], () => {
+  if (activeTab.value === "rank" && !rankRosterReady.value) ensureFullState();
 });
 
 watch([adminCultivatorPerson, () => player.value.portraitUrl], () => {

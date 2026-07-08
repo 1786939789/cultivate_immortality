@@ -4771,6 +4771,20 @@ export function ensureStateShape(state) {
       if (!Array.isArray(state.sectProfiles[name].elderIds)) state.sectProfiles[name].elderIds = [];
     }
   }
+  if (!Array.isArray(state.npcs)) {
+    state.npcs = [];
+    changed = true;
+  }
+  if (state.npcs.length < npcNames.length) {
+    const restoredNpcs = [...state.npcs];
+    for (let index = 0; index < npcNames.length; index += 1) {
+      if (!restoredNpcs[index]) {
+        restoredNpcs[index] = makeNpc(npcNames[index], index);
+        changed = true;
+      }
+    }
+    state.npcs = restoredNpcs;
+  }
   state.npcs = state.npcs.map((npc, index) => {
     const full = { ...npc };
     full.id ??= `npc-${index}`;

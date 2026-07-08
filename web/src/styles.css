@@ -7147,6 +7147,14 @@ button.event {
   white-space: nowrap;
 }
 
+.rank-loading-state {
+  border: 1px dashed rgba(120, 91, 43, .28);
+  border-radius: 7px;
+  color: var(--muted);
+  padding: 18px;
+  text-align: center;
+}
+
 .rank-row.person-rank-row {
   grid-template-columns: auto auto minmax(0, 1fr) auto;
 }
