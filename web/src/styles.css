@@ -2300,10 +2300,14 @@ button {
 }
 
 .compact-monster-strip .monster-chip.with-emblem {
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: 48px minmax(0, 1fr);
   align-items: center;
   align-content: center;
   height: 100%;
+}
+
+.compact-monster-strip .monster-chip.with-emblem .monster-emblem.sm {
+  --monster-size: 46px;
 }
 
 .compact-monster-strip .monster-chip.with-emblem > span {
