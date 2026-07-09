@@ -1001,9 +1001,12 @@
             <button class="secondary" type="button" @click="showDungeonLoot = !showDungeonLoot">
               {{ showDungeonLoot ? "收起装备池" : "展开装备池" }}
             </button>
+            <button class="secondary" type="button" @click="showDungeonBestiary = !showDungeonBestiary">
+              {{ showDungeonBestiary ? "收起妖物图鉴" : "展开妖物图鉴" }}
+            </button>
           </div>
 
-          <section class="panel dungeon-bestiary-panel" aria-label="副本妖物图鉴">
+          <section v-if="showDungeonBestiary" class="panel dungeon-bestiary-panel" aria-label="副本妖物图鉴">
             <div class="section-head compact">
               <div>
                 <h3>副本妖物图鉴</h3>
@@ -3688,6 +3691,7 @@ const equipmentSortDirection = ref("desc");
 const dungeonDayIndex = ref(0);
 const activeDungeonRecordTab = ref("blood");
 const showDungeonLoot = ref(false);
+const showDungeonBestiary = ref(false);
 const selectedVoidHallSect = ref("");
 const detailView = ref("rank");
 const selectedPersonId = ref("player");
