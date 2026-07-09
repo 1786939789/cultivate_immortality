@@ -4469,7 +4469,8 @@ const homeLogDayRecords = computed(() => {
   for (let day = currentDay; day >= firstDay; day -= 1) {
     const logs = [
       ...playerDuelHomeLogs(day),
-      ...playerSectWarHomeLogs(day)
+      ...playerSectWarHomeLogs(day),
+      ...marketElixirHomeLogs(day)
     ]
       .sort((a, b) => (a.order || 0) - (b.order || 0) || String(a.text).localeCompare(String(b.text), "zh-Hans-CN"))
       .slice(0, 30);
@@ -5387,6 +5388,19 @@ function playerDuelHomeLogs(day) {
         text: `切磋${won ? "胜利" : "失败"}，对战${entry.opponent || "未知对手"}，段位${entry.opponentRankName || "未记录"}，${scoreText}。`
       };
     });
+}
+
+function marketElixirHomeLogs(day) {
+  return (gameState.value.log || [])
+    .filter((entry) => Number(entry.day) === Number(day))
+    .filter((entry) => {
+      const text = entry?.text || "";
+      return text.startsWith("在坊市购得「") || text.startsWith("售出「");
+    })
+    .map((entry, index) => ({
+      ...entry,
+      order: 3000 + index
+    }));
 }
 
 function sectWarStats(sect) {
