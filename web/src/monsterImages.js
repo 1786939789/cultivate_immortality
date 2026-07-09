@@ -39,13 +39,27 @@ export const monsterImageNames = {
 
 export const monsterStageNames = ["血色外谷", "石殿甬道", "熔岩石窟", "玄冰洞府", "坠魔裂谷", "虚天残境", "乱星海深渊", "昆吾灵山", "真灵天门"];
 
+export const monsterArchetypes = [
+  { id: "hp", label: "血量高", shortLabel: "血厚", text: "气血厚重，能扛更久。" },
+  { id: "sense", label: "神识高", shortLabel: "神识", text: "神识敏锐，更容易预判闪避。" },
+  { id: "attack", label: "攻击高", shortLabel: "凶攻", text: "攻伐凶猛，正面伤害更高。" },
+  { id: "balanced", label: "均衡型", shortLabel: "均衡", text: "五维平衡，没有明显短板。" }
+];
+
+const monsterArchetypeByName = Object.fromEntries(Object.keys(monsterImageNames).map((name, index) => [name, monsterArchetypes[index % monsterArchetypes.length]]));
+
 export const monsterImageEntries = Object.entries(monsterImageNames).map(([name, file], index) => {
   const stage = Math.floor(index / 4);
+  const archetype = monsterArchetypeByName[name] || monsterArchetypes[3];
   return {
     name,
     file,
     stage,
-    stageName: monsterStageNames[stage] || `第${stage + 1}阶妖域`
+    stageName: monsterStageNames[stage] || `第${stage + 1}阶妖域`,
+    archetype: archetype.id,
+    archetypeLabel: archetype.label,
+    archetypeShortLabel: archetype.shortLabel,
+    archetypeText: archetype.text
   };
 });
 
@@ -54,6 +68,11 @@ const monsterNames = Object.keys(monsterImageNames).sort((a, b) => b.length - a.
 export function baseMonsterName(name = "") {
   const text = String(name || "");
   return monsterNames.find((monsterName) => text.includes(monsterName)) || text.replace(/^.*?·/, "").replace(/王$/, "");
+}
+
+export function monsterArchetype(monster) {
+  const name = baseMonsterName(typeof monster === "string" ? monster : monster?.name);
+  return monsterArchetypeByName[name] || monsterArchetypes[3];
 }
 
 export function monsterImagePath(monster) {

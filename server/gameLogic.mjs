@@ -43,6 +43,7 @@ const xpModeVersion = 2;
 const playerDailyBaseXp = 10;
 const taskDefinitionLimit = 80;
 const taskCompletionLimit = 120;
+const taskMultiplierRecordDays = 3;
 const taskCategories = ["生活", "学习", "工作", "运动"];
 const defaultTaskDefinitions = [
   { id: "task-work-hour", name: "加班", detail: "按实际投入时间记录额外工作。", type: "measurable", category: "工作", unitName: "小时", targetAmount: 1, xpReward: 100, spiritReward: 10, maxMultiplier: 4, enabled: true },
@@ -998,7 +999,7 @@ export function baseBreakthroughChance(realm) {
   const bottleneckPenalty = info.level === 10 ? 0.3 + info.stageIndex * 0.045 : 0;
   if (info.stageIndex === 1 && info.level === 10) return 0.1;
   if (info.stageIndex === 2 && info.level === 10) return 0.06;
-  return clamp(0.72 - levelPenalty - stagePenalty - bottleneckPenalty, 0.035, 0.82);
+  return clamp(0.72 - levelPenalty - stagePenalty - bottleneckPenalty, minimumBreakthroughChance(realm), 0.82);
 }
 
 function lateMajorBreakthroughChance(realm) {
@@ -1006,11 +1007,12 @@ function lateMajorBreakthroughChance(realm) {
   if (safeRealm % 10 !== 9 || safeRealm + 1 >= realms.length) return null;
   const targetStageIndex = Math.floor((safeRealm + 1) / 10);
   if (targetStageIndex < 4) return null;
-  return 0.02 / Math.pow(2, targetStageIndex - 4);
+  return Math.max(0.01, 0.02 / Math.pow(2, targetStageIndex - 4));
 }
 
 function minimumBreakthroughChance(realm) {
-  return lateMajorBreakthroughChance(realm) === null ? 0.035 : 0;
+  if (lateMajorBreakthroughChance(realm) !== null) return 0.01;
+  return Math.floor((realm || 0) / 10) >= 8 ? 0.01 : 0.035;
 }
 
 export function breakthroughChance(entity) {
@@ -1074,6 +1076,14 @@ const monsterNamesByStage = [
   ["域外天魔", "真仙傀儡", "古魔圣祖影", "天罚雷兽"]
 ];
 const monsterNames = monsterNamesByStage.flat();
+const monsterArchetypes = [
+  { id: "hp", label: "血量高", shortLabel: "血厚", text: "气血厚重，能扛更久。", multipliers: { maxHp: 1.34, attack: 0.92, defense: 1.06, divineSense: 0.92, maxMana: 0.96 }, skillIds: ["wood_recovery", "golden_body", "spirit_armor", "mirror_water"] },
+  { id: "sense", label: "神识高", shortLabel: "神识", text: "神识敏锐，更容易预判闪避。", multipliers: { maxHp: 0.96, attack: 0.94, defense: 0.96, divineSense: 1.42, maxMana: 1.16 }, skillIds: ["soul_hook", "ice_seal", "magnetic_light", "ghost_step"] },
+  { id: "attack", label: "攻击高", shortLabel: "凶攻", text: "攻伐凶猛，正面伤害更高。", multipliers: { maxHp: 0.98, attack: 1.34, defense: 0.92, divineSense: 0.96, maxMana: 1.02 }, skillIds: ["starfall", "demon_cut", "blood_drink", "thunder_pearl"] },
+  { id: "balanced", label: "均衡型", shortLabel: "均衡", text: "五维平衡，没有明显短板。", multipliers: { maxHp: 1.08, attack: 1.08, defense: 1.08, divineSense: 1.08, maxMana: 1.08 }, skillIds: ["five_element", "wind_blade", "azure_sword", "green_bamboo"] }
+];
+const monsterArchetypeById = Object.fromEntries(monsterArchetypes.map((archetype) => [archetype.id, archetype]));
+const monsterArchetypeByName = Object.fromEntries(monsterNamesByStage.flatMap((names) => names.map((name, index) => [name, monsterArchetypes[index % monsterArchetypes.length].id])));
 const sharedDungeonItemIds = equipmentCatalog.map((item) => item.id);
 const recentRecordDays = 30;
 const replayRetentionDays = 7;
@@ -1676,11 +1686,44 @@ function equipmentTierForRealm(realm) {
   return clamp(1 + Math.floor(stageIndexOfRealm(realm) * 0.72), 1, equipmentTiers.length);
 }
 
-function makeMonster(name, realm, rootKey, intensity = 1) {
+function baseMonsterName(name = "") {
+  const text = String(name || "");
+  return monsterNames.find((monsterName) => text.includes(monsterName)) || text.replace(/^.*?·/, "").replace(/王$/, "");
+}
+
+function monsterArchetypeForName(name = "") {
+  return monsterArchetypeById[monsterArchetypeByName[baseMonsterName(name)]] || monsterArchetypes[3];
+}
+
+function monsterSkillForArchetype(name, archetype) {
+  const ids = (archetype?.skillIds || []).filter((id) => combatSkills.some((skill) => skill.id === id));
+  if (!ids.length) return randomSkillId();
+  return ids[stableHash(name) % ids.length];
+}
+
+function applyMonsterArchetypeStats(stats, archetype) {
+  const multipliers = archetype?.multipliers || {};
+  return {
+    maxHp: Math.max(1, Math.floor(stats.maxHp * (multipliers.maxHp || 1))),
+    maxMana: Math.max(1, Math.floor(stats.maxMana * (multipliers.maxMana || 1))),
+    attack: Math.max(1, Math.floor(stats.attack * (multipliers.attack || 1))),
+    defense: Math.max(0, Math.floor(stats.defense * (multipliers.defense || 1))),
+    divineSense: Math.max(1, Math.floor(stats.divineSense * (multipliers.divineSense || 1)))
+  };
+}
+
+function makeMonster(name, realm, rootKey, intensity = 1, archetypeId = "") {
   const stats = rollBirthStats(capRealm(realm));
   const monsterRootKey = rootKey || pick(roots).key;
-  const attack = Math.max(stats.attack + 2, Math.floor(stats.attack * (1.16 + intensity * 0.1)));
-  const defense = Math.max(stats.defense + 1, Math.floor(stats.defense * (1.14 + intensity * 0.08)));
+  const archetype = monsterArchetypeById[archetypeId] || monsterArchetypeForName(name);
+  const baseStats = {
+    attack: Math.max(stats.attack + 2, Math.floor(stats.attack * (1.16 + intensity * 0.1))),
+    defense: Math.max(stats.defense + 1, Math.floor(stats.defense * (1.14 + intensity * 0.08))),
+    maxHp: Math.floor(stats.maxHp * (1.34 + intensity * 0.24)),
+    maxMana: Math.floor(stats.maxMana * (1.08 + intensity * 0.1)),
+    divineSense: Math.floor(stats.divineSense * (1.12 + intensity * 0.08))
+  };
+  const archetypeStats = applyMonsterArchetypeStats(baseStats, archetype);
   const monster = {
     id: `monster-${stateSafeId(name)}-${realm}-${Math.floor(Math.random() * 100000)}`,
     name,
@@ -1688,14 +1731,17 @@ function makeMonster(name, realm, rootKey, intensity = 1) {
     root: normalizeRoot({ key: monsterRootKey, bonus: monsterRootKey === "heaven" ? 0 : undefined }),
     roots: [],
     primaryRootKey: monsterRootKey,
-    attack,
-    defense,
-    maxHp: Math.floor(stats.maxHp * (1.34 + intensity * 0.24)),
+    attack: archetypeStats.attack,
+    defense: archetypeStats.defense,
+    maxHp: archetypeStats.maxHp,
     hp: 1,
-    maxMana: Math.floor(stats.maxMana * (1.08 + intensity * 0.1)),
+    maxMana: archetypeStats.maxMana,
     mana: 1,
-    divineSense: Math.floor(stats.divineSense * (1.12 + intensity * 0.08)),
-    skillId: randomSkillId()
+    divineSense: archetypeStats.divineSense,
+    archetype: archetype.id,
+    archetypeLabel: archetype.label,
+    archetypeText: archetype.text,
+    skillId: monsterSkillForArchetype(name, archetype)
   };
   applyRootSet(monster);
   if (monster.primaryRootKey === "heaven") monster.root.bonus = 0;
@@ -1784,6 +1830,9 @@ function publicMonster(monster) {
     skillRank: skillRankOf(monster, monster.skillId),
     effectiveSkill: effectiveSkillForEntity(monster),
     skill: findSkill(monster.skillId)?.name || "妖兽本能",
+    archetype: monster.archetype || monsterArchetypeForName(monster.name).id,
+    archetypeLabel: monster.archetypeLabel || monsterArchetypeForName(monster.name).label,
+    archetypeText: monster.archetypeText || monsterArchetypeForName(monster.name).text,
     maxHp: monster.maxHp,
     attack: monster.attack,
     defense: monster.defense,
@@ -1907,10 +1956,12 @@ function createBloodTrialCaves(maxStage) {
     const stage = clamp(cave, 0, realmStages.length - 1);
     const realm = topRealmOfStage(stage);
     const stageMonsterNames = monsterNamesByStage[stage] || monsterNames;
+    const monsterName = pick(stageMonsterNames);
+    const archetype = monsterArchetypeForName(monsterName);
     return {
       cave: cave + 1,
       name: dungeonTierNames[stage],
-      monster: makeMonster(`${dungeonTierNames[stage]}·${pick(stageMonsterNames)}`, realm, pick(roots).key, 0.8 + cave * 0.18),
+      monster: makeMonster(`${dungeonTierNames[stage]}·${monsterName}`, realm, pick(roots).key, 0.8 + cave * 0.18, archetype.id),
       clears: [],
       challengers: []
     };
@@ -3666,6 +3717,76 @@ function activeCultivationMultiplier(state) {
   return publicElixirEffects(state).cultivationMultiplier;
 }
 
+function normalizeTaskMultiplierRecords(state) {
+  state.taskMultiplierRecords = Array.isArray(state.taskMultiplierRecords) ? state.taskMultiplierRecords : [];
+  const seen = new Set();
+  state.taskMultiplierRecords = state.taskMultiplierRecords
+    .map((record) => {
+      const day = Math.max(1, Math.floor(Number(record?.day) || 0));
+      if (!day) return null;
+      const elixirMultiplier = Math.max(1, Number(record?.elixirMultiplier ?? record?.cultivationMultiplier) || 1);
+      const manaMultiplier = Math.max(1, Number(record?.manaMultiplier) || 1);
+      const totalMultiplier = Math.max(1, Number(record?.totalMultiplier) || elixirMultiplier * manaMultiplier);
+      return {
+        day,
+        date: record?.date || stateDateForDay(state, day),
+        elixirMultiplier,
+        manaMultiplier,
+        totalMultiplier
+      };
+    })
+    .filter(Boolean)
+    .filter((record) => {
+      if (seen.has(record.day)) return false;
+      seen.add(record.day);
+      return isRecordWithinDays(record, state.day || 1, taskMultiplierRecordDays);
+    })
+    .sort((a, b) => b.day - a.day)
+    .slice(0, taskMultiplierRecordDays);
+}
+
+function taskMultiplierSnapshot(state, day = state.day) {
+  const targetDay = Math.max(1, Math.floor(Number(day) || state.day || 1));
+  normalizeElixirEffects(state);
+  const elixirMultiplier = activeCultivationMultiplier(state);
+  const manaMultiplier = 1 + manaTaskBonus(state.player, state);
+  return {
+    day: targetDay,
+    date: stateDateForDay(state, targetDay),
+    elixirMultiplier,
+    manaMultiplier,
+    totalMultiplier: elixirMultiplier * manaMultiplier
+  };
+}
+
+function rememberTaskMultiplierForDay(state, day = state.day) {
+  normalizeTaskMultiplierRecords(state);
+  const snapshot = taskMultiplierSnapshot(state, day);
+  state.taskMultiplierRecords = [
+    snapshot,
+    ...state.taskMultiplierRecords.filter((record) => record.day !== snapshot.day)
+  ]
+    .filter((record) => isRecordWithinDays(record, state.day || snapshot.day, taskMultiplierRecordDays))
+    .sort((a, b) => b.day - a.day)
+    .slice(0, taskMultiplierRecordDays);
+  return snapshot;
+}
+
+function taskMultiplierForDay(state, day = state.day) {
+  const targetDay = Math.max(1, Math.floor(Number(day) || state.day || 1));
+  normalizeTaskMultiplierRecords(state);
+  if (targetDay === Number(state.day || 1)) return rememberTaskMultiplierForDay(state, targetDay);
+  const found = state.taskMultiplierRecords.find((record) => record.day === targetDay);
+  if (found) return found;
+  return {
+    day: targetDay,
+    date: stateDateForDay(state, targetDay),
+    elixirMultiplier: 1,
+    manaMultiplier: 1,
+    totalMultiplier: 1
+  };
+}
+
 function activeBreakthroughBonus(state) {
   return publicElixirEffects(state).nextBreakthroughBonus;
 }
@@ -4291,6 +4412,12 @@ function ensureTaskSystem(state) {
     changed = true;
   }
   state.tasks ??= [];
+  const beforeRecords = JSON.stringify(state.taskMultiplierRecords || []);
+  normalizeTaskMultiplierRecords(state);
+  if (!state.taskMultiplierRecords.some((record) => record.day === state.day)) {
+    rememberTaskMultiplierForDay(state, state.day);
+  }
+  changed = changed || beforeRecords !== JSON.stringify(state.taskMultiplierRecords || []);
   return changed;
 }
 
@@ -4362,6 +4489,7 @@ export function createDefaultState() {
     tasks: [],
     taskDefinitions: defaultRealityTasks(),
     taskCompletions: [],
+    taskMultiplierRecords: [{ day: 1, date: openingDate, elixirMultiplier: 1, manaMultiplier: 1, totalMultiplier: 1 }],
     npcs: npcNames.map((name, index) => makeNpc(name, index)),
     sectNameMap: {},
     sect: {
@@ -4418,6 +4546,7 @@ export function clearProgressHistory(state) {
   state.tasks = [];
   state.taskDefinitions = defaultRealityTasks();
   state.taskCompletions = [];
+  state.taskMultiplierRecords = [taskMultiplierSnapshot(state, state.day)];
   state.player.sect = state.sect?.name || "落云宗";
   state.sect.warWins = 0;
   state.sect.warLosses = 0;
@@ -4919,6 +5048,7 @@ export function compactStateForStorage(state, options = {}) {
   state.tasks = (state.tasks || []).slice(0, 16);
   state.taskCompletions = (state.taskCompletions || []).slice(0, taskCompletionLimit);
   state.taskDefinitions = (state.taskDefinitions || []).slice(0, taskDefinitionLimit);
+  normalizeTaskMultiplierRecords(state);
   return state;
 }
 
@@ -5048,6 +5178,7 @@ export function getPublicState(state, options = {}) {
       tasks: state.tasks,
       taskDefinitions: state.taskDefinitions,
       taskCompletions: state.taskCompletions,
+      taskMultiplierRecords: state.taskMultiplierRecords,
       log: state.log,
       logDays: publicLogDays(state),
       bag: state.bag,
@@ -5116,6 +5247,7 @@ function getHomeState(state) {
     tasks: state.tasks,
     taskDefinitions: state.taskDefinitions,
     taskCompletions: state.taskCompletions,
+    taskMultiplierRecords: state.taskMultiplierRecords,
     log: state.log,
     logDays: publicLogDays(state),
     bag: state.bag,
@@ -6119,9 +6251,11 @@ export function settleIfNeeded(state) {
 }
 
 export function dailySettlement(state, options = {}) {
+  rememberTaskMultiplierForDay(state, state.day);
   state.day += 1;
   state.player.breakthroughAttemptsToday = 0;
   normalizeElixirEffects(state);
+  rememberTaskMultiplierForDay(state, state.day);
   const settlementDate = stateDateForDay(state);
   const events = [
     "坊市传来秘境流言，众修士人心浮动。",
@@ -6299,11 +6433,17 @@ export function addTask(state, payload) {
     ? Math.max(0, Number(payload.completedAmount ?? payload.amount ?? definition.targetAmount) || 0)
     : 1;
   if (completedAmount <= 0) throw new Error("完成量必须大于 0");
+  const currentDay = Math.max(1, Math.floor(Number(state.day) || 1));
+  const targetDay = Math.max(1, Math.floor(Number(payload.day ?? payload.targetDay ?? currentDay) || currentDay));
+  if (targetDay > currentDay || targetDay < Math.max(1, currentDay - taskMultiplierRecordDays + 1)) {
+    throw new Error("只能补记最近三天的现实任务");
+  }
   const rawMultiplier = definition.type === "measurable" ? completedAmount / definition.targetAmount : 1;
   const multiplier = definition.type === "measurable" ? clamp(rawMultiplier, 0, definition.maxMultiplier) : 1;
   const baseXpGain = Math.floor(definition.xpReward * multiplier);
   const spiritGain = Math.floor(definition.spiritReward * multiplier);
-  const xpMultiplier = activeCultivationMultiplier(state) * (1 + manaTaskBonus(p, state));
+  const dayMultiplier = taskMultiplierForDay(state, targetDay);
+  const xpMultiplier = Math.max(1, Number(dayMultiplier.totalMultiplier) || 1);
   const xpGain = Math.floor(baseXpGain * xpMultiplier);
   p.xp += xpGain;
   p.spirit += spiritGain;
@@ -6321,9 +6461,12 @@ export function addTask(state, payload) {
     multiplier,
     xp: xpGain,
     baseXp: baseXpGain,
+    elixirMultiplier: dayMultiplier.elixirMultiplier,
+    manaMultiplier: dayMultiplier.manaMultiplier,
+    xpMultiplier,
     spirit: spiritGain,
-    day: state.day,
-    date: stateDateForDay(state)
+    day: targetDay,
+    date: dayMultiplier.date || stateDateForDay(state, targetDay)
   };
   state.taskCompletions.unshift(completion);
   state.taskCompletions = state.taskCompletions.slice(0, taskCompletionLimit);
@@ -6334,17 +6477,19 @@ export function addTask(state, payload) {
     baseXpGain,
     taskName: definition.name,
     taskType: definition.category,
-    spiritGain
+    spiritGain,
+    day: targetDay,
+    date: completion.date
   });
   const bonusText = xpGain > baseXpGain ? `（丹药/法力加成 +${xpGain - baseXpGain}）` : "";
   log(state, `完成「${definition.name}」，获得 ${xpGain} 经验${bonusText}与 ${spiritGain} 灵石。`, "gold");
   autoAttemptPlayerBreakthrough(state);
 }
 
-function addTaskXpToDailyRecord(state, { xpGain, baseXpGain, taskName, taskType, spiritGain = 0 }) {
+function addTaskXpToDailyRecord(state, { xpGain, baseXpGain, taskName, taskType, spiritGain = 0, day = state.day, date }) {
   const player = state.player;
-  const today = state.day;
-  const todayDate = stateDateForDay(state);
+  const today = Math.max(1, Math.floor(Number(day) || state.day || 1));
+  const todayDate = date || stateDateForDay(state, today);
   player.dailyRecords ??= [];
   let record = player.dailyRecords.find((item) => item.day === today);
   if (!record) {

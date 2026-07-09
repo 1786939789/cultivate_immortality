@@ -336,7 +336,6 @@
                 <b>{{ selectedHomeLogDayRecord?.date || currentDate }}</b>
                 <span>本日暂无战斗日志</span>
               </div>
-              <LogPanel class="home-log-fallback" :logs="mainLogs" />
             </article>
           </div>
         </section>
@@ -488,7 +487,7 @@
                 <span>{{ realm.nextRealm }}</span>
                 <span>{{ realm.xpNeed }}</span>
                 <span>{{ realm.growthText }}</span>
-                <span>{{ formatPercent(realm.baseBreakChance) }}</span>
+                <span>{{ realmBaseBreakChanceText(realm) }}</span>
               </div>
             </div>
           </section>
@@ -513,8 +512,12 @@
               </div>
 
               <div class="task-date-card">
-                <strong>第 {{ gameState.day }} 天</strong>
-                <span>{{ currentDateLabel }}</span>
+                <strong>{{ selectedTaskDayMeta?.text || `第 ${gameState.day} 天` }}</strong>
+                <span>{{ selectedTaskDayMeta?.label || "今日" }} · {{ formatDateLabel(selectedTaskDate) }}</span>
+                <label class="task-calendar-field">
+                  <span>补记日期</span>
+                  <input v-model="selectedTaskDate" type="date" :min="taskDateMin" :max="taskDateMax" aria-label="选择现实任务补记日期">
+                </label>
                 <button class="icon-button task-admin-button" type="button" title="管理现实任务" aria-label="管理现实任务" @click="openTaskAdmin">
                   <Settings :size="17" :stroke-width="2.4" aria-hidden="true" />
                 </button>
@@ -645,16 +648,20 @@
                         <span>灵石</span>
                         <strong>+{{ taskRewardPreview.spirit }}</strong>
                       </div>
-                      <div class="task-reward-token elixir" :class="{ muted: taskRewardPreview.elixirMultiplier <= 1 }">
+                      <div
+                        class="task-reward-token elixir task-reward-has-tip"
+                        :class="{ muted: taskRewardPreview.xpMultiplier <= 1 }"
+                        tabindex="0"
+                        :aria-label="`加成：${formatTaskBonusPercent(taskRewardPreview.xpMultiplier)}。${taskRewardFormulaText}`"
+                      >
                         <img src="/assets/tasks/icon-elixir.svg" alt="" aria-hidden="true">
                         <span>加成</span>
-                        <strong>x{{ formatMultiplier(taskRewardPreview.elixirMultiplier) }}</strong>
+                        <strong>{{ formatTaskBonusPercent(taskRewardPreview.xpMultiplier) }}</strong>
+                        <small class="task-reward-tip" role="tooltip">{{ taskRewardFormulaText }}</small>
                       </div>
                     </div>
 
                     <div class="task-detail-footer">
-                      <span v-if="taskRewardPreview.elixirMultiplier > 1">基础 +{{ taskRewardPreview.baseXp }}，药力加成后结算。</span>
-                      <span v-else>当前未服用修为丹，按基础收益结算。</span>
                       <button class="primary task-complete-button" :disabled="isActionPending('/api/tasks') || !selectedTaskDefinition">
                         {{ isActionPending("/api/tasks") ? "结算中..." : "完成任务" }}
                       </button>
@@ -1013,7 +1020,10 @@
                 <div class="bestiary-monster-list">
                   <span class="bestiary-monster" v-for="monster in stage.monsters" :key="monster.name">
                     <MonsterEmblem :monster="monster" size="sm" />
-                    <b>{{ monster.name }}</b>
+                    <span>
+                      <b>{{ monster.name }}</b>
+                      <small :class="`monster-role-${monster.archetype}`" :title="monster.archetypeText">{{ monster.archetypeLabel }}</small>
+                    </span>
                   </span>
                 </div>
               </article>
@@ -1051,6 +1061,9 @@
                     <div class="monster-identity-copy">
                       <h4 :title="cave.monster?.name || ''">{{ monsterShortName(cave.monster?.name) }}</h4>
                       <p :title="`${cave.monster?.realm || ''} · ${cave.monster?.rootName || ''}`">{{ cave.monster?.realm }} · {{ cave.monster?.rootName }}</p>
+                      <small class="monster-role-badge" :class="`monster-role-${cave.monster?.archetype || monsterArchetypeOf(cave.monster).id}`" :title="cave.monster?.archetypeText || monsterArchetypeOf(cave.monster).text">
+                        {{ cave.monster?.archetypeLabel || monsterArchetypeOf(cave.monster).label }}
+                      </small>
                     </div>
                     <div class="monster-stats">
                       <span v-for="stat in monsterStatItems(cave.monster)" :key="stat.icon" :aria-label="`${stat.label} ${stat.value}`" :title="`${stat.label}：${stat.value}`">
@@ -2848,24 +2861,33 @@
               <div class="equipment-avatar-panel detail-equipment-top dossier-core">
                 <div class="equipment-paperdoll">
                   <div class="equipment-slot-column">
-                    <div class="equipment-slot-card" v-for="slot in equipmentSlots.slice(0, 3)" :key="slot.id" :class="equipmentSlotCardClass(selectedPerson, slot)">
+                    <div class="equipment-slot-card" v-for="slot in dossierEquipmentSlotColumns[0]" :key="slot.id" :class="equipmentSlotCardClass(selectedPerson, slot)" tabindex="0" :title="equipmentSlotTooltip(selectedPerson, slot)" :aria-label="equipmentSlotTooltip(selectedPerson, slot)">
                       <EquipmentIcon v-if="equippedInSlot(selectedPerson, slot.id)" :id="equippedInSlot(selectedPerson, slot.id)?.id" :name="equippedInSlot(selectedPerson, slot.id)?.name" :slot="slot.id" :tier="equippedInSlot(selectedPerson, slot.id)?.tier" />
                       <span>{{ slot.name }}</span>
-                      <strong>{{ equippedInSlot(selectedPerson, slot.id)?.name || "空" }}</strong>
-                      <small>{{ equipmentSlotSummary(selectedPerson, slot) }}</small>
+                      <strong v-if="!equippedInSlot(selectedPerson, slot.id)">空</strong>
+                      <small v-if="!equippedInSlot(selectedPerson, slot.id)">{{ equipmentSlotSummary(selectedPerson, slot) }}</small>
+                      <div v-if="equippedInSlot(selectedPerson, slot.id)" class="equipment-slot-tooltip" role="tooltip">
+                        <strong>{{ equippedInSlot(selectedPerson, slot.id)?.name }}</strong>
+                        <span>{{ equipmentSlotSummary(selectedPerson, slot) }}</span>
+                      </div>
                     </div>
                   </div>
                   <div class="equipment-character-core">
                     <CharacterPortrait :person="withDuelRank(selectedPerson)" size="xl" />
-                    <b>{{ personPower(selectedPerson) }}</b>
-                    <span>战斗力</span>
+                    <div class="dossier-power-line" :aria-label="`战斗力：${personPower(selectedPerson)}`">
+                      <span>战斗力：<b>{{ personPower(selectedPerson) }}</b></span>
+                    </div>
                   </div>
                   <div class="equipment-slot-column">
-                    <div class="equipment-slot-card" v-for="slot in equipmentSlots.slice(3)" :key="slot.id" :class="equipmentSlotCardClass(selectedPerson, slot)">
+                    <div class="equipment-slot-card" v-for="slot in dossierEquipmentSlotColumns[1]" :key="slot.id" :class="equipmentSlotCardClass(selectedPerson, slot)" tabindex="0" :title="equipmentSlotTooltip(selectedPerson, slot)" :aria-label="equipmentSlotTooltip(selectedPerson, slot)">
                       <EquipmentIcon v-if="equippedInSlot(selectedPerson, slot.id)" :id="equippedInSlot(selectedPerson, slot.id)?.id" :name="equippedInSlot(selectedPerson, slot.id)?.name" :slot="slot.id" :tier="equippedInSlot(selectedPerson, slot.id)?.tier" />
                       <span>{{ slot.name }}</span>
-                      <strong>{{ equippedInSlot(selectedPerson, slot.id)?.name || "空" }}</strong>
-                      <small>{{ equipmentSlotSummary(selectedPerson, slot) }}</small>
+                      <strong v-if="!equippedInSlot(selectedPerson, slot.id)">空</strong>
+                      <small v-if="!equippedInSlot(selectedPerson, slot.id)">{{ equipmentSlotSummary(selectedPerson, slot) }}</small>
+                      <div v-if="equippedInSlot(selectedPerson, slot.id)" class="equipment-slot-tooltip" role="tooltip">
+                        <strong>{{ equippedInSlot(selectedPerson, slot.id)?.name }}</strong>
+                        <span>{{ equipmentSlotSummary(selectedPerson, slot) }}</span>
+                      </div>
                     </div>
                     <div class="equipment-slot-card empty-slot" v-if="equipmentSlots.length < 6">
                       <span>预留</span>
@@ -2980,7 +3002,6 @@
               <div class="panel flat">
                 <h3>秘境记录</h3>
                 <div class="timeline detail-scroll">
-                  <div class="dossier-record-group-label">副本闯关</div>
                   <button
                     class="event event-button"
                     :class="{ bad: dungeonRecordFailed(record), gold: dungeonRecordSucceeded(record), replayable: hasReplay(record) }"
@@ -3030,12 +3051,12 @@
                   </div>
                 </div>
                 <div class="sect-member-grid">
-                  <button class="sect-member-card" :class="{ leader: member.id === selectedSect.leaderId }" v-for="member in sectMembers(selectedSect)" :key="member.id" @click="openPersonById(member.id)">
+                  <button class="sect-member-card" :class="{ leader: member.id === selectedSect.leaderId, elder: (selectedSect.elderIds || []).includes(member.id) }" v-for="member in sectMembers(selectedSect)" :key="member.id" @click="openPersonById(member.id)">
                     <CharacterPortrait :person="member" size="md" />
                     <div class="sect-member-main">
                       <div class="sect-member-topline">
                         <span class="tag">{{ realmName(member.realm) }}</span>
-                        <span v-if="sectMemberOffice(selectedSect, member) && member.id !== selectedSect.leaderId" class="member-badge office">{{ sectMemberOffice(selectedSect, member) }}</span>
+                        <span v-if="sectMemberOffice(selectedSect, member) && member.id !== selectedSect.leaderId && !(selectedSect.elderIds || []).includes(member.id)" class="member-badge office">{{ sectMemberOffice(selectedSect, member) }}</span>
                         <span class="member-badge" :class="{ player: member.isPlayer }">{{ member.isPlayer ? "你" : "NPC" }}</span>
                       </div>
                       <strong>{{ member.name }}</strong>
@@ -3465,11 +3486,10 @@ import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, 
 import { clearCachedState, getBattleReplay, getCachedState, getCultivatorDetail, getCurrentUser, getDuelReplay, getState, login, logout, postAction, register, saveCachedState } from "./api";
 import CharacterPortrait from "./components/CharacterPortrait.vue";
 import EquipmentIcon from "./components/EquipmentIcon.vue";
-import LogPanel from "./components/LogPanel.vue";
 import Meter from "./components/Meter.vue";
 import MonsterEmblem from "./components/MonsterEmblem.vue";
 import StatIcon, { statIconComponent } from "./components/StatIcon.vue";
-import { monsterImageEntries, monsterStageNames } from "./monsterImages";
+import { monsterArchetype, monsterImageEntries, monsterStageNames } from "./monsterImages";
 import { equipmentCatalog as fallbackEquipmentCatalog, equipmentSlots as fallbackEquipmentSlots, equipmentTiers as fallbackEquipmentTiers } from "../../shared/equipmentData.mjs";
 import { duelLossScore, duelRanks, duelRankForScore, duelSeasonDay, duelSeasonLength, duelSeasonMaxScore, duelSeasonOfDay, duelWinScore } from "../../shared/duelSeasonData.mjs";
 
@@ -3554,6 +3574,7 @@ const emptyState = {
   tasks: [],
   taskDefinitions: [],
   taskCompletions: [],
+  taskMultiplierRecords: [],
   log: [],
   logDays: [],
   bag: {},
@@ -3677,7 +3698,7 @@ const replayLoading = ref(false);
 const battleCursor = ref(0);
 const invalidReplayIds = ref(new Set());
 const countdown = ref("--:--:--");
-const taskForm = reactive({ category: "", taskId: "", completedAmount: 1 });
+const taskForm = reactive({ category: "", taskId: "", completedAmount: 1, targetDay: 0 });
 const collapsedTaskDays = ref(new Set());
 const expandedTaskDays = ref(new Set());
 const adminMode = ref("cultivators");
@@ -3761,6 +3782,13 @@ const accountInitial = computed(() => {
   return name ? name.slice(0, 1).toUpperCase() : "?";
 });
 const equipmentSlots = computed(() => catalog.value.equipmentSlots?.length ? catalog.value.equipmentSlots : fallbackEquipmentSlots);
+const dossierEquipmentSlotColumns = computed(() => {
+  const slotById = new Map(equipmentSlots.value.map((slot) => [slot.id, slot]));
+  return [
+    ["trinket", "armor", "legs"],
+    ["head", "weapon"]
+  ].map((column) => column.map((id) => slotById.get(id)).filter(Boolean));
+});
 const equipmentTiers = computed(() => catalog.value.equipmentTiers?.length ? catalog.value.equipmentTiers : fallbackEquipmentTiers);
 const duelRankList = computed(() => catalog.value.duelRanks?.length ? catalog.value.duelRanks : duelRanks);
 const duelSeasonInfo = computed(() => derived.value.duelSeason || {
@@ -3804,6 +3832,7 @@ const currentDateLabel = computed(() => formatDateLabel(currentDate.value));
 const taskDefinitions = computed(() => gameState.value.taskDefinitions || []);
 const enabledTaskDefinitions = computed(() => taskDefinitions.value.filter((task) => task.enabled !== false));
 const taskDailyGoal = computed(() => Math.max(6, enabledTaskDefinitions.value.length || 0));
+const taskSelectableDayCount = 3;
 const frontTaskCategories = computed(() => {
   const categories = [];
   for (const task of enabledTaskDefinitions.value) {
@@ -3817,6 +3846,61 @@ const frontTaskCategories = computed(() => {
   });
 });
 const taskJournalDays = 15;
+const taskSelectableDays = computed(() => {
+  const currentDay = Math.max(1, Number(gameState.value.day) || 1);
+  return Array.from({ length: Math.min(taskSelectableDayCount, currentDay) }, (_, index) => {
+    const day = currentDay - index;
+    const date = dateForDay(day);
+    return {
+      day,
+      date,
+      label: index === 0 ? "今日" : index === 1 ? "昨日" : "前日",
+      text: `第 ${day} 天`
+    };
+  });
+});
+const taskDateMin = computed(() => taskSelectableDays.value.at(-1)?.date || currentDate.value);
+const taskDateMax = computed(() => taskSelectableDays.value[0]?.date || currentDate.value);
+const selectedTaskDay = computed(() => {
+  const currentDay = Math.max(1, Number(gameState.value.day) || 1);
+  const day = Math.max(1, Math.floor(Number(taskForm.targetDay) || currentDay));
+  return Math.max(Math.max(1, currentDay - taskSelectableDayCount + 1), Math.min(currentDay, day));
+});
+const selectedTaskDate = computed({
+  get() {
+    return dateForDay(selectedTaskDay.value);
+  },
+  set(value) {
+    const match = taskSelectableDays.value.find((day) => day.date === value);
+    taskForm.targetDay = match?.day || gameState.value.day;
+  }
+});
+const selectedTaskDayMeta = computed(() => taskSelectableDays.value.find((day) => day.day === selectedTaskDay.value) || taskSelectableDays.value[0]);
+const taskMultiplierRecords = computed(() => gameState.value.taskMultiplierRecords || []);
+const selectedTaskMultiplierRecord = computed(() => {
+  const day = selectedTaskDay.value;
+  const found = taskMultiplierRecords.value.find((record) => Number(record.day) === day);
+  if (day === gameState.value.day) {
+    const effects = shopDerived.value.activeEffects || {};
+    const elixirMultiplier = Math.max(1, Number(effects.cultivationMultiplier) || 1);
+    const manaMultiplier = currentTaskManaMultiplier();
+    return {
+      day,
+      date: found?.date || selectedTaskDate.value,
+      elixirMultiplier,
+      manaMultiplier,
+      totalMultiplier: elixirMultiplier * manaMultiplier
+    };
+  }
+  if (found) return normalizeTaskMultiplierRecord(found, day, selectedTaskDate.value);
+  return {
+    day,
+    date: selectedTaskDate.value,
+    elixirMultiplier: 1,
+    manaMultiplier: 1,
+    totalMultiplier: 1
+  };
+});
 const taskRecentDayFloor = computed(() => Math.max(1, (Number(gameState.value.day) || 1) - taskJournalDays + 1));
 const taskDefinitionFrequency = computed(() => {
   const currentDay = Math.max(1, Number(gameState.value.day) || 1);
@@ -3862,6 +3946,12 @@ const todayTaskSummary = computed(() => todayTaskCompletions.value.reduce((summa
   xp: summary.xp + (Number(task.xp) || 0),
   spirit: summary.spirit + (Number(task.spirit) || 0)
 }), { count: 0, xp: 0, spirit: 0 }));
+const selectedTaskCompletions = computed(() => taskCompletions.value.filter((task) => Number(task.day) === selectedTaskDay.value));
+const selectedTaskSummary = computed(() => selectedTaskCompletions.value.reduce((summary, task) => ({
+  count: summary.count + 1,
+  xp: summary.xp + (Number(task.xp) || 0),
+  spirit: summary.spirit + (Number(task.spirit) || 0)
+}), { count: 0, xp: 0, spirit: 0 }));
 const recentTaskDays = computed(() => {
   const currentDay = Math.max(1, Number(gameState.value.day) || 1);
   const currentTaskDate = dateForDay(currentDay);
@@ -3889,20 +3979,37 @@ const recentTaskDays = computed(() => {
 });
 const taskRewardPreview = computed(() => {
   const task = selectedTaskDefinition.value;
-  if (!task) return { xp: 0, baseXp: 0, spirit: 0, multiplier: 0, elixirMultiplier: 1 };
+  if (!task) return { xp: 0, rawXp: 0, baseXp: 0, spirit: 0, multiplier: 0, elixirMultiplier: 1, manaMultiplier: 1, xpMultiplier: 1 };
   const amount = task.type === "measurable" ? Math.max(0, Number(taskForm.completedAmount) || 0) : 1;
   const target = Math.max(0.01, Number(task.targetAmount) || 1);
   const maxMultiplier = Math.max(0.01, Number(task.maxMultiplier) || 1);
   const multiplier = task.type === "measurable" ? Math.min(amount / target, maxMultiplier) : 1;
-  const baseXp = Math.floor((Number(task.xpReward) || 0) * multiplier);
-  const elixirMultiplier = Math.max(1, Number(shopDerived.value.activeEffects?.cultivationMultiplier) || 1);
+  const rawXp = Number(task.xpReward) || 0;
+  const baseXp = Math.floor(rawXp * multiplier);
+  const elixirMultiplier = Math.max(1, Number(selectedTaskMultiplierRecord.value?.elixirMultiplier) || 1);
+  const manaMultiplier = Math.max(1, Number(selectedTaskMultiplierRecord.value?.manaMultiplier) || 1);
+  const xpMultiplier = Math.max(1, Number(selectedTaskMultiplierRecord.value?.totalMultiplier) || elixirMultiplier * manaMultiplier);
   return {
-    xp: Math.floor(baseXp * elixirMultiplier),
+    xp: Math.floor(baseXp * xpMultiplier),
+    rawXp,
     baseXp,
     spirit: Math.floor((Number(task.spiritReward) || 0) * multiplier),
     multiplier,
-    elixirMultiplier
+    elixirMultiplier,
+    manaMultiplier,
+    xpMultiplier
   };
+});
+const taskRewardFormulaText = computed(() => {
+  const task = selectedTaskDefinition.value;
+  const preview = taskRewardPreview.value;
+  const dayLabel = selectedTaskDayMeta.value?.label || "所选日";
+  if (!task) return `${dayLabel}修为公式：请选择任务。`;
+  const parts = [`基础 +${Math.floor(preview.rawXp || 0)}`];
+  if (task.type === "measurable") parts.push(`完成度 x${formatFormulaMultiplier(preview.multiplier)}`);
+  parts.push(`丹药 x${formatFormulaMultiplier(preview.elixirMultiplier)}`);
+  parts.push(`个人属性 x${formatFormulaMultiplier(preview.manaMultiplier)}`);
+  return `${dayLabel}修为公式：${parts.join(" × ")} = +${preview.xp}（总加成 ${formatTaskBonusPercent(preview.xpMultiplier)}）`;
 });
 const selectedTaskTypeText = computed(() => {
   const task = selectedTaskDefinition.value;
@@ -3941,16 +4048,17 @@ const taskAmountMarks = computed(() => {
 });
 const taskStatusCards = computed(() => {
   const effects = shopDerived.value.activeEffects || {};
-  const multiplier = Math.max(1, Number(effects.cultivationMultiplier) || 1);
-  const daysLeft = Math.max(0, Number(effects.cultivationMultiplierDaysLeft) || 0);
+  const multiplier = Math.max(1, Number(selectedTaskMultiplierRecord.value?.totalMultiplier) || 1);
+  const daysLeft = selectedTaskDay.value === gameState.value.day ? Math.max(0, Number(effects.cultivationMultiplierDaysLeft) || 0) : 0;
+  const dayLabel = selectedTaskDayMeta.value?.label || "所选日";
   return [
-    { label: "今日完成", value: `${todayTaskSummary.value.count}/${taskDailyGoal.value}`, note: "现实任务", icon: CheckCircle2, asset: "/assets/tasks/icon-scroll.svg", tone: "count" },
-    { label: "今日修为", value: `+${todayTaskSummary.value.xp}`, note: "经验入账", icon: Sprout, asset: "/assets/tasks/icon-life.svg", tone: "xp" },
-    { label: "今日灵石", value: `+${todayTaskSummary.value.spirit}`, note: "可用于坊市", icon: Gem, asset: "/assets/tasks/icon-crystal.svg", tone: "spirit" },
+    { label: `${dayLabel}完成`, value: `${selectedTaskSummary.value.count}/${taskDailyGoal.value}`, note: "现实任务", icon: CheckCircle2, asset: "/assets/tasks/icon-scroll.svg", tone: "count" },
+    { label: `${dayLabel}修为`, value: `+${selectedTaskSummary.value.xp}`, note: "经验入账", icon: Sprout, asset: "/assets/tasks/icon-life.svg", tone: "xp" },
+    { label: `${dayLabel}灵石`, value: `+${selectedTaskSummary.value.spirit}`, note: "可用于坊市", icon: Gem, asset: "/assets/tasks/icon-crystal.svg", tone: "spirit" },
     {
-      label: "药力加成",
-      value: `x${formatMultiplier(multiplier)}`,
-      note: daysLeft > 0 ? `剩余 ${daysLeft} 天` : "暂无修为丹",
+      label: "修为加成",
+      value: formatTaskBonusPercent(multiplier),
+      note: daysLeft > 0 ? `药力剩余 ${daysLeft} 天` : (selectedTaskDay.value === gameState.value.day ? "个人属性" : "当日快照"),
       icon: Sparkles,
       asset: "/assets/tasks/icon-elixir.svg",
       tone: multiplier > 1 ? "elixir active" : "elixir"
@@ -3959,7 +4067,7 @@ const taskStatusCards = computed(() => {
 });
 const taskTodayHint = computed(() => {
   if (!todayTaskSummary.value.count) return "今日札记未开笔，先完成一项现实任务积攒修为。";
-  if (taskRewardPreview.value.elixirMultiplier > 1) return "修为丹药力正在生效，现实任务会获得额外修为。";
+  if (taskRewardPreview.value.xpMultiplier > 1) return "修为加成正在生效，现实任务会获得额外修为。";
   return "今日已有任务入账，可继续补记现实进度。";
 });
 const playerPortraitUrl = computed(() => {
@@ -4356,20 +4464,14 @@ const todayDungeonSummary = computed(() => {
 const homeLogDayRecords = computed(() => {
   const currentDay = Math.max(1, Number(gameState.value.day || 1));
   const firstDay = Math.max(1, currentDay - 29);
-  const source = homeSummary.value.logDays?.length
-    ? homeSummary.value.logDays
-    : gameState.value.logDays?.length ? gameState.value.logDays : [];
-  const sourceByDay = new Map(source.map((record) => [Number(record.day), record]));
   const flatLogs = gameState.value.log || [];
   const records = [];
   for (let day = currentDay; day >= firstDay; day -= 1) {
-    const saved = sourceByDay.get(day);
-    const logs = (saved?.logs?.length ? saved.logs : flatLogs.filter((entry) => Number(entry.day) === day))
-      .filter(shouldShowHomeLog)
-      .slice(0, 30);
+    const logs = playerSectWarHomeLogs(day).slice(0, 30);
+    const dayFallback = flatLogs.find((entry) => Number(entry.day) === day);
     records.push({
       day,
-      date: saved?.date || logs[0]?.date || dateForDay(day),
+      date: logs[0]?.date || dayFallback?.date || dateForDay(day),
       logs
     });
   }
@@ -4457,6 +4559,11 @@ const homeSectTerritorySummary = computed(() => {
 const sectTerritoryRanking = computed(() => sectSummaries.value
   .map((sect) => {
     const provinces = provinceTerritories.value.filter((province) => province.owner === sect.name);
+    const highlightedProvinces = [...provinces].sort((a, b) =>
+      provinceHighlightSortValue(a) - provinceHighlightSortValue(b)
+      || (a.rank || 99) - (b.rank || 99)
+      || a.name.localeCompare(b.name, "zh-Hans-CN")
+    );
     const spiritItems = provinces.filter((province) => province.effect.type === "spirit").map((province) => ({ name: province.name, value: province.effect.value, text: province.effect.text }));
     const xpItems = provinces.filter((province) => province.effect.type === "xp").map((province) => ({ name: province.name, value: province.effect.value, text: province.effect.text }));
     const breakthroughItems = provinces.filter((province) => province.effect.type === "breakthrough").map((province) => ({ name: province.name, value: province.effect.value, text: province.effect.text }));
@@ -4464,7 +4571,7 @@ const sectTerritoryRanking = computed(() => sectSummaries.value
       name: sect.name,
       provinceCount: provinces.length,
       provinceNames: provinces.map((province) => province.name),
-      provinceHighlights: provinces.slice(0, 5).map((province) => ({
+      provinceHighlights: highlightedProvinces.slice(0, 5).map((province) => ({
         id: province.id,
         name: province.name,
         shortName: provinceShortName(province.name),
@@ -4548,7 +4655,6 @@ const filteredProvinceWars = computed(() => {
 });
 const selectedProvinceWar = computed(() => selectedProvinceWarDayRecord.value?.wars.find((war) => war.id === selectedProvinceWarId.value));
 const selectedProvinceWarDate = computed(() => selectedProvinceWarDayRecord.value?.date || dateForDay(selectedProvinceWarDay.value));
-const mainLogs = computed(() => gameState.value.log.filter((entry) => !isNpcBreakthroughLog(entry)));
 watch(homeLogDayRecords, (records) => {
   if (!records.length) {
     selectedHomeLogDay.value = null;
@@ -5006,6 +5112,10 @@ function skillCompactLabel(target) {
   return `${skill.name} · ${skillRankText(skillDisplayRank(target))}`;
 }
 
+function skillNameOnlyLabel(target) {
+  return skillForDisplay(target).name || "普通攻击";
+}
+
 function skillNameForDisplay(target) {
   return skillForDisplay(target).name || "普通攻击";
 }
@@ -5200,6 +5310,39 @@ function withSectWarDisplay(sect, war) {
   };
 }
 
+function playerSectWarHomeLogs(day) {
+  const sectName = player.value?.sect || gameState.value.sect?.name || "";
+  if (!sectName) return [];
+  const sect = { name: sectName };
+  return provinceWarRecords.value
+    .filter((war) => Number(war.day || gameState.value.day) === Number(day))
+    .filter((war) => sectWarSide(sect, war))
+    .sort((a, b) => {
+      if (a.captured !== b.captured) return a.captured ? -1 : 1;
+      return String(a.provinceName || "").localeCompare(String(b.provinceName || ""), "zh-Hans-CN");
+    })
+    .map((war) => {
+      const side = sectWarSide(sect, war);
+      const won = sectWonWar(sect, war);
+      const province = war.provinceName || "未知城池";
+      const opponent = side === "attack" ? war.defender : war.attacker;
+      const text = side === "attack"
+        ? won
+          ? `攻城胜利，攻下${province}，从${opponent || "敌宗"}手中夺城。`
+          : `攻城失败，未能攻下${province}，${opponent || "守军"}守住城池。`
+        : won
+          ? `守城胜利，守下${province}，击退${opponent || "来犯宗门"}。`
+          : `守城失败，${province}被${opponent || "敌宗"}攻下。`;
+      return {
+        day: war.day || day,
+        date: war.date || dateForDay(day),
+        time: war.time || "",
+        type: won ? "good" : "bad",
+        text
+      };
+    });
+}
+
 function sectWarStats(sect) {
   const records = provinceWarRecords.value.filter((war) => sectWarSide(sect, war));
   if (!records.length) {
@@ -5240,6 +5383,15 @@ function monsterStatItems(monster = {}) {
 function monsterShortName(name) {
   const text = String(name || "").trim();
   return text.includes("·") ? text.split("·").pop() || text : text || "未知妖物";
+}
+
+function monsterArchetypeOf(monster) {
+  return {
+    ...monsterArchetype(monster),
+    id: monster?.archetype || monsterArchetype(monster).id,
+    label: monster?.archetypeLabel || monsterArchetype(monster).label,
+    text: monster?.archetypeText || monsterArchetype(monster).text
+  };
 }
 
 function voidHallTopEntries(record) {
@@ -5934,6 +6086,11 @@ function provinceGdpTier(rank) {
   return "E";
 }
 
+function provinceHighlightSortValue(province) {
+  const tierOrder = { S: 0, A: 1, B: 2, C: 3, D: 4, E: 5 };
+  return tierOrder[provinceGdpTier(province?.rank)] ?? 99;
+}
+
 function provinceShortName(name) {
   return String(name || "").replace(/省|市|自治区|特别行政区/g, "");
 }
@@ -6274,9 +6431,17 @@ function equipmentSlotSummary(person, slot) {
   return `${item.tierName} · ${item.statName} +${formatPercent(item.bonus)}`;
 }
 
+function equipmentSlotTooltip(person, slot) {
+  const item = equippedInSlot(person, slot.id);
+  if (!item) return `${slot.name}：空`;
+  const tierName = item.tierName || equipmentTierName(item.tier);
+  const statName = item.statName || slot.statName || "属性";
+  return `${item.name} · ${tierName} · ${statName} +${formatPercent(item.bonus)}`;
+}
+
 function equipmentSlotCardClass(person, slot) {
   const item = equippedInSlot(person, slot.id);
-  return [item ? `tier-${item.tier}` : "empty-slot", `slot-${slot.id}`];
+  return [item ? `tier-${item.tier}` : "empty-slot", item ? "has-equipment" : "", `slot-${slot.id}`];
 }
 
 function equipmentBonus(person, stat) {
@@ -6615,12 +6780,32 @@ function shouldShowHomeLog(entry) {
 
 function formatPercent(value) {
   if (typeof value !== "number") return "未记录";
-  return `${Math.round(value * 100)}%`;
+  const percent = value * 100;
+  if (percent > 0 && percent < 1) return "1%";
+  return `${Math.round(percent)}%`;
+}
+
+function realmBaseBreakChanceText(realm) {
+  if (!realm || typeof realm.baseBreakChance !== "number") return "未记录";
+  const stageIndex = Math.floor(Number(realm.index || 0) / 10);
+  if (stageIndex >= 8 && Math.round(realm.baseBreakChance * 100) <= 4) return "1%";
+  return formatPercent(realm.baseBreakChance);
 }
 
 function formatMultiplier(value) {
   const number = Math.max(1, Number(value) || 1);
   return number.toFixed(number % 1 ? 1 : 0);
+}
+
+function formatFormulaMultiplier(value) {
+  const number = Math.max(0, Number(value) || 0);
+  return number.toFixed(2).replace(/\.?0+$/, "");
+}
+
+function formatTaskBonusPercent(value) {
+  const number = Math.max(1, Number(value) || 1);
+  const percent = Math.round((number - 1) * 100);
+  return percent > 0 ? `+${percent}%` : "+0%";
 }
 
 function formatLootPercent(value) {
@@ -7394,17 +7579,28 @@ function personStats(person) {
   return [
     { label: "性别", value: genderLabel(person.gender), icon: "gender" },
     { label: "灵石", value: Math.floor(person.spirit || 0), icon: "spirit" },
-    { label: "血量", value: statWithBonus(effective.maxHp, effective.bonuses.maxHp), icon: "hp" },
-    { label: "法力", value: statWithBonus(effective.maxMana, effective.bonuses.maxMana), icon: "mana" },
-    { label: "攻击", value: statWithBonus(effective.attack, effective.bonuses.attack), icon: "attack" },
-    { label: "防御", value: statWithBonus(effective.defense, effective.bonuses.defense), icon: "defense" },
-    { label: "神识", value: statWithBonus(effective.divineSense, effective.bonuses.divineSense), icon: "sense" },
-    { label: "技能", value: skillCompactLabel(person), icon: "skill", help: skillTip(person) },
+    dossierStatLine("血量", effective.maxHp, effective.bonuses.maxHp, "hp"),
+    dossierStatLine("法力", effective.maxMana, effective.bonuses.maxMana, "mana"),
+    dossierStatLine("攻击", effective.attack, effective.bonuses.attack, "attack"),
+    dossierStatLine("防御", effective.defense, effective.bonuses.defense, "defense"),
+    dossierStatLine("神识", effective.divineSense, effective.bonuses.divineSense, "sense"),
+    { label: "技能", value: skillNameOnlyLabel(person), icon: "skill", help: skillTip(person) },
     { label: "战斗力", value: power, icon: "power", help: personPowerFormula(person, effective, power) },
     { label: "战力排名", value: powerRank ? `#${powerRank}` : "未上榜", icon: "rank", help: powerRank ? `当前个人战力榜第 ${powerRank} 名。` : "当前不在个人战力榜中。" },
-    { label: "段位", value: duelRankText(person), icon: "rank", help: `第 ${duelSeasonInfo.value.season} 赛季段位：${duelRankText(person)}。` },
+    { label: "段位", value: duelRankText(person), icon: `duel-rank-${duelRankId(person)}`, help: `第 ${duelSeasonInfo.value.season} 赛季段位：${duelRankText(person)}。` },
     { label: "段位排名", value: duelRankPosition ? `#${duelRankPosition}` : "未上榜", icon: "rank", help: duelRankPosition ? `当前切磋段位榜第 ${duelRankPosition} 名。` : "当前不在切磋段位榜中。" }
   ];
+}
+
+function dossierStatLine(label, total, bonus = 0, icon = "default") {
+  const value = statTotal(total);
+  const gain = Math.max(0, Math.floor(Number(bonus) || 0));
+  return {
+    label,
+    value,
+    icon,
+    help: gain > 0 ? `当前为 ${value}，其中加成 +${gain}。` : `当前为 ${value}。`
+  };
 }
 
 function detailIconComponent(icon) {
@@ -7892,6 +8088,25 @@ function statTotal(total) {
   return Math.floor(total || 0);
 }
 
+function normalizeTaskMultiplierRecord(record, day, date) {
+  const elixirMultiplier = Math.max(1, Number(record?.elixirMultiplier ?? record?.cultivationMultiplier) || 1);
+  const manaMultiplier = Math.max(1, Number(record?.manaMultiplier) || 1);
+  const totalMultiplier = Math.max(1, Number(record?.totalMultiplier) || elixirMultiplier * manaMultiplier);
+  return {
+    day,
+    date: record?.date || date,
+    elixirMultiplier,
+    manaMultiplier,
+    totalMultiplier
+  };
+}
+
+function currentTaskManaMultiplier() {
+  const effectiveMana = Math.floor(Number(derived.value.effectiveStats?.maxMana) || Number(player.value.maxMana) || 0);
+  const bonus = Math.min(0.1, Math.max(0, Math.floor(effectiveMana / 50) / 100));
+  return 1 + bonus;
+}
+
 function growthText(growth) {
   if (!growth) return "";
   return `成长：血量 +${growth.maxHp || 0}，攻击 +${growth.attack || 0}，防御 +${growth.defense || 0}，神识 +${growth.divineSense || 0}，法力 +${growth.maxMana || 0}`;
@@ -8202,6 +8417,7 @@ function mergeGameState(current, incoming, options = {}) {
     tasks: incoming.tasks || current.tasks || [],
     taskDefinitions: incoming.taskDefinitions || current.taskDefinitions || [],
     taskCompletions: incoming.taskCompletions || current.taskCompletions || [],
+    taskMultiplierRecords: incoming.taskMultiplierRecords || current.taskMultiplierRecords || [],
     home: {
       ...(current.home || {}),
       ...(incoming.home || {})
@@ -8232,6 +8448,9 @@ function syncSelectedDays() {
   else selectedDuelDay.value = clampDay(selectedDuelDay.value);
   if (!selectedProvinceWarDay.value) selectedProvinceWarDay.value = gameState.value.day;
   else selectedProvinceWarDay.value = clampDay(selectedProvinceWarDay.value);
+  const currentDay = Math.max(1, Number(gameState.value.day) || 1);
+  const floorDay = Math.max(1, currentDay - taskSelectableDayCount + 1);
+  taskForm.targetDay = Math.max(floorDay, Math.min(currentDay, Number(taskForm.targetDay) || currentDay));
 }
 
 function switchAuthMode(mode) {
@@ -8562,7 +8781,8 @@ async function submitTask() {
   }
   await act("/api/tasks", {
     taskId: task.id,
-    completedAmount: task.type === "measurable" ? taskForm.completedAmount : 1
+    completedAmount: task.type === "measurable" ? taskForm.completedAmount : 1,
+    day: selectedTaskDay.value
   });
   taskForm.completedAmount = task.type === "measurable" ? task.targetAmount : 1;
 }

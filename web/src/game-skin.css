@@ -6626,6 +6626,60 @@ body::before {
   text-shadow: 0 1px 0 rgba(255, 240, 197, .62);
 }
 
+.rank-surface .sect-detail-sections.sect-record-sections {
+  align-items: stretch;
+}
+
+.rank-surface .sect-detail-sections.sect-record-sections > .panel,
+.rank-surface .sect-detail-sections.sect-record-sections > .sect-member-panel {
+  height: 100%;
+  min-height: 286px;
+}
+
+.rank-surface .sect-detail-sections.sect-record-sections > .sect-war-panel {
+  align-self: stretch;
+}
+
+.rank-surface .sect-member-card.leader {
+  border-color: rgba(184, 92, 24, .78);
+  background:
+    linear-gradient(135deg, rgba(255, 237, 197, .98), rgba(224, 141, 58, .68)),
+    radial-gradient(circle at 12% 50%, rgba(185, 83, 28, .24), transparent 5rem),
+    rgba(255, 246, 220, .94);
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 236, 170, .34),
+    0 8px 18px rgba(133, 77, 14, .16);
+}
+
+.rank-surface .sect-member-card.elder:not(.leader) {
+  border-color: rgba(37, 99, 144, .62);
+  background:
+    linear-gradient(135deg, rgba(226, 244, 255, .96), rgba(125, 182, 215, .62)),
+    radial-gradient(circle at 12% 50%, rgba(37, 99, 144, .2), transparent 5rem),
+    rgba(234, 248, 255, .9);
+  box-shadow:
+    inset 0 0 0 2px rgba(199, 229, 246, .3),
+    0 8px 18px rgba(35, 83, 119, .12);
+}
+
+.rank-surface .sect-member-card.leader:hover,
+.rank-surface .sect-member-card.leader:focus-visible {
+  border-color: rgba(154, 68, 16, .92);
+  background:
+    linear-gradient(135deg, rgba(255, 232, 176, 1), rgba(219, 116, 42, .72)),
+    radial-gradient(circle at 12% 50%, rgba(185, 83, 28, .28), transparent 5rem),
+    rgba(255, 246, 220, .96);
+}
+
+.rank-surface .sect-member-card.elder:not(.leader):hover,
+.rank-surface .sect-member-card.elder:not(.leader):focus-visible {
+  border-color: rgba(30, 83, 125, .86);
+  background:
+    linear-gradient(135deg, rgba(214, 239, 255, .98), rgba(92, 157, 199, .7)),
+    radial-gradient(circle at 12% 50%, rgba(37, 99, 144, .24), transparent 5rem),
+    rgba(234, 248, 255, .94);
+}
+
 /* Cultivation system concept pass: code-native UI over AI-generated RPG assets. */
 .cultivation-nav-surface {
   margin-bottom: 0;
@@ -8972,8 +9026,8 @@ body::before {
 
 .rank-surface.view.active > .character-dossier .dossier-core {
   background:
-    radial-gradient(circle at 50% 35%, rgba(250, 226, 150, .18), transparent 35%),
-    var(--dossier-cards) 100% 100% / 200% 200% no-repeat;
+    radial-gradient(circle at 50% 35%, rgba(250, 226, 150, .2), transparent 36%),
+    linear-gradient(180deg, rgba(255, 247, 219, .88), rgba(217, 192, 139, .78));
 }
 
 .rank-surface.view.active > .character-dossier .dossier-stat-bank .detail-box {
@@ -9010,34 +9064,24 @@ body::before {
 
 /* Character dossier concept fidelity pass. */
 .layout.dossier-layout {
-  grid-template-columns: minmax(0, 1fr);
-  margin-top: 0;
+  grid-template-columns: clamp(300px, 22.5vw, 405px) minmax(0, 1fr);
 }
 
 .layout.dossier-layout > .sidebar {
-  display: none;
+  display: grid;
 }
 
-.app:has(.layout.dossier-layout) > .topbar,
 .layout.dossier-layout > .main {
-  width: 100%;
-}
-
-.app:has(.layout.dossier-layout) > .topbar {
-  display: none;
+  width: auto;
 }
 
 .layout.dossier-layout > .main {
   min-width: 0;
 }
 
-.layout.dossier-layout > .main > .tabs {
-  display: none;
-}
-
 .rank-surface.view.active > .character-dossier {
-  min-height: min(960px, calc(100vh - 18px));
-  padding: clamp(8px, .9vw, 14px);
+  min-height: 0;
+  padding: clamp(8px, .8vw, 12px);
   border: 2px solid rgba(190, 151, 70, .78);
   border-radius: 2px;
   background:
@@ -9051,48 +9095,58 @@ body::before {
 }
 
 .rank-surface.view.active > .character-dossier .dossier-frame {
-  gap: clamp(7px, .75vw, 11px);
+  gap: clamp(8px, .72vw, 10px);
 }
 
 .rank-surface.view.active > .character-dossier .dossier-header {
   display: grid;
-  grid-template-columns: auto minmax(430px, .72fr) minmax(0, 1fr);
+  grid-template-columns: auto minmax(240px, .74fr) minmax(0, 1fr);
   align-items: center;
-  gap: clamp(12px, 1.35vw, 22px);
-  min-height: clamp(70px, 5.4vw, 86px);
-  padding: 8px 18px;
+  gap: clamp(8px, 1vw, 14px);
+  min-height: 62px;
+  padding: 7px 12px;
   border: 2px solid rgba(139, 94, 33, .48);
   border-radius: 3px;
 }
 
 .rank-surface.view.active > .character-dossier .dossier-back-button {
-  min-width: clamp(118px, 8vw, 142px);
-  min-height: clamp(48px, 3.7vw, 58px);
+  min-width: 104px;
+  min-height: 40px;
   border-radius: 28px;
-  font-size: clamp(18px, 1.28vw, 22px);
+  font-size: clamp(13px, .9vw, 16px);
   font-weight: 950;
 }
 
 .rank-surface.view.active > .character-dossier .dossier-header h3 {
-  font-size: clamp(36px, 3.25vw, 54px);
+  font-size: clamp(24px, 2.1vw, 34px);
   letter-spacing: 0;
 }
 
 .rank-surface.view.active > .character-dossier .dossier-header p {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 18px;
+  gap: 4px 12px;
   max-width: none;
   margin: 0;
   font-weight: 800;
-  line-height: 1.35;
+  font-size: 11.5px;
+  line-height: 1.3;
 }
 
 .rank-surface.view.active > .character-dossier .dossier-header-tags {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 7px;
+  gap: 5px;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-header-tags .tag {
+  max-width: 100%;
+  min-height: 28px;
+  padding: 5px 8px;
+  font-size: 11.5px;
+  line-height: 1.25;
+  white-space: normal;
 }
 
 .rank-surface.view.active > .character-dossier .equipment-count-tag {
@@ -9100,33 +9154,43 @@ body::before {
 }
 
 .rank-surface.view.active > .character-dossier .dossier-overview {
-  grid-template-columns: minmax(330px, .92fr) minmax(520px, 1.2fr) minmax(330px, .92fr);
-  gap: clamp(10px, .95vw, 16px);
+  grid-template-columns: minmax(180px, .44fr) minmax(480px, 1.28fr) minmax(180px, .44fr);
+  gap: clamp(10px, .72vw, 13px);
   align-items: stretch;
   min-height: 0;
 }
 
 .rank-surface.view.active > .character-dossier .dossier-stat-bank {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-template-rows: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: repeat(6, minmax(0, 1fr));
   grid-auto-rows: minmax(0, 1fr);
   align-content: start;
-  gap: clamp(8px, .7vw, 10px);
+  gap: 8px;
 }
 
 .rank-surface.view.active > .character-dossier .dossier-stat-bank .detail-box {
-  grid-template-columns: clamp(44px, 3.5vw, 54px) minmax(74px, 1fr);
+  grid-template-columns: 54px minmax(0, 1fr);
   min-width: 0;
-  min-height: clamp(82px, 6vw, 104px);
-  padding: clamp(9px, .85vw, 14px);
+  min-height: 70px;
+  padding: 10px 12px;
   border-radius: 4px;
   overflow: visible;
 }
 
+.rank-surface.view.active > .character-dossier .dossier-stat-bank:first-child .detail-tip {
+  right: auto;
+  left: 0;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-stat-bank:last-child .detail-tip {
+  right: 0;
+  left: auto;
+}
+
 .rank-surface.view.active > .character-dossier .dossier-stat-bank .detail-icon {
-  width: clamp(42px, 3.4vw, 52px);
-  height: clamp(42px, 3.4vw, 52px);
+  width: 52px;
+  height: 52px;
 }
 
 .rank-surface.view.active > .character-dossier .dossier-stat-bank .detail-label {
@@ -9137,7 +9201,7 @@ body::before {
 .rank-surface.view.active > .character-dossier .dossier-stat-bank .detail-box b {
   max-width: 100%;
   overflow: visible;
-  font-size: clamp(15px, 1.18vw, 20px);
+  font-size: clamp(16px, 1.22vw, 20px);
   text-overflow: clip;
   white-space: normal;
   overflow-wrap: anywhere;
@@ -9147,7 +9211,7 @@ body::before {
   min-height: 0;
   grid-template-rows: minmax(0, 1fr) auto;
   align-content: stretch;
-  padding: clamp(10px, .85vw, 14px);
+  padding: clamp(9px, .75vw, 12px);
   border: 2px solid rgba(166, 121, 45, .55);
   border-radius: 3px;
 }
@@ -9157,33 +9221,122 @@ body::before {
 }
 
 .rank-surface.view.active > .character-dossier .dossier-core .equipment-paperdoll {
-  grid-template-columns: clamp(108px, 7.6vw, 126px) minmax(180px, 1fr) clamp(108px, 7.6vw, 126px);
-  gap: clamp(8px, .7vw, 10px);
-  min-height: clamp(300px, 22vw, 360px);
+  grid-template-columns: clamp(110px, 7.5vw, 136px) minmax(168px, 1fr) clamp(110px, 7.5vw, 136px);
+  gap: clamp(9px, .66vw, 11px);
+  min-height: clamp(360px, 25vw, 448px);
   align-items: stretch;
+  justify-content: stretch;
+  justify-items: stretch;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-column {
+  width: 100%;
+  min-width: 0;
+  justify-items: stretch;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-column:first-child {
+  justify-self: start;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-column:last-child {
+  justify-self: end;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-character-core {
+  justify-self: stretch;
 }
 
 .rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card {
   width: 100%;
+  min-width: 0;
   min-height: 0;
   aspect-ratio: 1;
   grid-template-columns: 1fr;
   align-content: center;
   justify-items: center;
-  padding: 6px;
+  padding: clamp(48px, 4vw, 60px) 6px 6px;
   border-radius: 3px;
+  overflow: visible;
   text-align: center;
 }
 
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card.has-equipment {
+  isolation: isolate;
+  align-content: end;
+  padding: 0;
+  overflow: hidden;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card.empty-slot {
+  align-content: center;
+  gap: 4px;
+  padding: clamp(8px, .8vw, 12px) 6px;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card:hover,
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card:focus,
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card:focus-visible {
+  z-index: 30;
+}
+
 .rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card::before {
-  width: clamp(46px, 3.7vw, 58px);
-  height: clamp(46px, 3.7vw, 58px);
+  width: clamp(56px, 4.35vw, 72px);
+  height: clamp(56px, 4.35vw, 72px);
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card.has-equipment::before {
+  display: none;
 }
 
 .rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card .equipment-icon {
+  width: clamp(68px, 5.25vw, 86px);
+  height: clamp(68px, 5.25vw, 86px);
   left: 50%;
-  top: 28px;
+  top: clamp(38px, 3.65vw, 48px);
   transform: translate(-50%, -50%);
+  border-radius: 9px;
+  overflow: hidden;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card.has-equipment .equipment-icon {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  border-width: 0;
+  border-radius: 3px;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card.has-equipment .equipment-icon::after {
+  inset: 0;
+  border-color: rgba(255, 239, 180, .55);
+  border-radius: 3px;
+  box-shadow:
+    inset 0 0 0 1px rgba(90, 52, 13, .22),
+    inset 0 -22px 24px rgba(53, 29, 8, .32);
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card .equipment-icon img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(1.18);
+  transform-origin: center;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card.has-equipment .equipment-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: none;
+  filter: none;
 }
 
 .rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card span,
@@ -9198,8 +9351,21 @@ body::before {
 }
 
 .rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card span {
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.15;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card.has-equipment > span:not(.equipment-icon) {
+  position: relative;
+  z-index: 2;
+  justify-self: stretch;
+  padding: 5px 6px;
+  color: #fff4d0;
+  background: linear-gradient(180deg, rgba(49, 30, 9, 0), rgba(49, 30, 9, .72));
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1.1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .65);
 }
 
 .rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card strong {
@@ -9211,37 +9377,147 @@ body::before {
   display: none;
 }
 
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-tooltip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  z-index: 40;
+  display: grid;
+  gap: 4px;
+  min-width: 176px;
+  max-width: min(260px, 72vw);
+  padding: 9px 11px;
+  border: 1px solid rgba(117, 78, 28, .5);
+  border-radius: 5px;
+  background:
+    linear-gradient(180deg, rgba(255, 249, 226, .96), rgba(236, 217, 174, .94)),
+    rgba(255, 248, 226, .96);
+  box-shadow: 0 12px 28px rgba(38, 25, 9, .22);
+  color: #35230d;
+  line-height: 1.35;
+  opacity: 0;
+  pointer-events: none;
+  text-align: left;
+  transform: translate(-50%, 5px);
+  transition: opacity .16s ease, transform .16s ease;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-tooltip strong {
+  color: #2e1e0c;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-tooltip span {
+  color: #6d4a1d;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-tooltip::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  width: 10px;
+  height: 10px;
+  border-right: 1px solid rgba(117, 78, 28, .5);
+  border-bottom: 1px solid rgba(117, 78, 28, .5);
+  background: rgba(236, 217, 174, .94);
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card:hover .equipment-slot-tooltip,
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card:focus .equipment-slot-tooltip,
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-slot-card:focus-visible .equipment-slot-tooltip {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
 .rank-surface.view.active > .character-dossier .dossier-core .equipment-character-core {
-  min-height: clamp(300px, 22vw, 360px);
-  padding: clamp(8px, .75vw, 12px);
+  min-width: 0;
+  min-height: clamp(360px, 25vw, 448px);
+  padding: clamp(6px, .56vw, 9px);
 }
 
 .rank-surface.view.active > .character-dossier .dossier-core .equipment-character-core .character-portrait.xl {
-  width: min(230px, 82%);
+  width: min(236px, 82%);
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core .dossier-power-line {
+  display: inline-grid;
+  align-items: baseline;
+  justify-content: center;
+  width: min(88%, 240px);
+  min-height: clamp(40px, 3.4vw, 54px);
+  padding: 5px 12px 7px;
+  border-top: 1px solid rgba(169, 111, 35, .34);
+  border-bottom: 1px solid rgba(25, 110, 93, .3);
+  background:
+    linear-gradient(90deg, transparent, rgba(255, 236, 174, .62) 18%, rgba(255, 248, 224, .7) 50%, rgba(255, 236, 174, .62) 82%, transparent);
+  color: #5a3110;
+  text-align: center;
+  white-space: nowrap;
+  text-shadow: 0 1px 0 rgba(255, 240, 194, .78);
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core .dossier-power-line span {
+  display: block;
+  color: #5a3110;
+  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
+  font-size: clamp(16px, 1.22vw, 21px);
+  font-weight: 950;
+  line-height: 1.1;
+  letter-spacing: 0;
+  white-space: nowrap;
 }
 
 .rank-surface.view.active > .character-dossier .dossier-core .equipment-character-core b {
   font-size: clamp(28px, 2vw, 34px);
 }
 
+.rank-surface.view.active > .character-dossier .dossier-core .dossier-power-line b {
+  display: inline-block;
+  color: #9b2f22;
+  font-family: Georgia, "Times New Roman", "Microsoft YaHei", serif;
+  font-size: clamp(25px, 1.95vw, 34px);
+  font-weight: 950;
+  line-height: .95;
+  text-shadow:
+    0 1px 0 rgba(255, 236, 174, .88),
+    0 0 8px rgba(181, 88, 34, .18);
+}
+
 .rank-surface.view.active > .character-dossier .dossier-core .detail-meters {
-  margin-top: 8px;
+  margin-top: 10px;
   padding: 8px 12px;
   border-radius: 3px;
+  background: rgba(255, 246, 218, .66);
 }
 
 .rank-surface.view.active > .character-dossier .dossier-records {
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: clamp(7px, .7vw, 10px);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(8px, .8vw, 12px);
 }
 
 .rank-surface.view.active > .character-dossier .dossier-records > .panel {
   min-width: 0;
-  min-height: clamp(260px, 25vh, 300px);
+  min-height: clamp(210px, 24vh, 280px);
   max-height: 330px;
   padding: 12px 13px;
   border-radius: 3px;
+  background: linear-gradient(180deg, #fff6dc, #ead9b4);
   overflow: hidden;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-records > .panel::before {
+  background: none;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-records > .panel::after {
+  display: none;
+  background: none;
 }
 
 .rank-surface.view.active > .character-dossier .dossier-records > .panel h3 {
@@ -9252,7 +9528,8 @@ body::before {
 }
 
 .rank-surface.view.active > .character-dossier .dossier-records .detail-scroll {
-  max-height: clamp(190px, 20vh, 236px);
+  max-height: clamp(150px, 18vh, 220px);
+  gap: 7px;
 }
 
 .rank-surface.view.active > .character-dossier .root-chip-list,
@@ -9275,9 +9552,28 @@ body::before {
 .rank-surface.view.active > .character-dossier .event,
 .rank-surface.view.active > .character-dossier .event-button,
 .rank-surface.view.active > .character-dossier .duel-record {
-  min-height: 0;
-  padding: 8px 9px;
+  min-height: 56px;
+  align-content: center;
+  gap: 5px;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.rank-surface.view.active > .character-dossier .event strong,
+.rank-surface.view.active > .character-dossier .event-button strong,
+.rank-surface.view.active > .character-dossier .duel-record strong {
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.rank-surface.view.active > .character-dossier .event span,
+.rank-surface.view.active > .character-dossier .event-button span,
+.rank-surface.view.active > .character-dossier .duel-record span,
+.rank-surface.view.active > .character-dossier .event small,
+.rank-surface.view.active > .character-dossier .event-button small {
   font-size: 13px;
+  line-height: 1.35;
 }
 
 .rank-surface.view.active > .character-dossier .dossier-record-group-label {
@@ -9305,32 +9601,83 @@ body::before {
   overflow-wrap: anywhere;
 }
 
+.rank-surface.view.active > .character-dossier {
+  --dossier-bg: url("/assets/character-dossier/dossier-bg-simple.png");
+  --dossier-core-bg: none;
+  background:
+    linear-gradient(rgba(8, 34, 30, .04), rgba(8, 34, 30, .04)),
+    var(--dossier-bg) center center / 100% 100% no-repeat,
+    linear-gradient(180deg, #f0dfb6, #d8bf82);
+}
+
+.rank-surface.view.active > .character-dossier::after {
+  opacity: .18;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-character-core {
+  background:
+    radial-gradient(circle at 50% 32%, rgba(255, 244, 202, .52), transparent 34%),
+    linear-gradient(180deg, rgba(255, 249, 226, .9), rgba(232, 211, 166, .84));
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core .equipment-character-core b {
+  color: #9b2f22;
+  text-shadow: 0 1px 0 rgba(255, 236, 174, .7);
+}
+
+.rank-surface.view.active > .character-dossier .dossier-core .dossier-power-line b {
+  text-shadow:
+    0 1px 0 rgba(255, 236, 174, .88),
+    0 0 8px rgba(181, 88, 34, .18);
+}
+
+.dossier-ai-icon-duel-rank-iron,
+.dossier-ai-icon-duel-rank-bronze,
+.dossier-ai-icon-duel-rank-silver,
+.dossier-ai-icon-duel-rank-gold,
+.dossier-ai-icon-duel-rank-platinum,
+.dossier-ai-icon-duel-rank-diamond,
+.dossier-ai-icon-duel-rank-master,
+.dossier-ai-icon-duel-rank-challenger {
+  background-size: contain;
+  background-position: center;
+}
+
+.dossier-ai-icon-duel-rank-iron { background-image: url("/assets/duel-ranks/rank-iron.png"); }
+.dossier-ai-icon-duel-rank-bronze { background-image: url("/assets/duel-ranks/rank-bronze.png?v=2"); }
+.dossier-ai-icon-duel-rank-silver { background-image: url("/assets/duel-ranks/rank-silver.png"); }
+.dossier-ai-icon-duel-rank-gold { background-image: url("/assets/duel-ranks/rank-gold.png"); }
+.dossier-ai-icon-duel-rank-platinum { background-image: url("/assets/duel-ranks/rank-platinum.png"); }
+.dossier-ai-icon-duel-rank-diamond { background-image: url("/assets/duel-ranks/rank-diamond.png"); }
+.dossier-ai-icon-duel-rank-master { background-image: url("/assets/duel-ranks/rank-master.png"); }
+.dossier-ai-icon-duel-rank-challenger { background-image: url("/assets/duel-ranks/rank-challenger.png"); }
+
 @media (max-width: 1400px) {
   .rank-surface.view.active > .character-dossier .dossier-overview {
-    grid-template-columns: minmax(0, .94fr) minmax(320px, 1.12fr) minmax(0, .94fr);
+    grid-template-columns: minmax(150px, .48fr) minmax(420px, 1.2fr) minmax(150px, .48fr);
   }
 
   .rank-surface.view.active > .character-dossier .dossier-stat-bank {
-    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-    grid-template-rows: none;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: repeat(6, minmax(0, 1fr));
   }
 
   .rank-surface.view.active > .character-dossier .dossier-records {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (min-width: 1600px) {
   .rank-surface.view.active > .character-dossier .dossier-overview {
-    grid-template-columns: minmax(318px, .86fr) minmax(500px, 1.2fr) minmax(318px, .86fr);
+    grid-template-columns: minmax(240px, .44fr) minmax(760px, 1.24fr) minmax(240px, .44fr);
   }
 
   .rank-surface.view.active > .character-dossier .dossier-stat-bank {
-    grid-template-columns: repeat(2, minmax(150px, 1fr));
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .rank-surface.view.active > .character-dossier .dossier-records {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
