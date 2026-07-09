@@ -8954,7 +8954,7 @@ button.event {
 }
 
 .detail-sections.sect-record-sections > .panel {
-  height: 286px;
+  height: auto;
 }
 
 .detail-sections > .sect-member-panel {

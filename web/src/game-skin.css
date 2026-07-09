@@ -6643,17 +6643,15 @@ body::before {
 }
 
 .rank-surface .sect-detail-sections.sect-record-sections {
-  align-items: stretch;
+  align-items: start;
 }
 
-.rank-surface .sect-detail-sections.sect-record-sections > .panel,
 .rank-surface .sect-detail-sections.sect-record-sections > .sect-member-panel {
-  height: 100%;
   min-height: 286px;
 }
 
 .rank-surface .sect-detail-sections.sect-record-sections > .sect-war-panel {
-  align-self: stretch;
+  align-self: start;
 }
 
 .rank-surface .sect-member-card.leader {
