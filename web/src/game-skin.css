@@ -6654,7 +6654,7 @@ body::before {
   align-self: start;
 }
 
-.rank-surface .sect-member-card.leader {
+.view.active.rank-surface .sect-member-card.leader {
   border-color: rgba(184, 92, 24, .78);
   background:
     linear-gradient(135deg, rgba(255, 237, 197, .98), rgba(224, 141, 58, .68)),
@@ -6665,7 +6665,7 @@ body::before {
     0 8px 18px rgba(133, 77, 14, .16);
 }
 
-.rank-surface .sect-member-card.elder:not(.leader) {
+.view.active.rank-surface .sect-member-card.elder:not(.leader) {
   border-color: rgba(37, 99, 144, .62);
   background:
     linear-gradient(135deg, rgba(226, 244, 255, .96), rgba(125, 182, 215, .62)),
@@ -6676,8 +6676,8 @@ body::before {
     0 8px 18px rgba(35, 83, 119, .12);
 }
 
-.rank-surface .sect-member-card.leader:hover,
-.rank-surface .sect-member-card.leader:focus-visible {
+.view.active.rank-surface .sect-member-card.leader:hover,
+.view.active.rank-surface .sect-member-card.leader:focus-visible {
   border-color: rgba(154, 68, 16, .92);
   background:
     linear-gradient(135deg, rgba(255, 232, 176, 1), rgba(219, 116, 42, .72)),
@@ -6685,8 +6685,8 @@ body::before {
     rgba(255, 246, 220, .96);
 }
 
-.rank-surface .sect-member-card.elder:not(.leader):hover,
-.rank-surface .sect-member-card.elder:not(.leader):focus-visible {
+.view.active.rank-surface .sect-member-card.elder:not(.leader):hover,
+.view.active.rank-surface .sect-member-card.elder:not(.leader):focus-visible {
   border-color: rgba(30, 83, 125, .86);
   background:
     linear-gradient(135deg, rgba(214, 239, 255, .98), rgba(92, 157, 199, .7)),
