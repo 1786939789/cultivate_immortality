@@ -1058,7 +1058,7 @@ function ensureField(object, key, value) {
 const equipmentSlotMap = Object.fromEntries(equipmentSlots.map((slot) => [slot.id, slot]));
 const equipmentTierMap = Object.fromEntries(equipmentTiers.map((tier) => [tier.id, tier]));
 const equipmentVersion = 3;
-const dungeonRecordVersion = 3;
+const dungeonRecordVersion = 4;
 const starSeaTeamSize = 10;
 const starSeaCycleLength = 10;
 const starSeaMaxRounds = 100;
@@ -1346,6 +1346,14 @@ function stableHash(text) {
 
 function stableUnit(seed) {
   return stableHash(seed) / 0xffffffff;
+}
+
+function monsterNameForStage(stage, seed = "") {
+  const safeStage = clamp(Math.floor(Number(stage) || 0), 0, monsterNamesByStage.length - 1);
+  const names = monsterNamesByStage[safeStage] || monsterNamesByStage[0] || monsterNames;
+  if (!names.length) return pick(monsterNames);
+  const index = stableHash(`${safeStage}|${seed}`) % names.length;
+  return names[index];
 }
 
 function dungeonLootBaseChance(item, depth = 1) {
@@ -1798,6 +1806,16 @@ function ensureDungeonState(state) {
   }
   if (previousDungeonRecordVersion < dungeonRecordVersion) {
     migrateStarSeaSpiritRewards(state);
+    if (previousDungeonRecordVersion < 4) {
+      state.dungeonDays = [];
+      state.starSeaCycle = null;
+      for (const { entity } of allCultivators(state)) {
+        entity.dungeonHistory = [];
+        entity.dungeonClears = 0;
+        entity.bestDungeonPower = 0;
+        entity.bestDungeonName = "未入秘境";
+      }
+    }
     state.dungeonRecordVersion = dungeonRecordVersion;
   }
 }
@@ -2199,7 +2217,8 @@ function runSectDungeon(state, sectName, members, date) {
   const highestRealm = Math.max(...members.map(({ entity }) => entity.realm || 0));
   const monsterRealm = voidHallMonsterRealmForHighestRealm(highestRealm);
   const targetStage = stageIndexOfRealm(monsterRealm);
-  const monster = makeMonster(`虚天殿·${pick(monsterNames)}王`, monsterRealm, pick(roots).key, 1.2 + targetStage * 0.14);
+  const monsterName = monsterNameForStage(targetStage, `void_hall|${state.day || 1}|${sectName}|${monsterRealm}`);
+  const monster = makeMonster(`虚天殿·${monsterName}王`, monsterRealm, pick(roots).key, 1.2 + targetStage * 0.14);
   const monsterPower = powerOf(monster, state);
   const contributions = [];
   const battles = [];
@@ -2396,7 +2415,8 @@ function starSeaMonsterRealmForHighestRealm(highestRealm) {
 function makeStarSeaMonster(state, highestRealm) {
   const realm = starSeaMonsterRealmForHighestRealm(highestRealm);
   const stage = stageIndexOfRealm(realm);
-  const monster = makeMonster(`乱星海·${pick(monsterNamesByStage[stage] || monsterNames)}`, realm, pick(roots).key, 1.15 + stage * 0.1);
+  const monsterName = monsterNameForStage(stage, `star_sea|${state.day || 1}|${realm}`);
+  const monster = makeMonster(`乱星海·${monsterName}`, realm, pick(roots).key, 1.15 + stage * 0.1);
   monster.defense = Math.max(1, Math.floor(monster.defense * 0.52));
   monster.attack = Math.max(1, Math.floor(monster.attack * 0.82));
   monster.maxHp = Math.max(monster.maxHp * 4, Math.floor(allCultivators(state).reduce((sum, { entity }) => sum + powerOf(entity, state), 0) * 0.34));
