@@ -9513,11 +9513,13 @@ body::before {
 .rank-surface.view.active > .character-dossier .dossier-records {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: clamp(8px, .8vw, 12px);
+  align-items: start;
 }
 
 .rank-surface.view.active > .character-dossier .dossier-records > .panel {
   min-width: 0;
-  min-height: clamp(210px, 24vh, 280px);
+  height: auto;
+  min-height: 0;
   max-height: 330px;
   padding: 12px 13px;
   border-radius: 3px;
