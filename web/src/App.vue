@@ -4467,7 +4467,12 @@ const homeLogDayRecords = computed(() => {
   const flatLogs = gameState.value.log || [];
   const records = [];
   for (let day = currentDay; day >= firstDay; day -= 1) {
-    const logs = playerSectWarHomeLogs(day).slice(0, 30);
+    const logs = [
+      ...playerDuelHomeLogs(day),
+      ...playerSectWarHomeLogs(day)
+    ]
+      .sort((a, b) => (a.order || 0) - (b.order || 0) || String(a.text).localeCompare(String(b.text), "zh-Hans-CN"))
+      .slice(0, 30);
     const dayFallback = flatLogs.find((entry) => Number(entry.day) === day);
     records.push({
       day,
@@ -5337,8 +5342,49 @@ function playerSectWarHomeLogs(day) {
         day: war.day || day,
         date: war.date || dateForDay(day),
         time: war.time || "",
+        order: 2000,
         type: won ? "good" : "bad",
         text
+      };
+    });
+}
+
+function playerDuelHomeLogs(day) {
+  const record = (gameState.value.duelDays || []).find((item) => Number(item.day) === Number(day));
+  const playerId = player.value?.id || "player";
+  const matchLogs = (!record?.matches?.length || !playerId) ? [] : (record.matches || [])
+    .filter((match) => match.type !== "bye")
+    .filter((match) => [match.left?.id, match.right?.id, match.winner?.id, match.loser?.id].includes(playerId))
+    .map((match) => {
+      const won = match.winner?.id === playerId;
+      const opponentRef = match.left?.id === playerId ? match.right : match.left;
+      const opponent = matchPerson(opponentRef);
+      const delta = won ? match.winnerScoreDelta : match.loserScoreDelta;
+      const scoreText = typeof delta === "number" ? `积分 ${delta > 0 ? "+" : ""}${delta}` : "积分未记录";
+      const rankText = duelRankText(opponent);
+      const opponentName = opponent?.name || opponentRef?.name || "未知对手";
+      return {
+        day: record.day || day,
+        date: record.date || dateForDay(day),
+        time: match.time || "",
+        order: 1000 + Number(match.order || 0),
+        type: won ? "good" : "bad",
+        text: `切磋${won ? "胜利" : "失败"}，对战${opponentName}，段位${rankText}，${scoreText}。`
+      };
+    });
+  if (matchLogs.length) return matchLogs;
+  return (player.value?.duelHistory || [])
+    .filter((entry) => Number(entry.day) === Number(day) || String(entry.foughtAt || "").startsWith(dateForDay(day)))
+    .map((entry, index) => {
+      const won = entry.result === "胜";
+      const scoreText = typeof entry.scoreDelta === "number" ? `积分 ${entry.scoreDelta > 0 ? "+" : ""}${entry.scoreDelta}` : "积分未记录";
+      return {
+        day: entry.day || day,
+        date: String(entry.foughtAt || "").match(/^\d{4}-\d{2}-\d{2}/)?.[0] || dateForDay(day),
+        time: logEntryMinute(entry.foughtAt) || "",
+        order: 1100 + index,
+        type: won ? "good" : "bad",
+        text: `切磋${won ? "胜利" : "失败"}，对战${entry.opponent || "未知对手"}，段位${entry.opponentRankName || "未记录"}，${scoreText}。`
       };
     });
 }
