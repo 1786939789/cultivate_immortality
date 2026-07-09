@@ -322,8 +322,8 @@
                 </label>
               </div>
               <div class="battle-log-list" v-if="homeLogs.length">
-                <div v-for="(entry, index) in homeLogs" :key="`${entry.day}-${entry.time || ''}-${entry.text}-${index}`" :class="logTone(entry)">
-                  <b>{{ logTone(entry) === "loss" ? "败" : "胜" }}</b>
+                <div v-for="(entry, index) in homeLogs" :key="`${entry.day}-${entry.time || ''}-${entry.text}-${index}`" :class="[logTone(entry), `log-category-${logCategory(entry).id}`]">
+                  <b :title="logCategory(entry).label">{{ logCategory(entry).mark }}</b>
                   <span
                     class="home-log-text"
                     :class="{ 'is-long': isLongHomeLogText(entry.text) }"
@@ -5344,6 +5344,7 @@ function playerSectWarHomeLogs(day) {
         date: war.date || dateForDay(day),
         time: war.time || "",
         order: 2000,
+        category: "siege",
         type: won ? "good" : "bad",
         text
       };
@@ -5369,6 +5370,7 @@ function playerDuelHomeLogs(day) {
         date: record.date || dateForDay(day),
         time: match.time || "",
         order: 1000 + Number(match.order || 0),
+        category: "duel",
         type: won ? "good" : "bad",
         text: `切磋${won ? "胜利" : "失败"}，对战${opponentName}，段位${rankText}，${scoreText}。`
       };
@@ -5384,6 +5386,7 @@ function playerDuelHomeLogs(day) {
         date: String(entry.foughtAt || "").match(/^\d{4}-\d{2}-\d{2}/)?.[0] || dateForDay(day),
         time: logEntryMinute(entry.foughtAt) || "",
         order: 1100 + index,
+        category: "duel",
         type: won ? "good" : "bad",
         text: `切磋${won ? "胜利" : "失败"}，对战${entry.opponent || "未知对手"}，段位${entry.opponentRankName || "未记录"}，${scoreText}。`
       };
@@ -5399,6 +5402,7 @@ function marketElixirHomeLogs(day) {
     })
     .map((entry, index) => ({
       ...entry,
+      category: "elixir",
       order: 3000 + index
     }));
 }
@@ -6927,6 +6931,15 @@ function logTone(entry) {
   const text = entry?.text || "";
   if (text.includes("失败") || text.includes("败") || text.includes("未能")) return "loss";
   return "win";
+}
+
+function logCategory(entry) {
+  const text = entry?.text || "";
+  const category = entry?.category || "";
+  if (category === "duel" || text.startsWith("切磋")) return { id: "duel", mark: "斗", label: "切磋" };
+  if (category === "siege" || text.includes("攻城") || text.includes("守城")) return { id: "siege", mark: "城", label: "攻守城" };
+  if (category === "elixir" || text.startsWith("在坊市购得「") || text.startsWith("售出「")) return { id: "elixir", mark: "丹", label: "丹药买卖" };
+  return { id: "note", mark: "记", label: "记录" };
 }
 
 function duelRankId(person) {

@@ -3280,6 +3280,22 @@ body::before {
   background: linear-gradient(180deg, #b84a3c, #78281f);
 }
 
+.battle-log-list .log-category-duel b {
+  background: linear-gradient(180deg, #3e82b7, #24506f);
+}
+
+.battle-log-list .log-category-siege b {
+  background: linear-gradient(180deg, #b0713a, #74451e);
+}
+
+.battle-log-list .log-category-elixir b {
+  background: linear-gradient(180deg, #3b9869, #1f6547);
+}
+
+.battle-log-list .log-category-note b {
+  background: linear-gradient(180deg, #8d8064, #5d523d);
+}
+
 .battle-log-list span {
   overflow: hidden;
   text-overflow: ellipsis;
