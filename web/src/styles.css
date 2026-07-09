@@ -2326,6 +2326,33 @@ button {
   color: var(--ink);
 }
 
+.star-sea-equipment-chip {
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+}
+
+.star-sea-equipment-chip > span:not(.equipment-icon) {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.star-sea-equipment-chip .equipment-icon,
+.star-sea-equipment-empty {
+  width: 40px;
+  height: 40px;
+}
+
+.star-sea-equipment-empty {
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(120, 91, 43, .18);
+  border-radius: 8px;
+  color: var(--muted);
+  background: rgba(255, 253, 246, .6);
+  font-weight: 800;
+}
+
 .dungeon-record-panel > .loot-pool .loot-pool-summary span {
   color: #5b4630;
   font-size: 13.5px;

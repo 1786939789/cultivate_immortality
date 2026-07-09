@@ -1462,10 +1462,20 @@
                     <b>{{ selectedDungeonDay.public?.totalDamage || 0 }}</b>
                     <small>{{ selectedDungeonDay.public?.teams?.length || 0 }} 支队伍合计</small>
                   </div>
-                  <div class="star-sea-summary-chip">
-                    <span>装备</span>
-                    <b>{{ starSeaTodayEquipmentName }}</b>
-                    <small>{{ starSeaTodayEquipmentText }}</small>
+                  <div class="star-sea-summary-chip star-sea-equipment-chip" :class="{ empty: !starSeaTodayEquipmentItem }">
+                    <EquipmentIcon
+                      v-if="starSeaTodayEquipmentItem"
+                      :id="starSeaTodayEquipmentItem.id"
+                      :name="starSeaTodayEquipmentItem.name"
+                      :slot="starSeaTodayEquipmentItem.slot"
+                      :tier="starSeaTodayEquipmentItem.tier"
+                    />
+                    <span v-else class="star-sea-equipment-empty">装</span>
+                    <span>
+                      <span>装备</span>
+                      <b>{{ starSeaTodayEquipmentName }}</b>
+                      <small>{{ starSeaTodayEquipmentText }}</small>
+                    </span>
                   </div>
                   <div class="star-sea-summary-chip" v-if="selectedDungeonDay.public?.item">
                     <span>竞拍</span>
@@ -4297,6 +4307,22 @@ const starSeaTeamRanking = computed(() => [...(selectedDungeonDay.value?.public?
   .sort((a, b) => (a.rank || 999) - (b.rank || 999) || b.score - a.score)
   .slice(0, 10));
 const starSeaTodayEquipmentName = computed(() => selectedDungeonDay.value?.public?.item || "无");
+const starSeaTodayEquipmentItem = computed(() => {
+  const record = selectedDungeonDay.value?.public;
+  if (!record?.item) return null;
+  const direct = record.itemId ? equipmentList.value.find((item) => item.id === record.itemId) : null;
+  const byName = equipmentList.value.find((item) => item.name === record.item);
+  const item = direct || byName;
+  if (item) return item;
+  return {
+    id: record.itemId || "",
+    name: record.item,
+    slot: record.itemSlot || "trinket",
+    tier: record.itemTier || 1,
+    tierName: record.tierName || equipmentTierName(record.itemTier || 1),
+    value: record.itemValue || 0
+  };
+});
 const starSeaTodayEquipmentText = computed(() => {
   const record = selectedDungeonDay.value?.public;
   if (!record?.item) return "本日未出现装备";

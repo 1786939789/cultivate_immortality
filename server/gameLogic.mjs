@@ -3001,6 +3001,9 @@ function settleStarSeaAuction(state, teamRecords, item) {
       state.equipmentTransfers.unshift(transfer);
       state.equipmentTransfers = state.equipmentTransfers.slice(0, recentRecordDays);
       team.item = item.name;
+      team.itemId = item.id;
+      team.itemSlot = item.slot;
+      team.itemTier = item.tier;
       team.itemOwner = entity.name;
       team.itemValue = value;
       team.auctionDividend = dividend;
@@ -5889,6 +5892,9 @@ function publicSectDungeonRecord(record, currentDay = 1, parentDay = null, peopl
       replay: null
     })),
     item: record.item || "",
+    itemId: record.itemId || "",
+    itemSlot: record.itemSlot || "",
+    itemTier: record.itemTier || 0,
     itemOwner: record.itemOwner || "",
     tierName: record.tierName || "",
     replayId: record.replayId || "",
@@ -5920,6 +5926,9 @@ function publicStarSeaRecord(record, currentDay = 1, parentDay = null, people = 
     teams: (record.teams || []).map((team) => publicStarSeaTeam(team, currentDay, replayRecord.day, people)),
     top: (record.top || []).map((member) => publicStarSeaMember(member, people)),
     item: record.item || "",
+    itemId: record.itemId || "",
+    itemSlot: record.itemSlot || "",
+    itemTier: record.itemTier || 0,
     itemOwner: record.itemOwner || "",
     tierName: record.tierName || "",
     itemValue: record.itemValue || 0,
@@ -5948,6 +5957,9 @@ function publicStarSeaTeam(record, currentDay = 1, parentDay = null, people = nu
     members: (record.members || []).map((member) => publicStarSeaMember(member, people)),
     top: (record.top || []).map((member) => publicStarSeaMember(member, people)),
     item: record.item || "",
+    itemId: record.itemId || "",
+    itemSlot: record.itemSlot || "",
+    itemTier: record.itemTier || 0,
     itemOwner: record.itemOwner || "",
     itemValue: record.itemValue || 0,
     auctionDividend: record.auctionDividend || 0,
