@@ -779,7 +779,7 @@ body {
     url("/assets/xianxia/world-mist.svg") center top / cover fixed,
     radial-gradient(circle at 20% 0%, rgba(218, 181, 103, .14), transparent 24rem),
     linear-gradient(180deg, rgba(9, 11, 10, .96), rgba(25, 20, 13, .96) 72px, #d8c29a 73px, #ecdfc6 100%);
-  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
+  font-family: Arial, "Helvetica Neue", "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
 }
 
 body::before {
@@ -1373,7 +1373,8 @@ body::before {
 }
 
 .duel-search input,
-.duel-date-select select {
+.duel-date-select select,
+.duel-date-select input {
   width: 100%;
 }
 
@@ -1396,7 +1397,8 @@ body::before {
   border-color: rgba(203, 147, 58, .58);
 }
 
-.arena-surface.view.active .duel-command-bar .duel-date-select select {
+.arena-surface.view.active .duel-command-bar .duel-date-select select,
+.arena-surface.view.active .duel-command-bar .duel-date-select input {
   color: #2b1b0d;
   background:
     linear-gradient(180deg, rgba(255, 253, 245, .98), rgba(237, 221, 178, .96));
@@ -3292,6 +3294,26 @@ body::before {
   background: linear-gradient(180deg, #3b9869, #1f6547);
 }
 
+.battle-log-list .log-category-dungeon b {
+  background: linear-gradient(180deg, #8a4fbd, #563078);
+}
+
+.battle-log-list .log-category-breakthrough b {
+  background: linear-gradient(180deg, #c28b2e, #7d5416);
+}
+
+.battle-log-list .log-category-equipment b {
+  background: linear-gradient(180deg, #b34e52, #76272d);
+}
+
+.battle-log-list .log-category-progress b {
+  background: linear-gradient(180deg, #2f8f88, #175d58);
+}
+
+.battle-log-list .log-category-task b {
+  background: linear-gradient(180deg, #6f7f2a, #465217);
+}
+
 .battle-log-list .log-category-note b {
   background: linear-gradient(180deg, #8d8064, #5d523d);
 }
@@ -3745,7 +3767,7 @@ body::before {
 
 .cultivation-surface .section-head h3,
 .cultivation-surface > .panel > h3:first-child {
-  font-family: "KaiTi", "STKaiti", "Microsoft YaHei", serif;
+  font-family: Arial, "Helvetica Neue", "KaiTi", "STKaiti", "Microsoft YaHei", serif;
   font-size: 25px;
   color: #4d2f12;
   text-shadow: 0 1px 0 rgba(255, 243, 205, .9);
@@ -5768,6 +5790,26 @@ body::before {
   color: #f0dca6;
 }
 
+.profile-nav-link {
+  appearance: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.profile-nav-link:not(:disabled):hover,
+.profile-nav-link:not(:disabled):focus-visible {
+  border-color: rgba(234, 196, 118, .62);
+  background: rgba(255, 236, 176, .11);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 236, 176, .1),
+    0 0 0 2px rgba(47, 143, 136, .2);
+}
+
+.profile-nav-link:disabled {
+  cursor: default;
+}
+
 .profile-progress .bar {
   height: 7px;
   border-color: rgba(218, 171, 87, .42);
@@ -7153,19 +7195,20 @@ body::before {
 
 .progression-surface .realm-row.current {
   position: relative;
-  border-top-color: rgba(240, 207, 103, .84);
-  outline: 2px solid rgba(85, 214, 137, .78);
-  outline-offset: -2px;
+  z-index: 1;
+  border-top-color: rgba(253, 230, 138, .95);
+  outline: 3px solid rgba(43, 186, 128, .88);
+  outline-offset: -3px;
   background:
-    radial-gradient(circle at 10% 50%, rgba(104, 232, 142, .32), transparent 12rem),
-    linear-gradient(90deg, rgba(217, 233, 190, .98), rgba(183, 210, 171, .98));
-  color: #162916;
+    radial-gradient(circle at 13% 48%, rgba(232, 255, 199, .72), transparent 13rem),
+    linear-gradient(90deg, rgba(31, 113, 90, .96), rgba(82, 158, 119, .94) 48%, rgba(207, 236, 174, .96));
+  color: #f9ffe6;
   box-shadow:
-    inset 5px 0 0 rgba(75, 201, 112, .95),
-    inset 0 0 0 1px rgba(255, 241, 160, .54),
-    inset 0 0 24px rgba(72, 179, 111, .2),
-    0 0 0 1px rgba(238, 199, 93, .72),
-    0 0 18px rgba(93, 221, 128, .28);
+    inset 8px 0 0 rgba(255, 221, 102, .98),
+    inset 0 0 0 1px rgba(255, 249, 194, .8),
+    inset 0 0 30px rgba(178, 255, 186, .26),
+    0 0 0 2px rgba(238, 199, 93, .92),
+    0 0 22px rgba(93, 221, 128, .36);
 }
 
 .progression-surface .realm-row strong {
@@ -7176,6 +7219,19 @@ body::before {
 .progression-surface .realm-row small {
   color: rgba(238, 218, 166, .72);
   font-size: 12px;
+}
+
+.progression-surface .realm-row.current small {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 4px;
+  border: 1px solid rgba(255, 236, 153, .86);
+  border-radius: 999px;
+  background: rgba(19, 78, 74, .58);
+  color: #fff4b8;
+  font-weight: 900;
+  line-height: 1;
+  padding: 4px 8px;
 }
 
 .progression-surface .realm-row > span {
@@ -8148,11 +8204,11 @@ body::before {
 
 .arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-fighter {
   display: grid;
-  grid-template-rows: 68px 21px 17px 17px minmax(17px, 36px) 34px 34px;
+  grid-template-rows: 68px 21px 17px minmax(38px, auto) 34px 34px;
   align-content: start;
   justify-items: start;
   text-align: left;
-  gap: 3px;
+  gap: 5px;
   min-width: 0;
 }
 
@@ -8190,6 +8246,14 @@ body::before {
   overflow: hidden;
 }
 
+.arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-fighter-attrs {
+  width: 168px;
+  max-width: 100%;
+  gap: 2px;
+  min-height: 34px;
+  margin-bottom: 2px;
+}
+
 .arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-fighter.right .duel-fighter-attrs,
 .view.active.sect-war-room .sect-war-replay-panel .duel-fighter.right .duel-fighter-attrs {
   justify-content: flex-end;
@@ -8212,6 +8276,19 @@ body::before {
   white-space: nowrap;
 }
 
+.arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-fighter-attrs span {
+  flex: 0 0 39px;
+  height: 16px;
+  padding: 1px 3px;
+  font-size: 9px;
+  line-height: 12px;
+  text-align: center;
+}
+
+.arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-fighter-attrs .root {
+  flex-basis: 60px;
+}
+
 .arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-fighter-attrs .root,
 .view.active.sect-war-room .sect-war-replay-panel .duel-fighter-attrs .root {
   border-color: rgba(100, 224, 172, .42);
@@ -8221,7 +8298,7 @@ body::before {
 .arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-fighter .meter {
   width: min(168px, 100%);
   min-height: 30px;
-  margin-top: 0;
+  margin-top: 4px;
 }
 
 .arena-surface.view.active .duel-console-shell .duel-replay-panel.live .duel-live-center {
@@ -8314,6 +8391,47 @@ body::before {
   justify-content: flex-start;
 }
 
+.wheel-battle-console .sect-war-replay-panel .duel-fighter {
+  grid-template-rows: 68px 21px 17px 19px 32px 32px;
+  gap: 3px;
+}
+
+.wheel-battle-console .sect-war-replay-panel .duel-fighter .character-portrait.lg {
+  width: 68px;
+  height: 68px;
+}
+
+.wheel-battle-console .sect-war-replay-panel .duel-fighter-attrs {
+  flex-wrap: nowrap;
+  gap: 2px;
+  width: 100%;
+  max-width: 148px;
+  margin: 0;
+}
+
+.wheel-battle-console .sect-war-replay-panel .duel-fighter-attrs span {
+  height: 16px;
+  padding: 1px 3px;
+  font-size: 9px;
+  line-height: 12px;
+}
+
+.wheel-battle-console .sect-war-replay-panel .duel-fighter .meter {
+  width: min(148px, 100%);
+  min-height: 30px;
+  margin-top: 0;
+}
+
+.wheel-battle-console .sect-war-replay-panel .duel-fighter .meter-head {
+  gap: 3px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.wheel-battle-console .sect-war-replay-panel .duel-fighter .meter-label {
+  gap: 2px;
+}
+
 .void-wheel-console .wheel-battle-board,
 .void-wheel-console .wheel-replay-panel {
   height: 640px;
@@ -8372,7 +8490,7 @@ body::before {
   box-sizing: border-box;
   min-height: 600px;
   height: 600px;
-  grid-template-rows: auto 292px 74px minmax(0, 1fr);
+  grid-template-rows: auto 238px 64px minmax(0, 1fr);
   border: 1px solid rgba(203, 147, 58, .62);
   background:
     linear-gradient(180deg, rgba(9, 16, 16, .96), rgba(7, 12, 12, .98)),
@@ -8409,11 +8527,11 @@ body::before {
 
 .view.active.sect-war-room .sect-war-replay-panel .duel-arena-stage {
   box-sizing: border-box;
-  min-height: 292px;
-  height: 292px;
+  min-height: 238px;
+  height: 238px;
   grid-template-columns: minmax(0, 1fr) 92px minmax(0, 1fr);
   align-items: stretch;
-  padding: 14px 16px 12px;
+  padding: 12px 16px 10px;
   background:
     linear-gradient(180deg, rgba(6, 10, 11, .06), rgba(6, 10, 11, .34)),
     url("/assets/home-cards/duel-arena.png") center / cover no-repeat;
@@ -8421,7 +8539,7 @@ body::before {
 
 .view.active.sect-war-room .sect-war-replay-panel .duel-fighter {
   display: grid;
-  grid-template-rows: 68px 21px 17px 17px minmax(17px, 36px) 34px 34px;
+  grid-template-rows: 56px 20px 16px 18px 30px 30px;
   align-content: start;
   justify-items: start;
   text-align: left;
@@ -8440,8 +8558,8 @@ body::before {
 }
 
 .view.active.sect-war-room .sect-war-replay-panel .duel-fighter .character-portrait.lg {
-  width: 68px;
-  height: 68px;
+  width: 56px;
+  height: 56px;
 }
 
 .view.active.sect-war-room .sect-war-replay-panel .duel-fighter strong,
@@ -8457,9 +8575,34 @@ body::before {
 }
 
 .view.active.sect-war-room .sect-war-replay-panel .duel-fighter .meter {
-  width: min(168px, 100%);
+  width: 168px;
+  max-width: 100%;
   min-height: 30px;
   margin-top: 0;
+}
+
+.view.active.sect-war-room .sect-war-replay-panel .duel-fighter-attrs {
+  flex-wrap: nowrap;
+  width: 168px;
+  max-width: 100%;
+  margin: 0;
+}
+
+.view.active.sect-war-room .sect-war-replay-panel .duel-fighter-attrs span {
+  height: 16px;
+  padding: 1px 3px;
+  font-size: 9px;
+  line-height: 12px;
+}
+
+.view.active.sect-war-room .sect-war-replay-panel .duel-fighter .meter-head {
+  gap: 4px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.view.active.sect-war-room .sect-war-replay-panel .duel-fighter .meter-label {
+  gap: 3px;
 }
 
 .view.active.sect-war-room .sect-war-replay-panel .duel-fighter.left .duel-fighter-attrs,
@@ -8495,9 +8638,9 @@ body::before {
 
 .view.active.sect-war-room .sect-war-replay-panel .duel-skill-row {
   box-sizing: border-box;
-  min-height: 74px;
-  height: 74px;
-  padding-block: 9px;
+  min-height: 64px;
+  height: 64px;
+  padding-block: 7px;
   overflow: visible;
   z-index: 12000;
 }
@@ -9479,7 +9622,7 @@ body::before {
 .rank-surface.view.active > .character-dossier .dossier-core .dossier-power-line span {
   display: block;
   color: #5a3110;
-  font-family: "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
+  font-family: Arial, "Helvetica Neue", "STKaiti", "KaiTi", "FangSong", "Microsoft YaHei", serif;
   font-size: clamp(16px, 1.22vw, 21px);
   font-weight: 950;
   line-height: 1.1;
@@ -9494,7 +9637,7 @@ body::before {
 .rank-surface.view.active > .character-dossier .dossier-core .dossier-power-line b {
   display: inline-block;
   color: #9b2f22;
-  font-family: Georgia, "Times New Roman", "Microsoft YaHei", serif;
+  font-family: Arial, "Helvetica Neue", Georgia, "Times New Roman", "Microsoft YaHei", serif;
   font-size: clamp(25px, 1.95vw, 34px);
   font-weight: 950;
   line-height: .95;
@@ -9513,17 +9656,20 @@ body::before {
 .rank-surface.view.active > .character-dossier .dossier-records {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: clamp(8px, .8vw, 12px);
-  align-items: start;
+  align-items: stretch;
+  grid-auto-rows: minmax(0, auto);
 }
 
 .rank-surface.view.active > .character-dossier .dossier-records > .panel {
   min-width: 0;
-  height: auto;
+  height: 100%;
   min-height: 0;
   max-height: 330px;
   padding: 12px 13px;
   border-radius: 3px;
   background: linear-gradient(180deg, #fff6dc, #ead9b4);
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
@@ -9544,16 +9690,25 @@ body::before {
 }
 
 .rank-surface.view.active > .character-dossier .dossier-records .detail-scroll {
-  max-height: clamp(150px, 18vh, 220px);
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
   gap: 7px;
 }
 
 .rank-surface.view.active > .character-dossier .root-chip-list,
 .rank-surface.view.active > .character-dossier .root-summary-list,
 .rank-surface.view.active > .character-dossier .attribute-list.compact {
+  flex: 1 1 auto;
+  min-height: 0;
   max-height: clamp(190px, 20vh, 236px);
   overflow-y: auto;
   padding-right: 4px;
+}
+
+.rank-surface.view.active > .character-dossier .root-chip-list {
+  flex: 0 0 auto;
 }
 
 .rank-surface.view.active > .character-dossier .attribute-row {
@@ -9590,14 +9745,6 @@ body::before {
 .rank-surface.view.active > .character-dossier .event-button small {
   font-size: 13px;
   line-height: 1.35;
-}
-
-.rank-surface.view.active > .character-dossier .dossier-record-group-label {
-  margin: 3px 0 6px;
-  color: #6c4a1f;
-  font-size: 12px;
-  font-weight: 900;
-  line-height: 1.2;
 }
 
 .rank-surface.view.active > .character-dossier .root-chip,

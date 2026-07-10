@@ -131,11 +131,17 @@
           </div>
 
           <div class="profile-info-list">
-            <div class="profile-info-item">
+            <button
+              class="profile-info-item profile-nav-link profile-sect-link"
+              type="button"
+              :disabled="!playerSectName"
+              :aria-label="playerSectName ? `查看${playerSectName}宗门属性` : '暂无宗门可查看'"
+              @click="openPlayerSectDetail"
+            >
               <Landmark :size="17" :stroke-width="2.4" aria-hidden="true" />
               <span>宗门</span>
               <strong>{{ player.sect || "散修" }}</strong>
-            </div>
+            </button>
             <div class="profile-info-item">
               <Orbit :size="17" :stroke-width="2.4" aria-hidden="true" />
               <span>境界</span>
@@ -147,11 +153,11 @@
               <Meter label="总经验" :value="player.xp" :max="derived.xpNeed" />
               <small>当前经验 {{ Math.floor(player.xp) }} / 总经验 {{ derived.xpNeed }}</small>
             </button>
-            <div class="profile-info-item">
+            <button class="profile-info-item profile-nav-link profile-root-link" type="button" @click="openRootAttributes" aria-label="查看灵根页面">
               <component :is="rootIconComponent(player.primaryRootKey || player.root?.key)" :size="17" :stroke-width="2.4" aria-hidden="true" />
               <span>灵根</span>
               <strong>{{ profileRootText }}</strong>
-            </div>
+            </button>
           </div>
         </section>
 
@@ -255,9 +261,9 @@
               <div class="section-head compact">
                 <h3>斗法场</h3>
               </div>
-              <p>我的排名：{{ playerRank }}</p>
+              <p>段位排名：{{ playerDuelRankPosition || "未上榜" }}</p>
               <p>今日切磋：{{ todayDuelCount }} 场</p>
-              <p>段位：<strong>{{ duelRankText(withDuelRank(player)) }}</strong></p>
+              <p>段位：<strong>{{ playerDuelRankText }}</strong></p>
               <div class="duel-mark" aria-hidden="true">⚔</div>
               <button class="primary game-cta" type="button" @click="switchTab('arena')">进入切磋</button>
             </article>
@@ -310,14 +316,14 @@
               <div class="section-head compact">
                 <h3>战斗日志</h3>
                 <label class="log-day-select" v-if="homeLogDayRecords.length">
-                  <span>日期</span>
+                  <span>游戏日期</span>
                   <input
                     v-model="selectedHomeLogDate"
                     type="date"
                     :min="homeLogMinDate"
                     :max="homeLogMaxDate"
                     step="1"
-                    aria-label="选择日志日期"
+                    aria-label="选择游戏日志日期"
                   />
                 </label>
               </div>
@@ -333,7 +339,7 @@
                 </div>
               </div>
               <div class="battle-log-empty" v-else>
-                <b>{{ selectedHomeLogDayRecord?.date || currentDate }}</b>
+                <b>第 {{ selectedHomeLogDayRecord?.day || gameState.day }} 天</b>
                 <span>本日暂无战斗日志</span>
               </div>
             </article>
@@ -980,7 +986,16 @@
             </div>
             <div class="dungeon-day-nav">
               <button class="secondary" type="button" :disabled="!canShowPreviousDungeonDay" @click="showPreviousDungeonDay">前一日</button>
-              <span class="tag">{{ selectedDungeonDay?.date || currentDate }}</span>
+              <label class="dungeon-date-select">
+                <span>查看日期</span>
+                <input
+                  v-model="selectedDungeonCalendarDate"
+                  type="date"
+                  :min="dungeonDateMin"
+                  :max="dungeonDateMax"
+                  aria-label="选择副本记录日期"
+                >
+              </label>
               <button class="secondary" type="button" :disabled="!canShowNextDungeonDay" @click="showNextDungeonDay">后一日</button>
             </div>
           </div>
@@ -992,7 +1007,7 @@
               type="button"
               class="segment"
               :class="{ active: activeDungeonRecordTab === tab.id }"
-              @click="activeDungeonRecordTab = tab.id"
+              @click="switchDungeonRecordTab(tab.id)"
             >
               {{ tab.label }}
             </button>
@@ -1018,7 +1033,7 @@
               <article class="bestiary-stage" v-for="stage in dungeonMonsterStages" :key="stage.name">
                 <div class="bestiary-stage-title">
                   <strong>{{ stage.name }}</strong>
-                  <span>第 {{ stage.stage + 1 }} 阶</span>
+                  <span>{{ realmStageName(stage.stage) }}</span>
                 </div>
                 <div class="bestiary-monster-list">
                   <span class="bestiary-monster" v-for="monster in stage.monsters" :key="monster.name">
@@ -1234,11 +1249,10 @@
                         <MonsterEmblem v-if="isBattleMonster(lastBattle.left)" :monster="lastBattle.left" size="lg" />
                         <CharacterPortrait v-else :person="battlePerson(lastBattle.left)" size="lg" />
                         <strong>{{ battleDisplayName(lastBattle.left) }}</strong>
-                        <small v-if="lastBattle.left.sect">{{ lastBattle.left.sect }}</small>
                         <small>{{ realmName(lastBattle.left.realm) }}</small>
                         <div class="duel-fighter-attrs" :aria-label="`${battleDisplayName(lastBattle.left)} 战斗属性`">
                           <span class="root">{{ battleRootName(lastBattle.left) }}</span>
-                          <span v-for="stat in battleCompactStats(lastBattle.left)" :key="stat.label">{{ stat.short }} {{ stat.value }}</span>
+                          <span v-for="stat in battleCompactStats(lastBattle.left)" :key="stat.label">{{ stat.short }}{{ stat.value }}</span>
                         </div>
                         <Meter label="血量" icon="health" :value="currentBattleFrame.leftHp" :max="battleMax(lastBattle.left, 'hp')" tone="health" />
                         <Meter label="法力" icon="mana" :value="currentBattleFrame.leftMana" :max="battleMax(lastBattle.left, 'mana')" tone="focus" />
@@ -1252,11 +1266,10 @@
                         <MonsterEmblem v-if="isBattleMonster(lastBattle.right)" :monster="lastBattle.right" size="lg" />
                         <CharacterPortrait v-else :person="battlePerson(lastBattle.right)" size="lg" />
                         <strong>{{ battleDisplayName(lastBattle.right) }}</strong>
-                        <small v-if="lastBattle.right.sect">{{ lastBattle.right.sect }}</small>
                         <small>{{ realmName(lastBattle.right.realm) }}</small>
                         <div class="duel-fighter-attrs" :aria-label="`${battleDisplayName(lastBattle.right)} 战斗属性`">
                           <span class="root">{{ battleRootName(lastBattle.right) }}</span>
-                          <span v-for="stat in battleCompactStats(lastBattle.right)" :key="stat.label">{{ stat.short }} {{ stat.value }}</span>
+                          <span v-for="stat in battleCompactStats(lastBattle.right)" :key="stat.label">{{ stat.short }}{{ stat.value }}</span>
                         </div>
                         <Meter label="血量" icon="health" :value="currentBattleFrame.rightHp" :max="battleMax(lastBattle.right, 'hp')" tone="health" />
                         <Meter label="法力" icon="mana" :value="currentBattleFrame.rightMana" :max="battleMax(lastBattle.right, 'mana')" tone="focus" />
@@ -1424,7 +1437,7 @@
                   <strong>装备池</strong>
                   <span>{{ dungeonLootPool('star_sea').sourceText }}</span>
                 </div>
-                <em>每日 {{ formatLootPercent(starSeaDropChance) }} 概率竞拍</em>
+                <em>每期必出 1 件 · 低品质权重更高</em>
               </div>
               <div class="loot-pool-summary">
                 <span v-if="showDungeonLoot">{{ dungeonLootPool('star_sea').acquiredCount || 0 }} 已获取</span>
@@ -1446,12 +1459,20 @@
                 <h3>猎妖概览</h3>
                 <div class="star-sea-overview-line">
                   <div class="monster-strip compact-monster-strip" v-if="selectedDungeonDay.public?.monsters?.length">
-                    <div class="monster-chip with-emblem" v-for="monster in selectedDungeonDay.public.monsters" :key="monster.id || monster.name">
+                    <div class="monster-chip with-emblem star-sea-monster-summary" v-for="monster in selectedDungeonDay.public.monsters" :key="monster.id || monster.name">
                       <MonsterEmblem :monster="monster" size="sm" />
-                      <span>
-                        <strong>{{ monster.name }}</strong>
-                        <span>{{ monster.realm }} · {{ monster.rootName }}</span>
-                        <small>血 {{ monster.maxHp }} / 攻 {{ monster.attack }} / 防 {{ monster.defense }} / 神 {{ monster.divineSense }}</small>
+                      <span class="star-sea-monster-body">
+                        <span class="star-sea-monster-title">
+                          <strong>{{ monster.name }}</strong>
+                          <em>{{ monster.realm }}</em>
+                        </span>
+                        <span class="star-sea-monster-root">{{ monster.rootName }}</span>
+                        <span class="star-sea-monster-stats-mini">
+                          <small><span>血</span><b>{{ monster.maxHp }}</b></small>
+                          <small><span>攻</span><b>{{ monster.attack }}</b></small>
+                          <small><span>防</span><b>{{ monster.defense }}</b></small>
+                          <small><span>神</span><b>{{ monster.divineSense }}</b></small>
+                        </span>
                       </span>
                     </div>
                   </div>
@@ -1475,22 +1496,69 @@
                     />
                     <span v-else class="star-sea-equipment-empty">装</span>
                     <span>
-                      <span>装备</span>
+                      <span>期末奖励</span>
                       <b>{{ starSeaTodayEquipmentName }}</b>
                       <small>{{ starSeaTodayEquipmentText }}</small>
                     </span>
                   </div>
-                  <div class="star-sea-summary-chip" v-if="selectedDungeonDay.public?.item">
+                  <div class="star-sea-summary-chip" v-if="selectedStarSeaCycleReward">
                     <span>竞拍</span>
-                    <b>{{ selectedDungeonDay.public?.itemOwner || "无人获得" }}</b>
+                    <b>{{ selectedStarSeaCycleReward.winnerName || "全员平分" }}</b>
                     <small>{{ starSeaAuctionText }}</small>
                   </div>
                 </div>
               </div>
+              <div class="panel flat sea-cycle-history" v-if="starSeaCycleOptionList.length">
+                <div class="section-head compact">
+                  <div>
+                    <h3>近十期总评分榜</h3>
+                    <p>按十日周期汇总队伍总评分，可切换查看最近 10 期。</p>
+                  </div>
+                  <span class="tag">当前查看：第 {{ activeStarSeaCycle?.cycle || selectedDungeonDay?.public?.cycle || "-" }} 期</span>
+                </div>
+                <div class="star-sea-cycle-tabs" v-if="starSeaCycleOptionList.length > 1">
+                  <button
+                    v-for="cycle in starSeaCycleOptionList"
+                    :key="`cycle-tab-${cycle.cycle}`"
+                    type="button"
+                    :class="{ active: Number(activeStarSeaCycle?.cycle) === Number(cycle.cycle), empty: !cycle.hasData }"
+                    @click="selectedStarSeaCycle = cycle.cycle"
+                  >
+                    第 {{ cycle.cycle }} 期<span v-if="!cycle.hasData">暂无</span>
+                  </button>
+                </div>
+                <article class="star-sea-cycle-board" v-if="activeStarSeaCycle">
+                  <div class="star-sea-cycle-board-head">
+                    <div>
+                      <strong>第 {{ activeStarSeaCycle.cycle }} 期总评分榜</strong>
+                      <span>第 {{ activeStarSeaCycle.cycleStartDay }}-{{ activeStarSeaCycle.cycleEndDay }} 日 · {{ activeStarSeaCycle.settled ? "已结算" : "进行中" }} · 已计 {{ activeStarSeaCycle.dayCount || 0 }}/10 日</span>
+                    </div>
+                    <em>{{ starSeaCycleRewardText(activeStarSeaCycle) }}</em>
+                  </div>
+                  <div class="star-sea-cycle-board-list" v-if="activeStarSeaCycleTeamList.length">
+                    <div
+                      class="star-sea-cycle-team-row"
+                      v-for="team in activeStarSeaCycleTeamList"
+                      :key="`${activeStarSeaCycle.cycle}-${team.id || team.name}`"
+                    >
+                      <span class="cycle-rank">{{ team.rank }}</span>
+                      <span class="cycle-team-name">{{ team.name }}</span>
+                      <span class="cycle-score-bar" aria-hidden="true">
+                        <i :style="{ width: `${starSeaCycleScorePercent(team, activeStarSeaCycle)}%` }"></i>
+                      </span>
+                      <strong>{{ team.totalScore }}</strong>
+                    </div>
+                  </div>
+                  <div class="star-sea-cycle-empty" v-else>
+                    <b>暂无第 {{ activeStarSeaCycle.cycle }} 期总评分记录</b>
+                    <span>该期没有可汇总的乱星海战报。</span>
+                  </div>
+                </article>
+              </div>
               <div class="panel flat sea-team-rank">
                 <h3>队伍排名</h3>
                 <div class="timeline compact-list">
-                  <button class="event event-button" type="button" v-for="team in starSeaTeamRanking" :key="team.id || team.name" :disabled="!hasReplay(team) && !hasReplay(selectedDungeonDay.public)" @click="openStarSeaTeamReplay(team)">
+                  <button class="event event-button" type="button" v-for="team in starSeaTeamRanking" :key="team.id || team.name" :disabled="!hasReplay(team)" @click="openStarSeaTeamReplay(team)">
                     <strong>{{ team.rank }}. {{ team.name }}</strong>
                     <span>评分 {{ team.score }} · 输出 {{ team.damage }} · {{ team.success ? `${team.rounds} 回合击杀` : "未击杀" }} · 队伍 +{{ team.spirit }} 灵石</span>
                   </button>
@@ -1499,7 +1567,7 @@
               <div class="panel flat sea-personal-rank">
                 <h3>个人输出</h3>
                 <div class="timeline compact-list">
-                  <button class="event event-button" type="button" v-for="entry in selectedDungeonDay.public?.top || []" :key="entry.id" :disabled="!hasReplay(selectedDungeonDay.public)" @click="openReplay(selectedDungeonDay.public)">
+                  <button class="event event-button" type="button" v-for="entry in selectedDungeonDay.public?.top || []" :key="`${entry.id}-${entry.teamRank || entry.teamName || ''}`" :disabled="!hasStarSeaMemberReplay(entry)" @click="openStarSeaMemberReplay(entry)">
                     <strong>{{ entry.name }}</strong>
                     <span>{{ entry.teamName || entry.sect }} · 输出 {{ entry.damage }} · +{{ entry.spirit }} 灵石</span>
                   </button>
@@ -1733,11 +1801,10 @@
                 <div class="duel-fighter left">
                   <CharacterPortrait :person="battlePerson(lastBattle.left)" size="lg" />
                   <strong>{{ lastBattle.left.name }}</strong>
-                  <small>{{ lastBattle.left.sect }}</small>
                   <small>{{ realmName(lastBattle.left.realm) }}</small>
                   <div class="duel-fighter-attrs" :aria-label="`${lastBattle.left.name} 战斗属性`">
                     <span class="root">{{ battleRootName(lastBattle.left) }}</span>
-                    <span v-for="stat in battleCompactStats(lastBattle.left)" :key="stat.label">{{ stat.short }} {{ stat.value }}</span>
+                    <span v-for="stat in battleCompactStats(lastBattle.left)" :key="stat.label">{{ stat.short }}{{ stat.value }}</span>
                   </div>
                   <Meter label="血量" icon="health" :value="currentBattleFrame.leftHp" :max="battleMax(lastBattle.left, 'hp')" tone="health" />
                   <Meter label="法力" icon="mana" :value="currentBattleFrame.leftMana" :max="battleMax(lastBattle.left, 'mana')" tone="focus" />
@@ -1750,11 +1817,10 @@
                 <div class="duel-fighter right">
                   <CharacterPortrait :person="battlePerson(lastBattle.right)" size="lg" />
                   <strong>{{ lastBattle.right.name }}</strong>
-                  <small>{{ lastBattle.right.sect }}</small>
                   <small>{{ realmName(lastBattle.right.realm) }}</small>
                   <div class="duel-fighter-attrs" :aria-label="`${lastBattle.right.name} 战斗属性`">
                     <span class="root">{{ battleRootName(lastBattle.right) }}</span>
-                    <span v-for="stat in battleCompactStats(lastBattle.right)" :key="stat.label">{{ stat.short }} {{ stat.value }}</span>
+                    <span v-for="stat in battleCompactStats(lastBattle.right)" :key="stat.label">{{ stat.short }}{{ stat.value }}</span>
                   </div>
                   <Meter label="血量" icon="health" :value="currentBattleFrame.rightHp" :max="battleMax(lastBattle.right, 'hp')" tone="health" />
                   <Meter label="法力" icon="mana" :value="currentBattleFrame.rightMana" :max="battleMax(lastBattle.right, 'mana')" tone="focus" />
@@ -1917,11 +1983,10 @@
                       <div class="duel-fighter left">
                         <CharacterPortrait :person="battlePerson(lastBattle.left)" size="lg" />
                         <strong>{{ lastBattle.left.name }}</strong>
-                        <small>{{ lastBattle.left.sect }}</small>
                         <small>{{ realmName(lastBattle.left.realm) }}</small>
                         <div class="duel-fighter-attrs" :aria-label="`${lastBattle.left.name} 战斗属性`">
                           <span class="root">{{ battleRootName(lastBattle.left) }}</span>
-                          <span v-for="stat in battleCompactStats(lastBattle.left)" :key="stat.label">{{ stat.short }} {{ stat.value }}</span>
+                          <span v-for="stat in battleCompactStats(lastBattle.left)" :key="stat.label">{{ stat.short }}{{ stat.value }}</span>
                         </div>
                         <Meter label="血量" icon="health" :value="currentBattleFrame.leftHp" :max="battleMax(lastBattle.left, 'hp')" tone="health" />
                         <Meter label="法力" icon="mana" :value="currentBattleFrame.leftMana" :max="battleMax(lastBattle.left, 'mana')" tone="focus" />
@@ -1934,11 +1999,10 @@
                       <div class="duel-fighter right">
                         <CharacterPortrait :person="battlePerson(lastBattle.right)" size="lg" />
                         <strong>{{ lastBattle.right.name }}</strong>
-                        <small>{{ lastBattle.right.sect }}</small>
                         <small>{{ realmName(lastBattle.right.realm) }}</small>
                         <div class="duel-fighter-attrs" :aria-label="`${lastBattle.right.name} 战斗属性`">
                           <span class="root">{{ battleRootName(lastBattle.right) }}</span>
-                          <span v-for="stat in battleCompactStats(lastBattle.right)" :key="stat.label">{{ stat.short }} {{ stat.value }}</span>
+                          <span v-for="stat in battleCompactStats(lastBattle.right)" :key="stat.label">{{ stat.short }}{{ stat.value }}</span>
                         </div>
                         <Meter label="血量" icon="health" :value="currentBattleFrame.rightHp" :max="battleMax(lastBattle.right, 'hp')" tone="health" />
                         <Meter label="法力" icon="mana" :value="currentBattleFrame.rightMana" :max="battleMax(lastBattle.right, 'mana')" tone="focus" />
@@ -2165,9 +2229,14 @@
             <div class="duel-command-bar">
               <button class="secondary duel-nav-button" type="button" @click="changeDuelDay(-1)">前一天</button>
               <label class="duel-date-select">
-                <select v-model.number="selectedDuelDay" aria-label="查看日期">
-                  <option v-for="option in duelDateOptions" :key="option.day" :value="option.day">{{ option.date }}</option>
-                </select>
+                <input
+                  v-model="selectedDuelCalendarDate"
+                  type="date"
+                  :min="duelDateMin"
+                  :max="duelDateMax"
+                  step="1"
+                  aria-label="查看日期"
+                />
               </label>
               <label class="duel-search war-search">
                 <span class="search-field">
@@ -2281,11 +2350,10 @@
                     <div class="duel-fighter left">
                       <CharacterPortrait :person="battlePerson(lastBattle.left)" size="lg" />
                       <strong>{{ lastBattle.left.name }}</strong>
-                      <small>{{ lastBattle.left.sect }}</small>
                       <small>{{ realmName(lastBattle.left.realm) }}</small>
                       <div class="duel-fighter-attrs" :aria-label="`${lastBattle.left.name} 战斗属性`">
                         <span class="root">{{ battleRootName(lastBattle.left) }}</span>
-                        <span v-for="stat in battleCompactStats(lastBattle.left)" :key="stat.label">{{ stat.short }} {{ stat.value }}</span>
+                        <span v-for="stat in battleCompactStats(lastBattle.left)" :key="stat.label">{{ stat.short }}{{ stat.value }}</span>
                       </div>
                       <Meter label="血量" icon="health" :value="currentBattleFrame.leftHp" :max="battleMax(lastBattle.left, 'hp')" tone="health" />
                       <Meter label="法力" icon="mana" :value="currentBattleFrame.leftMana" :max="battleMax(lastBattle.left, 'mana')" tone="focus" />
@@ -2298,11 +2366,10 @@
                     <div class="duel-fighter right">
                       <CharacterPortrait :person="battlePerson(lastBattle.right)" size="lg" />
                       <strong>{{ lastBattle.right.name }}</strong>
-                      <small>{{ lastBattle.right.sect }}</small>
                       <small>{{ realmName(lastBattle.right.realm) }}</small>
                       <div class="duel-fighter-attrs" :aria-label="`${lastBattle.right.name} 战斗属性`">
                         <span class="root">{{ battleRootName(lastBattle.right) }}</span>
-                        <span v-for="stat in battleCompactStats(lastBattle.right)" :key="stat.label">{{ stat.short }} {{ stat.value }}</span>
+                        <span v-for="stat in battleCompactStats(lastBattle.right)" :key="stat.label">{{ stat.short }}{{ stat.value }}</span>
                       </div>
                       <Meter label="血量" icon="health" :value="currentBattleFrame.rightHp" :max="battleMax(lastBattle.right, 'hp')" tone="health" />
                       <Meter label="法力" icon="mana" :value="currentBattleFrame.rightMana" :max="battleMax(lastBattle.right, 'mana')" tone="focus" />
@@ -2953,7 +3020,7 @@
                 <div class="attribute-list compact">
                   <div class="attribute-row">
                     <span>经验</span>
-                    <strong>{{ personInsight(selectedPerson).tomorrowXp.total }}</strong>
+                    <strong>{{ tomorrowXpTotal(selectedPerson) }}</strong>
                     <small>{{ tomorrowXpText(selectedPerson) }}</small>
                   </div>
                   <div class="attribute-row">
@@ -3029,7 +3096,11 @@
                     <small v-if="record.item">{{ record.tierName }}「{{ record.item }}」</small>
                   </button>
                   <div v-if="!selectedPerson.dungeonHistory?.length" class="empty">暂无副本闯关记录。</div>
-                  <div class="dossier-record-group-label">技能升阶</div>
+                </div>
+              </div>
+              <div class="panel flat">
+                <h3>技能升阶</h3>
+                <div class="timeline detail-scroll">
                   <div class="event" :class="{ gold: skillUpgradeRecordSucceeded(record), bad: !skillUpgradeRecordSucceeded(record) }" v-for="record in selectedPerson.skillUpgrades || []" :key="`${record.day}-${record.skillId}-${record.toRank}-${record.success === false ? 'fail' : 'success'}`">
                     <strong>{{ skillUpgradeRecordTitle(record) }}</strong>
                     <span>{{ skillUpgradeRecordMetaText(record) }}</span>
@@ -3692,6 +3763,7 @@ const dungeonDayIndex = ref(0);
 const activeDungeonRecordTab = ref("blood");
 const showDungeonLoot = ref(false);
 const showDungeonBestiary = ref(false);
+const selectedStarSeaCycle = ref(null);
 const selectedVoidHallSect = ref("");
 const detailView = ref("rank");
 const selectedPersonId = ref("player");
@@ -4114,6 +4186,7 @@ const skillUpgradeHint = computed(() => {
   return `失败也会扣除 ${preview.cost} 灵石，今日仅可尝试一次。`;
 });
 const sectSummaries = computed(() => derived.value.sects || []);
+const playerSectName = computed(() => player.value?.sect || gameState.value.sect?.name || "");
 const fallbackRoots = [
   { key: "metal", name: "金灵根", effect: "attack", min: 0.05, max: 0.1, note: "攻击提高 5%-10%。" },
   { key: "wood", name: "木灵根", effect: "hp", min: 0.1, max: 0.2, note: "血量上限提高 10%-20%。" },
@@ -4219,7 +4292,6 @@ const dungeonRecordTabs = [
   { id: "void", label: "虚天殿" },
   { id: "sea", label: "乱星海猎妖" }
 ];
-const starSeaDropChance = 0.1;
 const dungeonMonsterStages = monsterStageNames.map((stageName, stage) => ({
   stage,
   name: stageName,
@@ -4229,6 +4301,21 @@ const dungeonDays = computed(() => gameState.value.dungeonDays || []);
 const selectedDungeonDay = computed(() => dungeonDays.value[dungeonDayIndex.value] || null);
 const canShowPreviousDungeonDay = computed(() => dungeonDayIndex.value < dungeonDays.value.length - 1);
 const canShowNextDungeonDay = computed(() => dungeonDayIndex.value > 0);
+const dungeonDateMin = computed(() => dateForDay(Math.max(1, (gameState.value.day || 1) - 6)));
+const dungeonDateMax = computed(() => currentDate.value);
+const selectedDungeonCalendarDate = computed({
+  get() {
+    return selectedDungeonDay.value?.date || dateForDay(selectedDungeonDay.value?.day || gameState.value.day);
+  },
+  set(value) {
+    const day = clampDay(dayForDate(value));
+    const index = dungeonDays.value.findIndex((record) => Number(record.day) === Number(day));
+    if (index >= 0) {
+      dungeonDayIndex.value = index;
+      closeBattleReplay();
+    }
+  }
+});
 const bloodTrialClearCount = computed(() => (selectedDungeonDay.value?.bloodTrial?.caves || []).reduce((sum, cave) => sum + bloodCaveClearCount(cave), 0));
 const sortedVoidHallRecords = computed(() => [...(selectedDungeonDay.value?.sects || [])].sort((a, b) => (
   Number(b.success) - Number(a.success) ||
@@ -4236,6 +4323,12 @@ const sortedVoidHallRecords = computed(() => [...(selectedDungeonDay.value?.sect
   b.totalDamage - a.totalDamage
 )));
 const selectedVoidHallRecord = computed(() => sortedVoidHallRecords.value.find((record) => record.sect === selectedVoidHallSect.value));
+function switchDungeonRecordTab(tabId) {
+  if (!dungeonRecordTabs.some((tab) => tab.id === tabId)) return;
+  activeDungeonRecordTab.value = tabId;
+  selectedVoidHallSect.value = "";
+  clearBattleReplay();
+}
 const voidHallSuccessCount = computed(() => (selectedDungeonDay.value?.sects || []).filter((record) => record.success).length);
 const voidHallStageOptions = computed(() => {
   const stageCount = catalog.value.realmStages?.length || 9;
@@ -4310,17 +4403,84 @@ const starSeaSpiritLines = computed(() => {
 const starSeaTeamRanking = computed(() => [...(selectedDungeonDay.value?.public?.teams || [])]
   .sort((a, b) => (a.rank || 999) - (b.rank || 999) || b.score - a.score)
   .slice(0, 10));
-const starSeaTodayEquipmentName = computed(() => selectedDungeonDay.value?.public?.item || "无");
+const currentStarSeaCycleSummary = computed(() => visibleStarSeaCycleSummary(selectedDungeonDay.value?.public?.cycle));
+const starSeaRecentCycles = computed(() => {
+  const byCycle = new Map((gameState.value.starSeaCycleHistory || []).map((record) => [record.cycle, record]));
+  const current = currentStarSeaCycleSummary.value;
+  if (current?.cycle) {
+    const persisted = byCycle.get(current.cycle);
+    byCycle.set(current.cycle, {
+      ...persisted,
+      ...current,
+      dayCount: Math.max(Number(persisted?.dayCount || 0), Number(current.dayCount || 0)),
+      reward: persisted?.reward || current.reward || null,
+      settled: Boolean(persisted?.settled || current.settled)
+    });
+  }
+  return [...byCycle.values()]
+    .filter(Boolean)
+    .sort((a, b) => (b.cycle || 0) - (a.cycle || 0))
+    .slice(0, 10);
+});
+const starSeaCycleOptions = computed(() => {
+  const dataByCycle = new Map(starSeaRecentCycles.value.map((record) => [Number(record.cycle), { ...record, hasData: true }]));
+  const latestCycle = Math.max(
+    1,
+    Number(selectedDungeonDay.value?.public?.cycle || 0),
+    Number(currentStarSeaCycleSummary.value?.cycle || 0),
+    starSeaCycleForDay(gameState.value.day || 1),
+    ...[...dataByCycle.keys()]
+  );
+  return Array.from({ length: Math.min(10, latestCycle) }, (_, index) => {
+    const cycle = latestCycle - index;
+    const known = dataByCycle.get(cycle);
+    if (known) return known;
+    const cycleStartDay = (cycle - 1) * 10 + 1;
+    const cycleEndDay = cycleStartDay + 9;
+    return {
+      cycle,
+      cycleStartDay,
+      cycleEndDay,
+      teamSize: 10,
+      dayCount: starSeaCycleElapsedDays({ cycleStartDay, cycleEndDay }),
+      totalScore: 0,
+      totalDamage: 0,
+      settled: cycleEndDay < Number(gameState.value.day || 1),
+      reward: null,
+      topTeams: [],
+      hasData: false
+    };
+  });
+});
+const starSeaCycleOptionList = computed(() => (Array.isArray(starSeaCycleOptions.value) ? starSeaCycleOptions.value : []));
+const selectedStarSeaCycleSummary = computed(() => {
+  const cycle = selectedDungeonDay.value?.public?.cycle;
+  return starSeaRecentCycles.value.find((record) => record.cycle === cycle)
+    || selectedDungeonDay.value?.public?.cycleSummary
+    || null;
+});
+const activeStarSeaCycle = computed(() => {
+  const selected = Number(selectedStarSeaCycle.value || 0);
+  const current = Number(selectedDungeonDay.value?.public?.cycle || 0);
+  return starSeaCycleOptions.value.find((record) => selected && Number(record.cycle) === selected)
+    || starSeaCycleOptions.value.find((record) => current && Number(record.cycle) === current)
+    || starSeaCycleOptions.value[0]
+    || null;
+});
+const activeStarSeaCycleTeams = computed(() => (activeStarSeaCycle.value?.topTeams || []).slice(0, 10));
+const activeStarSeaCycleTeamList = computed(() => (Array.isArray(activeStarSeaCycleTeams.value) ? activeStarSeaCycleTeams.value : []));
+const selectedStarSeaCycleReward = computed(() => selectedStarSeaCycleSummary.value?.reward || null);
+const starSeaTodayEquipmentName = computed(() => selectedStarSeaCycleReward.value?.itemName || "待结算");
 const starSeaTodayEquipmentItem = computed(() => {
-  const record = selectedDungeonDay.value?.public;
-  if (!record?.item) return null;
+  const record = selectedStarSeaCycleReward.value;
+  if (!record?.itemName) return null;
   const direct = record.itemId ? equipmentList.value.find((item) => item.id === record.itemId) : null;
-  const byName = equipmentList.value.find((item) => item.name === record.item);
+  const byName = equipmentList.value.find((item) => item.name === record.itemName);
   const item = direct || byName;
   if (item) return item;
   return {
     id: record.itemId || "",
-    name: record.item,
+    name: record.itemName,
     slot: record.itemSlot || "trinket",
     tier: record.itemTier || 1,
     tierName: record.tierName || equipmentTierName(record.itemTier || 1),
@@ -4328,19 +4488,113 @@ const starSeaTodayEquipmentItem = computed(() => {
   };
 });
 const starSeaTodayEquipmentText = computed(() => {
-  const record = selectedDungeonDay.value?.public;
-  if (!record?.item) return "本日未出现装备";
+  const record = selectedStarSeaCycleReward.value;
+  if (!record?.itemName) return "本期进行中，期末必结算";
+  if (record.reason === "equipment_exhausted") return `装备池已空 · 平分 ${record.share || 0}/人`;
+  if (record.reason === "auction_unsold") return `无人竞拍 · 平分 ${record.share || 0}/人`;
+  if (record.reason === "history_backfill") return `历史补录 · ${record.itemValue || 0} 灵石`;
   const tier = record.tierName ? `${record.tierName} · ` : "";
   const value = record.itemValue ? `${record.itemValue} 灵石` : "待竞拍";
   return `${tier}${value}`;
 });
 const starSeaAuctionText = computed(() => {
-  const record = selectedDungeonDay.value?.public;
-  if (!record?.item) return "未掉落或无人出价";
-  const price = record.itemValue ? ` · ${record.itemValue} 灵石` : "";
-  const dividend = record.auctionDividend ? ` · 分红 ${record.auctionDividend}/人` : "";
-  return `${record.itemOwner || "未知修士"}${price}${dividend}`;
+  const record = selectedStarSeaCycleReward.value;
+  if (!record?.itemName) return "本期尚未结算";
+  if (record.type === "auction") {
+    const price = record.itemValue ? ` · ${record.itemValue} 灵石` : "";
+    const dividend = record.dividend ? ` · 分红 ${record.dividend}/人` : "";
+    return `${record.winnerName || "未知修士"}${price}${dividend}`;
+  }
+  const share = record.share ? ` · 平分 ${record.share}/人` : "";
+  return `${record.itemValue || 0} 灵石${share}`;
 });
+function visibleStarSeaCycleSummary(cycle) {
+  const safeCycle = Number(cycle || 0);
+  if (!safeCycle) return null;
+  const records = dungeonDays.value
+    .map((day) => day?.public)
+    .filter((record) => record && Number(record.cycle) === safeCycle);
+  const selectedRecord = selectedDungeonDay.value?.public;
+  if (selectedRecord && Number(selectedRecord.cycle) === safeCycle && !records.some((record) => record.day === selectedRecord.day)) {
+    records.push(selectedRecord);
+  }
+  if (!records.length) return null;
+
+  const teamMap = new Map();
+  for (const record of records) {
+    for (const team of record.teams || []) {
+      const key = team.id || team.name;
+      const summary = teamMap.get(key) || {
+        id: team.id || key,
+        name: team.name || "猎妖小队",
+        rank: 0,
+        totalScore: 0,
+        totalDamage: 0,
+        totalSpirit: 0,
+        successes: 0,
+        battles: 0,
+        memberCount: 0
+      };
+      summary.totalScore += Number(team.score || 0);
+      summary.totalDamage += Number(team.damage || 0);
+      summary.totalSpirit += Number(team.spirit || 0);
+      summary.successes += team.success ? 1 : 0;
+      summary.battles += 1;
+      summary.memberCount = Math.max(summary.memberCount, (team.members || []).length);
+      teamMap.set(key, summary);
+    }
+  }
+
+  const topTeams = [...teamMap.values()]
+    .sort((a, b) => b.totalScore - a.totalScore || b.totalDamage - a.totalDamage || b.successes - a.successes)
+    .map((team, index) => ({ ...team, rank: index + 1 }))
+    .slice(0, 10);
+  const latest = records.sort((a, b) => Number(b.day || 0) - Number(a.day || 0))[0] || {};
+  const cycleStartDay = Number(latest.cycleStartDay || ((safeCycle - 1) * 10 + 1));
+  const cycleEndDay = Number(latest.cycleEndDay || (cycleStartDay + 9));
+  return {
+    cycle: safeCycle,
+    cycleStartDay,
+    cycleEndDay,
+    teamSize: latest.teamSize || 10,
+    dayCount: Math.max(records.length, starSeaCycleElapsedDays({ cycleStartDay, cycleEndDay })),
+    totalScore: topTeams.reduce((sum, team) => sum + team.totalScore, 0),
+    totalDamage: topTeams.reduce((sum, team) => sum + team.totalDamage, 0),
+    settled: false,
+    reward: null,
+    topTeams
+  };
+}
+function starSeaCycleForDay(day = 1) {
+  return Math.floor((Math.max(1, Number(day || 1)) - 1) / 10) + 1;
+}
+
+function starSeaCycleElapsedDays(cycle) {
+  const start = Number(cycle?.cycleStartDay || 0);
+  const end = Number(cycle?.cycleEndDay || 0);
+  const day = Math.floor(Number(gameState.value.day || selectedDungeonDay.value?.day || 1));
+  if (!start || !end || day < start) return 0;
+  return Math.min(10, Math.max(0, day - start + 1));
+}
+function starSeaCycleRewardText(cycle) {
+  const reward = cycle?.reward;
+  if (!reward?.settled) {
+    const ended = Number(gameState.value.day || 1) > Number(cycle?.cycleEndDay || 0);
+    return ended ? "装备奖励待补录" : "期末待结算";
+  }
+  if (reward.type === "auction") {
+    return `${reward.winnerName || "未知修士"}竞得${reward.tierName || ""}「${reward.itemName || "装备"}」 · ${reward.itemValue || 0} 灵石 · 分红 ${reward.dividend || 0}/人`;
+  }
+  if (reward.reason === "history_backfill") {
+    return `历史补录 · 掉落${reward.tierName || ""}「${reward.itemName || "装备"}」 · 价值 ${reward.itemValue || 0} 灵石`;
+  }
+  const reason = reward.reason === "equipment_exhausted" ? "装备池已空" : "无人竞拍";
+  return `${reason} · 按「${reward.itemName || "装备"}」价值 ${reward.itemValue || 0} 灵石平分 · ${reward.share || 0}/人`;
+}
+function starSeaCycleScorePercent(team, cycle) {
+  const max = Math.max(...((cycle?.topTeams || []).map((item) => Number(item.totalScore || 0))), 1);
+  return Math.max(5, Math.min(100, Math.round(Number(team?.totalScore || 0) / max * 100)));
+}
 const starSeaSectRanking = computed(() => {
   const map = new Map();
   for (const entry of selectedDungeonDay.value?.public?.top || []) {
@@ -4497,11 +4751,14 @@ const homeLogDayRecords = computed(() => {
   const flatLogs = gameState.value.log || [];
   const records = [];
   for (let day = currentDay; day >= firstDay; day -= 1) {
-    const logs = [
+    const logs = uniqueHomeLogs([
+      ...playerDailyProgressHomeLogs(day),
+      ...playerBreakthroughHomeLogs(day),
+      ...playerDungeonHomeLogs(day),
       ...playerDuelHomeLogs(day),
-      ...playerSectWarHomeLogs(day),
-      ...marketElixirHomeLogs(day)
-    ]
+      ...playerEquipmentHomeLogs(day),
+      ...playerActionHomeLogs(day)
+    ])
       .sort((a, b) => (a.order || 0) - (b.order || 0) || String(a.text).localeCompare(String(b.text), "zh-Hans-CN"))
       .slice(0, 30);
     const dayFallback = flatLogs.find((entry) => Number(entry.day) === day);
@@ -4559,11 +4816,17 @@ const playerRank = computed(() => {
   const index = powerRanking.value.findIndex((item) => item.id === "player");
   return index >= 0 ? index + 1 : "-";
 });
+const playerDuelRankPosition = computed(() => {
+  if (typeof homeSummary.value.playerDuelRankPosition === "number") return homeSummary.value.playerDuelRankPosition;
+  return personDuelRankPosition(player.value);
+});
+const playerDuelRankText = computed(() => homeSummary.value.playerDuelRankText || duelRankText(withDuelRank(player.value)));
 const todayDuelCount = computed(() => {
   if (typeof homeSummary.value.todayDuelCount === "number") return homeSummary.value.todayDuelCount;
+  const playerId = player.value?.id || "player";
   return todaysDuelRecord.value?.matches?.filter((match) => {
     const ids = [match.left?.id, match.right?.id, match.winner?.id, match.loser?.id].filter(Boolean);
-    return ids.includes("player");
+    return ids.includes(playerId);
   }).length || 0;
 });
 const provinceWarRecords = computed(() => gameState.value.provinceWars || []);
@@ -4691,12 +4954,14 @@ const filteredProvinceWars = computed(() => {
 });
 const selectedProvinceWar = computed(() => selectedProvinceWarDayRecord.value?.wars.find((war) => war.id === selectedProvinceWarId.value));
 const selectedProvinceWarDate = computed(() => selectedProvinceWarDayRecord.value?.date || dateForDay(selectedProvinceWarDay.value));
-watch(homeLogDayRecords, (records) => {
+watch(homeLogDayRecords, (records, previousRecords) => {
   if (!records.length) {
     selectedHomeLogDay.value = null;
     return;
   }
-  if (!records.some((record) => record.day === selectedHomeLogDay.value)) {
+  const previousNewestDay = previousRecords?.[0]?.day;
+  const wasFollowingNewestDay = selectedHomeLogDay.value == null || selectedHomeLogDay.value === previousNewestDay;
+  if (wasFollowingNewestDay || !records.some((record) => record.day === selectedHomeLogDay.value)) {
     selectedHomeLogDay.value = records[0].day;
   }
 }, { immediate: true });
@@ -4706,7 +4971,17 @@ const duelDayOptions = computed(() => {
   const days = new Set([gameState.value.day, selectedDuelDay.value, ...duelRecords.value.map((record) => record.day)]);
   return [...days].filter((day) => day >= 1 && day <= gameState.value.day).sort((a, b) => b - a);
 });
-const duelDateOptions = computed(() => duelDayOptions.value.map((day) => ({ day, date: dateForDay(day) })));
+const duelDateMin = computed(() => dateForDay(1));
+const duelDateMax = computed(() => currentDate.value);
+const selectedDuelCalendarDate = computed({
+  get() {
+    return dateForDay(selectedDuelDay.value || gameState.value.day);
+  },
+  set(value) {
+    selectedDuelDay.value = clampDay(dayForDate(value));
+    clearBattleReplay();
+  }
+});
 const selectedDuelRecord = computed(() => duelRecords.value.find((record) => record.day === selectedDuelDay.value));
 const selectedDuelDate = computed(() => selectedDuelRecord.value?.date || dateForDay(selectedDuelDay.value));
 const todaysDuelRecord = computed(() => duelRecords.value.find((record) => record.day === gameState.value.day));
@@ -4836,7 +5111,7 @@ const shopGroupMeta = [
   { id: "xp", label: "修为丹", note: "只提升现实任务获得的修为，不影响其他来源。" },
   { id: "breakthrough", label: "破境丹", note: "只对下一次突破生效，成败都会消耗药力。" },
   { id: "attempt", label: "续脉丹", note: "增加今日可突破次数，价格明显高于破境丹。" },
-  { id: "permanent", label: "淬体丹", note: "永久提升基础属性，药性上限为 20 枚。" }
+  { id: "permanent", label: "淬体丹", note: "永久提升基础属性，药性上限为 100 枚。" }
 ];
 const shopGroups = computed(() => shopGroupMeta
   .map((group) => ({
@@ -5346,6 +5621,209 @@ function withSectWarDisplay(sect, war) {
   };
 }
 
+function uniqueHomeLogs(logs = []) {
+  const seen = new Set();
+  return logs.filter((entry) => {
+    const key = [entry.category || "", entry.day || "", entry.time || "", entry.text || ""].join("|");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function playerDailyProgressHomeLogs(day) {
+  const record = (player.value?.dailyRecords || []).find((item) => Number(item.day) === Number(day));
+  if (!record) return [];
+  const xp = Number(record.xp || record.passiveXp || 0);
+  const provinceSpirit = Number(record.provinceSpirit || 0);
+  const duelSeasonReward = Number(record.duelSeasonReward || 0);
+  const progressText = dailyProgressText(record);
+  if (!xp && !provinceSpirit && !duelSeasonReward && !progressText) return [];
+  const gains = [
+    progressText || (xp ? `经验 +${xp}` : ""),
+    provinceSpirit ? `宗门灵石包 +${provinceSpirit}` : "",
+    duelSeasonReward ? `切磋赛季奖励 +${duelSeasonReward}` : ""
+  ].filter(Boolean).join("，");
+  return [{
+    day: record.day || day,
+    date: record.date || dateForDay(day),
+    time: logEntryMinute(record.time || record.createdAt || record.updatedAt) || defaultHomeLogMinute(record),
+    order: 120,
+    category: "progress",
+    type: "good",
+    text: `修行入账，${gains}。`
+  }];
+}
+
+function dailyProgressText(record) {
+  const xp = Number(record?.xp || record?.passiveXp || 0);
+  const provinceXp = Number(record?.provinceXp || record?.bonusXp || 0);
+  const hasRecoveryFields = Object.prototype.hasOwnProperty.call(record || {}, "hpRecovery")
+    || Object.prototype.hasOwnProperty.call(record || {}, "manaRecovery");
+  if (xp || hasRecoveryFields) {
+    const hpRecovery = Number(record?.hpRecovery || 0);
+    const manaRecovery = Number(record?.manaRecovery || 0);
+    const parts = [
+      xp ? `经验 +${xp}${provinceXp ? `（宗门资源 +${provinceXp}）` : ""}` : "",
+      hpRecovery ? `气血恢复 +${hpRecovery}` : "",
+      manaRecovery ? `法力恢复 +${manaRecovery}` : ""
+    ].filter(Boolean);
+    if (parts.length) return parts.join("，");
+  }
+  const note = String(record?.note || "").trim();
+  const progress = note.split("；副本：")[0].replace(/^每日修行：/, "").trim();
+  if (progress) return normalizeDailyProgressText(progress);
+  return xp ? `经验 +${xp}` : "";
+}
+
+function normalizeDailyProgressText(text) {
+  return String(text || "")
+    .replace(/(^|，)血量 \+(\d+)/g, "$1气血恢复 +$2")
+    .replace(/(^|，)法力 \+(\d+)/g, "$1法力恢复 +$2")
+    .split("，")
+    .map((part) => part.trim())
+    .filter((part) => !/(?:气血恢复|法力恢复) \+0$/.test(part))
+    .join("，");
+}
+
+function playerBreakthroughHomeLogs(day) {
+  return (player.value?.breakthroughs || [])
+    .filter((record) => Number(record.day) === Number(day))
+    .map((record, index) => {
+      const success = record.success !== false;
+      const chance = typeof record.chance === "number" ? `，成功率 ${formatPercent(record.chance)}` : "";
+      const growth = growthCompactText(record.growth);
+      return {
+        day: record.day || day,
+        date: record.date || dateForDay(day),
+        time: "",
+        order: 240 + index,
+        category: "breakthrough",
+        type: success ? "good" : "bad",
+        text: `突破${success ? "成功" : "失败"}，${record.from || "当前境界"} → ${record.to || "下一境界"}${chance}${growth ? `，${growth}` : ""}。`
+      };
+    });
+}
+
+function playerDungeonHomeLogs(day) {
+  const historyLogs = (player.value?.dungeonHistory || [])
+    .filter((record) => Number(record.day) === Number(day))
+    .map((record, index) => {
+      const success = dungeonRecordSucceeded(record);
+      const spirit = Number(record.spirit || 0);
+      const item = record.item ? `，获得${record.tierName || "法器"}「${record.item}」` : "";
+      const result = record.result ? `，${record.result}` : "";
+      return {
+        day: record.day || day,
+        date: record.date || dateForDay(day),
+        time: logEntryMinute(record.foughtAt) || "",
+        order: 520 + index,
+        category: "dungeon",
+        type: success ? "good" : "bad",
+        text: `副本${success ? "告捷" : "受挫"}，${record.name || dungeonRecordTitle(record)}${result}${spirit ? `，获得 ${spirit} 灵石` : ""}${item}。`
+      };
+    });
+  if (historyLogs.length) return historyLogs;
+  const dailyRecord = (player.value?.dailyRecords || []).find((item) => Number(item.day) === Number(day));
+  const summary = dailyDungeonSummaryText(dailyRecord);
+  if (!summary) return [];
+  const dungeonSpirit = Math.max(0, Number(dailyRecord?.spirit || 0) - Number(dailyRecord?.provinceSpirit || 0) - Number(dailyRecord?.duelSeasonReward || 0));
+  return [{
+    day: dailyRecord.day || day,
+    date: dailyRecord.date || dateForDay(day),
+    time: "",
+    order: 520,
+    category: "dungeon",
+    type: recordTextFailed(summary) ? "bad" : "good",
+    text: `副本结算，${summary}${dungeonSpirit ? `，获得 ${dungeonSpirit} 灵石` : ""}。`
+  }];
+}
+
+function dailyDungeonSummaryText(record) {
+  const note = String(record?.note || "");
+  const match = note.match(/副本：([^；。]+)/);
+  return match?.[1]?.trim() || "";
+}
+
+function playerEquipmentHomeLogs(day) {
+  const playerId = player.value?.id || "player";
+  const drops = (gameState.value.equipmentTransfers || [])
+    .filter((drop) => Number(drop.day) === Number(day) && drop.itemName)
+    .slice(0, 12);
+  const logs = drops.slice(0, 6).map((drop, index) => {
+    const kind = equipmentDropKind(drop);
+    const source = equipmentDropSource(drop);
+    const isPlayerDrop = [drop.winnerId, drop.receiverId].includes(playerId);
+    const owner = isPlayerDrop ? "你" : (drop.winnerName || drop.receiverName || "未知修士");
+    const action = kind === "steal" ? "夺得" : kind === "auction" ? "竞得" : "获得";
+    const loser = kind === "steal" && drop.loserName ? `，来自 ${drop.loserName}` : "";
+    return {
+      day: drop.day || day,
+      date: drop.date || dateForDay(day),
+      time: "",
+      order: 760 + index,
+      category: "equipment",
+      type: "good",
+      text: `装备${kind === "steal" ? "流转" : "掉落"}，${owner}在 ${source} ${action}${drop.tierName || "法器"}「${drop.itemName}」 · ${equipmentDropSlotName(drop)} · ${equipmentDropStatName(drop)} +${formatPercent(equipmentDropBonus(drop))}${loser}。`
+    };
+  });
+  if (drops.length > 6) {
+    logs.push({
+      day,
+      date: dateForDay(day),
+      time: "",
+      order: 790,
+      category: "equipment",
+      type: "good",
+      text: `今日装备流转共 ${drops.length} 件，更多可在装备页查看。`
+    });
+  }
+  return logs;
+}
+
+function playerActionHomeLogs(day) {
+  return (gameState.value.log || [])
+    .filter((entry) => Number(entry.day) === Number(day))
+    .filter((entry) => isPlayerHomeActionLog(entry?.text || ""))
+    .filter((entry) => !isDuplicateAutoBreakthroughSuccessLog(entry?.text || ""))
+    .map((entry, index) => ({
+      ...entry,
+      category: playerHomeActionCategory(entry?.text || ""),
+      order: 3000 + index
+    }));
+}
+
+function isDuplicateAutoBreakthroughSuccessLog(text = "") {
+  return String(text || "").includes("自动突破至");
+}
+
+function isPlayerHomeActionLog(text = "") {
+  const value = String(text || "");
+  return value.startsWith("在坊市购得「")
+    || value.startsWith("售出「")
+    || value.startsWith("服下「")
+    || value.startsWith("当前修为丹药力更强")
+    || value.startsWith("下次突破最多")
+    || value.startsWith("今日经脉承载")
+    || value.startsWith("灵石不足")
+    || value.startsWith("完成「")
+    || value.startsWith("经验圆满")
+    || value.startsWith("你通关")
+    || value.includes("血量见底后撤出")
+    || value.includes("你在回合战中取胜")
+    || /^完成.+任务，获得/.test(value);
+}
+
+function playerHomeActionCategory(text = "") {
+  const value = String(text || "");
+  if (value.startsWith("在坊市购得「") || value.startsWith("售出「") || value.startsWith("服下「") || value.includes("丹药")) return "elixir";
+  if (value.startsWith("完成「") || /^完成.+任务，获得/.test(value)) return "task";
+  if (value.startsWith("经验圆满")) return "breakthrough";
+  if (value.startsWith("你通关") || value.includes("血量见底后撤出")) return "dungeon";
+  if (value.includes("你在回合战中取胜")) return "duel";
+  return "note";
+}
+
 function playerSectWarHomeLogs(day) {
   const sectName = player.value?.sect || gameState.value.sect?.name || "";
   if (!sectName) return [];
@@ -5388,26 +5866,35 @@ function playerDuelHomeLogs(day) {
     .filter((match) => match.type !== "bye")
     .filter((match) => [match.left?.id, match.right?.id, match.winner?.id, match.loser?.id].includes(playerId))
     .map((match) => {
-      const won = match.winner?.id === playerId;
+      const participantIds = [match.left?.id, match.right?.id, match.winner?.id, match.loser?.id];
+      const isPlayerMatch = participantIds.includes(playerId);
+      const playerWon = match.winner?.id === playerId;
+      const winnerName = match.winner?.name || matchPerson(match.winner)?.name || "未知胜者";
+      const loserName = match.loser?.name || matchPerson(match.loser)?.name || "未知对手";
       const opponentRef = match.left?.id === playerId ? match.right : match.left;
-      const opponent = matchPerson(opponentRef);
-      const delta = won ? match.winnerScoreDelta : match.loserScoreDelta;
+      const opponent = isPlayerMatch ? matchPerson(opponentRef) : null;
+      const delta = isPlayerMatch
+        ? (playerWon ? match.winnerScoreDelta : match.loserScoreDelta)
+        : match.winnerScoreDelta;
       const scoreText = typeof delta === "number" ? `积分 ${delta > 0 ? "+" : ""}${delta}` : "积分未记录";
-      const rankText = duelRankText(opponent);
-      const opponentName = opponent?.name || opponentRef?.name || "未知对手";
+      const text = isPlayerMatch
+        ? `切磋${playerWon ? "胜利" : "失败"}，对战${opponent?.name || opponentRef?.name || "未知对手"}，段位${duelRankText(opponent)}，${scoreText}。`
+        : `切磋战报，${winnerName}战胜${loserName}，${scoreText}。`;
       return {
         day: record.day || day,
         date: record.date || dateForDay(day),
-        time: match.time || "",
-        order: 1000 + Number(match.order || 0),
+        time: match.time || logEntryMinute(record.createdAt) || "",
+        order: (isPlayerMatch ? 900 : 1000) + Number(match.order || 0),
         category: "duel",
-        type: won ? "good" : "bad",
-        text: `切磋${won ? "胜利" : "失败"}，对战${opponentName}，段位${rankText}，${scoreText}。`
+        type: isPlayerMatch && !playerWon ? "bad" : "good",
+        text
       };
     });
   if (matchLogs.length) return matchLogs;
   return (player.value?.duelHistory || [])
-    .filter((entry) => Number(entry.day) === Number(day) || String(entry.foughtAt || "").startsWith(dateForDay(day)))
+    .filter((entry) => entry.day != null
+      ? Number(entry.day) === Number(day)
+      : String(entry.foughtAt || "").startsWith(dateForDay(day)))
     .map((entry, index) => {
       const won = entry.result === "胜";
       const scoreText = typeof entry.scoreDelta === "number" ? `积分 ${entry.scoreDelta > 0 ? "+" : ""}${entry.scoreDelta}` : "积分未记录";
@@ -5421,20 +5908,6 @@ function playerDuelHomeLogs(day) {
         text: `切磋${won ? "胜利" : "失败"}，对战${entry.opponent || "未知对手"}，段位${entry.opponentRankName || "未记录"}，${scoreText}。`
       };
     });
-}
-
-function marketElixirHomeLogs(day) {
-  return (gameState.value.log || [])
-    .filter((entry) => Number(entry.day) === Number(day))
-    .filter((entry) => {
-      const text = entry?.text || "";
-      return text.startsWith("在坊市购得「") || text.startsWith("售出「");
-    })
-    .map((entry, index) => ({
-      ...entry,
-      category: "elixir",
-      order: 3000 + index
-    }));
 }
 
 function sectWarStats(sect) {
@@ -6946,9 +7419,9 @@ function logEntryMinute(time = "") {
 }
 
 function logEntryTimeText(entry) {
-  const date = entry?.date || currentDate.value;
   const minute = logEntryMinute(entry?.time);
-  return minute ? `${date} ${minute}` : date;
+  const date = shortDateText(entry?.date || dateForDay(entry?.day || gameState.value.day));
+  return minute ? `${date} · ${minute}` : date;
 }
 
 function logEntryDateTime(entry) {
@@ -6957,7 +7430,15 @@ function logEntryDateTime(entry) {
   return minute ? `${date}T${minute}` : date;
 }
 
+function defaultHomeLogMinute(record) {
+  const note = String(record?.note || "");
+  if (note.includes("每日修行") || note.includes("现实任务")) return "00:00";
+  return "";
+}
+
 function logTone(entry) {
+  if (entry?.type === "bad") return "loss";
+  if (entry?.type === "good") return "win";
   const text = entry?.text || "";
   if (text.includes("失败") || text.includes("败") || text.includes("未能")) return "loss";
   return "win";
@@ -6968,7 +7449,12 @@ function logCategory(entry) {
   const category = entry?.category || "";
   if (category === "duel" || text.startsWith("切磋")) return { id: "duel", mark: "斗", label: "切磋" };
   if (category === "siege" || text.includes("攻城") || text.includes("守城")) return { id: "siege", mark: "城", label: "攻守城" };
-  if (category === "elixir" || text.startsWith("在坊市购得「") || text.startsWith("售出「")) return { id: "elixir", mark: "丹", label: "丹药买卖" };
+  if (category === "dungeon" || text.startsWith("副本") || text.startsWith("你通关")) return { id: "dungeon", mark: "副", label: "副本" };
+  if (category === "breakthrough" || text.startsWith("突破") || text.startsWith("经验圆满")) return { id: "breakthrough", mark: "破", label: "突破" };
+  if (category === "equipment" || text.startsWith("装备掉落")) return { id: "equipment", mark: "装", label: "装备" };
+  if (category === "progress" || text.startsWith("修行入账")) return { id: "progress", mark: "修", label: "修行收益" };
+  if (category === "task" || text.startsWith("完成「")) return { id: "task", mark: "务", label: "现实任务" };
+  if (category === "elixir" || text.startsWith("在坊市购得「") || text.startsWith("售出「") || text.startsWith("服下「")) return { id: "elixir", mark: "丹", label: "丹药买卖服用" };
   return { id: "note", mark: "记", label: "记录" };
 }
 
@@ -7051,6 +7537,19 @@ function addDays(dateText, offset) {
 
 function dateForDay(day) {
   return addDays(gameState.value.calendarStartDate || gameState.value.lastSettlementDate, Math.max(0, Number(day || 1) - 1));
+}
+
+function dayForDate(dateText) {
+  const startTime = utcDateValue(gameState.value.calendarStartDate || gameState.value.lastSettlementDate);
+  const targetTime = utcDateValue(dateText);
+  if (startTime === null || targetTime === null) return gameState.value.day;
+  return Math.floor((targetTime - startTime) / 86400000) + 1;
+}
+
+function utcDateValue(dateText) {
+  const [year, month, day] = String(dateText || "").split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return Date.UTC(year, month - 1, day);
 }
 
 function displayDate(record) {
@@ -7182,8 +7681,43 @@ function duelRecordMeta(record) {
   if (record.opponentRankName) parts.push(record.opponentRankName);
   if (typeof record.scoreDelta === "number") parts.push(`积分 ${record.scoreDelta > 0 ? "+" : ""}${record.scoreDelta}`);
   else parts.push(hasReplay(record) ? "可回放" : "无回放");
+  const scoreAfter = duelRecordScoreAfter(record);
+  if (scoreAfter !== null) parts.push(`当日积分 ${scoreAfter}`);
   if (!hasReplay(record)) parts.push("七天外无回放");
   return parts.join(" · ");
+}
+
+function duelRecordScoreAfter(record) {
+  if (typeof record?.scoreAfter === "number") return record.scoreAfter;
+  if (typeof record?.scoreBefore === "number" && typeof record?.scoreDelta === "number") {
+    return clampDuelRecordScore(record.scoreBefore + record.scoreDelta);
+  }
+  const inferredScore = inferDuelRecordScoreAfter(record);
+  if (inferredScore !== null) return inferredScore;
+  return null;
+}
+
+function inferDuelRecordScoreAfter(record) {
+  const person = selectedPerson.value;
+  const records = (person?.duelHistory || []).filter((entry) => {
+    const entrySeason = Number(entry.season || duelSeasonOfDay(entry.day || gameState.value.day));
+    const recordSeason = Number(record?.season || duelSeasonOfDay(record?.day || gameState.value.day));
+    return entrySeason === recordSeason;
+  });
+  if (!records.length || typeof person?.duelSeason?.score !== "number") return null;
+  let runningScore = clampDuelRecordScore(person.duelSeason.score);
+  for (const entry of records) {
+    const scoreAfter = runningScore;
+    if (entry === record) return scoreAfter;
+    if (typeof entry.scoreDelta === "number") runningScore = clampDuelRecordScore(runningScore - entry.scoreDelta);
+  }
+  return null;
+}
+
+function clampDuelRecordScore(score) {
+  const maxScore = Number(duelSeasonInfo.value?.maxScore || 0);
+  const value = Number(score) || 0;
+  return maxScore > 0 ? Math.max(0, Math.min(maxScore, value)) : Math.max(0, value);
 }
 
 function dungeonRecordTitle(record) {
@@ -7265,6 +7799,27 @@ function openDetailFromCurrent(nextView) {
     && last.selectedSectName === current.selectedSectName;
   if (!sameAsLast && current.detailView !== nextView) detailReturnStack.value.push(current);
   detailView.value = nextView;
+}
+
+async function openPlayerSectDetail() {
+  const sectName = playerSectName.value;
+  if (!sectName) return;
+  const alreadyOpen = activeTab.value === "rank" && detailView.value === "sect" && selectedSectName.value === sectName;
+  closeBattleReplay();
+  if (!alreadyOpen) {
+    const current = captureDetailReturn();
+    const last = detailReturnStack.value[detailReturnStack.value.length - 1];
+    const sameAsLast = last
+      && last.activeTab === current.activeTab
+      && last.detailView === current.detailView
+      && last.selectedPersonId === current.selectedPersonId
+      && last.selectedSectName === current.selectedSectName;
+    if (!sameAsLast) detailReturnStack.value.push(current);
+  }
+  selectedSectName.value = sectName;
+  activeTab.value = "rank";
+  detailView.value = "sect";
+  if (state.value && (!sectByName(sectName) || fullStateStale.value || !hasFullCultivatorRoster())) await ensureFullState();
 }
 
 function returnFromDetail() {
@@ -7386,7 +7941,30 @@ async function openReplay(record, fallbackRecord = null, target = captureBattleR
 }
 
 async function openStarSeaTeamReplay(team) {
-  await openReplay(team, selectedDungeonDay.value?.public || null, captureBattleReturn());
+  await openReplay(team, null, captureBattleReturn());
+}
+
+function starSeaTeamForMember(entry) {
+  const teams = selectedDungeonDay.value?.public?.teams || [];
+  if (!entry || !teams.length) return null;
+  return teams.find((team) => entry.teamName && team.name === entry.teamName)
+    || teams.find((team) => entry.teamRank && Number(team.rank) === Number(entry.teamRank))
+    || teams.find((team) => (team.members || []).some((member) => member.id === entry.id))
+    || null;
+}
+
+function hasStarSeaMemberReplay(entry) {
+  const team = starSeaTeamForMember(entry);
+  return Boolean(team && hasReplay(team));
+}
+
+async function openStarSeaMemberReplay(entry) {
+  const team = starSeaTeamForMember(entry);
+  if (!team) {
+    error.value = `未找到${entry?.name || "该修士"}所在队伍的战报。`;
+    return;
+  }
+  await openStarSeaTeamReplay(team);
 }
 
 function returnFromBattle() {
@@ -7671,6 +8249,11 @@ function openPersonById(id) {
 function openProgression() {
   selectedRealmStage.value = derived.value.currentRealmInfo?.stage || selectedRealmStage.value;
   cultivationSubTab.value = "progression";
+  activeTab.value = "cultivation";
+}
+
+function openRootAttributes() {
+  cultivationSubTab.value = "attributes";
   activeTab.value = "cultivation";
 }
 
@@ -8173,7 +8756,15 @@ function personEffectiveStats(person) {
 
 function tomorrowXpText(person) {
   const xp = personInsight(person).tomorrowXp;
-  return `基础 ${xp.baseXp} × 灵根 ${formatPercent(xp.rootMultiplier)} × 宗门 ${formatPercent(xp.sectMultiplier)} = ${xp.total}`;
+  return `基础 ${xp.baseXp} × 灵根 ${formatPercent(xp.rootMultiplier)} × 宗门 ${formatPercent(xp.sectMultiplier)} = ${tomorrowXpTotal(person)}`;
+}
+
+function tomorrowXpTotal(person) {
+  const xp = personInsight(person).tomorrowXp;
+  if (typeof xp.baseXp === "number" && typeof xp.rootMultiplier === "number" && typeof xp.sectMultiplier === "number") {
+    return Math.floor(xp.baseXp * xp.rootMultiplier * xp.sectMultiplier);
+  }
+  return Math.floor(Number(xp.total) || 0);
 }
 
 function breakthroughPartsText(person) {
@@ -8540,6 +9131,15 @@ function applyState(nextState, options = {}) {
   if (state.value && nextState?.__scope === "home") saveCachedState(state.value);
   if (!["home", "lite"].includes(nextState?.__scope)) fullStateStale.value = false;
   else fullStateStale.value = true;
+  if (
+    nextState?.__scope === "home"
+    && typeof nextState.home?.playerDuelRankPosition !== "number"
+    && !(state.value?.npcs || []).length
+  ) {
+    ensureFullState().catch((err) => {
+      error.value = err.message;
+    });
+  }
   if (state.value && detailView.value === "person" && selectedPersonId.value) ensurePersonDetail(selectedPersonId.value);
 }
 
@@ -9155,6 +9755,10 @@ watch([adminSearch, adminMode], () => {
 
 watch([detailView, selectedPersonId], () => {
   if (detailView.value === "person") ensurePersonDetail(selectedPersonId.value);
+});
+
+watch(() => selectedDungeonDay.value?.public?.cycle, (cycle) => {
+  selectedStarSeaCycle.value = cycle || null;
 });
 
 watch([enabledTaskDefinitions, () => taskForm.category], () => {

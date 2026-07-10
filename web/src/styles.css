@@ -25,7 +25,7 @@ body {
     radial-gradient(circle at 86% 18%, rgba(183, 121, 31, .16), transparent 24rem),
     linear-gradient(135deg, #eadfc6 0%, #f9f4e7 48%, #dce7e1 100%);
   background-size: 100% 100%, auto, auto, auto;
-  font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+  font-family: Arial, "Helvetica Neue", "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
   letter-spacing: 0;
 }
 
@@ -250,7 +250,7 @@ button {
   border-radius: 50%;
   background: linear-gradient(135deg, #0f766e, #1f4f46);
   color: #fff7db;
-  font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+  font-family: Arial, "Helvetica Neue", "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
   font-size: 14px;
   font-weight: 900;
 }
@@ -1215,6 +1215,41 @@ button {
   justify-content: flex-end;
 }
 
+.dungeon-date-select {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid rgba(120, 91, 43, .18);
+  border-radius: 7px;
+  background: rgba(255, 253, 246, .74);
+}
+
+.dungeon-date-select span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.dungeon-date-select input[type="date"] {
+  width: 132px;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: #3b1f0c;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 900;
+  outline: none;
+}
+
+.dungeon-date-select input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: .72;
+}
+
 .dungeon-record-panel {
   margin-top: 12px;
 }
@@ -1486,7 +1521,7 @@ button {
   position: relative;
   z-index: 1;
   color: color-mix(in srgb, var(--icon-c) 82%, #28150a);
-  font-family: "Noto Serif SC", serif;
+  font-family: Arial, "Helvetica Neue", "Noto Serif SC", serif;
   font-size: 18px;
   font-weight: 800;
   line-height: 1;
@@ -2302,20 +2337,145 @@ button {
 }
 
 .compact-monster-strip .monster-chip.with-emblem {
-  grid-template-columns: 48px minmax(0, 1fr);
+  grid-template-columns: 62px minmax(0, 1fr);
   align-items: center;
   align-content: center;
   height: 100%;
+  padding: 6px;
+}
+
+.compact-monster-strip .monster-chip.star-sea-monster-summary {
+  position: relative;
+  isolation: isolate;
+  grid-template-columns: 76px minmax(0, 1fr);
+  min-height: 104px;
+  overflow: hidden;
+  gap: 11px;
+  border-color: rgba(15, 118, 110, .34);
+  background:
+    linear-gradient(135deg, rgba(13, 32, 30, .96), rgba(33, 42, 34, .92) 52%, rgba(92, 58, 22, .82)),
+    radial-gradient(circle at 8% 16%, rgba(76, 191, 178, .28), transparent 9rem);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 248, 214, .12),
+    0 12px 24px rgba(35, 29, 18, .16);
+}
+
+.compact-monster-strip .monster-chip.star-sea-monster-summary::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(90deg, rgba(245, 158, 11, .18), transparent 34%),
+    radial-gradient(circle at 96% 0, rgba(255, 247, 214, .2), transparent 8rem);
+  opacity: .86;
+}
+
+.compact-monster-strip .monster-chip.star-sea-monster-summary::after {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  z-index: -1;
+  border: 1px solid rgba(255, 248, 214, .16);
+  border-radius: 6px;
+  pointer-events: none;
 }
 
 .compact-monster-strip .monster-chip.with-emblem .monster-emblem.sm {
-  --monster-size: 46px;
+  --monster-size: 60px;
+}
+
+.compact-monster-strip .monster-chip.star-sea-monster-summary .monster-emblem.sm {
+  --monster-size: 68px;
+  border-radius: 9px;
+  box-shadow:
+    0 0 0 1px rgba(255, 248, 214, .28),
+    0 10px 20px rgba(0, 0, 0, .26),
+    0 0 18px hsl(var(--monster-hue, 190) 72% 48% / .3);
 }
 
 .compact-monster-strip .monster-chip.with-emblem > span {
   min-width: 0;
   display: grid;
   gap: 2px;
+}
+
+.star-sea-monster-body {
+  align-self: stretch;
+  align-content: center;
+  gap: 6px !important;
+}
+
+.star-sea-monster-title {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.star-sea-monster-title strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #fff8dd;
+  font-size: 16px !important;
+  line-height: 1.22 !important;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, .42);
+  white-space: nowrap;
+}
+
+.star-sea-monster-title em {
+  min-width: max-content;
+  border: 1px solid rgba(245, 158, 11, .32);
+  border-radius: 999px;
+  color: #ffe8a8;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+  line-height: 1;
+  padding: 4px 7px;
+  background: rgba(245, 158, 11, .16);
+}
+
+.star-sea-monster-root {
+  color: rgba(255, 248, 214, .74) !important;
+  font-size: 12px !important;
+  font-weight: 800;
+  line-height: 1.2 !important;
+}
+
+.star-sea-monster-stats-mini {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.star-sea-monster-stats-mini small {
+  display: grid !important;
+  gap: 2px;
+  min-width: 0;
+  border: 1px solid rgba(255, 248, 214, .14);
+  border-radius: 6px;
+  padding: 4px 5px;
+  background: rgba(255, 253, 246, .09);
+  line-height: 1.1 !important;
+}
+
+.star-sea-monster-stats-mini small span {
+  color: rgba(255, 248, 214, .62) !important;
+  font-size: 10px !important;
+  line-height: 1 !important;
+}
+
+.star-sea-monster-stats-mini small b {
+  min-width: 0;
+  overflow: hidden;
+  color: #fff8dd;
+  font-size: 11px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .star-sea-summary-chip span,
@@ -2384,6 +2544,188 @@ button {
 .sea-team-rank,
 .sea-personal-rank {
   min-width: 0;
+}
+
+.sea-cycle-history {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.star-sea-cycle-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.star-sea-cycle-tabs button {
+  min-width: max-content;
+  padding: 5px 10px;
+  border: 1px solid rgba(120, 91, 43, .2);
+  border-radius: 999px;
+  background: rgba(255, 253, 246, .72);
+  color: #5b4630;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.star-sea-cycle-tabs button span {
+  margin-left: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.star-sea-cycle-tabs button.empty {
+  border-style: dashed;
+  color: rgba(91, 70, 48, .72);
+}
+
+.star-sea-cycle-tabs button.active {
+  border-color: rgba(15, 118, 110, .46);
+  background: linear-gradient(135deg, rgba(15, 118, 110, .16), rgba(245, 158, 11, .14));
+  color: #173f3a;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .42);
+}
+
+.star-sea-cycle-board {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(120, 91, 43, .18);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(255, 253, 246, .9), rgba(235, 222, 183, .62)),
+    radial-gradient(circle at 0 0, rgba(15, 118, 110, .12), transparent 16rem);
+}
+
+.star-sea-cycle-board-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid rgba(120, 91, 43, .14);
+  padding-bottom: 9px;
+}
+
+.star-sea-cycle-board-head > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.star-sea-cycle-board-head strong {
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.star-sea-cycle-board-head span {
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+
+.star-sea-cycle-board-head em {
+  min-width: max-content;
+  max-width: 42%;
+  color: #7a4b13;
+  font-size: 12.5px;
+  font-weight: 800;
+  font-style: normal;
+  line-height: 1.35;
+  text-align: right;
+}
+
+.star-sea-cycle-board-list {
+  display: grid;
+  gap: 6px;
+}
+
+.star-sea-cycle-empty {
+  display: grid;
+  gap: 4px;
+  place-items: center;
+  min-height: 86px;
+  border: 1px dashed rgba(120, 91, 43, .22);
+  border-radius: 8px;
+  color: var(--muted);
+  background: rgba(255, 253, 246, .46);
+  text-align: center;
+}
+
+.star-sea-cycle-empty b {
+  color: var(--ink);
+}
+
+.star-sea-cycle-team-row {
+  display: grid;
+  grid-template-columns: 28px minmax(120px, .82fr) minmax(160px, 1fr) 74px;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  min-height: 32px;
+  padding: 6px 8px;
+  border: 1px solid rgba(120, 91, 43, .13);
+  border-radius: 7px;
+  background: rgba(255, 253, 246, .7);
+}
+
+.star-sea-cycle-team-row:first-child {
+  border-color: rgba(183, 121, 31, .34);
+  background: linear-gradient(135deg, rgba(255, 248, 221, .96), rgba(235, 222, 183, .72));
+}
+
+.cycle-rank {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(15, 118, 110, .12);
+  color: #173f3a;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.star-sea-cycle-team-row:first-child .cycle-rank {
+  background: #b7791f;
+  color: #fffaf0;
+}
+
+.cycle-team-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cycle-score-bar {
+  position: relative;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(120, 91, 43, .13);
+}
+
+.cycle-score-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #0f766e, #d99a2b);
+}
+
+.star-sea-cycle-team-row strong {
+  color: #3b1f0c;
+  font-size: 13px;
+  font-weight: 900;
+  text-align: right;
 }
 
 .card {
@@ -7405,7 +7747,7 @@ button.event {
 .rank-medal > span {
   display: block;
   color: #fffaf0;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: Arial, "Helvetica Neue", Georgia, "Times New Roman", serif;
   font-size: 18px;
   font-weight: 800;
   line-height: 1;
@@ -8066,7 +8408,7 @@ button.event {
   font-size: 20px;
   font-weight: 900;
   line-height: 1;
-  font-family: "KaiTi", "STKaiti", "Microsoft YaHei", serif;
+  font-family: Arial, "Helvetica Neue", "KaiTi", "STKaiti", "Microsoft YaHei", serif;
   box-shadow:
     inset 0 0 0 2px rgba(255, 255, 255, .16),
     0 0 20px color-mix(in srgb, var(--root-color, #0f766e) 70%, transparent);
@@ -8300,7 +8642,7 @@ button.event {
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, .12),
     0 8px 20px rgba(15, 118, 110, .16);
-  font-family: serif;
+  font-family: Arial, "Helvetica Neue", serif;
   font-weight: 900;
 }
 
@@ -9777,7 +10119,7 @@ button.event {
 }
 
 .duel-match-vs strong {
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: Arial, "Helvetica Neue", Georgia, "Times New Roman", serif;
   font-size: 27px;
   line-height: 1;
   color: #3b1f0c;
@@ -9917,10 +10259,11 @@ button.event {
 
 .duel-fighter {
   display: grid;
-  gap: 5px;
+  gap: 7px;
   justify-items: center;
   text-align: center;
   min-width: 0;
+  align-content: center;
 }
 
 .duel-fighter.left {
@@ -9935,14 +10278,25 @@ button.event {
 
 .duel-fighter .meter {
   width: 100%;
+  margin: 4px 0 0;
+}
+
+.duel-fighter-attrs + .meter {
+  margin-top: 12px;
+}
+
+.duel-fighter .meter + .meter {
+  margin-top: 4px;
 }
 
 .duel-fighter-attrs {
+  position: relative;
+  z-index: 2;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   gap: 5px;
-  margin: 4px 0;
+  margin: 4px 0 6px;
 }
 
 .duel-fighter.left .duel-fighter-attrs {
@@ -9970,7 +10324,7 @@ button.event {
 }
 
 .duel-live-center strong {
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: Arial, "Helvetica Neue", Georgia, "Times New Roman", serif;
   font-size: 46px;
   line-height: 1;
 }
@@ -10474,7 +10828,7 @@ button.event {
   font-style: normal;
   font-weight: 900;
   font-size: 24px;
-  font-family: serif;
+  font-family: Arial, "Helvetica Neue", serif;
   text-shadow: 0 0 12px rgba(var(--skill-rgb, 245, 158, 11), .42);
   background:
     radial-gradient(circle, rgba(255, 255, 255, .86) 0 18%, rgba(var(--skill-rgb, 245, 158, 11), .18) 19% 42%, transparent 44%),

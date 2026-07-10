@@ -322,7 +322,7 @@ export const itemCatalog = {
     basePrice: 360,
     priceStep: 120,
     effect: { type: "permanentStat", stat: "attack", amount: 2 },
-    limit: { type: "permanent", max: 20, days: 0 },
+    limit: { type: "permanent", max: 100, days: 0 },
     text: "永久攻击 +2。"
   },
   xuanjia_dan: {
@@ -332,7 +332,7 @@ export const itemCatalog = {
     basePrice: 360,
     priceStep: 120,
     effect: { type: "permanentStat", stat: "defense", amount: 2 },
-    limit: { type: "permanent", max: 20, days: 0 },
+    limit: { type: "permanent", max: 100, days: 0 },
     text: "永久防御 +2。"
   },
   jingang_cuiti_dan: {
@@ -342,7 +342,7 @@ export const itemCatalog = {
     basePrice: 320,
     priceStep: 100,
     effect: { type: "permanentStat", stat: "maxHp", amount: 10 },
-    limit: { type: "permanent", max: 20, days: 0 },
+    limit: { type: "permanent", max: 100, days: 0 },
     text: "永久气血上限 +10。"
   },
   yanghun_dan: {
@@ -352,7 +352,7 @@ export const itemCatalog = {
     basePrice: 520,
     priceStep: 180,
     effect: { type: "permanentStat", stat: "divineSense", amount: 2 },
-    limit: { type: "permanent", max: 20, days: 0 },
+    limit: { type: "permanent", max: 100, days: 0 },
     text: "永久神识 +2。"
   },
   zhenyuan_dan: {
@@ -362,7 +362,7 @@ export const itemCatalog = {
     basePrice: 520,
     priceStep: 180,
     effect: { type: "permanentStat", stat: "maxMana", amount: 10 },
-    limit: { type: "permanent", max: 20, days: 0 },
+    limit: { type: "permanent", max: 100, days: 0 },
     text: "永久法力上限 +10。"
   }
 };
