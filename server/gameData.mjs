@@ -16,9 +16,9 @@ export const roots = [
 export const rootCycle = ["metal", "wood", "earth", "water", "fire", "heaven"];
 
 export const specialRoots = [
-  { id: "thunder", name: "雷灵根", keys: ["metal", "wood", "earth"], note: "金、木、土齐备时自动转换；克金灵根、木灵根、土灵根，不被其他灵根相克。属性仍按子灵根加成和多灵根衰减计算。" },
-  { id: "wind", name: "风灵根", keys: ["water", "fire", "heaven"], note: "水、火、天齐备时自动转换；克水灵根、火灵根、天灵根，不被其他灵根相克。属性仍按子灵根加成和多灵根衰减计算。" },
-  { id: "hidden", name: "隐灵根", keys: ["metal", "wood", "water", "fire", "earth"], note: "金、木、水、火、土齐备时自动转换；克金灵根、木灵根、水灵根、火灵根、土灵根。属性仍按子灵根加成和多灵根衰减计算。" }
+  { id: "thunder", name: "雷灵根", keys: ["metal", "wood", "earth"], note: "灵根仅由金、木、土组成时自动转换；克金灵根、木灵根、土灵根，不被其他灵根相克。属性仍按子灵根加成和多灵根衰减计算。" },
+  { id: "wind", name: "风灵根", keys: ["water", "fire", "heaven"], note: "灵根仅由水、火、天组成时自动转换；克水灵根、火灵根、天灵根，不被其他灵根相克。属性仍按子灵根加成和多灵根衰减计算。" },
+  { id: "hidden", name: "隐灵根", keys: ["metal", "wood", "water", "fire", "earth"], note: "灵根仅由金、木、水、火、土组成时自动转换；克金灵根、木灵根、水灵根、火灵根、土灵根。属性仍按子灵根加成和多灵根衰减计算。" }
 ];
 
 export const spiritPearls = [

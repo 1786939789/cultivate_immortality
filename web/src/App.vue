@@ -1455,59 +1455,6 @@
               </div>
             </section>
             <div class="grid dungeon-sea-grid">
-              <div class="panel flat star-sea-overview-panel">
-                <h3>猎妖概览</h3>
-                <div class="star-sea-overview-line">
-                  <div class="monster-strip compact-monster-strip" v-if="selectedDungeonDay.public?.monsters?.length">
-                    <div class="monster-chip with-emblem star-sea-monster-summary" v-for="monster in selectedDungeonDay.public.monsters" :key="monster.id || monster.name">
-                      <MonsterEmblem :monster="monster" size="sm" />
-                      <span class="star-sea-monster-body">
-                        <span class="star-sea-monster-title">
-                          <strong>{{ monster.name }}</strong>
-                          <em>{{ monster.realm }}</em>
-                        </span>
-                        <span class="star-sea-monster-root">{{ monster.rootName }}</span>
-                        <span class="star-sea-monster-stats-mini">
-                          <small><span>血</span><b>{{ monster.maxHp }}</b></small>
-                          <small><span>攻</span><b>{{ monster.attack }}</b></small>
-                          <small><span>防</span><b>{{ monster.defense }}</b></small>
-                          <small><span>神</span><b>{{ monster.divineSense }}</b></small>
-                        </span>
-                      </span>
-                    </div>
-                  </div>
-                  <div class="star-sea-summary-chip" v-if="selectedDungeonDay.public?.cycle">
-                    <span>队伍周期</span>
-                    <b>第 {{ selectedDungeonDay.public.cycle }} 期</b>
-                    <small>第 {{ selectedDungeonDay.public.cycleStartDay }} 日至第 {{ selectedDungeonDay.public.cycleEndDay }} 日 · {{ selectedDungeonDay.public.teamSize || 10 }} 人一队</small>
-                  </div>
-                  <div class="star-sea-summary-chip">
-                    <span>总贡献</span>
-                    <b>{{ selectedDungeonDay.public?.totalDamage || 0 }}</b>
-                    <small>{{ selectedDungeonDay.public?.teams?.length || 0 }} 支队伍合计</small>
-                  </div>
-                  <div class="star-sea-summary-chip star-sea-equipment-chip" :class="{ empty: !starSeaTodayEquipmentItem }">
-                    <EquipmentIcon
-                      v-if="starSeaTodayEquipmentItem"
-                      :id="starSeaTodayEquipmentItem.id"
-                      :name="starSeaTodayEquipmentItem.name"
-                      :slot="starSeaTodayEquipmentItem.slot"
-                      :tier="starSeaTodayEquipmentItem.tier"
-                    />
-                    <span v-else class="star-sea-equipment-empty">装</span>
-                    <span>
-                      <span>期末奖励</span>
-                      <b>{{ starSeaTodayEquipmentName }}</b>
-                      <small>{{ starSeaTodayEquipmentText }}</small>
-                    </span>
-                  </div>
-                  <div class="star-sea-summary-chip" v-if="selectedStarSeaCycleReward">
-                    <span>竞拍</span>
-                    <b>{{ selectedStarSeaCycleReward.winnerName || "全员平分" }}</b>
-                    <small>{{ starSeaAuctionText }}</small>
-                  </div>
-                </div>
-              </div>
               <div class="panel flat sea-cycle-history" v-if="starSeaCycleOptionList.length">
                 <div class="section-head compact">
                   <div>
@@ -1542,7 +1489,13 @@
                       :key="`${activeStarSeaCycle.cycle}-${team.id || team.name}`"
                     >
                       <span class="cycle-rank">{{ team.rank }}</span>
-                      <span class="cycle-team-name">{{ team.name }}</span>
+                      <span class="cycle-team-identity">
+                        <CharacterPortrait :person="starSeaTeamLeader(team)" size="sm" />
+                        <span class="cycle-team-copy">
+                          <span class="cycle-team-name">{{ team.name }}</span>
+                          <small>队长 · {{ starSeaTeamLeader(team)?.name || starSeaTeamLeaderName(team) }}</small>
+                        </span>
+                      </span>
                       <span class="cycle-score-bar" aria-hidden="true">
                         <i :style="{ width: `${starSeaCycleScorePercent(team, activeStarSeaCycle)}%` }"></i>
                       </span>
@@ -1555,21 +1508,105 @@
                   </div>
                 </article>
               </div>
+              <div class="panel flat star-sea-overview-panel">
+                <h3>猎妖概览</h3>
+                <div class="star-sea-overview-line">
+                  <div class="monster-strip compact-monster-strip" v-if="selectedDungeonDay.public?.monsters?.length">
+                    <div class="monster-chip with-emblem star-sea-monster-summary" v-for="monster in selectedDungeonDay.public.monsters" :key="monster.id || monster.name">
+                      <MonsterEmblem :monster="monster" size="sm" />
+                      <span class="star-sea-monster-body">
+                        <span class="star-sea-monster-title">
+                          <strong>{{ monster.name }}</strong>
+                          <em>{{ monster.realm }}</em>
+                        </span>
+                        <span class="star-sea-monster-root">{{ monster.rootName }}</span>
+                        <span class="star-sea-monster-stats-mini">
+                          <small><span>血</span><b>{{ monster.maxHp }}</b></small>
+                          <small><span>攻</span><b>{{ monster.attack }}</b></small>
+                          <small><span>防</span><b>{{ monster.defense }}</b></small>
+                          <small><span>神</span><b>{{ monster.divineSense }}</b></small>
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+                  <div class="star-sea-summary-chip star-sea-metric-card cycle" v-if="selectedDungeonDay.public?.cycle">
+                    <span class="star-sea-card-icon"><CalendarDays :size="20" aria-hidden="true" /></span>
+                    <span class="star-sea-card-copy">
+                      <span>队伍周期</span>
+                      <b>第 {{ selectedDungeonDay.public.cycle }} 期</b>
+                      <small>第 {{ selectedDungeonDay.public.cycleStartDay }} 日至第 {{ selectedDungeonDay.public.cycleEndDay }} 日 · {{ selectedDungeonDay.public.teamSize || 10 }} 人一队</small>
+                    </span>
+                  </div>
+                  <div class="star-sea-summary-chip star-sea-metric-card contribution">
+                    <span class="star-sea-card-icon"><Zap :size="20" aria-hidden="true" /></span>
+                    <span class="star-sea-card-copy">
+                      <span>总贡献</span>
+                      <b>{{ selectedDungeonDay.public?.totalDamage || 0 }}</b>
+                      <small>{{ selectedDungeonDay.public?.teams?.length || 0 }} 支队伍合计</small>
+                    </span>
+                  </div>
+                  <div class="star-sea-summary-chip star-sea-equipment-chip" :class="{ empty: !starSeaTodayEquipmentItem }">
+                    <EquipmentIcon
+                      v-if="starSeaTodayEquipmentItem"
+                      :id="starSeaTodayEquipmentItem.id"
+                      :name="starSeaTodayEquipmentItem.name"
+                      :slot="starSeaTodayEquipmentItem.slot"
+                      :tier="starSeaTodayEquipmentItem.tier"
+                    />
+                    <span v-else class="star-sea-equipment-empty">装</span>
+                    <span>
+                      <span>期末奖励</span>
+                      <b>{{ starSeaTodayEquipmentName }}</b>
+                      <small>{{ starSeaTodayEquipmentText }}</small>
+                    </span>
+                  </div>
+                  <div class="star-sea-summary-chip star-sea-metric-card auction" v-if="selectedStarSeaCycleReward">
+                    <span class="star-sea-card-icon"><Coins :size="20" aria-hidden="true" /></span>
+                    <span class="star-sea-card-copy">
+                      <span>竞拍结果</span>
+                      <b>{{ selectedStarSeaCycleReward.winnerName || "全员平分" }}</b>
+                      <small>{{ starSeaAuctionText }}</small>
+                    </span>
+                  </div>
+                </div>
+              </div>
               <div class="panel flat sea-team-rank">
-                <h3>队伍排名</h3>
-                <div class="timeline compact-list">
-                  <button class="event event-button" type="button" v-for="team in starSeaTeamRanking" :key="team.id || team.name" :disabled="!hasReplay(team)" @click="openStarSeaTeamReplay(team)">
-                    <strong>{{ team.rank }}. {{ team.name }}</strong>
-                    <span>评分 {{ team.score }} · 输出 {{ team.damage }} · {{ team.success ? `${team.rounds} 回合击杀` : "未击杀" }} · 队伍 +{{ team.spirit }} 灵石</span>
+                <div class="star-sea-rank-head">
+                  <span class="star-sea-rank-icon team"><Trophy :size="18" aria-hidden="true" /></span>
+                  <span><h3>队伍排名</h3><small>按当日猎妖评分排序</small></span>
+                </div>
+                <div class="star-sea-rank-list">
+                  <button class="star-sea-rank-row team" type="button" v-for="team in starSeaTeamRanking" :key="team.id || team.name" :disabled="!hasReplay(team)" @click="openStarSeaTeamReplay(team)">
+                    <span class="star-sea-rank-number">{{ team.rank }}</span>
+                    <CharacterPortrait :person="starSeaTeamLeader(team)" size="sm" />
+                    <span class="star-sea-rank-copy">
+                      <strong>{{ team.name }}</strong>
+                      <small>队长 · {{ starSeaTeamLeader(team)?.name || starSeaTeamLeaderName(team) }}</small>
+                    </span>
+                    <span class="star-sea-rank-result" :class="team.success ? 'success' : 'failed'">
+                      {{ team.success ? `${team.rounds} 回合击杀` : "未击杀" }}
+                    </span>
+                    <span class="star-sea-rank-stat"><small>评分</small><b>{{ team.score }}</b></span>
+                    <span class="star-sea-rank-stat"><small>输出</small><b>{{ team.damage }}</b></span>
+                    <span class="star-sea-rank-reward"><Gem :size="14" aria-hidden="true" /> +{{ team.spirit }}</span>
                   </button>
                 </div>
               </div>
               <div class="panel flat sea-personal-rank">
-                <h3>个人输出</h3>
-                <div class="timeline compact-list">
-                  <button class="event event-button" type="button" v-for="entry in selectedDungeonDay.public?.top || []" :key="`${entry.id}-${entry.teamRank || entry.teamName || ''}`" :disabled="!hasStarSeaMemberReplay(entry)" @click="openStarSeaMemberReplay(entry)">
-                    <strong>{{ entry.name }}</strong>
-                    <span>{{ entry.teamName || entry.sect }} · 输出 {{ entry.damage }} · +{{ entry.spirit }} 灵石</span>
+                <div class="star-sea-rank-head">
+                  <span class="star-sea-rank-icon personal"><Zap :size="18" aria-hidden="true" /></span>
+                  <span><h3>个人输出</h3><small>当日修士伤害贡献</small></span>
+                </div>
+                <div class="star-sea-rank-list">
+                  <button class="star-sea-rank-row personal" type="button" v-for="(entry, index) in selectedDungeonDay.public?.top || []" :key="`${entry.id}-${entry.teamRank || entry.teamName || ''}`" :disabled="!hasStarSeaMemberReplay(entry)" @click="openStarSeaMemberReplay(entry)">
+                    <span class="star-sea-rank-number">{{ index + 1 }}</span>
+                    <CharacterPortrait :person="personByRef(entry)" size="sm" />
+                    <span class="star-sea-rank-copy">
+                      <strong>{{ entry.name }}</strong>
+                      <small>{{ entry.teamName || entry.sect }}</small>
+                    </span>
+                    <span class="star-sea-output-value"><small>输出</small><b>{{ entry.damage }}</b></span>
+                    <span class="star-sea-rank-reward"><Gem :size="14" aria-hidden="true" /> +{{ entry.spirit }}</span>
                   </button>
                 </div>
               </div>
@@ -1784,23 +1821,25 @@
             </div>
           </div>
 
-          <div v-else-if="activeSectSubTab === 'strategy'" class="panel sect-system-panel sect-province-panel">
-            <div class="section-head compact sect-panel-title">
-              <div>
+          <div v-else-if="activeSectSubTab === 'strategy'" class="panel sect-system-panel sect-province-panel sect-strategy-board">
+            <div class="section-head compact sect-panel-title strategy-board-heading">
+              <div class="strategy-title-copy">
+                <span class="strategy-title-seal" aria-hidden="true">令</span>
                 <h3>明日战略</h3>
                 <p>第 {{ planTargetDay }} 天执行；未设置的攻守由宗门自行补齐。</p>
               </div>
-              <span class="tag">{{ playerSectNameForPlan || "本宗" }}</span>
+              <span class="strategy-sect-mark">{{ playerSectNameForPlan || "本宗" }} · 军令台</span>
             </div>
-            <div class="equipment-tools">
-              <label>战略态度
-                <select v-model="sectPlanDraft.mode">
-                  <option value="conservative">保守</option>
-                  <option value="balanced">均衡</option>
-                  <option value="aggressive">激进</option>
-                </select>
-              </label>
-              <label>攻城目标
+            <div class="strategy-command-deck">
+              <div class="strategy-mode-field">
+                <span class="strategy-field-label">战略态度</span>
+                <div class="strategy-mode-options" role="group" aria-label="战略态度">
+                  <button type="button" :class="{ active: sectPlanDraft.mode === 'conservative' }" @click="sectPlanDraft.mode = 'conservative'">保守</button>
+                  <button type="button" :class="{ active: sectPlanDraft.mode === 'balanced' }" @click="sectPlanDraft.mode = 'balanced'">均衡</button>
+                  <button type="button" :class="{ active: sectPlanDraft.mode === 'aggressive' }" @click="sectPlanDraft.mode = 'aggressive'">激进</button>
+                </div>
+              </div>
+              <label class="strategy-target-field"><span class="strategy-field-label">攻城目标</span>
                 <select v-model="sectPlanDraft.attackTarget">
                   <option value="">自动选择</option>
                   <option v-for="province in attackableProvinces" :key="province.id" :value="province.id">
@@ -1808,49 +1847,67 @@
                   </option>
                 </select>
               </label>
-              <button class="secondary" type="button" @click="resetSectPlanAuto">恢复自动</button>
-              <button class="primary" type="button" :disabled="isActionPending('/api/sect/plan')" @click="saveSectPlan">
-                {{ isActionPending("/api/sect/plan") ? "保存中..." : "保存明日战略" }}
-              </button>
+              <div class="strategy-command-actions">
+                <button class="secondary" type="button" @click="resetSectPlanAuto">恢复自动</button>
+                <button class="primary" type="button" :disabled="isActionPending('/api/sect/plan')" @click="saveSectPlan">
+                  {{ isActionPending("/api/sect/plan") ? "保存中..." : "颁布明日军令" }}
+                </button>
+              </div>
             </div>
 
-            <div class="grid">
-              <article class="panel flat">
-                <div class="section-head compact">
+            <div class="grid strategy-columns">
+              <article class="panel flat strategy-roster-panel attack-roster-panel">
+                <div class="section-head compact strategy-section-heading">
                   <div>
                     <h3>攻城队伍</h3>
-                    <p>{{ selectedAttackProvince ? `目标 ${selectedAttackProvince.name}，最多 ${selectedAttackProvince.attackerLimit || 6} 人，距离 ${selectedAttackProvince.distance}` : "不指定目标时由 AI 选城选人" }}</p>
+                    <p>{{ selectedAttackProvince ? `目标 ${selectedAttackProvince.name}，最多 ${selectedAttackProvince.attackerLimit || maxSiegeTeamSize} 人，距离 ${selectedAttackProvince.distance}` : `不指定目标时由 AI 选城选人，攻守双方均不超过 ${maxSiegeTeamSize} 人` }}</p>
                   </div>
-                  <span class="tag">{{ sectPlanDraft.attackMemberIds.length }} 人</span>
+                  <span class="strategy-count-badge attack">已选 {{ sectPlanDraft.attackMemberIds.length }} / {{ maxSiegeTeamSize }}</span>
                 </div>
-                <div class="timeline compact-list">
+                <div class="timeline compact-list strategy-member-list">
                   <button
                     v-for="member in playerSectMembers"
                     :key="`attack-${member.id}`"
-                    class="event event-button"
+                    class="event event-button strategy-member-row"
                     type="button"
                     :class="{ active: assignedAttackIds.has(member.id) }"
                     @click="togglePlanAttackMember(member.id)"
                   >
-                    <strong>{{ member.name }}</strong>
-                    <span>{{ planMemberLabel(member) }}</span>
+                    <span class="strategy-member-index" aria-hidden="true">{{ assignedAttackIds.has(member.id) ? "攻" : "候" }}</span>
+                    <span class="strategy-member-main">
+                      <strong>{{ member.name }}</strong>
+                      <small>{{ realmName(member.realm) }}</small>
+                    </span>
+                    <span class="strategy-member-stats">
+                      <b>战力 {{ formatCompact(personPower(member)) }}</b>
+                      <span class="fatigue-help" tabindex="0" @click.stop>
+                        疲劳 {{ member.fatigue || 0 }}
+                        <span class="fatigue-tooltip" role="tooltip">{{ fatigueHelpText(member) }}</span>
+                      </span>
+                    </span>
                   </button>
                 </div>
               </article>
 
-              <article class="panel flat">
-                <div class="section-head compact">
+              <article class="panel flat strategy-roster-panel defense-roster-panel">
+                <div class="section-head compact strategy-section-heading">
                   <div>
                     <h3>己方布防</h3>
                     <p>攻城成员不能同时守城；空缺会由 AI 按价值补齐。</p>
                   </div>
-                  <span class="tag">{{ playerOwnedProvinces.length }} 城</span>
+                  <span class="strategy-count-badge defense">{{ playerOwnedProvinces.length }} 座城池</span>
                 </div>
-                <div class="timeline compact-list">
-                  <section class="event" v-for="province in playerOwnedProvinces" :key="`defense-${province.id}`">
-                    <strong>{{ province.name }} · 防守价值 {{ province.defenseValue || 0 }}</strong>
-                    <span>资源 {{ province.effect.label }} · 上限 {{ province.defenderLimit || 0 }} 人 · 已守 {{ (sectPlanDraft.defense[province.id] || []).length }}</span>
-                    <div class="defender-stack">
+                <div class="timeline compact-list strategy-defense-list">
+                  <section class="event strategy-city-card" v-for="province in playerOwnedProvinces" :key="`defense-${province.id}`">
+                    <div class="strategy-city-heading">
+                      <span class="strategy-city-seal" aria-hidden="true">守</span>
+                      <div>
+                        <strong>{{ province.name }}</strong>
+                        <span>{{ province.effect.label || "宗门资源" }} · 防守价值 {{ province.defenseValue || 0 }}</span>
+                      </div>
+                      <b>{{ (sectPlanDraft.defense[province.id] || []).length }} / {{ province.defenderLimit || maxSiegeTeamSize }}</b>
+                    </div>
+                    <div class="defender-stack plan-defender-stack">
                       <button
                         v-for="member in playerSectMembers"
                         :key="`${province.id}-${member.id}`"
@@ -1861,7 +1918,7 @@
                         :title="planMemberLabel(member)"
                         @click="togglePlanDefender(province.id, member.id)"
                       >
-                        {{ member.name.slice(0, 2) }}
+                        {{ member.name }}
                       </button>
                     </div>
                   </section>
@@ -2246,31 +2303,41 @@
                   <span class="war-outcome" :class="war.captured ? 'captured' : 'defended'">
                     <Sword v-if="war.captured" :size="16" aria-hidden="true" />
                     <ShieldCheck v-else :size="16" aria-hidden="true" />
-                    {{ war.captured ? "城池易主" : "守城告捷" }}
+                    {{ war.captured ? "攻破" : "守住" }}
                   </span>
                 </div>
 
-                <div class="war-lineup" v-if="warTeam(war, 'attacker').length || warTeam(war, 'defender').length">
-                  <div class="war-team" :class="{ 'two-lines': warTeam(war, 'attacker').length > 5 }">
+                <div class="war-lineup war-versus-board" v-if="warTeam(war, 'attacker').length || warTeam(war, 'defender').length">
+                  <div class="war-team war-team-attacker" :class="{ victor: war.captured }">
                     <span class="war-team-name"><i :style="{ '--banner-color': sectColor(war.attacker) }">攻</i><span><small>攻城方 {{ war.captured ? "· 胜" : "" }}</small>{{ war.attacker }}</span></span>
                     <div class="war-team-row">
-                      <div v-for="member in warTeam(war, 'attacker')" :key="`${war.id}-attacker-${member.id || member.name}`" class="war-roster-card">
-                        <CharacterPortrait :person="battlePerson(member)" size="sm" />
+                      <div
+                        v-for="member in warTeam(war, 'attacker')"
+                        :key="`${war.id}-attacker-${member.id || member.name}`"
+                        class="war-roster-card"
+                      >
+                        <span class="war-portrait-frame"><CharacterPortrait :person="battlePerson(member)" size="sm" /></span>
                         <strong>{{ member.name }}</strong>
                         <small>{{ realmName(member.realm) }}</small>
                       </div>
                     </div>
                   </div>
-                  <div class="war-lineup-vs">
+                  <div class="war-lineup-vs" aria-label="对阵结果">
+                    <i></i>
                     <small>{{ war.battles.length ? `${war.battles.length} 场车轮战` : "兵不血刃" }}</small>
                     <strong>战</strong>
                     <span>{{ war.captured ? "攻破城防" : "固守成功" }}</span>
+                    <i></i>
                   </div>
-                  <div class="war-team" :class="{ 'two-lines': warTeam(war, 'defender').length > 5 }">
+                  <div class="war-team war-team-defender" :class="{ victor: !war.captured }">
                     <span class="war-team-name defender"><i :style="{ '--banner-color': sectColor(war.defender) }">守</i><span><small>守城方 {{ !war.captured ? "· 胜" : "" }}</small>{{ war.defender }}</span></span>
                     <div class="war-team-row">
-                      <div v-for="member in warTeam(war, 'defender')" :key="`${war.id}-defender-${member.id || member.name}`" class="war-roster-card">
-                        <CharacterPortrait :person="battlePerson(member)" size="sm" />
+                      <div
+                        v-for="member in warTeam(war, 'defender')"
+                        :key="`${war.id}-defender-${member.id || member.name}`"
+                        class="war-roster-card"
+                      >
+                        <span class="war-portrait-frame"><CharacterPortrait :person="battlePerson(member)" size="sm" /></span>
                         <strong>{{ member.name }}</strong>
                         <small>{{ realmName(member.realm) }}</small>
                       </div>
@@ -2790,46 +2857,6 @@
           <div class="panel equipment-panel">
             <div class="section-head">
               <div>
-                <h3>灵珠</h3>
-                <p>副本碎片自动凝练；本命灵珠加成翻倍。</p>
-              </div>
-              <span class="tag">灵尘 {{ spiritPearlState.dust || 0 }}</span>
-            </div>
-            <div class="equipment-inventory-grid">
-              <article
-                class="equipment-card spirit-pearl-card"
-                v-for="pearl in spiritPearlState.pearls || []"
-                :key="pearl.id"
-                :class="{ owned: pearl.tier > 0, equipped: pearl.matchMultiplier > 1 }"
-                tabindex="0"
-              >
-                <div class="equipment-card-frame">
-                  <span class="spirit-pearl-orb">{{ pearl.config?.name?.slice(0, 1) || "珠" }}</span>
-                  <strong>{{ pearl.config?.name || pearl.name }}</strong>
-                  <small>{{ pearl.tier ? `${pearl.tier}阶${pearl.star}星` : "未凝成" }}</small>
-                </div>
-                <div class="equipment-tooltip-card" role="tooltip">
-                  <div class="equipment-tooltip-head">
-                    <strong>{{ pearl.config?.name || pearl.name }}</strong>
-                    <span>{{ pearl.matchMultiplier > 1 ? `本命 x${pearl.matchMultiplier}` : "普通生效" }}</span>
-                  </div>
-                  <dl class="equipment-tooltip-stats">
-                    <div>
-                      <dt>当前效果</dt>
-                      <dd>{{ pearlEffectText(pearl) }}</dd>
-                    </div>
-                    <div>
-                      <dt>下次消耗</dt>
-                      <dd>{{ pearl.next?.fragmentTier || 1 }}阶碎片 {{ pearl.fragments?.[String(pearl.next?.fragmentTier || 1)] || 0 }} / {{ pearl.next?.cost || 0 }}</dd>
-                    </div>
-                  </dl>
-                </div>
-              </article>
-            </div>
-          </div>
-          <div class="panel equipment-panel">
-            <div class="section-head">
-              <div>
                 <h3>装备图鉴</h3>
                 <p>唯一装备 · 自动穿戴最优同部位。</p>
               </div>
@@ -2905,6 +2932,48 @@
               </article>
             </div>
             <div v-if="!filteredEquipment.length" class="empty">没有符合筛选条件的装备。</div>
+          </div>
+          <div class="panel equipment-panel">
+            <div class="section-head">
+              <div>
+                <h3>灵珠</h3>
+                <p>副本碎片自动凝练；本命灵珠加成翻倍。</p>
+              </div>
+              <span class="tag">灵尘 {{ spiritPearlState.dust || 0 }}</span>
+            </div>
+            <div class="equipment-inventory-grid">
+              <article
+                class="equipment-card spirit-pearl-card"
+                v-for="pearl in spiritPearlState.pearls || []"
+                :key="pearl.id"
+                :class="{ owned: pearl.tier > 0, matched: pearl.tier > 0 && pearl.matchMultiplier > 1 }"
+                tabindex="0"
+              >
+                <div class="equipment-card-frame">
+                  <span class="spirit-pearl-orb" :class="`root-icon-${pearl.config?.rootKey || pearl.id}`" aria-hidden="true">
+                    <img :src="rootIconPath(pearl.config?.rootKey || pearl.id)" alt="">
+                  </span>
+                  <strong>{{ pearl.config?.name || pearl.name }}</strong>
+                  <small>{{ pearl.tier ? `${pearl.tier}阶${pearl.star}星` : "未凝成" }}</small>
+                </div>
+                <div class="equipment-tooltip-card" role="tooltip">
+                  <div class="equipment-tooltip-head">
+                    <strong>{{ pearl.config?.name || pearl.name }}</strong>
+                    <span>{{ pearl.matchMultiplier > 1 ? (pearl.tier ? `本命契合 x${pearl.matchMultiplier}` : `本命契合 · 凝成后 x${pearl.matchMultiplier}`) : "普通生效" }}</span>
+                  </div>
+                  <dl class="equipment-tooltip-stats">
+                    <div>
+                      <dt>当前效果</dt>
+                      <dd>{{ pearlEffectText(pearl) }}</dd>
+                    </div>
+                    <div>
+                      <dt>下次消耗</dt>
+                      <dd>{{ pearl.next?.fragmentTier || 1 }}阶碎片 {{ pearl.fragments?.[String(pearl.next?.fragmentTier || 1)] || 0 }} / {{ pearl.next?.cost || 0 }}</dd>
+                    </div>
+                  </dl>
+                </div>
+              </article>
+            </div>
           </div>
         </section>
 
@@ -3074,7 +3143,23 @@
                     <span>宗门：{{ selectedPerson.sect }}</span>
                     <span>性别：{{ genderLabel(selectedPerson.gender) }}</span>
                     <span>境界：{{ realmName(selectedPerson.realm) }}</span>
-                    <span>根线：{{ rootLine(selectedPerson) }}</span>
+                    <span class="dossier-root-line">
+                      <span>根线：</span>
+                      <span
+                        v-for="(root, rootIndex) in rootList(selectedPerson)"
+                        :key="`${selectedPerson.id}-header-root-${root.key}`"
+                        class="dossier-root-hover"
+                        tabindex="0"
+                      >
+                        <span class="dossier-root-name">{{ root.name }}{{ root.key === primaryRoot(selectedPerson).key ? "（主）" : "" }}{{ rootIndex < rootList(selectedPerson).length - 1 ? "、" : "" }}</span>
+                        <span class="dossier-root-tooltip" role="tooltip">
+                          <strong>{{ root.name }} · {{ root.key === primaryRoot(selectedPerson).key ? "主灵根" : "副灵根" }}</strong>
+                          <span>基础：{{ rootEffectShortText(root) }}</span>
+                          <span>当前：{{ rootBonusText(selectedPerson, root) }}</span>
+                          <span>{{ rootEfficiencyText(selectedPerson) }}</span>
+                        </span>
+                      </span>
+                    </span>
                   </p>
                 </div>
                 <div class="dossier-header-tags">
@@ -3170,6 +3255,31 @@
                   </small>
                 </div>
               </div>
+            </div>
+
+            <div class="panel flat dossier-pearl-panel dossier-pearl-strip">
+                <div class="dossier-pearl-head">
+                  <h3>灵珠资产</h3>
+                  <span>灵尘 {{ personSpiritPearls(selectedPerson).dust || 0 }}</span>
+                </div>
+                <div class="dossier-pearl-summary">
+                  <span><b>{{ personPearlFragmentTotal(selectedPerson) }}</b> 碎片</span>
+                  <span><b>{{ personFormedPearlCount(selectedPerson) }}</b> / 9</span>
+                </div>
+                <div v-if="personDetailLoading.has(selectedPerson.id)" class="empty">灵珠档案读取中...</div>
+                <div v-else class="dossier-pearl-grid">
+                  <span
+                    v-for="pearl in personSpiritPearls(selectedPerson).pearls || []"
+                    :key="`${selectedPerson.id}-pearl-${pearl.id}`"
+                    class="dossier-pearl-item"
+                    :class="{ formed: pearl.tier > 0, matched: pearl.matchMultiplier > 1 }"
+                    :title="personPearlTooltip(pearl)"
+                  >
+                    <img :src="rootIconPath(pearl.config?.rootKey || pearl.id)" alt="">
+                    <small>{{ pearl.config?.name || pearl.name }}</small>
+                    <b>{{ pearl.tier ? `${pearl.tier}阶${pearl.star}星` : personPearlFragmentCount(pearl) }}</b>
+                  </span>
+                </div>
             </div>
 
             <div class="grid detail-sections record-sections dossier-records">
@@ -3958,6 +4068,7 @@ const sectPlanDraft = reactive({
   attackMemberIds: [],
   defense: {}
 });
+const maxSiegeTeamSize = 5;
 const lastBattle = ref(null);
 const battleReturnTarget = ref(null);
 const replayLoading = ref(false);
@@ -4150,13 +4261,11 @@ const selectedTaskMultiplierRecord = computed(() => {
   if (day === gameState.value.day) {
     const effects = shopDerived.value.activeEffects || {};
     const elixirMultiplier = Math.max(1, Number(effects.cultivationMultiplier) || 1);
-    const manaMultiplier = currentTaskManaMultiplier();
     return {
       day,
       date: found?.date || selectedTaskDate.value,
       elixirMultiplier,
-      manaMultiplier,
-      totalMultiplier: elixirMultiplier * manaMultiplier
+      totalMultiplier: elixirMultiplier
     };
   }
   if (found) return normalizeTaskMultiplierRecord(found, day, selectedTaskDate.value);
@@ -4164,7 +4273,6 @@ const selectedTaskMultiplierRecord = computed(() => {
     day,
     date: selectedTaskDate.value,
     elixirMultiplier: 1,
-    manaMultiplier: 1,
     totalMultiplier: 1
   };
 });
@@ -4246,7 +4354,7 @@ const recentTaskDays = computed(() => {
 });
 const taskRewardPreview = computed(() => {
   const task = selectedTaskDefinition.value;
-  if (!task) return { xp: 0, rawXp: 0, baseXp: 0, spirit: 0, multiplier: 0, elixirMultiplier: 1, manaMultiplier: 1, xpMultiplier: 1 };
+  if (!task) return { xp: 0, rawXp: 0, baseXp: 0, spirit: 0, multiplier: 0, elixirMultiplier: 1, xpMultiplier: 1 };
   const amount = task.type === "measurable" ? Math.max(0, Number(taskForm.completedAmount) || 0) : 1;
   const target = Math.max(0.01, Number(task.targetAmount) || 1);
   const maxMultiplier = Math.max(0.01, Number(task.maxMultiplier) || 1);
@@ -4254,8 +4362,7 @@ const taskRewardPreview = computed(() => {
   const rawXp = Number(task.xpReward) || 0;
   const baseXp = Math.floor(rawXp * multiplier);
   const elixirMultiplier = Math.max(1, Number(selectedTaskMultiplierRecord.value?.elixirMultiplier) || 1);
-  const manaMultiplier = Math.max(1, Number(selectedTaskMultiplierRecord.value?.manaMultiplier) || 1);
-  const xpMultiplier = Math.max(1, Number(selectedTaskMultiplierRecord.value?.totalMultiplier) || elixirMultiplier * manaMultiplier);
+  const xpMultiplier = Math.max(1, Number(selectedTaskMultiplierRecord.value?.totalMultiplier) || elixirMultiplier);
   return {
     xp: Math.floor(baseXp * xpMultiplier),
     rawXp,
@@ -4263,7 +4370,6 @@ const taskRewardPreview = computed(() => {
     spirit: Math.floor((Number(task.spiritReward) || 0) * multiplier),
     multiplier,
     elixirMultiplier,
-    manaMultiplier,
     xpMultiplier
   };
 });
@@ -4275,7 +4381,6 @@ const taskRewardFormulaText = computed(() => {
   const parts = [`基础 +${Math.floor(preview.rawXp || 0)}`];
   if (task.type === "measurable") parts.push(`完成度 x${formatFormulaMultiplier(preview.multiplier)}`);
   parts.push(`丹药 x${formatFormulaMultiplier(preview.elixirMultiplier)}`);
-  parts.push(`个人属性 x${formatFormulaMultiplier(preview.manaMultiplier)}`);
   return `${dayLabel}修为公式：${parts.join(" × ")} = +${preview.xp}（总加成 ${formatTaskBonusPercent(preview.xpMultiplier)}）`;
 });
 const selectedTaskTypeText = computed(() => {
@@ -4325,7 +4430,7 @@ const taskStatusCards = computed(() => {
     {
       label: "修为加成",
       value: formatTaskBonusPercent(multiplier),
-      note: daysLeft > 0 ? `药力剩余 ${daysLeft} 天` : (selectedTaskDay.value === gameState.value.day ? "个人属性" : "当日快照"),
+      note: daysLeft > 0 ? `药力剩余 ${daysLeft} 天` : (selectedTaskDay.value === gameState.value.day ? "暂无丹药加成" : "当日快照"),
       icon: Sparkles,
       asset: "/assets/tasks/icon-elixir.svg",
       tone: multiplier > 1 ? "elixir active" : "elixir"
@@ -4378,9 +4483,9 @@ const fallbackRoots = [
 ];
 const fallbackRootCycle = ["metal", "wood", "earth", "water", "fire", "heaven"];
 const fallbackSpecialRoots = [
-  { id: "thunder", name: "雷灵根", keys: ["metal", "wood", "earth"], note: "金、木、土齐备时自动转换；克金灵根、木灵根、土灵根，不被其他灵根相克。" },
-  { id: "wind", name: "风灵根", keys: ["water", "fire", "heaven"], note: "水、火、天齐备时自动转换；克水灵根、火灵根、天灵根，不被其他灵根相克。" },
-  { id: "hidden", name: "隐灵根", keys: ["metal", "wood", "water", "fire", "earth"], note: "金、木、水、火、土齐备时自动转换；克五行灵根，不被其他灵根相克。" }
+  { id: "thunder", name: "雷灵根", keys: ["metal", "wood", "earth"], note: "灵根仅由金、木、土组成时自动转换；克金灵根、木灵根、土灵根，不被其他灵根相克。" },
+  { id: "wind", name: "风灵根", keys: ["water", "fire", "heaven"], note: "灵根仅由水、火、天组成时自动转换；克水灵根、火灵根、天灵根，不被其他灵根相克。" },
+  { id: "hidden", name: "隐灵根", keys: ["metal", "wood", "water", "fire", "earth"], note: "灵根仅由金、木、水、火、土组成时自动转换；克五行灵根，不被其他灵根相克。" }
 ];
 const fallbackRootByKey = Object.fromEntries(fallbackRoots.map((root) => [root.key, root]));
 const fallbackRootRules = {
@@ -4776,6 +4881,18 @@ function starSeaCycleScorePercent(team, cycle) {
   const max = Math.max(...((cycle?.topTeams || []).map((item) => Number(item.totalScore || 0))), 1);
   return Math.max(5, Math.min(100, Math.round(Number(team?.totalScore || 0) / max * 100)));
 }
+
+function starSeaTeamLeader(team) {
+  return personByRef({
+    ...(team?.leader || {}),
+    id: team?.leader?.id || team?.leaderId || "",
+    name: team?.leader?.name || team?.leaderName || starSeaTeamLeaderName(team)
+  });
+}
+
+function starSeaTeamLeaderName(team) {
+  return team?.leaderName || String(team?.name || "猎妖修士").replace(/之队$/, "");
+}
 const starSeaSectRanking = computed(() => {
   const map = new Map();
   for (const entry of selectedDungeonDay.value?.public?.top || []) {
@@ -5027,8 +5144,8 @@ const provinceTerritories = computed(() => {
       distance: strategy.distances?.[province.id] || 0,
       resourceValue: strategyValue.resourceValue || 0,
       defenseValue: strategyValue.defenseValue || 0,
-      defenderLimit: strategyValue.defenderLimit || 0,
-      attackerLimit: strategyValue.attackerLimit || 0,
+      defenderLimit: maxSiegeTeamSize,
+      attackerLimit: maxSiegeTeamSize,
       effect: provinceEffect(currentProvince)
     };
   });
@@ -5863,18 +5980,7 @@ function playerDailyProgressHomeLogs(day) {
 function dailyProgressText(record) {
   const xp = Number(record?.xp || record?.passiveXp || 0);
   const provinceXp = Number(record?.provinceXp || record?.bonusXp || 0);
-  const hasRecoveryFields = Object.prototype.hasOwnProperty.call(record || {}, "hpRecovery")
-    || Object.prototype.hasOwnProperty.call(record || {}, "manaRecovery");
-  if (xp || hasRecoveryFields) {
-    const hpRecovery = Number(record?.hpRecovery || 0);
-    const manaRecovery = Number(record?.manaRecovery || 0);
-    const parts = [
-      xp ? `经验 +${xp}${provinceXp ? `（宗门资源 +${provinceXp}）` : ""}` : "",
-      hpRecovery ? `气血恢复 +${hpRecovery}` : "",
-      manaRecovery ? `法力恢复 +${manaRecovery}` : ""
-    ].filter(Boolean);
-    if (parts.length) return parts.join("，");
-  }
+  if (xp) return `经验 +${xp}${provinceXp ? `（宗门资源 +${provinceXp}）` : ""}`;
   const note = String(record?.note || "").trim();
   const progress = note.split("；副本：")[0].replace(/^每日修行：/, "").trim();
   if (progress) return normalizeDailyProgressText(progress);
@@ -5883,11 +5989,9 @@ function dailyProgressText(record) {
 
 function normalizeDailyProgressText(text) {
   return String(text || "")
-    .replace(/(^|，)血量 \+(\d+)/g, "$1气血恢复 +$2")
-    .replace(/(^|，)法力 \+(\d+)/g, "$1法力恢复 +$2")
     .split("，")
     .map((part) => part.trim())
-    .filter((part) => !/(?:气血恢复|法力恢复) \+0$/.test(part))
+    .filter((part) => !/(?:气血恢复|法力恢复|血量|法力) \+\d+$/.test(part))
     .join("，");
 }
 
@@ -5901,7 +6005,7 @@ function playerBreakthroughHomeLogs(day) {
       return {
         day: record.day || day,
         date: record.date || dateForDay(day),
-        time: "",
+        time: logEntryMinute(record.time || record.createdAt) || "00:00",
         order: 240 + index,
         category: "breakthrough",
         type: success ? "good" : "bad",
@@ -6953,14 +7057,15 @@ function syncSectPlanDraft() {
   const plan = derived.value.sectStrategy?.plan || gameState.value.playerSectPlan || {};
   sectPlanDraft.mode = plan.mode || "balanced";
   sectPlanDraft.attackTarget = plan.attack?.targetProvinceId || "";
-  sectPlanDraft.attackMemberIds = Array.isArray(plan.attack?.memberIds) ? [...plan.attack.memberIds] : [];
-  sectPlanDraft.defense = { ...(plan.defense?.provinceIdToMemberIds || {}) };
+  sectPlanDraft.attackMemberIds = Array.isArray(plan.attack?.memberIds) ? [...new Set(plan.attack.memberIds)].slice(0, maxSiegeTeamSize) : [];
+  sectPlanDraft.defense = Object.fromEntries(Object.entries(plan.defense?.provinceIdToMemberIds || {})
+    .map(([provinceId, ids]) => [provinceId, [...new Set(Array.isArray(ids) ? ids : [])].slice(0, maxSiegeTeamSize)]));
 }
 
 function togglePlanAttackMember(id) {
   const next = new Set(sectPlanDraft.attackMemberIds);
   if (next.has(id)) next.delete(id);
-  else next.add(id);
+  else if (next.size < (selectedAttackProvince.value?.attackerLimit || maxSiegeTeamSize)) next.add(id);
   sectPlanDraft.attackMemberIds = [...next];
   for (const provinceId of Object.keys(sectPlanDraft.defense)) {
     sectPlanDraft.defense[provinceId] = (sectPlanDraft.defense[provinceId] || []).filter((memberId) => memberId !== id);
@@ -6973,11 +7078,17 @@ function togglePlanDefender(provinceId, id) {
   if (next.has(id)) next.delete(id);
   else next.add(id);
   const province = provinceTerritories.value.find((item) => item.id === provinceId);
-  sectPlanDraft.defense[provinceId] = [...next].slice(0, province?.defenderLimit || 5);
+  sectPlanDraft.defense[provinceId] = [...next].slice(0, province?.defenderLimit || maxSiegeTeamSize);
 }
 
 function planMemberLabel(member) {
   return `${member.name} · ${realmName(member.realm)} · 战力 ${formatCompact(personPower(member))} · 疲劳 ${member.fatigue || 0}`;
+}
+
+function fatigueHelpText(member) {
+  const fatigue = Math.max(0, Number(member?.fatigue) || 0);
+  const penalty = Math.round(fatigue * 3);
+  return `疲劳来自连续参与攻守城：守城当日 +1，攻城按距离增加，最高 8 点；未参战一日恢复 2 点。当前 ${fatigue} 点，使攻守城基础战力降低约 ${penalty}%。`;
 }
 
 function planProvinceLabel(province) {
@@ -7066,6 +7177,31 @@ function detailedPerson(person) {
     duelSeasonHistory: merged.duelSeasonHistory || [],
     skillRanks: merged.skillRanks || {}
   });
+}
+
+function personSpiritPearls(person) {
+  return personDetails.value[person?.id]?.spiritPearls
+    || (person?.id === "player" ? spiritPearlState.value : null)
+    || { dust: 0, pearls: [], history: [], bonuses: {} };
+}
+
+function personPearlFragmentCount(pearl) {
+  return Object.values(pearl?.fragments || {}).reduce((sum, value) => sum + Math.max(0, Number(value) || 0), 0);
+}
+
+function personPearlFragmentTotal(person) {
+  return (personSpiritPearls(person).pearls || []).reduce((sum, pearl) => sum + personPearlFragmentCount(pearl), 0);
+}
+
+function personFormedPearlCount(person) {
+  return (personSpiritPearls(person).pearls || []).filter((pearl) => pearl.tier > 0).length;
+}
+
+function personPearlTooltip(pearl) {
+  const name = pearl?.config?.name || pearl?.name || "灵珠";
+  const fragments = personPearlFragmentCount(pearl);
+  const stateText = pearl?.tier ? `${pearl.tier}阶${pearl.star}星` : "未凝成";
+  return `${name} · ${stateText} · 碎片 ${fragments}`;
 }
 
 function withDuelRank(person) {
@@ -8975,6 +9111,11 @@ function rootBonusText(person, root) {
   return `${rootEffectLabel(root)} +${formatPercent(rootEffectiveBonus(person, root))}`;
 }
 
+function rootEfficiencyText(person) {
+  const profile = personInsight(person).rootProfile;
+  return `经验效率 ${formatPercent(profile.cultivationMultiplier)}，突破效率 ${formatPercent(profile.breakthroughMultiplier)}`;
+}
+
 function rootSummary(person) {
   const insight = personInsight(person);
   const rootsText = rootList(person).map((root) => `${root.name}${root.key === primaryRoot(person).key ? "主" : "副"}：${rootBonusText(person, root)}`).join("；");
@@ -8987,7 +9128,7 @@ function rootSummary(person) {
 function rootSummaryLines(person) {
   const insight = personInsight(person);
   const lines = rootList(person).map((root) => `${root.name}${root.key === primaryRoot(person).key ? "主" : "副"}：${rootBonusText(person, root)}`);
-  lines.push(`经验效率 ${formatPercent(insight.rootProfile.cultivationMultiplier)}，突破效率 ${formatPercent(insight.rootProfile.breakthroughMultiplier)}`);
+  lines.push(rootEfficiencyText(person));
   if (insight.rootProfile.specialRoot) {
     lines.push(`特殊灵根：${insight.rootProfile.specialRoot.name}`);
   }
@@ -9144,21 +9285,12 @@ function statTotal(total) {
 
 function normalizeTaskMultiplierRecord(record, day, date) {
   const elixirMultiplier = Math.max(1, Number(record?.elixirMultiplier ?? record?.cultivationMultiplier) || 1);
-  const manaMultiplier = Math.max(1, Number(record?.manaMultiplier) || 1);
-  const totalMultiplier = Math.max(1, Number(record?.totalMultiplier) || elixirMultiplier * manaMultiplier);
   return {
     day,
     date: record?.date || date,
     elixirMultiplier,
-    manaMultiplier,
-    totalMultiplier
+    totalMultiplier: elixirMultiplier
   };
-}
-
-function currentTaskManaMultiplier() {
-  const effectiveMana = Math.floor(Number(derived.value.effectiveStats?.maxMana) || Number(player.value.maxMana) || 0);
-  const bonus = Math.min(0.1, Math.max(0, Math.floor(effectiveMana / 50) / 100));
-  return 1 + bonus;
 }
 
 function growthText(growth) {

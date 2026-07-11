@@ -1,6 +1,6 @@
 <template>
   <span class="character-portrait" :class="[size, rankClass, { npc: !person?.isPlayer, failed: imageFailed }]" :style="portraitStyle" aria-hidden="true">
-    <img v-if="imageSrc && !imageFailed" :src="imageSrc" :alt="person?.name || '角色头像'" @error="imageFailed = true">
+    <img v-if="imageSrc && !imageFailed" :src="imageSrc" :alt="person?.name || '角色头像'" decoding="async" @error="imageFailed = true">
     <span v-else>{{ initial }}</span>
   </span>
 </template>

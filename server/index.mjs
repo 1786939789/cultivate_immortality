@@ -91,16 +91,14 @@ function sendImage(res, portrait) {
   if (portrait.url) {
     res.writeHead(302, {
       location: portrait.url,
-      "cache-control": "no-store, max-age=0"
+      "cache-control": "public, max-age=31536000, immutable"
     });
     res.end();
     return;
   }
   res.writeHead(200, {
     "content-type": portrait.contentType || "image/webp",
-    "cache-control": "no-store, max-age=0",
-    "pragma": "no-cache",
-    "expires": "0",
+    "cache-control": "private, max-age=31536000, immutable",
     "content-length": portrait.buffer.length
   });
   res.end(portrait.buffer);

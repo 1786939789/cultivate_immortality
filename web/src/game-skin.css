@@ -5232,13 +5232,44 @@ body::before {
   display: grid;
   place-items: center;
   border-radius: 50%;
-  color: #fff7d7;
-  font-size: 26px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--root-color, #77d6bd) 74%, #d8f3e8);
+  background: #10231f;
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, .08),
+    0 0 22px color-mix(in srgb, var(--root-color, #77d6bd) 42%, transparent);
+}
+
+.equipment-surface .spirit-pearl-orb img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  border-radius: inherit;
+  filter: grayscale(.72) saturate(.62) brightness(.78);
+  opacity: .78;
+}
+
+.equipment-surface .spirit-pearl-card.owned .spirit-pearl-orb img {
+  filter: none;
+  opacity: 1;
+}
+
+.equipment-surface .spirit-pearl-card.matched .equipment-card-frame::after {
+  position: absolute;
+  left: 7px;
+  top: 7px;
+  min-width: 30px;
+  content: "契合";
+  border: 1px solid rgba(119, 214, 189, .42);
+  border-radius: 999px;
+  background: rgba(20, 83, 72, .9);
+  color: #d7fff4;
+  font-size: 9px;
   font-weight: 900;
-  background:
-    radial-gradient(circle at 35% 28%, rgba(255, 255, 255, .44), transparent 22px),
-    radial-gradient(circle at 50% 55%, rgba(82, 211, 176, .9), rgba(19, 93, 90, .96));
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .2), 0 0 22px rgba(65, 191, 161, .3);
+  line-height: 1;
+  padding: 4px 6px;
+  text-align: center;
 }
 
 .equipment-surface .equipment-card-frame {
@@ -7887,6 +7918,14 @@ body::before {
   color: #f2d58a;
 }
 
+.view.active.sect-war-room .sect-command-header .sect-command-title p {
+  color: #f3e2b8;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.55;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .72);
+}
+
 .view.active.sect-war-room .sect-panel-title h3,
 .view.active.sect-war-room .sect-map-panel .map-toolbar span {
   color: #f8e9b2;
@@ -7917,6 +7956,369 @@ body::before {
 
 .view.active.sect-war-room .war-strategy-note {
   background: rgba(255, 251, 232, .58);
+}
+
+/* Tomorrow strategy: a compact sect command table rather than a generic form. */
+.view.active.sect-war-room .sect-strategy-board {
+  --strategy-ink: #263d38;
+  --strategy-jade: #176b61;
+  --strategy-gold: #b68a3e;
+  --strategy-paper: #f5e9c8;
+  padding: 0 14px 16px;
+  background:
+    linear-gradient(135deg, transparent 0 72%, rgba(72, 105, 85, .08) 72% 73%, transparent 73%),
+    radial-gradient(circle at 12% 0%, rgba(255, 247, 207, .62), transparent 23rem),
+    linear-gradient(180deg, #efe4c5, #d7c496);
+}
+
+.view.active.sect-war-room .strategy-board-heading {
+  margin: 0 -14px;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(190, 151, 69, .48);
+  background:
+    radial-gradient(circle at 18% -60%, rgba(232, 196, 111, .22), transparent 18rem),
+    linear-gradient(100deg, #142d2b, #24443c 58%, #18322f);
+  box-shadow: inset 0 -1px rgba(255, 232, 166, .12), 0 8px 18px rgba(58, 38, 18, .14);
+}
+
+.view.active.sect-war-room .strategy-title-copy {
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  column-gap: 12px;
+  align-items: center;
+}
+
+.view.active.sect-war-room .strategy-title-copy h3,
+.view.active.sect-war-room .strategy-title-copy p {
+  grid-column: 2;
+}
+
+.view.active.sect-war-room .strategy-title-copy h3 {
+  margin: 0;
+  color: #ffe9ac;
+  font-size: 24px;
+  letter-spacing: .08em;
+}
+
+.view.active.sect-war-room .strategy-title-copy p {
+  margin: 3px 0 0;
+  color: #e7d9b4;
+  font-size: 13px;
+}
+
+.view.active.sect-war-room .strategy-title-seal {
+  grid-row: 1 / span 2;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(255, 224, 143, .64);
+  background: linear-gradient(145deg, #a94334, #742c26);
+  color: #ffe5ad;
+  font: 900 23px/1 "KaiTi", "STKaiti", serif;
+  transform: rotate(-3deg);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, .28), inset 0 0 0 3px rgba(255, 228, 157, .1);
+}
+
+.view.active.sect-war-room .strategy-sect-mark {
+  padding: 7px 11px;
+  border: 1px solid rgba(230, 195, 112, .4);
+  background: rgba(9, 24, 23, .36);
+  color: #f2d98e;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+
+.view.active.sect-war-room .strategy-command-deck {
+  display: grid;
+  grid-template-columns: minmax(280px, .85fr) minmax(320px, 1.2fr) auto;
+  gap: 14px;
+  align-items: end;
+  margin: 14px 0;
+  padding: 13px 14px;
+  border: 1px solid rgba(99, 74, 35, .32);
+  background:
+    linear-gradient(90deg, rgba(255, 251, 230, .76), rgba(230, 219, 181, .76)),
+    repeating-linear-gradient(0deg, transparent 0 23px, rgba(97, 70, 31, .04) 24px);
+  box-shadow: inset 0 0 0 1px rgba(255, 250, 218, .58), 0 7px 14px rgba(70, 45, 18, .1);
+}
+
+.view.active.sect-war-room .strategy-mode-field,
+.view.active.sect-war-room .strategy-target-field {
+  display: grid;
+  gap: 7px;
+}
+
+.view.active.sect-war-room .strategy-field-label {
+  color: #644a27;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .06em;
+}
+
+.view.active.sect-war-room .strategy-mode-options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border: 1px solid rgba(52, 76, 64, .32);
+  background: rgba(255, 253, 239, .52);
+}
+
+.view.active.sect-war-room .strategy-mode-options button {
+  min-height: 38px;
+  border: 0;
+  border-right: 1px solid rgba(52, 76, 64, .2);
+  border-radius: 0;
+  background: transparent;
+  color: #5e523d;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.view.active.sect-war-room .strategy-mode-options button:last-child {
+  border-right: 0;
+}
+
+.view.active.sect-war-room .strategy-mode-options button.active {
+  background: linear-gradient(180deg, #2c786b, #165a51);
+  color: #fff2c9;
+  box-shadow: inset 0 -2px rgba(237, 194, 94, .58);
+}
+
+.view.active.sect-war-room .strategy-target-field select {
+  min-height: 40px;
+  border-color: rgba(72, 81, 61, .34);
+  background: rgba(255, 253, 239, .86);
+  color: #382d1f;
+  font-weight: 750;
+}
+
+.view.active.sect-war-room .strategy-command-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.view.active.sect-war-room .strategy-command-actions button {
+  min-height: 40px;
+  white-space: nowrap;
+}
+
+.view.active.sect-war-room .strategy-command-actions .primary {
+  border-color: #8b6528;
+  background: linear-gradient(180deg, #337f70, #15594f);
+  color: #fff0bd;
+  box-shadow: inset 0 -3px rgba(15, 56, 50, .7), 0 4px 9px rgba(30, 66, 56, .2);
+}
+
+.view.active.sect-war-room .strategy-columns {
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr);
+  gap: 14px;
+}
+
+.view.active.sect-war-room .strategy-roster-panel {
+  padding: 0;
+  overflow: visible;
+  border: 1px solid rgba(78, 59, 30, .32);
+  border-radius: 2px;
+  background: rgba(246, 235, 202, .72);
+  box-shadow: 0 9px 18px rgba(67, 45, 20, .12), inset 0 0 0 1px rgba(255, 250, 224, .48);
+}
+
+.view.active.sect-war-room .strategy-section-heading {
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(96, 72, 34, .24);
+  background: linear-gradient(90deg, rgba(39, 70, 62, .95), rgba(47, 82, 70, .82));
+}
+
+.view.active.sect-war-room .strategy-section-heading h3 {
+  color: #ffe7a5;
+  font-size: 17px;
+}
+
+.view.active.sect-war-room .strategy-section-heading p {
+  color: #e7ddbf;
+  font-size: 12px;
+}
+
+.view.active.sect-war-room .strategy-count-badge {
+  padding: 6px 9px;
+  border: 1px solid rgba(237, 201, 112, .42);
+  background: rgba(10, 30, 27, .35);
+  color: #f5dc91;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.view.active.sect-war-room .strategy-member-list,
+.view.active.sect-war-room .strategy-defense-list {
+  gap: 7px;
+  padding: 10px;
+}
+
+.view.active.sect-war-room .strategy-member-row {
+  grid-template-columns: 34px minmax(110px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+  padding: 8px 10px;
+  border: 1px solid rgba(87, 65, 33, .2);
+  border-left: 3px solid rgba(33, 101, 87, .52);
+  border-radius: 2px;
+  background: linear-gradient(90deg, rgba(255, 251, 232, .76), rgba(231, 218, 181, .58));
+}
+
+.view.active.sect-war-room .strategy-member-row.active {
+  border-color: rgba(26, 107, 91, .66);
+  border-left-color: #a63d31;
+  background: linear-gradient(90deg, rgba(226, 244, 222, .88), rgba(246, 230, 189, .72));
+  box-shadow: inset 0 0 0 1px rgba(23, 107, 91, .12);
+}
+
+.view.active.sect-war-room .strategy-member-index {
+  display: grid !important;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(54, 86, 73, .35);
+  border-radius: 50%;
+  background: rgba(37, 72, 62, .09);
+  color: #315e53;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.view.active.sect-war-room .strategy-member-row.active .strategy-member-index {
+  border-color: rgba(157, 54, 43, .5);
+  background: #963a30;
+  color: #ffe7b0;
+}
+
+.view.active.sect-war-room .strategy-member-main,
+.view.active.sect-war-room .strategy-member-stats {
+  display: grid !important;
+  gap: 2px;
+}
+
+.view.active.sect-war-room .strategy-member-main strong {
+  color: #2f2a1f;
+  font-size: 15px;
+}
+
+.view.active.sect-war-room .strategy-member-main small,
+.view.active.sect-war-room .strategy-member-stats {
+  color: #756040;
+  font-size: 12px;
+}
+
+.view.active.sect-war-room .strategy-member-stats {
+  justify-items: end;
+}
+
+.view.active.sect-war-room .strategy-member-stats b {
+  color: #3e503f;
+  font-size: 13px;
+}
+
+.view.active.sect-war-room .strategy-city-card {
+  display: grid;
+  gap: 10px;
+  padding: 11px;
+  border: 1px solid rgba(87, 65, 33, .24);
+  border-left: 4px solid #267165;
+  border-radius: 2px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(39, 110, 93, .1), transparent 10rem),
+    linear-gradient(135deg, rgba(255, 250, 228, .82), rgba(226, 214, 177, .66));
+}
+
+.view.active.sect-war-room .strategy-city-heading {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+}
+
+.view.active.sect-war-room .strategy-city-seal {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(36, 105, 90, .46);
+  background: rgba(32, 105, 89, .1);
+  color: #23675b;
+  font-weight: 900;
+}
+
+.view.active.sect-war-room .strategy-city-heading > div {
+  display: grid;
+  gap: 2px;
+}
+
+.view.active.sect-war-room .strategy-city-heading strong {
+  color: #302619;
+  font-size: 15px;
+}
+
+.view.active.sect-war-room .strategy-city-heading span {
+  color: #766040;
+  font-size: 12px;
+}
+
+.view.active.sect-war-room .strategy-city-heading > b {
+  padding: 4px 7px;
+  border: 1px solid rgba(151, 59, 47, .35);
+  background: rgba(156, 58, 47, .08);
+  color: #8f382f;
+  font-size: 12px;
+}
+
+@media (max-width: 1040px) {
+  .view.active.sect-war-room .strategy-command-deck {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .view.active.sect-war-room .strategy-command-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+
+  .view.active.sect-war-room .strategy-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .view.active.sect-war-room .strategy-board-heading {
+    align-items: flex-start;
+  }
+
+  .view.active.sect-war-room .strategy-sect-mark {
+    display: none;
+  }
+
+  .view.active.sect-war-room .strategy-command-deck {
+    grid-template-columns: 1fr;
+  }
+
+  .view.active.sect-war-room .strategy-command-actions {
+    grid-column: auto;
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .view.active.sect-war-room .strategy-member-row {
+    grid-template-columns: 32px minmax(0, 1fr);
+  }
+
+  .view.active.sect-war-room .strategy-member-stats {
+    grid-column: 2;
+    justify-items: start;
+  }
+
+  .view.active.sect-war-room .plan-defender-stack,
+  .view.active.sect-war-room .sect-province-panel .plan-defender-stack {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 /* Fixed character dossier: keep stats in document flow instead of floating over the portrait. */
@@ -7971,6 +8373,10 @@ body::before {
 
   .sect-war-room .war-lineup {
     grid-template-columns: 1fr;
+  }
+
+  .rank-surface.view.active > .character-dossier .dossier-pearl-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 }
 
@@ -9307,7 +9713,17 @@ body::before {
 }
 
 .rank-surface.view.active > .character-dossier .dossier-frame {
+  grid-template-columns: minmax(0, 1fr);
   gap: clamp(8px, .72vw, 10px);
+}
+
+.rank-surface.view.active > .character-dossier .dossier-frame > .dossier-header,
+.rank-surface.view.active > .character-dossier .dossier-frame > .dossier-overview,
+.rank-surface.view.active > .character-dossier .dossier-frame > .dossier-pearl-strip,
+.rank-surface.view.active > .character-dossier .dossier-frame > .dossier-records {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
 }
 
 .rank-surface.view.active > .character-dossier .dossier-header {
@@ -9343,6 +9759,82 @@ body::before {
   font-weight: 800;
   font-size: 11.5px;
   line-height: 1.3;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-root-line {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-root-hover {
+  position: relative;
+  display: inline-block;
+  outline: none;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-root-name {
+  border-bottom: 1px dotted rgba(85, 52, 17, .58);
+  cursor: help;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-root-hover:focus-visible .dossier-root-name {
+  border-radius: 2px;
+  outline: 2px solid rgba(30, 101, 91, .5);
+  outline-offset: 2px;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-root-tooltip {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 8px);
+  z-index: 30;
+  width: max-content;
+  min-width: 220px;
+  max-width: min(300px, 72vw);
+  display: grid;
+  gap: 5px;
+  padding: 10px 12px;
+  border: 1px solid rgba(211, 164, 58, .7);
+  border-radius: 4px;
+  background: linear-gradient(180deg, rgba(35, 48, 38, .98), rgba(19, 31, 26, .99));
+  color: #f3dfae;
+  box-shadow: 0 10px 22px rgba(7, 18, 14, .34), inset 0 0 0 1px rgba(255, 235, 170, .12);
+  font-size: 11px;
+  line-height: 1.45;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, -4px);
+  transition: opacity .14s ease, transform .14s ease;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-root-tooltip::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -5px;
+  width: 8px;
+  height: 8px;
+  border-left: 1px solid rgba(211, 164, 58, .7);
+  border-top: 1px solid rgba(211, 164, 58, .7);
+  background: #233026;
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.rank-surface.view.active > .character-dossier .dossier-root-tooltip strong {
+  color: #ffe7a8;
+  font-size: 12px;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-root-tooltip span {
+  color: #d8c69b;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-root-hover:hover .dossier-root-tooltip,
+.rank-surface.view.active > .character-dossier .dossier-root-hover:focus .dossier-root-tooltip,
+.rank-surface.view.active > .character-dossier .dossier-root-hover:focus-visible .dossier-root-tooltip {
+  opacity: 1;
+  transform: translate(-50%, 0);
 }
 
 .rank-surface.view.active > .character-dossier .dossier-header-tags {
@@ -9744,6 +10236,99 @@ body::before {
   white-space: nowrap;
 }
 
+.rank-surface.view.active > .character-dossier .dossier-pearl-panel {
+  grid-column: 1 / -1;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-pearl-strip {
+  width: 100%;
+  margin-top: 12px;
+  padding: 12px 13px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #fff6dc, #ead9b4);
+  overflow: hidden;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-pearl-head,
+.rank-surface.view.active > .character-dossier .dossier-pearl-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-pearl-head > span,
+.rank-surface.view.active > .character-dossier .dossier-pearl-summary span {
+  color: #694c25;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-pearl-summary {
+  justify-content: flex-start;
+  margin: 8px 0 10px;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-pearl-summary span {
+  border: 1px solid rgba(116, 79, 33, .24);
+  border-radius: 3px;
+  background: rgba(255, 248, 219, .6);
+  padding: 5px 8px;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-pearl-grid {
+  display: grid;
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-pearl-item {
+  min-width: 0;
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  padding: 7px 4px;
+  border: 1px solid rgba(104, 78, 43, .22);
+  border-radius: 4px;
+  background: rgba(255, 249, 225, .48);
+}
+
+.rank-surface.view.active > .character-dossier .dossier-pearl-item img {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  object-fit: cover;
+  filter: grayscale(.72) brightness(.76);
+}
+
+.rank-surface.view.active > .character-dossier .dossier-pearl-item.formed img {
+  filter: none;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-pearl-item.matched {
+  border-color: rgba(30, 123, 95, .58);
+  box-shadow: inset 0 0 0 1px rgba(30, 123, 95, .12);
+}
+
+.rank-surface.view.active > .character-dossier .dossier-pearl-item small,
+.rank-surface.view.active > .character-dossier .dossier-pearl-item b {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-pearl-item small {
+  color: #49351e;
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-pearl-item b {
+  color: #866126;
+  font-size: 9px;
+}
+
 .rank-surface.view.active > .character-dossier .dossier-records .detail-scroll {
   flex: 1 1 auto;
   min-height: 0;
@@ -9909,9 +10494,35 @@ body::before {
     justify-content: flex-start;
   }
 
+  .rank-surface.view.active > .character-dossier .dossier-root-tooltip {
+    left: 0;
+    min-width: 210px;
+    max-width: 260px;
+    transform: translate(0, -4px);
+  }
+
+  .rank-surface.view.active > .character-dossier .dossier-root-tooltip::before {
+    left: 18px;
+    transform: rotate(45deg);
+  }
+
+  .rank-surface.view.active > .character-dossier .dossier-root-hover:hover .dossier-root-tooltip,
+  .rank-surface.view.active > .character-dossier .dossier-root-hover:focus .dossier-root-tooltip,
+  .rank-surface.view.active > .character-dossier .dossier-root-hover:focus-visible .dossier-root-tooltip {
+    transform: translate(0, 0);
+  }
+
   .rank-surface.view.active > .character-dossier .dossier-stat-bank,
   .rank-surface.view.active > .character-dossier .dossier-records {
     grid-template-columns: 1fr;
+  }
+
+  .rank-surface.view.active > .character-dossier .dossier-pearl-panel {
+    grid-column: auto;
+  }
+
+  .rank-surface.view.active > .character-dossier .dossier-pearl-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -10056,8 +10667,14 @@ body::before {
 }
 
 .view.active.sect-war-room .war-day-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
   gap: 12px;
   padding: 14px 16px 18px;
+}
+
+.view.active.sect-war-room .war-day-list > .empty {
+  grid-column: 1 / -1;
 }
 
 .view.active.sect-war-room .war-matchup-card {
@@ -10092,7 +10709,7 @@ body::before {
 
 .view.active.sect-war-room .war-matchup-head {
   min-height: 62px;
-  padding: 10px 14px 10px 18px;
+  padding: 10px 12px 10px 16px;
   border-bottom: 1px solid rgba(91, 67, 31, .18);
   background: linear-gradient(90deg, rgba(77, 54, 25, .05), transparent 45%);
 }
@@ -10113,19 +10730,19 @@ body::before {
   padding-right: 12px;
   border-right: 1px solid rgba(91, 67, 31, .2);
   color: #80623a;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
 }
 
 .view.active.sect-war-room .war-battle-identity strong {
   color: var(--war-ink);
-  font-size: 23px;
+  font-size: 21px;
 }
 
 .view.active.sect-war-room .war-battle-identity small {
   grid-column: 2 / -1;
   color: var(--war-muted);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
 }
 
@@ -10134,12 +10751,12 @@ body::before {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-width: 100px;
+  min-width: 92px;
   justify-content: center;
   padding: 7px 10px;
   border: 1px solid currentColor;
   border-radius: 3px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 900;
 }
 
@@ -10154,21 +10771,63 @@ body::before {
 }
 
 .view.active.sect-war-room .war-lineup {
-  grid-template-columns: minmax(0, 1fr) 96px minmax(0, 1fr);
-  gap: 13px;
+  position: relative;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
   align-items: stretch;
-  padding: 14px 18px;
-  background: linear-gradient(90deg, rgba(159, 52, 41, .035), transparent 38%, transparent 62%, rgba(30, 101, 91, .04));
+  padding: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 226, 143, .28), transparent 24%),
+    linear-gradient(180deg, rgba(137, 46, 37, .09) 0 43%, rgba(72, 50, 24, .08) 43% 57%, rgba(27, 98, 88, .1) 57% 100%);
 }
 
 .view.active.sect-war-room .war-team {
+  position: relative;
+  z-index: 1;
+  grid-template-columns: 108px minmax(0, 1fr) 108px;
   gap: 10px;
+  align-items: center;
+  min-height: 146px;
+  padding: 12px 12px 14px;
+}
+
+.view.active.sect-war-room .war-team-attacker .war-team-name {
+  grid-column: 1;
+}
+
+.view.active.sect-war-room .war-team-attacker .war-team-row {
+  grid-column: 2;
+}
+
+.view.active.sect-war-room .war-team-attacker {
+  border-bottom: 1px solid rgba(120, 74, 38, .24);
+}
+
+.view.active.sect-war-room .war-team-defender {
+  padding-top: 12px;
+}
+
+.view.active.sect-war-room .war-team-defender .war-team-name {
+  grid-column: 3;
+}
+
+.view.active.sect-war-room .war-team-defender .war-team-row {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.view.active.sect-war-room .war-team.victor {
+  box-shadow: inset 4px 0 0 rgba(202, 155, 57, .72), inset -4px 0 0 rgba(202, 155, 57, .72);
 }
 
 .view.active.sect-war-room .war-team-name {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
   gap: 9px;
   color: var(--war-ink);
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .view.active.sect-war-room .war-team-name.defender {
@@ -10198,65 +10857,100 @@ body::before {
 
 .view.active.sect-war-room .war-team-name small {
   color: #8a6d45;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 800;
 }
 
 .view.active.sect-war-room .war-team-row {
-  grid-auto-columns: 62px;
-  gap: 8px;
+  grid-auto-columns: 76px;
+  gap: 6px;
+  justify-content: center;
+  overflow-x: auto;
+  padding: 2px 1px 3px;
+  scrollbar-width: thin;
 }
 
 .view.active.sect-war-room .war-roster-card {
-  min-width: 62px;
-  gap: 4px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
+  position: relative;
+  min-width: 76px;
+  gap: 5px;
+  padding: 6px 4px 7px;
+  border: 1px solid rgba(75, 55, 31, .34);
+  border-radius: 3px;
+  background: linear-gradient(180deg, rgba(48, 42, 31, .98), rgba(25, 25, 21, .97));
+  box-shadow: 0 5px 10px rgba(34, 22, 10, .2), inset 0 0 0 1px rgba(234, 206, 130, .12);
+}
+
+.view.active.sect-war-room .war-portrait-frame {
+  position: relative;
+  display: grid;
+  width: 100%;
+  place-items: center;
 }
 
 .view.active.sect-war-room .war-roster-card .character-portrait {
-  border: 1px solid rgba(74, 54, 28, .25);
-  border-radius: 4px;
+  width: 46px;
+  height: 46px;
+  border: 1px solid rgba(219, 186, 102, .5);
+  border-radius: 2px;
   background: rgba(255, 252, 232, .72);
-  box-shadow: 0 4px 8px rgba(35, 22, 9, .12);
+  box-shadow: 0 3px 7px rgba(8, 8, 6, .4);
 }
 
 .view.active.sect-war-room .war-roster-card strong {
-  font-size: 10px;
+  color: #fff0bf;
+  font-size: 12px;
 }
 
 .view.active.sect-war-room .war-roster-card small {
-  font-size: 9px;
+  color: #b8a578;
+  font-size: 11px;
 }
 
 .view.active.sect-war-room .war-lineup-vs {
+  position: relative;
+  z-index: 3;
   align-self: center;
-  gap: 5px;
+  grid-template-columns: 1fr auto auto auto 1fr;
+  justify-items: center;
+  align-items: center;
+  gap: 7px;
+  min-height: 42px;
+  margin: -21px 10px;
+  pointer-events: none;
+}
+
+.view.active.sect-war-room .war-lineup-vs i {
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(112, 75, 34, .5));
+}
+
+.view.active.sect-war-room .war-lineup-vs i:last-child {
+  transform: scaleX(-1);
 }
 
 .view.active.sect-war-room .war-lineup-vs small {
   color: #8a6d45;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 800;
 }
 
 .view.active.sect-war-room .war-lineup-vs strong {
-  min-width: 52px;
-  min-height: 52px;
-  border: 1px solid rgba(122, 48, 35, .45);
+  min-width: 50px;
+  min-height: 50px;
+  border: 2px solid rgba(237, 197, 97, .72);
   border-radius: 50%;
-  background: radial-gradient(circle, #8e3027 0 52%, #6e241e 53% 100%);
+  background: radial-gradient(circle, #9e3529 0 46%, #6e241e 47% 70%, #302318 71% 100%);
   color: #ffe9ad;
-  font-size: 25px;
-  transform: none;
-  box-shadow: 0 0 0 4px rgba(142, 48, 39, .09), 0 5px 10px rgba(49, 24, 15, .18);
+  font: 900 23px/1 "KaiTi", "STKaiti", serif;
+  transform: rotate(-4deg);
+  box-shadow: 0 0 0 4px rgba(142, 48, 39, .11), 0 6px 12px rgba(49, 24, 15, .25);
 }
 
 .view.active.sect-war-room .war-lineup-vs span {
   color: #6f472d;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
 }
 
@@ -10268,25 +10962,26 @@ body::before {
 }
 
 .view.active.sect-war-room .war-strategy-preview {
-  grid-template-columns: 76px minmax(0, 1fr);
-  gap: 4px 12px;
-  margin: 0 18px;
+  grid-template-columns: 1fr;
+  gap: 5px;
+  margin: 0 14px;
   padding: 10px 0;
   border-color: rgba(91, 67, 31, .2);
 }
 
 .view.active.sect-war-room .war-strategy-preview > strong {
-  grid-row: 1 / span 4;
+  grid-row: auto;
   padding-top: 2px;
   color: #3f3120;
-  font-size: 11px;
+  font-size: 15px;
+  line-height: 1.4;
 }
 
 .view.active.sect-war-room .war-strategy-preview span {
   color: #675238;
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 700;
-  line-height: 1.45;
+  line-height: 1.65;
 }
 
 .view.active.sect-war-room .war-result-footer {
@@ -10295,7 +10990,7 @@ body::before {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 9px 14px 9px 18px;
+  padding: 9px 12px 9px 14px;
   background: rgba(91, 67, 31, .06);
 }
 
@@ -10303,8 +10998,11 @@ body::before {
   display: block;
   min-width: 0;
   color: #655038;
-  font-size: 10px;
+  font-size: 12px;
   text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .view.active.sect-war-room .war-result-footer > span {
@@ -10313,8 +11011,14 @@ body::before {
   align-items: center;
   gap: 3px;
   color: #315e56;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
+}
+
+@media (max-width: 1100px) {
+  .view.active.sect-war-room .war-day-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 900px) {
@@ -10356,11 +11060,10 @@ body::before {
 
   .view.active.sect-war-room .war-lineup {
     grid-template-columns: 1fr;
-    padding-inline: 14px;
   }
 
   .view.active.sect-war-room .war-lineup-vs {
-    min-height: 64px;
+    min-height: 42px;
   }
 
   .view.active.sect-war-room .war-lineup-vs strong {
@@ -10370,8 +11073,37 @@ body::before {
   }
 
   .view.active.sect-war-room .war-team-name.defender {
-    flex-direction: row;
-    text-align: left;
+    flex-direction: row-reverse;
+    text-align: right;
+  }
+
+  .view.active.sect-war-room .war-team,
+  .view.active.sect-war-room .war-team-defender {
+    grid-template-columns: 72px minmax(0, 1fr) 72px;
+    min-height: 128px;
+  }
+
+  .view.active.sect-war-room .war-team-row {
+    grid-auto-columns: 72px;
+    gap: 7px;
+  }
+
+  .view.active.sect-war-room .war-roster-card {
+    min-width: 72px;
+    padding: 6px 4px 7px;
+  }
+
+  .view.active.sect-war-room .war-roster-card .character-portrait {
+    width: 44px;
+    height: 44px;
+  }
+
+  .view.active.sect-war-room .war-team-defender .war-team-name {
+    grid-column: 3;
+  }
+
+  .view.active.sect-war-room .war-team-defender .war-team-row {
+    grid-column: 2;
   }
 
   .view.active.sect-war-room .war-strategy-preview {

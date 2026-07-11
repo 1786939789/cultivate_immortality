@@ -3,7 +3,7 @@ import * as adventurer from "@dicebear/adventurer";
 import * as adventurerNeutral from "@dicebear/adventurer-neutral";
 
 const portraitMap = {
-  "李昕纾": "/portraits/custom/lixinshu.jpg",
+  "李昕纾": "/portraits/custom/lixinshu-web.webp",
   "韩立": "/portraits/generated/han-li.png",
   "陈巧倩": "/portraits/generated-ai/npc-002.svg",
   "钟卫娘": "/portraits/generated-ai/npc-003.svg",
@@ -207,7 +207,7 @@ const portraitMap = {
 
 export function portraitFor(person) {
   if (!person?.name) return "";
-  if (person.id === "player" || person.isPlayer) return "/portraits/generated/han-li.png";
+  if (person.id === "player" || person.isPlayer) return "/portraits/generated/han-li-web.webp";
   if (portraitMap[person.name]) return portraitMap[person.name];
   return dicebearPortraitFor(person);
 }
