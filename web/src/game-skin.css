@@ -5222,6 +5222,25 @@ body::before {
 .equipment-surface .equipment-card.tier-5 { --quality: var(--quality-legendary); }
 .equipment-surface .equipment-card.tier-6 { --quality: var(--quality-mythic); }
 
+.equipment-surface .spirit-pearl-card {
+  --quality: #77d6bd;
+}
+
+.equipment-surface .spirit-pearl-orb {
+  width: 72px;
+  height: 72px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff7d7;
+  font-size: 26px;
+  font-weight: 900;
+  background:
+    radial-gradient(circle at 35% 28%, rgba(255, 255, 255, .44), transparent 22px),
+    radial-gradient(circle at 50% 55%, rgba(82, 211, 176, .9), rgba(19, 93, 90, .96));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .2), 0 0 22px rgba(65, 191, 161, .3);
+}
+
 .equipment-surface .equipment-card-frame {
   min-height: 156px;
   display: grid;
@@ -7878,6 +7897,28 @@ body::before {
   color: var(--sect-muted);
 }
 
+.view.active.sect-war-room .war-strategy-panel {
+  border-color: rgba(83, 60, 29, .24);
+  background:
+    radial-gradient(circle at 12% 0%, rgba(245, 219, 139, .22), transparent 18rem),
+    linear-gradient(135deg, rgba(255, 249, 224, .86), rgba(220, 237, 216, .68));
+}
+
+.view.active.sect-war-room .war-strategy-panel header strong,
+.view.active.sect-war-room .war-strategy-note strong {
+  color: #2f2111;
+}
+
+.view.active.sect-war-room .war-strategy-panel header small,
+.view.active.sect-war-room .war-strategy-note p,
+.view.active.sect-war-room .war-strategy-preview span {
+  color: #5f4528;
+}
+
+.view.active.sect-war-room .war-strategy-note {
+  background: rgba(255, 251, 232, .58);
+}
+
 /* Fixed character dossier: keep stats in document flow instead of floating over the portrait. */
 .sidebar {
   display: flex;
@@ -8539,6 +8580,8 @@ body::before {
 
 .view.active.sect-war-room .sect-war-replay-panel .duel-fighter {
   display: grid;
+  box-sizing: border-box;
+  width: 100%;
   grid-template-rows: 56px 20px 16px 18px 30px 30px;
   align-content: start;
   justify-items: start;
@@ -8575,8 +8618,8 @@ body::before {
 }
 
 .view.active.sect-war-room .sect-war-replay-panel .duel-fighter .meter {
-  width: 168px;
-  max-width: 100%;
+  width: 100%;
+  max-width: 168px;
   min-height: 30px;
   margin-top: 0;
 }
@@ -8605,10 +8648,22 @@ body::before {
   gap: 3px;
 }
 
-.view.active.sect-war-room .sect-war-replay-panel .duel-fighter.left .duel-fighter-attrs,
-.view.active.sect-war-room .sect-war-replay-panel .duel-fighter.left .meter {
+.view.active.sect-war-room .sect-war-replay-panel .duel-fighter.left .duel-fighter-attrs {
   justify-content: flex-start;
   justify-self: start;
+}
+
+.view.active.sect-war-room .sect-war-replay-panel .duel-fighter.left .meter {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 168px;
+  justify-self: start;
+  text-align: left;
+}
+
+.view.active.sect-war-room .sect-war-replay-panel .duel-fighter.left .meter-head {
+  width: 100%;
+  text-align: left;
 }
 
 .view.active.sect-war-room .sect-war-replay-panel .duel-live-center {
@@ -9857,5 +9912,478 @@ body::before {
   .rank-surface.view.active > .character-dossier .dossier-stat-bank,
   .rank-surface.view.active > .character-dossier .dossier-records {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Siege dispatch: a readable campaign ledger inside the existing sect war room. */
+.view.active.sect-war-room .sect-war-log-panel {
+  --war-ink: #24190f;
+  --war-muted: #715b3e;
+  --war-red: #9f3429;
+  --war-red-soft: #f1d9cc;
+  --war-green: #1e655b;
+  --war-green-soft: #d4e4d7;
+  padding: 0;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(238, 224, 185, .98), rgba(215, 197, 154, .98));
+}
+
+.view.active.sect-war-room .sect-war-log-panel .war-log-head {
+  min-height: 118px;
+  margin: 0;
+  padding: 18px 20px;
+  border-bottom: 1px solid rgba(229, 194, 114, .34);
+  background:
+    radial-gradient(circle at 15% 0%, rgba(224, 187, 101, .17), transparent 22rem),
+    linear-gradient(105deg, #172b2b, #263936 58%, #172521);
+  box-shadow: inset 0 -1px 0 rgba(5, 12, 11, .8);
+}
+
+.view.active.sect-war-room .war-log-kicker {
+  display: block;
+  margin-bottom: 5px;
+  color: #d6bd7b;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.view.active.sect-war-room .war-log-title-copy h3 {
+  margin: 0 0 4px;
+  color: #fff1bd;
+  font: 900 30px/1.1 "KaiTi", "STKaiti", "Microsoft YaHei", serif;
+  letter-spacing: 0;
+}
+
+.view.active.sect-war-room .war-log-title-copy p {
+  color: rgba(238, 224, 181, .72);
+  font-size: 12px;
+}
+
+.view.active.sect-war-room .war-log-summary-strip {
+  gap: 6px;
+}
+
+.view.active.sect-war-room .war-log-summary-strip span {
+  min-width: 88px;
+  grid-template-columns: auto auto;
+  grid-template-rows: auto auto;
+  place-items: initial;
+  column-gap: 8px;
+  padding: 9px 11px;
+  border-color: rgba(244, 220, 151, .2);
+  background: rgba(7, 17, 16, .3);
+  box-shadow: inset 0 1px 0 rgba(255, 246, 209, .06);
+}
+
+.view.active.sect-war-room .war-log-summary-strip small {
+  grid-column: 1 / -1;
+  color: rgba(255, 239, 191, .68);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.view.active.sect-war-room .war-log-summary-strip b {
+  align-self: end;
+  color: #fff1bd;
+  font-size: 23px;
+}
+
+.view.active.sect-war-room .war-log-summary-strip em {
+  align-self: end;
+  color: rgba(255, 239, 191, .54);
+  font-size: 9px;
+  font-style: normal;
+}
+
+.view.active.sect-war-room .war-log-summary-strip .captured {
+  border-top: 2px solid #c65c49;
+}
+
+.view.active.sect-war-room .war-log-summary-strip .defended {
+  border-top: 2px solid #5ba093;
+}
+
+.view.active.sect-war-room .war-log-summary-strip .shown {
+  border-top: 2px solid #c8a85e;
+}
+
+.view.active.sect-war-room .sect-war-log-panel .war-log-toolbar {
+  grid-template-columns: minmax(290px, .72fr) minmax(240px, 1fr);
+  margin: 0;
+  padding: 12px 16px;
+  border: 0;
+  border-bottom: 1px solid rgba(83, 60, 29, .25);
+  border-radius: 0;
+  background: rgba(247, 238, 207, .58);
+  box-shadow: inset 0 -1px 0 rgba(255, 252, 230, .45);
+}
+
+.view.active.sect-war-room .sect-war-log-panel .war-log-date-controls {
+  grid-template-columns: 36px minmax(150px, 1fr) 36px;
+  gap: 6px;
+}
+
+.view.active.sect-war-room .war-log-date-controls label > span,
+.view.active.sect-war-room .war-search > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #604925;
+}
+
+.view.active.sect-war-room .war-day-step {
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(73, 52, 25, .34);
+  border-radius: 4px;
+  background: linear-gradient(180deg, #38534d, #203a36);
+  color: #f5dda1;
+  box-shadow: inset 0 1px 0 rgba(255, 240, 194, .14);
+}
+
+.view.active.sect-war-room .war-day-step:disabled {
+  opacity: .38;
+}
+
+.view.active.sect-war-room .sect-war-log-panel input {
+  min-height: 36px;
+  background: rgba(255, 252, 235, .86);
+}
+
+.view.active.sect-war-room .war-day-list {
+  gap: 12px;
+  padding: 14px 16px 18px;
+}
+
+.view.active.sect-war-room .war-matchup-card {
+  gap: 0;
+  padding: 0;
+  border: 1px solid rgba(64, 47, 25, .3);
+  border-radius: 5px;
+  background: rgba(249, 242, 214, .88);
+  box-shadow: 0 7px 15px rgba(48, 31, 13, .09), inset 0 0 0 1px rgba(255, 252, 232, .54);
+}
+
+.view.active.sect-war-room .war-matchup-card::before {
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  border-radius: 0;
+  background: var(--war-green);
+  opacity: 1;
+}
+
+.view.active.sect-war-room .war-matchup-card.captured::before {
+  background: var(--war-red);
+}
+
+.view.active.sect-war-room .war-matchup-card:hover,
+.view.active.sect-war-room .war-matchup-card:focus-visible {
+  transform: translateY(-1px);
+  border-color: rgba(31, 91, 81, .58);
+  background: #fbf4dc;
+  box-shadow: 0 12px 22px rgba(48, 31, 13, .14), inset 0 0 0 1px rgba(255, 252, 232, .7);
+}
+
+.view.active.sect-war-room .war-matchup-head {
+  min-height: 62px;
+  padding: 10px 14px 10px 18px;
+  border-bottom: 1px solid rgba(91, 67, 31, .18);
+  background: linear-gradient(90deg, rgba(77, 54, 25, .05), transparent 45%);
+}
+
+.view.active.sect-war-room .war-battle-identity {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: baseline;
+  gap: 5px 10px;
+}
+
+.view.active.sect-war-room .war-battle-number {
+  grid-row: 1 / 3;
+  align-self: stretch;
+  display: grid;
+  place-items: center;
+  padding-right: 12px;
+  border-right: 1px solid rgba(91, 67, 31, .2);
+  color: #80623a;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.view.active.sect-war-room .war-battle-identity strong {
+  color: var(--war-ink);
+  font-size: 23px;
+}
+
+.view.active.sect-war-room .war-battle-identity small {
+  grid-column: 2 / -1;
+  color: var(--war-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.view.active.sect-war-room .war-outcome {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 100px;
+  justify-content: center;
+  padding: 7px 10px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.view.active.sect-war-room .war-outcome.captured {
+  color: var(--war-red);
+  background: var(--war-red-soft);
+}
+
+.view.active.sect-war-room .war-outcome.defended {
+  color: var(--war-green);
+  background: var(--war-green-soft);
+}
+
+.view.active.sect-war-room .war-lineup {
+  grid-template-columns: minmax(0, 1fr) 96px minmax(0, 1fr);
+  gap: 13px;
+  align-items: stretch;
+  padding: 14px 18px;
+  background: linear-gradient(90deg, rgba(159, 52, 41, .035), transparent 38%, transparent 62%, rgba(30, 101, 91, .04));
+}
+
+.view.active.sect-war-room .war-team {
+  gap: 10px;
+}
+
+.view.active.sect-war-room .war-team-name {
+  gap: 9px;
+  color: var(--war-ink);
+  font-size: 14px;
+}
+
+.view.active.sect-war-room .war-team-name.defender {
+  flex-direction: row-reverse;
+  text-align: right;
+}
+
+.view.active.sect-war-room .war-team-name i {
+  width: 32px;
+  height: 34px;
+  flex: 0 0 32px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 2px 2px 5px 5px;
+  background: var(--banner-color);
+  color: #fff5d1;
+  font-size: 12px;
+  font-style: normal;
+  box-shadow: inset 0 0 0 1px rgba(255, 244, 206, .24), 0 3px 6px rgba(27, 18, 9, .15);
+}
+
+.view.active.sect-war-room .war-team-name span {
+  display: grid;
+  gap: 2px;
+}
+
+.view.active.sect-war-room .war-team-name small {
+  color: #8a6d45;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.view.active.sect-war-room .war-team-row {
+  grid-auto-columns: 62px;
+  gap: 8px;
+}
+
+.view.active.sect-war-room .war-roster-card {
+  min-width: 62px;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.view.active.sect-war-room .war-roster-card .character-portrait {
+  border: 1px solid rgba(74, 54, 28, .25);
+  border-radius: 4px;
+  background: rgba(255, 252, 232, .72);
+  box-shadow: 0 4px 8px rgba(35, 22, 9, .12);
+}
+
+.view.active.sect-war-room .war-roster-card strong {
+  font-size: 10px;
+}
+
+.view.active.sect-war-room .war-roster-card small {
+  font-size: 9px;
+}
+
+.view.active.sect-war-room .war-lineup-vs {
+  align-self: center;
+  gap: 5px;
+}
+
+.view.active.sect-war-room .war-lineup-vs small {
+  color: #8a6d45;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.view.active.sect-war-room .war-lineup-vs strong {
+  min-width: 52px;
+  min-height: 52px;
+  border: 1px solid rgba(122, 48, 35, .45);
+  border-radius: 50%;
+  background: radial-gradient(circle, #8e3027 0 52%, #6e241e 53% 100%);
+  color: #ffe9ad;
+  font-size: 25px;
+  transform: none;
+  box-shadow: 0 0 0 4px rgba(142, 48, 39, .09), 0 5px 10px rgba(49, 24, 15, .18);
+}
+
+.view.active.sect-war-room .war-lineup-vs span {
+  color: #6f472d;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.view.active.sect-war-room .war-direct-capture {
+  margin: 14px 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.view.active.sect-war-room .war-strategy-preview {
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 4px 12px;
+  margin: 0 18px;
+  padding: 10px 0;
+  border-color: rgba(91, 67, 31, .2);
+}
+
+.view.active.sect-war-room .war-strategy-preview > strong {
+  grid-row: 1 / span 4;
+  padding-top: 2px;
+  color: #3f3120;
+  font-size: 11px;
+}
+
+.view.active.sect-war-room .war-strategy-preview span {
+  color: #675238;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.view.active.sect-war-room .war-result-footer {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 14px 9px 18px;
+  background: rgba(91, 67, 31, .06);
+}
+
+.view.active.sect-war-room .war-result-footer p {
+  display: block;
+  min-width: 0;
+  color: #655038;
+  font-size: 10px;
+  text-align: left;
+}
+
+.view.active.sect-war-room .war-result-footer > span {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #315e56;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+@media (max-width: 900px) {
+  .view.active.sect-war-room .sect-war-log-panel .war-log-head,
+  .view.active.sect-war-room .sect-war-log-panel .war-log-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .view.active.sect-war-room .war-log-summary-strip {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 720px) {
+  .view.active.sect-war-room .sect-war-log-panel .war-log-head {
+    padding: 16px;
+  }
+
+  .view.active.sect-war-room .war-log-summary-strip {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .view.active.sect-war-room .war-log-summary-strip span {
+    min-width: 0;
+    padding-inline: 8px;
+  }
+
+  .view.active.sect-war-room .war-matchup-head,
+  .view.active.sect-war-room .war-result-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .view.active.sect-war-room .war-outcome {
+    margin-left: 52px;
+  }
+
+  .view.active.sect-war-room .war-lineup {
+    grid-template-columns: 1fr;
+    padding-inline: 14px;
+  }
+
+  .view.active.sect-war-room .war-lineup-vs {
+    min-height: 64px;
+  }
+
+  .view.active.sect-war-room .war-lineup-vs strong {
+    min-width: 44px;
+    min-height: 44px;
+    font-size: 21px;
+  }
+
+  .view.active.sect-war-room .war-team-name.defender {
+    flex-direction: row;
+    text-align: left;
+  }
+
+  .view.active.sect-war-room .war-strategy-preview {
+    grid-template-columns: 1fr;
+    margin-inline: 14px;
+  }
+
+  .view.active.sect-war-room .war-strategy-preview > strong {
+    grid-row: auto;
+  }
+
+  .view.active.sect-war-room .war-result-footer > span {
+    align-self: flex-end;
   }
 }

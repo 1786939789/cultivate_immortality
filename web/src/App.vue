@@ -1587,7 +1587,7 @@
           <div class="panel section-head compact sect-command-header">
             <div class="sect-command-title">
               <h3>宗门疆域</h3>
-              <p>各宗门每日会随机攻打一处省级行政区；无主之地直接占领，有主之地按守城者车轮战结算。</p>
+              <p>各宗门每日按资源、距离、疲劳与守城价值制定攻守；你的宗门可手动安排明日战略，妖潮也会随机袭城。</p>
             </div>
             <div class="sect-command-stats" aria-label="宗门疆域概览">
               <span>
@@ -1784,6 +1784,93 @@
             </div>
           </div>
 
+          <div v-else-if="activeSectSubTab === 'strategy'" class="panel sect-system-panel sect-province-panel">
+            <div class="section-head compact sect-panel-title">
+              <div>
+                <h3>明日战略</h3>
+                <p>第 {{ planTargetDay }} 天执行；未设置的攻守由宗门自行补齐。</p>
+              </div>
+              <span class="tag">{{ playerSectNameForPlan || "本宗" }}</span>
+            </div>
+            <div class="equipment-tools">
+              <label>战略态度
+                <select v-model="sectPlanDraft.mode">
+                  <option value="conservative">保守</option>
+                  <option value="balanced">均衡</option>
+                  <option value="aggressive">激进</option>
+                </select>
+              </label>
+              <label>攻城目标
+                <select v-model="sectPlanDraft.attackTarget">
+                  <option value="">自动选择</option>
+                  <option v-for="province in attackableProvinces" :key="province.id" :value="province.id">
+                    {{ planProvinceLabel(province) }}
+                  </option>
+                </select>
+              </label>
+              <button class="secondary" type="button" @click="resetSectPlanAuto">恢复自动</button>
+              <button class="primary" type="button" :disabled="isActionPending('/api/sect/plan')" @click="saveSectPlan">
+                {{ isActionPending("/api/sect/plan") ? "保存中..." : "保存明日战略" }}
+              </button>
+            </div>
+
+            <div class="grid">
+              <article class="panel flat">
+                <div class="section-head compact">
+                  <div>
+                    <h3>攻城队伍</h3>
+                    <p>{{ selectedAttackProvince ? `目标 ${selectedAttackProvince.name}，最多 ${selectedAttackProvince.attackerLimit || 6} 人，距离 ${selectedAttackProvince.distance}` : "不指定目标时由 AI 选城选人" }}</p>
+                  </div>
+                  <span class="tag">{{ sectPlanDraft.attackMemberIds.length }} 人</span>
+                </div>
+                <div class="timeline compact-list">
+                  <button
+                    v-for="member in playerSectMembers"
+                    :key="`attack-${member.id}`"
+                    class="event event-button"
+                    type="button"
+                    :class="{ active: assignedAttackIds.has(member.id) }"
+                    @click="togglePlanAttackMember(member.id)"
+                  >
+                    <strong>{{ member.name }}</strong>
+                    <span>{{ planMemberLabel(member) }}</span>
+                  </button>
+                </div>
+              </article>
+
+              <article class="panel flat">
+                <div class="section-head compact">
+                  <div>
+                    <h3>己方布防</h3>
+                    <p>攻城成员不能同时守城；空缺会由 AI 按价值补齐。</p>
+                  </div>
+                  <span class="tag">{{ playerOwnedProvinces.length }} 城</span>
+                </div>
+                <div class="timeline compact-list">
+                  <section class="event" v-for="province in playerOwnedProvinces" :key="`defense-${province.id}`">
+                    <strong>{{ province.name }} · 防守价值 {{ province.defenseValue || 0 }}</strong>
+                    <span>资源 {{ province.effect.label }} · 上限 {{ province.defenderLimit || 0 }} 人 · 已守 {{ (sectPlanDraft.defense[province.id] || []).length }}</span>
+                    <div class="defender-stack">
+                      <button
+                        v-for="member in playerSectMembers"
+                        :key="`${province.id}-${member.id}`"
+                        type="button"
+                        class="defender-chip"
+                        :class="{ active: (sectPlanDraft.defense[province.id] || []).includes(member.id), muted: assignedAttackIds.has(member.id) }"
+                        :disabled="assignedAttackIds.has(member.id)"
+                        :title="planMemberLabel(member)"
+                        @click="togglePlanDefender(province.id, member.id)"
+                      >
+                        {{ member.name.slice(0, 2) }}
+                      </button>
+                    </div>
+                  </section>
+                  <div v-if="!playerOwnedProvinces.length" class="empty">本宗暂无城市，明日可全员攻城。</div>
+                </div>
+              </article>
+            </div>
+          </div>
+
           <div v-else-if="lastBattle && !selectedProvinceWar" class="sect-war-replay-shell">
             <section class="duel-replay-panel live sect-war-replay-panel">
               <div class="duel-replay-title">
@@ -1885,10 +1972,31 @@
               <div class="war-day-title">
                 <div>
                   <strong>{{ selectedProvinceWar.attacker }} 攻 {{ selectedProvinceWar.defender }}</strong>
-                  <small>{{ selectedProvinceWar.provinceName }} · {{ selectedProvinceWar.battles.length }} 场 PK</small>
+                  <small>{{ selectedProvinceWar.provinceName }} · {{ selectedProvinceWar.battles.length ? `${selectedProvinceWar.battles.length} 场 PK` : "无主接管" }}</small>
                 </div>
                 <span class="tag">{{ selectedProvinceWar.captured ? "易主" : "守住" }}</span>
               </div>
+              <section v-if="warStrategySections(selectedProvinceWar).length" class="war-strategy-panel" aria-label="攻守策略推演">
+                <header>
+                  <span aria-hidden="true">策</span>
+                  <div>
+                    <strong>军师札记</strong>
+                    <small>{{ selectedProvinceWar.strategy?.summary || warStrategyPreview(selectedProvinceWar)[0] }}</small>
+                  </div>
+                </header>
+                <div class="war-strategy-grid">
+                  <article v-for="section in warStrategySections(selectedProvinceWar)" :key="section.key" class="war-strategy-note">
+                    <span>{{ section.label }}</span>
+                    <strong>{{ section.title }}</strong>
+                    <p v-for="point in section.points" :key="point">{{ point }}</p>
+                    <div v-if="section.metrics.length" class="war-strategy-metrics">
+                      <em v-for="metric in section.metrics" :key="`${section.key}-${metric.label}`">
+                        {{ metric.label }}<b>{{ metric.value }}</b>
+                      </em>
+                    </div>
+                  </article>
+                </div>
+              </section>
               <div class="war-killboards">
                 <div class="war-killboard">
                   <strong>{{ selectedProvinceWar.attacker }} 击杀</strong>
@@ -2089,20 +2197,23 @@
           <div v-else class="panel sect-system-panel sect-war-log-panel">
             <div class="section-head compact sect-panel-title war-log-head">
               <div class="war-log-title-copy">
-                <h3>每日攻城记录</h3>
-                <p>{{ selectedProvinceWarDate }} · {{ selectedProvinceWarSummary.total }} 处战事</p>
+                <span class="war-log-kicker">九州军情司 · 第 {{ selectedProvinceWarDay }} 日</span>
+                <h3>攻城战报</h3>
+                <p>{{ selectedProvinceWarDate }}，共记录 {{ selectedProvinceWarSummary.total }} 场攻守交锋</p>
               </div>
               <div class="war-log-summary-strip">
-                <span><b>{{ selectedProvinceWarSummary.captured }}</b> 易主</span>
-                <span><b>{{ selectedProvinceWarSummary.defended }}</b> 守住</span>
-                <span><b>{{ filteredProvinceWars.length }}</b> 当前显示</span>
+                <span class="captured"><small>城池易主</small><b>{{ selectedProvinceWarSummary.captured }}</b><em>攻方得胜</em></span>
+                <span class="defended"><small>守城告捷</small><b>{{ selectedProvinceWarSummary.defended }}</b><em>守方得胜</em></span>
+                <span class="shown"><small>当前战报</small><b>{{ filteredProvinceWars.length }}</b><em>筛选结果</em></span>
               </div>
             </div>
 
             <div class="war-log-toolbar">
               <div class="war-log-date-controls">
-                <button class="secondary" type="button" @click="changeProvinceWarDay(-1)">前一天</button>
-                <label>查看日期
+                <button class="war-day-step" type="button" aria-label="查看前一天战报" @click="changeProvinceWarDay(-1)">
+                  <ChevronLeft :size="18" aria-hidden="true" />
+                </button>
+                <label><span><CalendarDays :size="15" aria-hidden="true" />战报日期</span>
                   <input
                     v-model="selectedProvinceWarDateInput"
                     type="date"
@@ -2112,26 +2223,36 @@
                     aria-label="选择攻城记录日期"
                   >
                 </label>
-                <button class="secondary" type="button" :disabled="selectedProvinceWarDay >= state.day" @click="changeProvinceWarDay(1)">后一天</button>
+                <button class="war-day-step" type="button" :disabled="selectedProvinceWarDay >= state.day" aria-label="查看后一天战报" @click="changeProvinceWarDay(1)">
+                  <ChevronRight :size="18" aria-hidden="true" />
+                </button>
               </div>
-              <label class="war-search">搜索省份 / 宗门
+              <label class="war-search"><span><Search :size="15" aria-hidden="true" />检索战报</span>
                 <span class="search-field">
-                  <input v-model.trim="provinceWarSearch" type="search" placeholder="例如：贵州、黄枫谷、妙音门">
+                  <input v-model.trim="provinceWarSearch" type="search" placeholder="输入省份或宗门名称">
                   <button v-if="provinceWarSearch" class="search-clear" type="button" aria-label="清空攻城记录搜索" @click="provinceWarSearch = ''">×</button>
                 </span>
               </label>
             </div>
 
             <div class="war-day-list" v-if="selectedProvinceWarDayRecord">
-              <button v-for="war in filteredProvinceWars" :key="war.id" class="war-matchup-card" :class="{ captured: war.captured }" type="button" @click="openProvinceWarDetail(war)">
+              <button v-for="(war, warIndex) in filteredProvinceWars" :key="war.id" class="war-matchup-card" :class="{ captured: war.captured, defended: !war.captured }" type="button" :aria-label="`查看${war.provinceName}攻城战详情`" @click="openProvinceWarDetail(war)">
                 <div class="war-matchup-head">
-                  <strong>{{ war.provinceName }}</strong>
-                  <span class="tag">{{ war.captured ? "易主" : "守住" }}</span>
+                  <div class="war-battle-identity">
+                    <span class="war-battle-number">第 {{ String(warIndex + 1).padStart(2, "0") }} 战</span>
+                    <strong>{{ war.provinceName }}</strong>
+                    <small>{{ war.attacker }} 进攻 {{ war.defender }}</small>
+                  </div>
+                  <span class="war-outcome" :class="war.captured ? 'captured' : 'defended'">
+                    <Sword v-if="war.captured" :size="16" aria-hidden="true" />
+                    <ShieldCheck v-else :size="16" aria-hidden="true" />
+                    {{ war.captured ? "城池易主" : "守城告捷" }}
+                  </span>
                 </div>
 
-                <div class="war-lineup" v-if="war.battles.length">
+                <div class="war-lineup" v-if="warTeam(war, 'attacker').length || warTeam(war, 'defender').length">
                   <div class="war-team" :class="{ 'two-lines': warTeam(war, 'attacker').length > 5 }">
-                    <span class="war-team-name"><i :style="{ background: sectColor(war.attacker) }"></i>{{ war.attacker }}</span>
+                    <span class="war-team-name"><i :style="{ '--banner-color': sectColor(war.attacker) }">攻</i><span><small>攻城方 {{ war.captured ? "· 胜" : "" }}</small>{{ war.attacker }}</span></span>
                     <div class="war-team-row">
                       <div v-for="member in warTeam(war, 'attacker')" :key="`${war.id}-attacker-${member.id || member.name}`" class="war-roster-card">
                         <CharacterPortrait :person="battlePerson(member)" size="sm" />
@@ -2141,11 +2262,12 @@
                     </div>
                   </div>
                   <div class="war-lineup-vs">
-                    <strong>VS</strong>
-                    <span>{{ war.battles.length }} 场</span>
+                    <small>{{ war.battles.length ? `${war.battles.length} 场车轮战` : "兵不血刃" }}</small>
+                    <strong>战</strong>
+                    <span>{{ war.captured ? "攻破城防" : "固守成功" }}</span>
                   </div>
                   <div class="war-team" :class="{ 'two-lines': warTeam(war, 'defender').length > 5 }">
-                    <span class="war-team-name"><i :style="{ background: sectColor(war.defender) }"></i>{{ war.defender }}</span>
+                    <span class="war-team-name defender"><i :style="{ '--banner-color': sectColor(war.defender) }">守</i><span><small>守城方 {{ !war.captured ? "· 胜" : "" }}</small>{{ war.defender }}</span></span>
                     <div class="war-team-row">
                       <div v-for="member in warTeam(war, 'defender')" :key="`${war.id}-defender-${member.id || member.name}`" class="war-roster-card">
                         <CharacterPortrait :person="battlePerson(member)" size="sm" />
@@ -2156,10 +2278,17 @@
                   </div>
                 </div>
                 <div v-else class="war-direct-capture">
-                  无主之地直接占领
+                  <Sword :size="17" aria-hidden="true" /> 无主之地，攻城方直接接管
                 </div>
 
-                <p><span>{{ war.captured ? "战况详情" : "守城详情" }}</span>{{ war.result }}</p>
+                <div v-if="warStrategyPreview(war).length" class="war-strategy-preview" aria-label="攻守策略摘要">
+                  <strong>战术简报</strong>
+                  <span v-for="item in warStrategyPreview(war)" :key="`${war.id}-${item}`">{{ item }}</span>
+                </div>
+                <div class="war-result-footer">
+                  <p>{{ war.result }}</p>
+                  <span>查看完整战报 <ChevronRight :size="15" aria-hidden="true" /></span>
+                </div>
               </button>
               <div v-if="!filteredProvinceWars.length" class="empty">没有匹配“{{ provinceWarSearch }}”的省份或宗门。</div>
             </div>
@@ -2658,6 +2787,46 @@
         </section>
 
         <section v-if="activeTab === 'equipment'" class="view active cultivation-surface equipment-surface">
+          <div class="panel equipment-panel">
+            <div class="section-head">
+              <div>
+                <h3>灵珠</h3>
+                <p>副本碎片自动凝练；本命灵珠加成翻倍。</p>
+              </div>
+              <span class="tag">灵尘 {{ spiritPearlState.dust || 0 }}</span>
+            </div>
+            <div class="equipment-inventory-grid">
+              <article
+                class="equipment-card spirit-pearl-card"
+                v-for="pearl in spiritPearlState.pearls || []"
+                :key="pearl.id"
+                :class="{ owned: pearl.tier > 0, equipped: pearl.matchMultiplier > 1 }"
+                tabindex="0"
+              >
+                <div class="equipment-card-frame">
+                  <span class="spirit-pearl-orb">{{ pearl.config?.name?.slice(0, 1) || "珠" }}</span>
+                  <strong>{{ pearl.config?.name || pearl.name }}</strong>
+                  <small>{{ pearl.tier ? `${pearl.tier}阶${pearl.star}星` : "未凝成" }}</small>
+                </div>
+                <div class="equipment-tooltip-card" role="tooltip">
+                  <div class="equipment-tooltip-head">
+                    <strong>{{ pearl.config?.name || pearl.name }}</strong>
+                    <span>{{ pearl.matchMultiplier > 1 ? `本命 x${pearl.matchMultiplier}` : "普通生效" }}</span>
+                  </div>
+                  <dl class="equipment-tooltip-stats">
+                    <div>
+                      <dt>当前效果</dt>
+                      <dd>{{ pearlEffectText(pearl) }}</dd>
+                    </div>
+                    <div>
+                      <dt>下次消耗</dt>
+                      <dd>{{ pearl.next?.fragmentTier || 1 }}阶碎片 {{ pearl.fragments?.[String(pearl.next?.fragmentTier || 1)] || 0 }} / {{ pearl.next?.cost || 0 }}</dd>
+                    </div>
+                  </dl>
+                </div>
+              </article>
+            </div>
+          </div>
           <div class="panel equipment-panel">
             <div class="section-head">
               <div>
@@ -3535,8 +3704,11 @@ import {
   BadgeCent,
   Backpack,
   BookOpen,
+  CalendarDays,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   CircleUserRound,
   Cloud,
   Coins,
@@ -3554,8 +3726,10 @@ import {
   Plus,
   ShoppingBag,
   Route,
+  Search,
   ScrollText,
   Settings,
+  ShieldCheck,
   Sparkles,
   Sprout,
   Sun,
@@ -3778,6 +3952,12 @@ const selectedProvinceWarId = ref("");
 const provinceWarSearch = ref("");
 const provinceResourceTypeFilter = ref("");
 const provinceResourceOwnerFilter = ref("");
+const sectPlanDraft = reactive({
+  mode: "balanced",
+  attackTarget: "",
+  attackMemberIds: [],
+  defense: {}
+});
 const lastBattle = ref(null);
 const battleReturnTarget = ref(null);
 const replayLoading = ref(false);
@@ -3856,6 +4036,7 @@ const sectSubTabs = [
   { id: "map", label: "势力地图", icon: "图" },
   { id: "sects", label: "宗门排行", icon: "榜" },
   { id: "provinces", label: "省份资源", icon: "资" },
+  { id: "strategy", label: "明日战略", icon: "策" },
   { id: "wars", label: "攻城记录", icon: "战" }
 ];
 
@@ -4832,13 +5013,22 @@ const todayDuelCount = computed(() => {
 const provinceWarRecords = computed(() => gameState.value.provinceWars || []);
 const provinceTerritories = computed(() => {
   const owners = new Map((gameState.value.provinces || []).map((item) => [item.id, item]));
+  const strategy = derived.value.sectStrategy || {};
   return (catalog.value.provinces || []).map((province) => {
     const territory = owners.get(province.id) || {};
     const currentProvince = { ...province, type: province.type || "spirit" };
+    const strategyValue = strategy.values?.[province.id] || {};
     return {
       ...currentProvince,
       owner: territory.owner || "",
       defenders: territory.defenders || [],
+      heldDays: territory.heldDays || 0,
+      miasmaUntilDay: territory.miasmaUntilDay || 0,
+      distance: strategy.distances?.[province.id] || 0,
+      resourceValue: strategyValue.resourceValue || 0,
+      defenseValue: strategyValue.defenseValue || 0,
+      defenderLimit: strategyValue.defenderLimit || 0,
+      attackerLimit: strategyValue.attackerLimit || 0,
       effect: provinceEffect(currentProvince)
     };
   });
@@ -4902,6 +5092,21 @@ const filteredProvinceResourceRanking = computed(() => provinceResourceRanking.v
   return typeMatched && ownerMatched;
 }));
 const topProvinceResourcePreview = computed(() => [...provinceTerritories.value].sort((a, b) => a.rank - b.rank).slice(0, 5));
+const playerSectNameForPlan = computed(() => gameState.value.sect?.name || player.value?.sect || "");
+const playerSectMembers = computed(() => sectMembers(sectByName(playerSectNameForPlan.value)).map((member) => ({
+  ...member,
+  fatigue: derived.value.sectStrategy?.fatigue?.[member.id] || 0
+})));
+const playerOwnedProvinces = computed(() => provinceTerritories.value.filter((province) => province.owner === playerSectNameForPlan.value));
+const attackableProvinces = computed(() => provinceTerritories.value
+  .filter((province) => province.owner !== playerSectNameForPlan.value)
+  .sort((a, b) => (a.distance || 9) - (b.distance || 9) || (b.resourceValue || 0) - (a.resourceValue || 0)));
+const selectedAttackProvince = computed(() => provinceTerritories.value.find((province) => province.id === sectPlanDraft.attackTarget) || null);
+const sectPlanMemberById = computed(() => new Map(playerSectMembers.value.map((member) => [member.id, member])));
+const assignedAttackIds = computed(() => new Set(sectPlanDraft.attackMemberIds));
+const assignedDefenseIds = computed(() => new Set(Object.values(sectPlanDraft.defense).flat()));
+const planTargetDay = computed(() => (derived.value.sectStrategy?.plan?.targetDay || gameState.value.day + 1));
+const spiritPearlState = computed(() => derived.value.spiritPearls || gameState.value.spiritPearls || { pearls: [], bonuses: {}, dust: 0, history: [] });
 const provinceWarDayRecords = computed(() => {
   if (activeTab.value !== "sect" && activeTab.value !== "arena") return [];
   const groups = new Map();
@@ -6744,6 +6949,72 @@ function clearProvinceResourceFilters() {
   provinceResourceOwnerFilter.value = "";
 }
 
+function syncSectPlanDraft() {
+  const plan = derived.value.sectStrategy?.plan || gameState.value.playerSectPlan || {};
+  sectPlanDraft.mode = plan.mode || "balanced";
+  sectPlanDraft.attackTarget = plan.attack?.targetProvinceId || "";
+  sectPlanDraft.attackMemberIds = Array.isArray(plan.attack?.memberIds) ? [...plan.attack.memberIds] : [];
+  sectPlanDraft.defense = { ...(plan.defense?.provinceIdToMemberIds || {}) };
+}
+
+function togglePlanAttackMember(id) {
+  const next = new Set(sectPlanDraft.attackMemberIds);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  sectPlanDraft.attackMemberIds = [...next];
+  for (const provinceId of Object.keys(sectPlanDraft.defense)) {
+    sectPlanDraft.defense[provinceId] = (sectPlanDraft.defense[provinceId] || []).filter((memberId) => memberId !== id);
+  }
+}
+
+function togglePlanDefender(provinceId, id) {
+  if (assignedAttackIds.value.has(id)) return;
+  const next = new Set(sectPlanDraft.defense[provinceId] || []);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  const province = provinceTerritories.value.find((item) => item.id === provinceId);
+  sectPlanDraft.defense[provinceId] = [...next].slice(0, province?.defenderLimit || 5);
+}
+
+function planMemberLabel(member) {
+  return `${member.name} · ${realmName(member.realm)} · 战力 ${formatCompact(personPower(member))} · 疲劳 ${member.fatigue || 0}`;
+}
+
+function planProvinceLabel(province) {
+  return `${province.name} · 距离 ${province.distance || "-"} · 价值 ${province.resourceValue || 0}`;
+}
+
+async function saveSectPlan() {
+  await act("/api/sect/plan", {
+    mode: sectPlanDraft.mode,
+    attack: {
+      targetProvinceId: sectPlanDraft.attackTarget,
+      memberIds: sectPlanDraft.attackMemberIds,
+      autoFill: true
+    },
+    defense: {
+      provinceIdToMemberIds: sectPlanDraft.defense,
+      autoFill: true
+    },
+    scope: "lite"
+  }, { scope: "lite", markStale: true });
+}
+
+async function resetSectPlanAuto() {
+  sectPlanDraft.mode = "balanced";
+  sectPlanDraft.attackTarget = "";
+  sectPlanDraft.attackMemberIds = [];
+  sectPlanDraft.defense = {};
+  await saveSectPlan();
+}
+
+function pearlEffectText(pearl) {
+  const effects = pearl.config?.effects || [];
+  const value = Number(pearl.value || 0) * Number(pearl.matchMultiplier || 1);
+  if (!pearl.tier) return "尚未凝成";
+  return effects.map((effect) => `${effect.label} +${Math.round(value * (effect.weight || 1) * 1000) / 10}%`).join("、");
+}
+
 const cultivators = computed(() => [
   withDuelRank({
     ...player.value,
@@ -7137,11 +7408,100 @@ function warKillRanking(war, side) {
   return [...kills.values()].sort((a, b) => b.kills - a.kills || a.name.localeCompare(b.name, "zh-Hans-CN"));
 }
 
+function strategyPointList(points, limit = 3) {
+  return (Array.isArray(points) ? points : [])
+    .filter((point) => typeof point === "string" && point.trim())
+    .slice(0, limit);
+}
+
+function strategyMetricList(metrics) {
+  return (Array.isArray(metrics) ? metrics : [])
+    .filter((metric) => metric?.label && metric?.value !== undefined && metric?.value !== null)
+    .map((metric) => ({ label: metric.label, value: metric.value }));
+}
+
+function fallbackWarStrategySections(war) {
+  const attackers = warTeam(war, "attacker");
+  const defenders = warTeam(war, "defender");
+  const direct = !war?.battles?.length || war?.defender === "无主之地";
+  return [
+    {
+      key: "attack",
+      label: "择城",
+      title: "旧战报推断",
+      points: [
+        direct
+          ? `${war?.attacker || "攻方"}选择接管${war?.provinceName || "此地"}，主要因为当时没有守军。`
+          : `${war?.attacker || "攻方"}挑战${war?.defender || "守方"}，目标是夺取${war?.provinceName || "此城"}的资源与据点。`,
+        war?.result || "旧记录未保存完整推演，只能按战况复盘。"
+      ],
+      metrics: []
+    },
+    {
+      key: "attackers",
+      label: "选将",
+      title: "攻城名单",
+      points: [`战报记录攻城队 ${attackers.length} 人${attackers.length ? `，包括 ${attackers.slice(0, 3).map((item) => item.name).join("、")}` : ""}。`],
+      metrics: []
+    },
+    {
+      key: "defenders",
+      label: "布防",
+      title: direct ? "无主之地" : "守城名单",
+      points: [direct ? "当日没有守军，攻方兵不血刃占下城池。" : `战报记录守城队 ${defenders.length} 人${defenders.length ? `，核心为 ${defenders.slice(0, 3).map((item) => item.name).join("、")}` : ""}。`],
+      metrics: []
+    }
+  ];
+}
+
+function warStrategySections(war) {
+  const strategy = war?.strategy;
+  if (!strategy) return fallbackWarStrategySections(war);
+  const labels = {
+    attack: "择城",
+    attackers: "选将",
+    defenders: "布防"
+  };
+  return ["attack", "attackers", "defenders"]
+    .map((key) => {
+      const section = strategy[key];
+      if (!section) return null;
+      return {
+        key,
+        label: labels[key],
+        title: section.title || labels[key],
+        points: strategyPointList(section.points),
+        metrics: strategyMetricList(section.metrics)
+      };
+    })
+    .filter((section) => section && (section.points.length || section.metrics.length));
+}
+
+function warStrategyPreview(war) {
+  const strategy = war?.strategy;
+  if (!strategy) {
+    return fallbackWarStrategySections(war).map((section) => section.points[0]).filter(Boolean).slice(0, 2);
+  }
+  return [
+    strategy.summary,
+    strategy.attack?.points?.[0],
+    strategy.attackers?.points?.[0]
+  ].filter((point) => typeof point === "string" && point.trim()).slice(0, 3);
+}
+
+function warStrategySearchText(war) {
+  return warStrategySections(war)
+    .flatMap((section) => [section.title, ...section.points, ...section.metrics.map((metric) => `${metric.label}${metric.value}`)])
+    .join(" ");
+}
+
 function provinceWarSearchText(war) {
   return [
     war.provinceName,
     war.attacker,
-    war.defender
+    war.defender,
+    war.strategy?.summary,
+    warStrategySearchText(war)
   ].filter(Boolean).join(" ").toLowerCase();
 }
 
@@ -9322,7 +9682,7 @@ async function act(path, body = {}, options = {}) {
 }
 
 function shouldMarkFullStateStale(path) {
-  return ["/api/day/advance", "/api/tasks", "/api/breakthrough"].includes(path);
+  return ["/api/day/advance", "/api/tasks", "/api/breakthrough", "/api/sect/plan"].includes(path);
 }
 
 function shouldRefreshHomeState(path) {
@@ -9336,6 +9696,7 @@ function shouldRefreshHomeState(path) {
     "/api/dungeons/run",
     "/api/sect/mission",
     "/api/sect/war",
+    "/api/sect/plan",
     "/api/duel",
     "/api/duels/day",
     "/api/items/buy",
@@ -9712,6 +10073,10 @@ watch([state, activeTab, activeSectSubTab], async () => {
   await nextTick();
   await renderChinaMap();
 });
+
+watch([state, activeTab, activeSectSubTab], () => {
+  if (activeTab.value === "sect" && activeSectSubTab.value === "strategy") syncSectPlanDraft();
+}, { immediate: true });
 
 watch(activeTab, () => {
   if (needsHeavyState(activeTab.value) && state.value && (fullStateStale.value || !hasFullCultivatorRoster())) {

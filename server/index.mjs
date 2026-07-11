@@ -26,6 +26,7 @@ import {
   toggleTaskDefinition,
   updateCultivatorProfile,
   updateTaskDefinition,
+  updatePlayerSectPlan,
   updateSectProfile,
   upgradePlayerSkill,
   useItem
@@ -58,6 +59,7 @@ const liteActionRoutes = new Set([
   "/api/rest",
   "/api/day/advance",
   "/api/sect/mission",
+  "/api/sect/plan",
   "/api/duel",
   "/api/duels/day",
   "/api/items/buy",
@@ -287,6 +289,7 @@ async function handleApi(req, res, url) {
     "/api/dungeons/run": (state) => runDungeon(state, body.id),
     "/api/sect/mission": (state) => sectMission(state),
     "/api/sect/war": (state) => sectWar(state),
+    "/api/sect/plan": (state) => updatePlayerSectPlan(state, body),
     "/api/duel": (state) => duel(state, body.index),
     "/api/duels/day": (state) => runDailyDuels(state),
     "/api/items/buy": (state) => buyItem(state, body.kind),

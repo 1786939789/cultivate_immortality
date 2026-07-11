@@ -21,6 +21,25 @@ export const specialRoots = [
   { id: "hidden", name: "隐灵根", keys: ["metal", "wood", "water", "fire", "earth"], note: "金、木、水、火、土齐备时自动转换；克金灵根、木灵根、水灵根、火灵根、土灵根。属性仍按子灵根加成和多灵根衰减计算。" }
 ];
 
+export const spiritPearls = [
+  { id: "metal", name: "金灵珠", rootKey: "metal", effects: [{ stat: "attack", label: "攻击", weight: 1 }] },
+  { id: "wood", name: "木灵珠", rootKey: "wood", effects: [{ stat: "maxHp", label: "血量", weight: 1 }] },
+  { id: "water", name: "水灵珠", rootKey: "water", effects: [{ stat: "xp", label: "修为获取", weight: 1 }] },
+  { id: "fire", name: "火灵珠", rootKey: "fire", effects: [{ stat: "divineSense", label: "神识", weight: 1 }] },
+  { id: "earth", name: "土灵珠", rootKey: "earth", effects: [{ stat: "defense", label: "防御", weight: 1 }] },
+  { id: "heaven", name: "天灵珠", rootKey: "heaven", effects: [{ stat: "maxMana", label: "法力", weight: 1 }] },
+  { id: "thunder", name: "雷灵珠", rootKey: "thunder", specialKeys: ["metal", "wood", "earth"], effects: [{ stat: "attack", label: "攻击", weight: 0.72 }, { stat: "defense", label: "防御", weight: 0.72 }] },
+  { id: "wind", name: "风灵珠", rootKey: "wind", specialKeys: ["water", "fire", "heaven"], effects: [{ stat: "divineSense", label: "神识", weight: 0.72 }, { stat: "maxMana", label: "法力", weight: 0.72 }] },
+  { id: "hidden", name: "隐灵珠", rootKey: "hidden", specialKeys: ["metal", "wood", "water", "fire", "earth"], effects: [
+    { stat: "attack", label: "攻击", weight: 0.28 },
+    { stat: "defense", label: "防御", weight: 0.28 },
+    { stat: "maxHp", label: "血量", weight: 0.28 },
+    { stat: "divineSense", label: "神识", weight: 0.28 },
+    { stat: "maxMana", label: "法力", weight: 0.28 },
+    { stat: "breakthrough", label: "突破", weight: 0.12 }
+  ] }
+];
+
 export const rosterVersion = 5;
 
 export { duelLossScore, duelRanks, duelSeasonLength, duelSeasonMaxScore, duelSeasonOfDay, duelSeasonDay, duelWinScore, duelRankForScore } from "../shared/duelSeasonData.mjs";

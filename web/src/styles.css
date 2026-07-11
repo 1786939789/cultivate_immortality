@@ -6277,6 +6277,144 @@ button.event {
   font-size: 13px;
 }
 
+.war-strategy-preview {
+  display: grid;
+  gap: 6px;
+  border-top: 1px dashed rgba(120, 91, 43, .24);
+  border-bottom: 1px dashed rgba(120, 91, 43, .18);
+  padding: 9px 0;
+}
+
+.war-strategy-preview span {
+  position: relative;
+  color: #5c3a18;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.55;
+  padding-left: 18px;
+}
+
+.war-strategy-preview span::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: .72em;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--jade), #d9a441);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, .1);
+}
+
+.war-strategy-panel {
+  border: 1px solid rgba(120, 91, 43, .2);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(255, 251, 235, .92), rgba(236, 253, 245, .62)),
+    rgba(255, 255, 255, .56);
+  padding: 12px;
+  display: grid;
+  gap: 12px;
+}
+
+.war-strategy-panel header {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.war-strategy-panel header > span {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 35% 20%, rgba(255, 255, 255, .42), transparent 48%),
+    linear-gradient(145deg, #134e4a, #7c2d12);
+  color: #fff7d6;
+  display: grid;
+  place-items: center;
+  font: 900 22px/1 "KaiTi", "STKaiti", "Microsoft YaHei", serif;
+  box-shadow: 0 10px 24px rgba(23, 32, 51, .16);
+}
+
+.war-strategy-panel header strong {
+  color: #2f2418;
+  font-size: 16px;
+}
+
+.war-strategy-panel header small {
+  display: block;
+  color: #6b4b2b;
+  line-height: 1.55;
+  margin-top: 2px;
+}
+
+.war-strategy-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.war-strategy-note {
+  min-width: 0;
+  border-left: 3px solid rgba(15, 118, 110, .48);
+  background: rgba(255, 253, 246, .62);
+  padding: 9px 10px;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+}
+
+.war-strategy-note > span {
+  width: fit-content;
+  border: 1px solid rgba(15, 118, 110, .18);
+  border-radius: 999px;
+  background: rgba(236, 253, 245, .68);
+  color: #0f766e;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.war-strategy-note strong {
+  color: #3b2a16;
+  font-size: 14px;
+}
+
+.war-strategy-note p {
+  color: #6b4b2b;
+  font-size: 12px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.war-strategy-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.war-strategy-metrics em {
+  border: 1px solid rgba(120, 91, 43, .18);
+  border-radius: 6px;
+  background: rgba(255, 247, 219, .72);
+  color: #70583b;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 7px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.war-strategy-metrics b {
+  color: #8d2d20;
+  font-weight: 950;
+}
+
 .sect-territory-rank,
 .war-day-title {
   display: flex;
@@ -6356,6 +6494,19 @@ button.event {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.defender-chip.active,
+.event-button.active {
+  border-color: rgba(15, 118, 110, .72);
+  background: rgba(204, 251, 241, .82);
+  color: #115e59;
+}
+
+.defender-chip.muted,
+.defender-chip:disabled {
+  opacity: .45;
+  cursor: not-allowed;
 }
 
 .war-battle-grid {
@@ -11501,6 +11652,22 @@ button.event {
 
   .sect-member-card {
     grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+}
+
+@media (max-width: 900px) {
+  .war-strategy-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .war-strategy-panel header {
+    grid-template-columns: 36px minmax(0, 1fr);
+  }
+
+  .war-strategy-panel header > span {
+    width: 36px;
+    height: 36px;
+    font-size: 19px;
   }
 }
 

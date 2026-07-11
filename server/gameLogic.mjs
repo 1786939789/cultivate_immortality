@@ -1,4 +1,4 @@
-import { combatSkills, dungeons, duelLossScore, duelRankForScore, duelRanks, duelSeasonDay, duelSeasonLength, duelSeasonMaxScore, duelSeasonOfDay, duelWinScore, equipmentCatalog, equipmentSlots, equipmentTiers, itemCatalog, npcGenders, npcNames, provinceVersion, provinces, realms, realmStages, rootCycle, specialRoots, roots, rosterVersion, sectRoster, sects, taskTemplates } from "./gameData.mjs";
+import { combatSkills, dungeons, duelLossScore, duelRankForScore, duelRanks, duelSeasonDay, duelSeasonLength, duelSeasonMaxScore, duelSeasonOfDay, duelWinScore, equipmentCatalog, equipmentSlots, equipmentTiers, itemCatalog, npcGenders, npcNames, provinceVersion, provinces, realms, realmStages, rootCycle, specialRoots, spiritPearls, roots, rosterVersion, sectRoster, sects, taskTemplates } from "./gameData.mjs";
 
 export function dateKey(date = new Date()) {
   const year = date.getFullYear();
@@ -356,27 +356,27 @@ function rootProfile(entity) {
 
 export function effectiveAttack(entity, state) {
   const bonus = rootEffectBonus(entity, "attack");
-  return Math.floor((entity.attack || 0) * (1 + bonus + equipmentBonusFor(state, entity, "attack")));
+  return Math.floor((entity.attack || 0) * (1 + bonus + equipmentBonusFor(state, entity, "attack") + spiritPearlBonusFor(state, entity, "attack")));
 }
 
 export function effectiveDefense(entity, state) {
   const bonus = rootEffectBonus(entity, "defense");
-  return Math.floor((entity.defense || 0) * (1 + bonus + equipmentBonusFor(state, entity, "defense")));
+  return Math.floor((entity.defense || 0) * (1 + bonus + equipmentBonusFor(state, entity, "defense") + spiritPearlBonusFor(state, entity, "defense")));
 }
 
 export function effectiveMaxHp(entity, state) {
   const bonus = rootEffectBonus(entity, "hp");
-  return Math.floor((entity.maxHp || 0) * (1 + bonus + equipmentBonusFor(state, entity, "maxHp")));
+  return Math.floor((entity.maxHp || 0) * (1 + bonus + equipmentBonusFor(state, entity, "maxHp") + spiritPearlBonusFor(state, entity, "maxHp")));
 }
 
 export function effectiveMaxMana(entity, state) {
   const bonus = rootEffectBonus(entity, "mana");
-  return Math.floor((entity.maxMana || 0) * (1 + bonus + equipmentBonusFor(state, entity, "maxMana")));
+  return Math.floor((entity.maxMana || 0) * (1 + bonus + equipmentBonusFor(state, entity, "maxMana") + spiritPearlBonusFor(state, entity, "maxMana")));
 }
 
 export function effectiveDivineSense(entity, state) {
   const bonus = rootEffectBonus(entity, "divineSense");
-  return Math.floor((entity.divineSense || 0) * (1 + bonus + equipmentBonusFor(state, entity, "divineSense")));
+  return Math.floor((entity.divineSense || 0) * (1 + bonus + equipmentBonusFor(state, entity, "divineSense") + spiritPearlBonusFor(state, entity, "divineSense")));
 }
 
 export function effectiveStats(entity, state) {
@@ -391,7 +391,7 @@ export function effectiveStats(entity, state) {
     maxHp,
     divineSense,
     maxMana,
-    xpMultiplier: xpGainMultiplier(entity),
+    xpMultiplier: xpGainMultiplier(entity, state),
     bonuses: {
       attack: attack - (entity.attack || 0),
       defense: defense - (entity.defense || 0),
@@ -402,8 +402,8 @@ export function effectiveStats(entity, state) {
   };
 }
 
-export function xpGainMultiplier(entity) {
-  return (1 + rootEffectBonus(entity, "xp")) * rootCultivationMultiplier(entity);
+export function xpGainMultiplier(entity, state = null) {
+  return (1 + rootEffectBonus(entity, "xp") + spiritPearlBonusFor(state, entity, "xp")) * rootCultivationMultiplier(entity);
 }
 
 export function applyXpGain(entity, amount, extraMultiplier = 1) {
@@ -1057,8 +1057,10 @@ function ensureField(object, key, value) {
 
 const equipmentSlotMap = Object.fromEntries(equipmentSlots.map((slot) => [slot.id, slot]));
 const equipmentTierMap = Object.fromEntries(equipmentTiers.map((tier) => [tier.id, tier]));
+const spiritPearlMap = Object.fromEntries(spiritPearls.map((pearl) => [pearl.id, pearl]));
 const equipmentVersion = 3;
 const dungeonRecordVersion = 4;
+const spiritPearlVersion = 1;
 const starSeaTeamSize = 10;
 const starSeaCycleLength = 10;
 const starSeaCycleHistoryLimit = 10;
@@ -1325,6 +1327,228 @@ function equipmentBonusFor(state, entity, stat) {
   return equippedItemsFor(state, entity)
     .filter((item) => equipmentSlot(item).stat === stat)
     .reduce((sum, item) => sum + (item.bonus || 0), 0);
+}
+
+function createSpiritPearlState() {
+  return {
+    version: spiritPearlVersion,
+    dust: 0,
+    pearls: Object.fromEntries(spiritPearls.map((pearl) => [pearl.id, { id: pearl.id, tier: 0, star: 0, fragments: {} }])),
+    history: []
+  };
+}
+
+function normalizeSpiritPearlEntry(entry, id) {
+  const pearl = spiritPearlMap[id];
+  return {
+    id,
+    tier: clamp(Math.floor(Number(entry?.tier) || 0), 0, 9),
+    star: clamp(Math.floor(Number(entry?.star) || 0), 0, 5),
+    fragments: Object.fromEntries(Array.from({ length: 9 }, (_, index) => {
+      const tier = String(index + 1);
+      return [tier, Math.max(0, Math.floor(Number(entry?.fragments?.[tier]) || 0))];
+    })),
+    name: pearl?.name || id
+  };
+}
+
+function ensureSpiritPearls(state) {
+  let changed = false;
+  if (!state.spiritPearls || state.spiritPearls.version !== spiritPearlVersion) {
+    const previous = state.spiritPearls || {};
+    const next = createSpiritPearlState();
+    next.dust = Math.max(0, Math.floor(Number(previous.dust) || 0));
+    next.history = Array.isArray(previous.history) ? previous.history.slice(0, recentRecordDays) : [];
+    for (const pearl of spiritPearls) {
+      next.pearls[pearl.id] = normalizeSpiritPearlEntry(previous.pearls?.[pearl.id], pearl.id);
+    }
+    state.spiritPearls = next;
+    changed = true;
+  }
+  for (const pearl of spiritPearls) {
+    const normalized = normalizeSpiritPearlEntry(state.spiritPearls.pearls?.[pearl.id], pearl.id);
+    state.spiritPearls.pearls[pearl.id] = normalized;
+  }
+  state.spiritPearls.version = spiritPearlVersion;
+  state.spiritPearls.dust = Math.max(0, Math.floor(Number(state.spiritPearls.dust) || 0));
+  state.spiritPearls.history = Array.isArray(state.spiritPearls.history) ? state.spiritPearls.history.slice(0, recentRecordDays) : [];
+  return changed;
+}
+
+function spiritPearlForgeCost(tier = 1) {
+  return tier <= 1 ? 20 : Math.round(20 + tier * 10 + Math.pow(tier, 1.45) * 8);
+}
+
+function spiritPearlStarCost(tier = 1, nextStar = 1) {
+  return Math.round(6 + tier * 5 + nextStar * (4 + tier * 2));
+}
+
+function spiritPearlValue(tier = 0, star = 0) {
+  if (tier <= 0) return 0;
+  const base = 0.006 + Math.pow(tier, 1.18) * 0.008;
+  return Number((base * (1 + clamp(star, 0, 5) * 0.16)).toFixed(4));
+}
+
+function entitySpiritPearlMatchMultiplier(entity, pearl) {
+  const profile = rootProfile(entity);
+  if (profile.specialRoot?.id === pearl.rootKey) return 2;
+  const keys = new Set(profile.roots.map((root) => root.key));
+  if (keys.has(pearl.rootKey)) return 2;
+  if (profile.specialRoot?.id === "thunder" && ["metal", "wood", "earth"].includes(pearl.rootKey)) return 1.25;
+  if (profile.specialRoot?.id === "wind" && ["water", "fire", "heaven"].includes(pearl.rootKey)) return 1.25;
+  if (profile.specialRoot?.id === "hidden" && ["metal", "wood", "water", "fire", "earth"].includes(pearl.rootKey)) return 1.15;
+  return 1;
+}
+
+function spiritPearlBonusesFor(state, entity) {
+  ensureSpiritPearls(state);
+  const totals = { attack: 0, defense: 0, maxHp: 0, divineSense: 0, maxMana: 0, xp: 0, breakthrough: 0 };
+  for (const config of spiritPearls) {
+    const entry = state.spiritPearls.pearls?.[config.id];
+    if (!entry?.tier) continue;
+    const value = spiritPearlValue(entry.tier, entry.star);
+    const match = entitySpiritPearlMatchMultiplier(entity, config);
+    for (const effect of config.effects || []) {
+      totals[effect.stat] = (totals[effect.stat] || 0) + value * (effect.weight || 1) * match;
+    }
+  }
+  return Object.fromEntries(Object.entries(totals).map(([key, value]) => [key, Number(value.toFixed(4))]));
+}
+
+function spiritPearlBonusFor(state, entity, stat) {
+  if (!state || entity?.id !== "player") return 0;
+  return spiritPearlBonusesFor(state, entity)[stat] || 0;
+}
+
+function publicSpiritPearls(state, entity = state.player) {
+  ensureSpiritPearls(state);
+  const bonuses = spiritPearlBonusesFor(state, entity);
+  return {
+    dust: state.spiritPearls.dust || 0,
+    bonuses,
+    history: state.spiritPearls.history || [],
+    pearls: spiritPearls.map((config) => {
+      const entry = state.spiritPearls.pearls[config.id];
+      const nextTier = entry.tier <= 0 ? 1 : Math.min(9, entry.tier + (entry.star >= 5 ? 1 : 0));
+      const nextStar = entry.tier <= 0 ? 0 : Math.min(5, entry.star + 1);
+      const requiredTier = entry.tier <= 0 ? 1 : entry.star >= 5 ? Math.min(9, entry.tier + 1) : entry.tier;
+      const cost = entry.tier <= 0 || entry.star >= 5 ? spiritPearlForgeCost(requiredTier) : spiritPearlStarCost(entry.tier, nextStar);
+      return {
+        ...entry,
+        config,
+        value: spiritPearlValue(entry.tier, entry.star),
+        matchMultiplier: entitySpiritPearlMatchMultiplier(entity, config),
+        next: { tier: nextTier, star: nextStar, fragmentTier: requiredTier, cost },
+        canUpgrade: (entry.fragments?.[String(requiredTier)] || 0) >= cost && (entry.tier < 9 || entry.star < 5)
+      };
+    })
+  };
+}
+
+function addSpiritPearlReward(state, pearlId, tier, amount, context, receiver = state.player) {
+  ensureSpiritPearls(state);
+  const id = spiritPearlMap[pearlId] ? pearlId : pick(spiritPearls).id;
+  const safeTier = clamp(Math.floor(Number(tier) || 1), 1, 9);
+  const safeAmount = Math.max(0, Math.floor(Number(amount) || 0));
+  if (!safeAmount) return null;
+  const entry = state.spiritPearls.pearls[id];
+  const key = String(safeTier);
+  entry.fragments[key] = Math.max(0, Math.floor(Number(entry.fragments[key]) || 0)) + safeAmount;
+  const record = {
+    day: state.day,
+    date: stateDateForDay(state),
+    type: "fragment",
+    pearlId: id,
+    pearlName: spiritPearlMap[id].name,
+    tier: safeTier,
+    amount: safeAmount,
+    context,
+    receiverId: receiver?.id || "player",
+    receiverName: receiver?.name || "主角"
+  };
+  state.spiritPearls.history.unshift(record);
+  state.spiritPearls.history = state.spiritPearls.history.slice(0, recentRecordDays);
+  autoUpgradeSpiritPearl(state, id, context);
+  return record;
+}
+
+function addSpiritDust(state, amount, context) {
+  ensureSpiritPearls(state);
+  const safeAmount = Math.max(0, Math.floor(Number(amount) || 0));
+  if (!safeAmount) return;
+  state.spiritPearls.dust += safeAmount;
+  state.spiritPearls.history.unshift({ day: state.day, date: stateDateForDay(state), type: "dust", amount: safeAmount, context });
+  state.spiritPearls.history = state.spiritPearls.history.slice(0, recentRecordDays);
+}
+
+function spiritPearlTierForDungeon(dungeonId, stage = 0, success = true) {
+  const base = dungeonId === "blood_trial" ? 1 : dungeonId === "void_hall" ? 2 : 3;
+  const bonus = Math.floor(Math.max(0, Number(stage) || 0) / 2);
+  const lucky = success && Math.random() < 0.08 + Math.max(0, Number(stage) || 0) * 0.015 ? 1 : 0;
+  return clamp(base + bonus + lucky, 1, 9);
+}
+
+function rollSpiritPearlFragmentReward(state, dungeonId, options = {}) {
+  const success = options.success !== false;
+  const stage = Math.max(0, Math.floor(Number(options.stage) || 0));
+  const depth = Math.max(1, Math.floor(Number(options.depth || options.cave || stage + 1) || 1));
+  const baseChance = dungeonId === "blood_trial" ? 0.18 : dungeonId === "void_hall" ? 0.55 : 0.42;
+  const chance = clamp(baseChance + depth * 0.025 + stage * 0.025 + (success ? 0.12 : -0.14), 0.08, 0.88);
+  if (Math.random() > chance) {
+    addSpiritDust(state, success ? 2 + Math.floor(depth / 2) : 1, options.context || "副本历练");
+    return null;
+  }
+  const tier = spiritPearlTierForDungeon(dungeonId, stage, success);
+  const amountBase = dungeonId === "blood_trial" ? 1 : dungeonId === "void_hall" ? 2 : 2;
+  const amount = amountBase + Math.floor(Math.random() * (success ? 3 : 2)) + Math.floor(depth / 4);
+  const pearlId = options.pearlId || pick(spiritPearls).id;
+  return addSpiritPearlReward(state, pearlId, tier, amount, options.context || "副本历练", options.receiver || state.player);
+}
+
+function autoUpgradeSpiritPearl(state, pearlId, context = "") {
+  ensureSpiritPearls(state);
+  const entry = state.spiritPearls.pearls[pearlId];
+  const config = spiritPearlMap[pearlId];
+  if (!entry || !config) return [];
+  const upgrades = [];
+  let guard = 0;
+  while (guard < 20) {
+    guard += 1;
+    if (entry.tier >= 9 && entry.star >= 5) break;
+    const fragmentTier = entry.tier <= 0 ? 1 : entry.star >= 5 ? Math.min(9, entry.tier + 1) : entry.tier;
+    const cost = entry.tier <= 0 || entry.star >= 5 ? spiritPearlForgeCost(fragmentTier) : spiritPearlStarCost(entry.tier, entry.star + 1);
+    const key = String(fragmentTier);
+    if ((entry.fragments[key] || 0) < cost) break;
+    entry.fragments[key] -= cost;
+    if (entry.tier <= 0) {
+      entry.tier = 1;
+      entry.star = 0;
+    } else if (entry.star >= 5) {
+      entry.tier = Math.min(9, entry.tier + 1);
+      entry.star = 0;
+    } else {
+      entry.star += 1;
+    }
+    const record = {
+      day: state.day,
+      date: stateDateForDay(state),
+      type: "upgrade",
+      pearlId,
+      pearlName: config.name,
+      tier: entry.tier,
+      star: entry.star,
+      cost,
+      fragmentTier,
+      context
+    };
+    upgrades.push(record);
+    state.spiritPearls.history.unshift(record);
+    if (pearlId === primaryRoot(state.player).key || pearlId === activeSpecialRoot(state.player)?.id) {
+      log(state, `${config.name}凝练至 ${entry.tier}阶${entry.star}星。`, "gold");
+    }
+  }
+  state.spiritPearls.history = state.spiritPearls.history.slice(0, recentRecordDays);
+  return upgrades;
 }
 
 function bestEquippedInSlot(state, entity, slot) {
@@ -2082,10 +2306,22 @@ function settleBloodTrialRewards(state, caves) {
     for (const clear of clears) {
       const person = allCultivators(state).find(({ entity }) => entity.id === clear.id)?.entity;
       if (person) person.spirit += clear.spirit || 0;
+      if (person?.id === "player") {
+        const reward = rollSpiritPearlFragmentReward(state, "blood_trial", {
+          success: true,
+          stage,
+          cave: cave.cave,
+          context: `${cave.name}通关`,
+          receiver: person,
+          pearlId: primaryRoot(person).key
+        });
+        if (reward) clear.spiritPearl = reward;
+      }
       const challenger = (cave.challengers || []).find((entry) => entry.id === clear.id);
       if (challenger) {
         challenger.spirit = clear.spirit || 0;
         challenger.bonusSpirit = clear.bonusSpirit || 0;
+        if (clear.spiritPearl) challenger.spiritPearl = clear.spiritPearl;
       }
     }
   }
@@ -2180,6 +2416,7 @@ function runSoloDungeonFor(state, entity, date, caves) {
 
   const score = clears ? finalRealm + clears * 8 : stageIndexOfRealm(entity.realm) * 10;
   if (clears) updateDungeonBest(entity, "血色禁地", score, clears);
+  if (!clears && entity.id === "player") addSpiritDust(state, 1, "血色禁地败退");
   const transfer = drop ? awardEquipment(state, entity, drop, "血色禁地") : null;
   const entry = {
     type: "solo",
@@ -2358,6 +2595,19 @@ function settleVoidHallRewards(state, sectRecords) {
         entity.spirit += memberSpirit;
         const history = entity.dungeonHistory?.find((entry) => entry.day === state.day && entry.type === "sect" && entry.name === "虚天殿" && entry.monster === record.monster);
         if (history) history.spirit = memberSpirit;
+        if (entity.id === "player") {
+          const reward = rollSpiritPearlFragmentReward(state, "void_hall", {
+            success: true,
+            stage,
+            context: "虚天殿宗门通关",
+            receiver: entity,
+            pearlId: activeSpecialRoot(entity)?.id || primaryRoot(entity).key
+          });
+          if (reward) {
+            record.spiritPearl = reward;
+            if (history) history.spiritPearl = reward;
+          }
+        }
       }
     }
 
@@ -3358,6 +3608,23 @@ function runStarSeaDungeon(state, roster, date) {
   const spiritRange = dungeonLootRules.star_sea.spiritRange({ stage: monsterStage, killed });
   const spiritPool = Math.max(teamRecords.length * 10, rollSpiritFromRange(spiritRange));
   settleStarSeaSpirit(state, teamRecords, spiritPool);
+  let playerStarSeaPearlReward = null;
+  for (const record of teamRecords) {
+    const playerMember = (record.members || []).find((member) => member.id === "player");
+    if (!playerMember) continue;
+    playerStarSeaPearlReward = rollSpiritPearlFragmentReward(state, "star_sea", {
+      success: record.success,
+      stage: monsterStage,
+      context: `乱星海猎妖第${record.rank}队`,
+      receiver: state.player,
+      pearlId: activeSpecialRoot(state.player)?.id || primaryRoot(state.player).key
+    });
+    if (playerStarSeaPearlReward) {
+      record.spiritPearl = playerStarSeaPearlReward;
+      playerMember.spiritPearl = playerStarSeaPearlReward;
+    }
+    break;
+  }
 
   const publicRecord = {
     type: "public",
@@ -3441,7 +3708,8 @@ function runStarSeaDungeon(state, roster, date) {
         monsterRealm: realms[monster.realm],
         replay,
         item: member.item || "",
-        tierName: member.tierName || ""
+        tierName: member.tierName || "",
+        spiritPearl: member.spiritPearl || null
       });
       updateDungeonBest(entity, "乱星海猎妖", monsterStage * 10 + Math.floor((record.score || 0) / 220), record.success ? 1 : 0);
     }
@@ -3684,6 +3952,114 @@ function provinceRankOf(territory) {
   return provinceById(territory.id)?.rank || 99;
 }
 
+const provinceAdjacency = {
+  xinjiang: ["tibet", "qinghai", "gansu"],
+  tibet: ["xinjiang", "qinghai", "sichuan", "yunnan"],
+  qinghai: ["xinjiang", "tibet", "gansu", "sichuan"],
+  gansu: ["xinjiang", "qinghai", "ningxia", "inner_mongolia", "shaanxi", "sichuan"],
+  ningxia: ["gansu", "inner_mongolia", "shaanxi"],
+  inner_mongolia: ["gansu", "ningxia", "shaanxi", "shanxi", "hebei", "liaoning", "jilin", "heilongjiang"],
+  heilongjiang: ["inner_mongolia", "jilin"],
+  jilin: ["heilongjiang", "inner_mongolia", "liaoning"],
+  liaoning: ["jilin", "inner_mongolia", "hebei"],
+  beijing: ["hebei", "tianjin"],
+  tianjin: ["beijing", "hebei"],
+  hebei: ["beijing", "tianjin", "liaoning", "inner_mongolia", "shanxi", "henan", "shandong"],
+  shanxi: ["inner_mongolia", "hebei", "henan", "shaanxi"],
+  shaanxi: ["gansu", "ningxia", "inner_mongolia", "shanxi", "henan", "hubei", "chongqing", "sichuan"],
+  henan: ["hebei", "shanxi", "shaanxi", "hubei", "anhui", "shandong"],
+  shandong: ["hebei", "henan", "anhui", "jiangsu"],
+  jiangsu: ["shandong", "anhui", "zhejiang", "shanghai"],
+  shanghai: ["jiangsu", "zhejiang"],
+  anhui: ["shandong", "henan", "hubei", "jiangxi", "zhejiang", "jiangsu"],
+  hubei: ["shaanxi", "henan", "anhui", "jiangxi", "hunan", "chongqing"],
+  chongqing: ["sichuan", "shaanxi", "hubei", "hunan", "guizhou"],
+  sichuan: ["tibet", "qinghai", "gansu", "shaanxi", "chongqing", "guizhou", "yunnan"],
+  guizhou: ["sichuan", "chongqing", "hunan", "guangxi", "yunnan"],
+  yunnan: ["tibet", "sichuan", "guizhou", "guangxi"],
+  hunan: ["hubei", "jiangxi", "guangdong", "guangxi", "guizhou", "chongqing"],
+  jiangxi: ["hubei", "anhui", "zhejiang", "fujian", "guangdong", "hunan"],
+  zhejiang: ["jiangsu", "shanghai", "anhui", "jiangxi", "fujian"],
+  fujian: ["zhejiang", "jiangxi", "guangdong", "taiwan"],
+  taiwan: ["fujian"],
+  guangxi: ["yunnan", "guizhou", "hunan", "guangdong"],
+  guangdong: ["guangxi", "hunan", "jiangxi", "fujian", "hongkong", "macau", "hainan"],
+  hongkong: ["guangdong"],
+  macau: ["guangdong"],
+  hainan: ["guangdong"]
+};
+
+function defaultPlayerSectPlan(targetDay = 1) {
+  return {
+    targetDay,
+    mode: "balanced",
+    attack: { targetProvinceId: "", memberIds: [], autoFill: true },
+    defense: { provinceIdToMemberIds: {}, autoFill: true }
+  };
+}
+
+function provinceDistance(fromIds, targetId) {
+  const starts = Array.isArray(fromIds) ? fromIds.filter(Boolean) : [fromIds].filter(Boolean);
+  if (!starts.length || !targetId) return 2;
+  if (starts.includes(targetId)) return 0;
+  const visited = new Set(starts);
+  const queue = starts.map((id) => ({ id, distance: 0 }));
+  while (queue.length) {
+    const current = queue.shift();
+    for (const next of provinceAdjacency[current.id] || []) {
+      if (visited.has(next)) continue;
+      if (next === targetId) return current.distance + 1;
+      visited.add(next);
+      queue.push({ id: next, distance: current.distance + 1 });
+    }
+  }
+  return 5;
+}
+
+function provinceResourceValue(province, state, sectName = "") {
+  if (!province) return 0;
+  const effect = provinceEffect(province);
+  const tier = provinceTier(province);
+  const owned = provinceEffectsForSect(state, sectName);
+  const typeCount = owned.filter((item) => item.type === effect.type).length;
+  const shortage = typeCount <= 0 ? 1.35 : typeCount === 1 ? 1.12 : 1;
+  const typeValue = effect.type === "spirit" ? effect.value * 1.15 : effect.type === "xp" ? effect.value * 92 : effect.value * 150;
+  return Math.round((18 + typeValue) * (0.8 + tier * 0.65) * shortage);
+}
+
+function sectFatigueOf(state, entityId) {
+  return clamp(Math.floor(Number(state.sectFatigue?.[entityId]) || 0), 0, 8);
+}
+
+function effectiveSiegePower(state, entity, distance = 1) {
+  const fatiguePenalty = sectFatigueOf(state, entity.id) * 0.03;
+  const distancePenalty = Math.min(0.25, Math.max(0, (distance || 1) - 1) * 0.06);
+  return Math.round(powerOf(entity, state) * Math.max(0.45, 1 - fatiguePenalty - distancePenalty));
+}
+
+function normalizePlayerSectPlan(plan, targetDay) {
+  const mode = ["conservative", "balanced", "aggressive"].includes(plan?.mode) ? plan.mode : "balanced";
+  const cleanIds = (ids) => [...new Set((Array.isArray(ids) ? ids : []).map((id) => String(id || "").trim()).filter(Boolean))];
+  const defenseSource = plan?.defense?.provinceIdToMemberIds || {};
+  const defense = {};
+  for (const [provinceId, ids] of Object.entries(defenseSource)) {
+    if (provinceById(provinceId)) defense[provinceId] = cleanIds(ids);
+  }
+  return {
+    targetDay,
+    mode,
+    attack: {
+      targetProvinceId: provinceById(plan?.attack?.targetProvinceId) ? plan.attack.targetProvinceId : "",
+      memberIds: cleanIds(plan?.attack?.memberIds),
+      autoFill: plan?.attack?.autoFill !== false
+    },
+    defense: {
+      provinceIdToMemberIds: defense,
+      autoFill: plan?.defense?.autoFill !== false
+    }
+  };
+}
+
 function enforceProvinceOccupationLimits(state) {
   state.provinces ??= createProvinceState(state);
   let changed = false;
@@ -3732,6 +4108,307 @@ function assignProvinceDefenders(state) {
   return changed;
 }
 
+function defenderLimitForProvince(province) {
+  return clamp(1 + Math.ceil(provinceTier(province)), 1, 5);
+}
+
+function attackerLimitForProvince(province) {
+  return clamp(2 + Math.ceil(provinceTier(province)), 3, 6);
+}
+
+function defenseValueForProvince(state, territory, sectName) {
+  const province = provinceById(territory.id);
+  if (!province) return 0;
+  const resourceValue = provinceResourceValue(province, state, sectName);
+  const heldDays = Math.max(0, Math.floor(Number(territory.heldDays) || 0));
+  const monsterRisk = resourceValue * 0.16 + heldDays * 1.8 + provinceTier(province) * 6;
+  return Math.round(resourceValue * 1.5 + monsterRisk * 0.7);
+}
+
+function buildDefenseAssignments(state, sectName, reservedIds = new Set(), manualDefense = null, mode = "balanced") {
+  const assignments = new Map();
+  const used = new Set(reservedIds);
+  const owned = (state.provinces || [])
+    .filter((item) => item.owner === sectName)
+    .sort((a, b) => defenseValueForProvince(state, b, sectName) - defenseValueForProvince(state, a, sectName));
+  const members = membersForSect(state, sectName).map(({ entity, kind }) => ({ entity, kind }));
+
+  const assign = (territory, entity) => {
+    if (!territory || !entity || used.has(entity.id)) return false;
+    const province = provinceById(territory.id);
+    const limit = province ? defenderLimitForProvince(province) : 3;
+    const current = assignments.get(territory.id) || [];
+    if (current.length >= limit) return false;
+    current.push(entity.id);
+    assignments.set(territory.id, current);
+    used.add(entity.id);
+    return true;
+  };
+
+  if (manualDefense) {
+    for (const [provinceId, ids] of Object.entries(manualDefense.provinceIdToMemberIds || {})) {
+      const territory = owned.find((item) => item.id === provinceId);
+      if (!territory) continue;
+      for (const id of ids || []) {
+        const member = members.find((item) => item.entity.id === id);
+        if (member) assign(territory, member.entity);
+      }
+    }
+  }
+
+  if (manualDefense && manualDefense.autoFill === false) {
+    return { assignments, used };
+  }
+
+  const modeOffset = mode === "conservative" ? 1 : mode === "aggressive" ? -1 : 0;
+  for (const territory of owned) {
+    const province = provinceById(territory.id);
+    const value = defenseValueForProvince(state, territory, sectName);
+    const targetCount = clamp(Math.round(value / 95) + modeOffset, value > 120 ? 2 : 0, province ? defenderLimitForProvince(province) : 3);
+    while ((assignments.get(territory.id) || []).length < targetCount) {
+      const candidate = members
+        .filter((item) => !used.has(item.entity.id))
+        .sort((a, b) => effectiveSiegePower(state, b.entity) - effectiveSiegePower(state, a.entity))[0];
+      if (!candidate) break;
+      assign(territory, candidate.entity);
+    }
+  }
+  return { assignments, used };
+}
+
+function estimateLineupPower(state, ids, distance = 1) {
+  return ids
+    .map((id) => cultivatorById(state, id))
+    .filter(Boolean)
+    .reduce((sum, entity) => sum + effectiveSiegePower(state, entity, distance), 0);
+}
+
+function estimateDefenderPower(state, territory) {
+  return estimateLineupPower(state, territory?.defenders || [], 1);
+}
+
+function pickAttackTarget(state, sectName, availableMembers, mode = "balanced", manualTargetId = "", targeted = new Set()) {
+  const ownedIds = provinceIdsForSect(state, sectName);
+  const ownedValues = ownedIds.map((id) => provinceResourceValue(provinceById(id), state, sectName));
+  const worstOwned = ownedValues.length ? Math.min(...ownedValues) : 0;
+  const expansionNeed = Math.max(0, Math.ceil(membersForSect(state, sectName).length / 3) - ownedIds.length);
+  const manualTarget = manualTargetId ? provinceStateById(state, manualTargetId) : null;
+  const candidates = (state.provinces || [])
+    .filter((territory) => territory.owner !== sectName)
+    .filter((territory) => manualTarget || !targeted.has(territory.id))
+    .filter((territory) => !manualTarget || territory.id === manualTarget.id);
+  let best = null;
+  for (const territory of candidates) {
+    const province = provinceById(territory.id);
+    if (!province) continue;
+    const distance = ownedIds.length ? provinceDistance(ownedIds, territory.id) : 2;
+    const value = provinceResourceValue(province, state, sectName);
+    const distanceCost = Math.max(0, distance - 1) * 18;
+    const adjacencyBonus = distance === 1 ? 25 : 0;
+    const lowValuePenalty = ownedIds.length <= 1 ? Math.max(0, worstOwned * 0.8 - value) * 0.25 : Math.max(0, worstOwned * 0.8 - value) * 0.6;
+    const attackLimit = attackerLimitForProvince(province);
+    const attackers = [...availableMembers]
+      .sort((a, b) => {
+        const aScore = effectiveSiegePower(state, a.entity, distance) + (distance >= 3 ? (a.entity.divineSense || 0) * 1.5 + (a.entity.maxMana || 0) * 0.4 : 0);
+        const bScore = effectiveSiegePower(state, b.entity, distance) + (distance >= 3 ? (b.entity.divineSense || 0) * 1.5 + (b.entity.maxMana || 0) * 0.4 : 0);
+        return bScore - aScore;
+      })
+      .slice(0, attackLimit);
+    const attackerPower = attackers.reduce((sum, item) => sum + effectiveSiegePower(state, item.entity, distance), 0);
+    const defenderPower = territory.owner ? Math.max(1, estimateDefenderPower(state, territory)) : 1;
+    const winRate = territory.owner ? attackerPower / Math.max(1, attackerPower + defenderPower) : 0.96;
+    const aggression = mode === "conservative" ? -20 : mode === "aggressive" ? 18 : 0;
+    const score = value * 1.4 + expansionNeed * 28 + adjacencyBonus + winRate * 80 + aggression - distanceCost - lowValuePenalty - defenderPower * 0.012;
+    if (!attackers.length) continue;
+    if (!manualTarget && winRate < (mode === "aggressive" ? 0.28 : mode === "conservative" ? 0.48 : 0.36)) continue;
+    if (!best || score > best.score) {
+      best = { territory, province, distance, attackers, score, winRate, value };
+    }
+  }
+  return best;
+}
+
+function strategyModeLabel(mode) {
+  if (mode === "aggressive") return "急攻";
+  if (mode === "conservative") return "稳守";
+  return "均衡";
+}
+
+function provinceResourceLabel(province) {
+  const effect = provinceEffect(province);
+  if (effect.type === "xp") return `经验城，${effect.text}`;
+  if (effect.type === "breakthrough") return `破境城，${effect.text}`;
+  return `灵石城，${effect.text}`;
+}
+
+function lineupStrategySummary(state, members, distance = 1) {
+  const ranked = (members || [])
+    .map((member) => member?.entity || member)
+    .filter(Boolean)
+    .map((entity) => ({
+      id: entity.id,
+      name: entity.name,
+      power: effectiveSiegePower(state, entity, distance),
+      fatigue: sectFatigueOf(state, entity.id)
+    }))
+    .sort((a, b) => b.power - a.power);
+  return {
+    count: ranked.length,
+    totalPower: ranked.reduce((sum, item) => sum + item.power, 0),
+    topNames: ranked.slice(0, 3).map((item) => item.name),
+    tiredNames: ranked.filter((item) => item.fatigue >= 4).slice(0, 2).map((item) => item.name)
+  };
+}
+
+function provinceWarStrategyForPlan(state, plan, target, province, defenderSect) {
+  const attackerSect = plan.sectName;
+  const ownedIds = provinceIdsForSect(state, attackerSect);
+  const members = membersForSect(state, attackerSect);
+  const distance = plan.attack?.distance || (ownedIds.length ? provinceDistance(ownedIds, target.id) : 2);
+  const value = plan.attack?.value || provinceResourceValue(province, state, attackerSect);
+  const attackers = lineupStrategySummary(state, plan.attack?.attackers || [], distance);
+  const defenderIds = target.defenders || [];
+  const defenders = lineupStrategySummary(state, defenderIds.map((id) => cultivatorById(state, id)).filter(Boolean), 1);
+  const defenderPower = defenderSect ? Math.max(1, estimateDefenderPower(state, target)) : 0;
+  const winRate = defenderSect
+    ? Math.round((plan.attack?.winRate ?? (attackers.totalPower / Math.max(1, attackers.totalPower + defenderPower))) * 100)
+    : 96;
+  const modeLabel = strategyModeLabel(plan.mode);
+  const attackIntent = plan.attack?.playerDirected
+    ? "按你保存的明日战略出兵，目标优先级高于宗门自行推演。"
+    : ownedIds.length
+      ? `${modeLabel}策略下，优先挑选距离 ${distance} 步、资源评分 ${value} 的可攻省份。`
+      : `${modeLabel}策略下，本宗尚无据点，先取资源评分 ${value} 的立足之城。`;
+  const terrainPoint = distance <= 1
+    ? "目标贴近己方疆域，调兵成本低，后续也便于连成防线。"
+    : `目标距离己方据点 ${distance} 步，远征会削弱攻城战力，但资源收益足以覆盖成本。`;
+  const attackerPoint = plan.attack?.playerDirected
+    ? `攻城队以指定人选为先，再按攻城战力补齐至 ${attackers.count} 人。`
+    : `从未参与守城的成员里，按攻城战力、距离惩罚和疲劳排序，取 ${attackers.count} 人出阵。`;
+  const defenderPoint = defenderSect
+    ? `守方按城市防守价值 ${defenseValueForProvince(state, target, defenderSect)} 分配守军，守城队 ${defenders.count} 人，总守备 ${defenders.totalPower}。`
+    : "此地暂为无主之地，无守军，只需派人立旗接管。";
+
+  return {
+    summary: `${modeLabel}推演：${province.name}是${provinceResourceLabel(province)}，攻方胜算约 ${winRate}%。`,
+    attack: {
+      title: plan.attack?.playerDirected ? "执行手动战略" : "择城推演",
+      points: [
+        attackIntent,
+        terrainPoint,
+        defenderSect ? `预估攻城战力 ${attackers.totalPower} 对守备 ${defenderPower}，胜算约 ${winRate}%。` : "无主城默认视为高把握目标，主要考量资源价值与距离。"
+      ],
+      metrics: [
+        { label: "资源评分", value },
+        { label: "距离", value: `${distance} 步` },
+        { label: "胜算", value: `${winRate}%` }
+      ]
+    },
+    attackers: {
+      title: "选将逻辑",
+      points: [
+        attackerPoint,
+        attackers.topNames.length ? `主力为 ${attackers.topNames.join("、")}，当前队伍总攻城战力 ${attackers.totalPower}。` : "没有可用攻城成员。",
+        attackers.tiredNames.length ? `${attackers.tiredNames.join("、")}略有疲劳，但仍在本次排序中靠前。` : "本次出阵成员疲劳可控。"
+      ]
+    },
+    defenders: {
+      title: defenderSect ? "守城布防" : "守方情报",
+      points: [
+        defenderPoint,
+        defenderSect && defenders.topNames.length ? `守城核心为 ${defenders.topNames.join("、")}，依托城防获得阵地加成。` : "没有守城队列。",
+        defenderSect ? "守城成员不会同时加入本宗攻城队，避免同日两线奔袭。" : "攻下后明日会按新归属重新安排防守。"
+      ]
+    }
+  };
+}
+
+function monsterWarStrategyForProvince(state, target, province, defenderSect) {
+  const value = provinceResourceValue(province, state, defenderSect);
+  const held = Math.max(0, Number(target.heldDays) || 0);
+  const ownerCount = (state.provinces || []).filter((item) => item.owner === defenderSect).length;
+  const defenders = lineupStrategySummary(state, (target.defenders || []).map((id) => cultivatorById(state, id)).filter(Boolean), 1);
+  return {
+    summary: `妖潮择城：${province.name}资源评分 ${value}，已据守 ${held} 日，妖物被灵气与人烟吸引。`,
+    attack: {
+      title: "妖潮择城",
+      points: [
+        "妖潮优先冲击资源价值高、持有时间较久、宗门领地较多的城市。",
+        `守方当前拥有 ${ownerCount} 城，${province.name}的资源评分为 ${value}。`,
+        "近期刚遭妖潮的城市会被降低权重，避免连续袭同一城。"
+      ],
+      metrics: [
+        { label: "资源评分", value },
+        { label: "持有", value: `${held} 日` },
+        { label: "守军", value: `${defenders.count} 人` }
+      ]
+    },
+    attackers: {
+      title: "妖物阵容",
+      points: [
+        "妖物强度会参考守方最高境界与城市资源档位。",
+        "资源越好的城越可能遇到多头妖物轮番冲阵。"
+      ]
+    },
+    defenders: {
+      title: "守城布防",
+      points: [
+        defenders.count ? `守军 ${defenders.count} 人，总守备 ${defenders.totalPower}，核心为 ${defenders.topNames.join("、")}。` : "此城没有有效守军，妖潮极易破城。",
+        "守城成员依托城防获得阵地加成，疲劳会削弱实战表现。"
+      ]
+    }
+  };
+}
+
+function buildSectSiegePlan(state, sectName, targeted, options = {}) {
+  const members = membersForSect(state, sectName).map(({ entity, kind }) => ({ entity, kind }));
+  if (!members.length) return null;
+  const mode = options.mode || "balanced";
+  const owned = (state.provinces || []).filter((item) => item.owner === sectName);
+  const manualAttack = options.attack || null;
+  const manualAttackTargetId = manualAttack?.targetProvinceId || "";
+  const manualAttackMembers = new Set((manualAttack?.memberIds || []).filter((id) => members.some((member) => member.entity.id === id)));
+
+  let attackReserved = new Set();
+  let manualAttackTarget = manualAttackTargetId ? provinceStateById(state, manualAttackTargetId) : null;
+  if (manualAttackTarget && manualAttackTarget.owner !== sectName) attackReserved = new Set(manualAttackMembers);
+  const defense = owned.length
+    ? buildDefenseAssignments(state, sectName, attackReserved, options.defense || null, mode)
+    : { assignments: new Map(), used: new Set() };
+
+  let availableAttackMembers = members.filter((member) => !defense.used.has(member.entity.id));
+  if (!owned.length) availableAttackMembers = members;
+  if (manualAttackTarget && manualAttackTarget.owner !== sectName) {
+    const province = provinceById(manualAttackTarget.id);
+    const distance = owned.length ? provinceDistance(owned.map((item) => item.id), manualAttackTarget.id) : 2;
+    const manualMembers = [...manualAttackMembers]
+      .map((id) => members.find((member) => member.entity.id === id))
+      .filter(Boolean);
+    const fillPool = availableAttackMembers.filter((member) => !manualAttackMembers.has(member.entity.id));
+    const limit = province ? attackerLimitForProvince(province) : 4;
+    const attackers = [
+      ...manualMembers,
+      ...(manualAttack?.autoFill !== false ? fillPool.sort((a, b) => effectiveSiegePower(state, b.entity, distance) - effectiveSiegePower(state, a.entity, distance)).slice(0, Math.max(0, limit - manualMembers.length)) : [])
+    ].slice(0, limit);
+    if (attackers.length && !targeted.has(manualAttackTarget.id)) {
+      targeted.add(manualAttackTarget.id);
+      return { sectName, mode, defense, attack: { territory: manualAttackTarget, province, distance, attackers, playerDirected: true } };
+    }
+  }
+
+  const attack = pickAttackTarget(
+    state,
+    sectName,
+    availableAttackMembers,
+    mode,
+    "",
+    targeted
+  );
+  if (attack && targeted.has(attack.territory.id)) return { sectName, mode, defense, attack: null };
+  if (attack) targeted.add(attack.territory.id);
+  return { sectName, mode, defense, attack };
+}
+
 function ensureProvinceState(state) {
   let changed = false;
   if (state.provinceVersion !== provinceVersion || !Array.isArray(state.provinces)) {
@@ -3761,7 +4438,8 @@ function ensureProvinceState(state) {
 function breakthroughChanceFor(state, entity) {
   const sectName = entity.id === "player" ? state.sect.name : entity.sect;
   const potionBonus = entity.id === "player" ? activeBreakthroughBonus(state) : 0;
-  const beforePotion = breakthroughChance(entity) * (1 + sectBreakthroughBonus(state, sectName, entity));
+  const pearlBonus = spiritPearlBonusFor(state, entity, "breakthrough");
+  const beforePotion = breakthroughChance(entity) * (1 + sectBreakthroughBonus(state, sectName, entity)) + pearlBonus;
   return clamp(
     beforePotion + potionBonus,
     minimumBreakthroughChance(entity.realm || 0),
@@ -3776,7 +4454,8 @@ function breakthroughChanceParts(state, entity) {
   const bonus = sectBreakthroughBonus(state, sectName, entity);
   const sectMultiplier = 1 + bonus;
   const potionBonus = entity.id === "player" ? activeBreakthroughBonus(state) : 0;
-  const beforePotion = base * sectMultiplier;
+  const pearlBonus = spiritPearlBonusFor(state, entity, "breakthrough");
+  const beforePotion = base * sectMultiplier + pearlBonus;
   return {
     realmBase,
     rootMultiplier: base / Math.max(0.0001, realmBase),
@@ -3784,13 +4463,14 @@ function breakthroughChanceParts(state, entity) {
     base,
     bonus,
     potionBonus,
+    spiritPearlBonus: pearlBonus,
     total: clamp(beforePotion + potionBonus, minimumBreakthroughChance(entity.realm || 0), entity.id === "player" ? 0.95 : 0.82)
   };
 }
 
 function xpPreviewParts(state, entity, baseXp = entity.id === "player" ? playerDailyBaseXp : 100) {
   const sectName = entity.id === "player" ? state.sect.name : entity.sect;
-  const rootMultiplier = entity.id === "player" ? 1 : xpGainMultiplier(entity);
+  const rootMultiplier = entity.id === "player" ? 1 : xpGainMultiplier(entity, state);
   const sectMultiplier = 1 + sectXpBonus(state, sectName, entity);
   const rootTotal = Math.floor(baseXp * rootMultiplier);
   const total = Math.floor(baseXp * rootMultiplier * sectMultiplier);
@@ -3847,6 +4527,8 @@ function staticCatalog() {
     sects,
     combatSkills,
     provinces,
+    provinceAdjacency,
+    spiritPearls,
     equipmentSlots,
     equipmentTiers,
     equipmentCatalog,
@@ -3988,6 +4670,26 @@ function publicShop(state) {
     })),
     activeEffects: publicElixirEffects(state),
     breakthroughAttempts: breakthroughAttemptInfo(state)
+  };
+}
+
+function publicSectStrategy(state) {
+  const playerSect = state.sect.name;
+  const owned = (state.provinces || []).filter((territory) => territory.owner === playerSect);
+  return {
+    plan: normalizePlayerSectPlan(state.playerSectPlan, state.playerSectPlan?.targetDay || state.day + 1),
+    fatigue: Object.fromEntries(membersForSect(state, playerSect).map(({ entity }) => [entity.id, sectFatigueOf(state, entity.id)])),
+    ownedProvinceIds: owned.map((territory) => territory.id),
+    distances: Object.fromEntries((state.provinces || []).map((territory) => [territory.id, owned.length ? provinceDistance(owned.map((item) => item.id), territory.id) : 2])),
+    values: Object.fromEntries((state.provinces || []).map((territory) => {
+      const province = provinceById(territory.id);
+      return [territory.id, {
+        resourceValue: provinceResourceValue(province, state, playerSect),
+        defenseValue: territory.owner === playerSect ? defenseValueForProvince(state, territory, playerSect) : 0,
+        defenderLimit: province ? defenderLimitForProvince(province) : 0,
+        attackerLimit: province ? attackerLimitForProvince(province) : 0
+      }];
+    }))
   };
 }
 
@@ -4183,23 +4885,33 @@ function siegeEntityRef(item) {
   return entityRef(item.entity, item.kind);
 }
 
-function withSiegeDefenseBuff(entity) {
+function withSiegeActionModifiers(state, entity, { defender = false, distance = 1 } = {}) {
+  const fatiguePenalty = sectFatigueOf(state, entity.id) * 0.03;
+  const distancePenalty = defender ? 0 : Math.min(0.25, Math.max(0, (distance || 1) - 1) * 0.06);
+  const defenseBonus = defender ? 0.1 : 0;
+  const multiplier = Math.max(0.45, 1 + defenseBonus - fatiguePenalty - distancePenalty);
   return {
     ...entity,
-    attack: Math.floor((entity.attack || 0) * 1.1),
-    defense: Math.floor((entity.defense || 0) * 1.1),
-    maxHp: Math.floor((entity.maxHp || 0) * 1.1),
-    hp: Math.floor((entity.hp ?? entity.maxHp ?? 0) * 1.1),
-    divineSense: Math.floor((entity.divineSense || 0) * 1.1),
-    maxMana: Math.floor((entity.maxMana || 0) * 1.1),
-    mana: Math.floor((entity.mana ?? entity.maxMana ?? 0) * 1.1)
+    attack: Math.floor((entity.attack || 0) * multiplier),
+    defense: Math.floor((entity.defense || 0) * multiplier),
+    maxHp: Math.floor((entity.maxHp || 0) * multiplier),
+    hp: Math.floor((entity.hp ?? entity.maxHp ?? 0) * multiplier),
+    divineSense: Math.floor((entity.divineSense || 0) * multiplier),
+    maxMana: Math.floor((entity.maxMana || 0) * multiplier),
+    mana: Math.floor((entity.mana ?? entity.maxMana ?? 0) * multiplier),
+    siegeModifier: { defender, distance, fatigue: sectFatigueOf(state, entity.id), multiplier }
   };
 }
 
-function runWheelBattle(state, province, attackerSect, defenderSect) {
-  const attackers = membersForSectAscending(state, attackerSect);
-  const defenderIds = provinceStateById(state, province.id)?.defenders || [];
+function runWheelBattle(state, province, attackerSect, defenderSect, options = {}) {
   const map = cultivatorMap(state);
+  const attackerIds = options.attackerIds || membersForSectAscending(state, attackerSect).map((member) => member.entity.id);
+  const attackers = attackerIds
+    .map((id) => map.get(id))
+    .filter(Boolean)
+    .map((entity) => ({ entity, kind: entity.id === "player" ? "player" : "npc" }))
+    .sort((a, b) => effectiveSiegePower(state, a.entity, options.distance || 1) - effectiveSiegePower(state, b.entity, options.distance || 1));
+  const defenderIds = options.defenderIds || provinceStateById(state, province.id)?.defenders || [];
   const defenders = defenderIds
     .map((id) => map.get(id))
     .filter(Boolean)
@@ -4214,12 +4926,13 @@ function runWheelBattle(state, province, attackerSect, defenderSect) {
   while (attackers[attackerIndex] && defenders[defenderIndex] && battles.length < 80) {
     const attacker = attackers[attackerIndex];
     const defender = defenders[defenderIndex];
+    const attackerWithPenalty = withSiegeActionModifiers(state, attacker.entity, { distance: options.distance || 1 });
     const left = {
-      ...attacker.entity,
-      hp: carry.attackerHp ?? effectiveMaxHp(attacker.entity, state),
-      mana: carry.attackerMana ?? effectiveMaxMana(attacker.entity, state)
+      ...attackerWithPenalty,
+      hp: carry.attackerHp ?? effectiveMaxHp(attackerWithPenalty, state),
+      mana: carry.attackerMana ?? effectiveMaxMana(attackerWithPenalty, state)
     };
-    const defenderWithBuff = withSiegeDefenseBuff(defender.entity);
+    const defenderWithBuff = withSiegeActionModifiers(state, defender.entity, { defender: true });
     const right = {
       ...defenderWithBuff,
       hp: carry.defenderHp ?? effectiveMaxHp(defenderWithBuff, state),
@@ -4262,19 +4975,205 @@ function runWheelBattle(state, province, attackerSect, defenderSect) {
   };
 }
 
+function applyPlannedDefenders(state, plans) {
+  for (const territory of state.provinces || []) territory.defenders = [];
+  for (const plan of plans || []) {
+    for (const [provinceId, ids] of plan.defense?.assignments || []) {
+      const territory = provinceStateById(state, provinceId);
+      if (territory?.owner === plan.sectName) territory.defenders = [...ids];
+    }
+  }
+}
+
+function updateSectFatigue(state, plans) {
+  state.sectFatigue ??= {};
+  const active = new Map();
+  for (const plan of plans || []) {
+    for (const ids of plan.defense?.assignments?.values?.() || []) {
+      for (const id of ids) active.set(id, Math.max(active.get(id) || 0, 1));
+    }
+    for (const member of plan.attack?.attackers || []) {
+      active.set(member.entity.id, Math.max(active.get(member.entity.id) || 0, 1 + Math.max(1, plan.attack.distance || 1)));
+    }
+  }
+  for (const { entity } of allCultivators(state)) {
+    const previous = sectFatigueOf(state, entity.id);
+    if (active.has(entity.id)) state.sectFatigue[entity.id] = clamp(previous + active.get(entity.id), 0, 8);
+    else state.sectFatigue[entity.id] = Math.max(0, previous - 2);
+  }
+}
+
+function monsterSiegeCount(day) {
+  return clamp(1 + Math.floor(Math.max(1, day || 1) / 50), 1, 4);
+}
+
+function makeSiegeMonsterForProvince(state, province, defenderSect) {
+  const defenders = membersForSect(state, defenderSect);
+  const highestRealm = defenders.length ? Math.max(...defenders.map(({ entity }) => entity.realm || 0)) : state.player.realm;
+  const stage = stageIndexOfRealm(highestRealm);
+  const tier = provinceTier(province);
+  const realm = capRealm(highestRealm + Math.max(0, Math.floor(tier / 2) - 1));
+  const monsterName = monsterNameForStage(stage, `province-monster|${state.day}|${province.id}`);
+  return makeMonster(`妖潮·${province.name}${monsterName}`, realm, pick(roots).key, 0.9 + tier * 0.18 + Math.min(0.35, (state.day || 1) / 500));
+}
+
+function monsterEntityRef(monster) {
+  return entityRef(monster, "monster");
+}
+
+function runMonsterSiegeBattle(state, territory, province, defenderSect) {
+  const defenderIds = territory.defenders || [];
+  const map = cultivatorMap(state);
+  const defenders = defenderIds
+    .map((id) => map.get(id))
+    .filter(Boolean)
+    .map((entity) => ({ entity, kind: entity.id === "player" ? "player" : "npc" }))
+    .sort((a, b) => powerOf(a.entity, state) - powerOf(b.entity, state));
+  const monsterCount = provinceTier(province) >= 4 ? 3 : provinceTier(province) >= 3 ? 2 : 1;
+  const monsters = Array.from({ length: monsterCount }, (_, index) => makeSiegeMonsterForProvince(state, province, defenderSect || ""))
+    .map((monster, index) => ({ ...monster, name: monsterCount > 1 ? `${monster.name}${index + 1}` : monster.name }));
+  let monsterIndex = 0;
+  let defenderIndex = 0;
+  let carry = { monsterHp: null, monsterMana: null, defenderHp: null, defenderMana: null };
+  const battles = [];
+  while (monsters[monsterIndex] && defenders[defenderIndex] && battles.length < 60) {
+    const monster = monsters[monsterIndex];
+    const defender = defenders[defenderIndex];
+    const left = {
+      ...monster,
+      hp: carry.monsterHp ?? effectiveMaxHp(monster, state),
+      mana: carry.monsterMana ?? effectiveMaxMana(monster, state)
+    };
+    const defenderWithBuff = withSiegeActionModifiers(state, defender.entity, { defender: true });
+    const right = {
+      ...defenderWithBuff,
+      hp: carry.defenderHp ?? effectiveMaxHp(defenderWithBuff, state),
+      mana: carry.defenderMana ?? effectiveMaxMana(defenderWithBuff, state)
+    };
+    const battle = runTurnBattle(left, right, { maxRounds: 16, state });
+    const monsterWon = battle.winner === "left";
+    battles.push({
+      order: battles.length + 1,
+      attacker: monsterEntityRef(monster),
+      defender: siegeEntityRef(defender),
+      winnerSide: monsterWon ? "monster" : "defender",
+      winnerName: monsterWon ? monster.name : defender.entity.name,
+      summary: `${monster.name} ${monsterWon ? "击溃" : "败于"} ${defender.entity.name}`,
+      replay: buildReplay(left, right, battle, monsterWon ? "胜" : "负", timestampKey(), state)
+    });
+    if (monsterWon) {
+      defenderIndex += 1;
+      carry.monsterHp = Math.max(1, battle.leftHp);
+      carry.monsterMana = battle.leftMana;
+      carry.defenderHp = null;
+      carry.defenderMana = null;
+    } else {
+      monsterIndex += 1;
+      carry.defenderHp = Math.max(1, battle.rightHp);
+      carry.defenderMana = battle.rightMana;
+      carry.monsterHp = null;
+      carry.monsterMana = null;
+    }
+  }
+  return {
+    captured: Boolean(monsters[monsterIndex] && !defenders[defenderIndex]) || !defenders.length,
+    battles,
+    attackerLineup: monsters.map(monsterEntityRef),
+    defenderLineup: defenders.map((defender) => siegeEntityRef(defender)),
+    defenderSurvivor: defenders[defenderIndex]?.entity.name || ""
+  };
+}
+
+function pickMonsterSiegeTargets(state, targeted = new Set()) {
+  const occupied = (state.provinces || []).filter((territory) => territory.owner && !targeted.has(territory.id));
+  const picks = [];
+  for (let count = monsterSiegeCount(state.day); count > 0 && occupied.length; count -= 1) {
+    const weighted = occupied
+      .filter((territory) => !picks.some((pick) => pick.id === territory.id))
+      .map((territory) => {
+        const province = provinceById(territory.id);
+        const ownerCount = (state.provinces || []).filter((item) => item.owner === territory.owner).length;
+        const value = provinceResourceValue(province, state, territory.owner);
+        const held = Math.max(0, Number(territory.heldDays) || 0);
+        const protection = Math.max(0, 3 - (state.day - Number(territory.lastMonsterSiegeDay || 0))) * 40;
+        return { territory, weight: Math.max(1, value * 1.2 + ownerCount * 4 + held * 2 - protection) };
+      });
+    const total = weighted.reduce((sum, item) => sum + item.weight, 0);
+    let roll = Math.random() * total;
+    for (const item of weighted) {
+      roll -= item.weight;
+      if (roll <= 0) {
+        picks.push(item.territory);
+        targeted.add(item.territory.id);
+        break;
+      }
+    }
+  }
+  return picks;
+}
+
 function runProvinceSieges(state, settlementDate) {
   state.provinceWars ??= [];
   const targeted = new Set();
-  const siegePlans = [];
   const wars = [];
-  for (const attackerSect of shuffle(activeSectNames(state))) {
-    const candidates = shuffle((state.provinces || []).filter((item) => item.owner !== attackerSect && !targeted.has(item.id)));
-    const target = candidates[0];
-    if (!target) continue;
-    targeted.add(target.id);
-    siegePlans.push({ attackerSect, target });
+  const playerPlan = normalizePlayerSectPlan(state.playerSectPlan, state.day);
+  const plans = [];
+  for (const sectName of shuffle(activeSectNames(state))) {
+    const isPlayerSect = sectName === state.sect.name;
+    const planOptions = isPlayerSect && playerPlan.targetDay === state.day ? playerPlan : {};
+    plans.push(buildSectSiegePlan(state, sectName, targeted, planOptions));
   }
-  for (const { attackerSect, target } of siegePlans) {
+  applyPlannedDefenders(state, plans.filter(Boolean));
+
+  for (const target of pickMonsterSiegeTargets(state, targeted)) {
+    const province = provinceById(target.id);
+    if (!province || !target.owner) continue;
+    const defenderSect = target.owner;
+    const result = runMonsterSiegeBattle(state, target, province, defenderSect);
+    const record = {
+      id: `${settlementDate}-monster-${target.id}`,
+      kind: "monster",
+      day: state.day,
+      date: settlementDate,
+      provinceId: target.id,
+      provinceName: province.name,
+      attacker: "妖物",
+      defender: defenderSect,
+      captured: result.captured,
+      result: result.captured
+        ? `妖潮攻破${defenderSect}防线，${province.name}沦为无主之地`
+        : `${defenderSect}守住${province.name}，${result.defenderSurvivor || "守城修士"}斩退妖潮`,
+      strategy: monsterWarStrategyForProvince(state, target, province, defenderSect),
+      attackerLineup: result.attackerLineup,
+      defenderLineup: result.defenderLineup,
+      battles: result.battles
+    };
+    target.lastMonsterSiegeDay = state.day;
+    if (result.captured) {
+      target.owner = null;
+      target.defenders = [];
+      target.miasmaUntilDay = state.day + 1;
+    } else {
+      for (const ref of result.defenderLineup || []) {
+        const entity = cultivatorById(state, ref.id);
+        if (entity?.id === "player") {
+          rollSpiritPearlFragmentReward(state, "blood_trial", {
+            success: true,
+            stage: stageIndexOfRealm(entity.realm || 0),
+            context: `${province.name}守妖`,
+            receiver: entity,
+            pearlId: activeSpecialRoot(entity)?.id || primaryRoot(entity).key
+          });
+        }
+      }
+    }
+    wars.push(record);
+  }
+
+  for (const plan of plans.filter(Boolean)) {
+    const target = plan.attack?.territory;
+    const attackerSect = plan.sectName;
+    if (!target) continue;
     const province = provinceById(target.id);
     if (!province) continue;
     const defenderSect = target.owner;
@@ -4288,24 +5187,38 @@ function runProvinceSieges(state, settlementDate) {
       defender: defenderSect || "无主之地",
       captured: false,
       result: "",
-      battles: []
+      attackerLineup: (plan.attack.attackers || []).map((member) => siegeEntityRef(member)),
+      defenderLineup: (target.defenders || [])
+        .map((id) => cultivatorById(state, id))
+        .filter(Boolean)
+        .map((entity) => siegeEntityRef({ entity, kind: entity.id === "player" ? "player" : "npc" })),
+      battles: [],
+      strategy: provinceWarStrategyForPlan(state, plan, target, province, defenderSect)
     };
     if (!defenderSect) {
       target.owner = attackerSect;
+      target.heldDays = 0;
       enforceProvinceOccupationLimits(state);
       record.captured = true;
       record.result = `${attackerSect}兵不血刃占下${province.name}`;
     } else {
-      const result = runWheelBattle(state, province, attackerSect, defenderSect);
+      const result = runWheelBattle(state, province, attackerSect, defenderSect, {
+        attackerIds: (plan.attack.attackers || []).map((member) => member.entity.id),
+        defenderIds: target.defenders || [],
+        distance: plan.attack.distance || 1
+      });
       record.battles = result.battles;
       record.attackerLineup = result.attackerLineup;
       record.defenderLineup = result.defenderLineup;
+      record.distance = plan.attack.distance || 1;
+      record.playerDirected = Boolean(plan.attack.playerDirected);
       record.captured = result.captured;
       record.result = result.captured
         ? `${attackerSect}攻破${defenderSect}防线，占下${province.name}`
         : `${defenderSect}守住${province.name}，${result.defenderSurvivor || "守城修士"}仍立城头`;
       if (result.captured) {
         target.owner = attackerSect;
+        target.heldDays = 0;
         enforceProvinceOccupationLimits(state);
       }
       const attackerStatus = attackerSect === state.sect.name ? state.sect : state.sectRivals?.[attackerSect];
@@ -4322,11 +5235,17 @@ function runProvinceSieges(state, settlementDate) {
     }
     wars.push(record);
   }
+  updateSectFatigue(state, plans.filter(Boolean));
+  for (const territory of state.provinces || []) {
+    territory.heldDays = territory.owner ? Math.max(0, Math.floor(Number(territory.heldDays) || 0)) + 1 : 0;
+    if (territory.miasmaUntilDay && territory.miasmaUntilDay < state.day) territory.miasmaUntilDay = 0;
+  }
+  state.playerSectPlan = defaultPlayerSectPlan(state.day + 1);
   if (wars.length) {
     state.provinceWars.unshift(...wars);
     state.provinceWars = trimRecordsByDay(state.provinceWars, state.day, battleRecordDays);
     enforceProvinceOccupationLimits(state);
-    assignProvinceDefenders(state);
+    applyPlannedDefenders(state, plans.filter(Boolean));
     log(state, `${settlementDate} 九州攻守结算完成，共 ${wars.length} 处省份被挑战。`, "gold");
   }
 }
@@ -4811,6 +5730,7 @@ export function createDefaultState() {
     },
     bag: emptyBag(),
     shop: { purchases: {}, permanentPurchases: {}, permanentUses: {} },
+    spiritPearls: createSpiritPearlState(),
     equipment: createEquipmentState(),
     equipmentVersion,
     equipmentTransfers: [],
@@ -4835,6 +5755,8 @@ export function createDefaultState() {
     },
     sectRivals: Object.fromEntries(sects.map((name, index) => [name, makeSectStatus(name, index)])),
     sectProfiles: Object.fromEntries(sects.map((name) => [name, { name, portraitUrl: "", leaderId: "", elderIds: [] }])),
+    playerSectPlan: defaultPlayerSectPlan(2),
+    sectFatigue: {},
     provinceVersion,
     provinces: createNeutralProvinceState(),
     provinceWars: [],
@@ -5188,6 +6110,7 @@ export function ensureStateShape(state) {
   }
   state.equipmentTransfers ??= [];
   changed = ensureEquipmentState(state) || changed;
+  changed = ensureSpiritPearls(state) || changed;
   ensureDungeonState(state);
   if (state.starSeaCycle === undefined) {
     state.starSeaCycle = null;
@@ -5209,6 +6132,8 @@ export function ensureStateShape(state) {
   state.player.mana = Math.min(state.player.mana, effectiveMaxMana(state.player, state));
   state.sect.warWins ??= 0;
   state.sect.warLosses ??= 0;
+  state.playerSectPlan = normalizePlayerSectPlan(state.playerSectPlan, state.playerSectPlan?.targetDay || (state.day + 1));
+  state.sectFatigue ??= {};
   state.shop ??= {};
   state.shop.purchases ??= {};
   state.shop.permanentPurchases ??= {};
@@ -5507,6 +6432,8 @@ export function getPublicState(state, options = {}) {
     baseBreakChance: currentRealmInfo.baseBreakChance,
     skillUpgrade: previewSkillUpgradeForState(state, state.player),
     shop: publicShop(state),
+    spiritPearls: publicSpiritPearls(state, state.player),
+    sectStrategy: publicSectStrategy(state),
     sects: options.scope === "lite" ? sectSummaries.map(compactSectSummary) : sectSummaries,
     ...(includeHeavyDerived ? {
       dungeonLootPools: publicDungeonLootPools(state),
@@ -5529,6 +6456,9 @@ export function getPublicState(state, options = {}) {
       log: state.log,
       logDays: publicLogDays(state),
       bag: state.bag,
+      spiritPearls: publicSpiritPearls(state, state.player),
+      playerSectPlan: state.playerSectPlan,
+      sectFatigue: state.sectFatigue,
       equipmentTransfers: state.equipmentTransfers,
       home: {
         ticker: homeTickerForState(state)
@@ -5546,6 +6476,7 @@ export function getPublicState(state, options = {}) {
     player: publicCultivator(state.player, state, { includeRecentReplays: true, kind: "player" }),
     npcs: state.npcs.map((npc) => publicCultivator(npc, state, { kind: "npc", compact: true })),
     equipment: state.equipment.map((item) => publicEquipment(item, state)),
+    spiritPearls: publicSpiritPearls(state, state.player),
     duelDays: publicDuelDays(state.duelDays || [], state.day, publicCultivatorRefMap(state)),
     provinceWars: publicProvinceWars(state.provinceWars || [], state.day, publicCultivatorRefMap(state)),
     dungeonDays: publicDungeonDays(state.dungeonDays || [], state.day, publicCultivatorRefMap(state)),
@@ -6721,7 +7652,7 @@ export function dailySettlement(state, options = {}) {
     const beforeRealm = npc.realm;
     const baseXp = 100;
     const sectXpShare = sectXpBonus(state, npc.sect, npc);
-    const xpMultiplier = xpGainMultiplier(npc) * (1 + sectXpShare);
+    const xpMultiplier = xpGainMultiplier(npc, state) * (1 + sectXpShare);
     const totalXp = Math.floor(baseXp * xpMultiplier);
     const bonusXp = Math.max(0, totalXp - baseXp);
     npc.xp += totalXp;
@@ -6784,7 +7715,7 @@ export function dailySettlement(state, options = {}) {
       baseSpirit: provinceFlatValueForSect(state, npc.sect, "spirit"),
       provinceSpirit,
       duelSeasonReward,
-      rootXpMultiplier: xpGainMultiplier(npc),
+      rootXpMultiplier: xpGainMultiplier(npc, state),
       sectXpMultiplier: 1 + sectXpShare,
       rootCount: rootCount(npc),
       realm: realms[npc.realm],
@@ -7764,6 +8695,13 @@ export function sellItem(state, kind) {
     state.shop.permanentPurchases[kind] = Math.max(used, bought - 1);
   }
   log(state, `售出「${item.name}」一枚，按今日行情九折换得 ${sellPrice} 灵石。`, "gold");
+}
+
+export function updatePlayerSectPlan(state, payload = {}) {
+  ensureStateShape(state);
+  state.playerSectPlan = normalizePlayerSectPlan(payload, state.day + 1);
+  log(state, `已保存${state.sect.name}第 ${state.day + 1} 天明日战略。`, "gold");
+  return state.playerSectPlan;
 }
 
 export function useItem(state, kind) {
