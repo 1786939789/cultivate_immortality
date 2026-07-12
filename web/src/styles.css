@@ -1254,6 +1254,11 @@ button {
   margin-top: 12px;
 }
 
+.dungeon-record-day-nav {
+  margin: -2px 0 10px;
+  justify-content: flex-start;
+}
+
 .dungeon-loot-toggle {
   display: flex;
   flex-wrap: wrap;
@@ -1335,7 +1340,7 @@ button {
 
 .cave-spirit-summary {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
   align-items: center;
   border: 1px solid rgba(120, 91, 43, .14);
@@ -1357,6 +1362,17 @@ button {
 .cave-spirit-summary span {
   color: #5b4630;
   font-weight: 700;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .cave-spirit-summary {
+    flex-wrap: wrap;
+  }
+
+  .cave-spirit-summary span {
+    white-space: normal;
+  }
 }
 
 .cave-loot-strip {
@@ -1684,6 +1700,7 @@ button {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr));
   gap: 10px;
   margin-top: 12px;
+  padding-top: 8px;
   overflow: visible;
 }
 
@@ -1702,14 +1719,30 @@ button {
 }
 
 .sect-dungeon-card.success {
-  border-color: rgba(15, 118, 110, .35);
-  background: rgba(236, 253, 245, .58);
+  border: 2px solid rgba(13, 148, 136, .72);
+  background:
+    linear-gradient(145deg, rgba(220, 252, 231, .94), rgba(236, 253, 245, .76) 55%, rgba(254, 243, 199, .72)),
+    rgba(236, 253, 245, .7);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, .72),
+    0 0 0 3px rgba(13, 148, 136, .12),
+    0 10px 22px rgba(15, 118, 110, .18);
+}
+
+.sect-dungeon-card.success .section-head h3 {
+  color: #0f766e;
+}
+
+.void-hall-success-tag {
+  padding: 7px 12px;
+  font-size: 15px;
+  font-weight: 900;
 }
 
 .dungeon-monster-card {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(118px, .58fr) minmax(0, 1.42fr);
+  grid-template-columns: 132px minmax(0, 1fr);
   gap: 10px 14px;
   align-items: stretch;
   margin-bottom: 7px;
@@ -1753,7 +1786,7 @@ button {
 }
 
 .monster-portrait .monster-emblem {
-  --monster-size: 118px;
+  --monster-size: 132px;
   flex: 0 0 auto;
   border-radius: 16px;
   box-shadow:
@@ -1774,6 +1807,13 @@ button {
 .monster-identity-copy {
   width: 100%;
   min-width: 0;
+}
+
+.monster-identity-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
 }
 
 .monster-tags {
@@ -1800,6 +1840,10 @@ button {
   white-space: nowrap;
 }
 
+.monster-identity-heading h4 {
+  flex: 0 1 auto;
+}
+
 .monster-info-panel .monster-identity-copy p {
   margin-top: 4px;
   color: #6f5a3c;
@@ -1817,7 +1861,7 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin-top: 5px;
+  margin-top: 0;
   padding: 2px 7px;
   border: 1px solid rgba(120, 91, 43, .18);
   border-radius: 999px;
@@ -2222,18 +2266,18 @@ button {
 .blood-podium-card strong {
   margin-top: 2px;
   line-height: 1.2;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .blood-podium-card small {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.35;
 }
 
 .blood-podium-card em {
   color: #92400e;
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
   line-height: 1.35;
 }
@@ -2242,12 +2286,35 @@ button {
   color: #64748b;
 }
 
+.battle-event.siege {
+  border-left-color: #b7791f;
+  background: linear-gradient(90deg, rgba(251, 191, 36, .17), rgba(255, 253, 246, .58));
+  color: #713f12;
+}
+
 .void-podium {
   margin-top: 8px;
 }
 
 .void-podium .blood-podium-card {
+  min-height: 118px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
   pointer-events: none;
+}
+
+.void-podium .blood-podium-card .character-portrait.lg {
+  --portrait-size: 42px;
+}
+
+.void-podium .blood-podium-card.rank-1 .character-portrait.lg {
+  --portrait-size: 46px;
+}
+
+.void-podium .blood-podium-card em {
+  margin-top: auto;
 }
 
 .sect-dungeon-card .attribute-list.compact {
@@ -2390,8 +2457,8 @@ button {
 .compact-monster-strip .monster-chip.star-sea-monster-summary {
   position: relative;
   isolation: isolate;
-  grid-template-columns: 76px minmax(0, 1fr);
-  min-height: 120px;
+  grid-template-columns: 80px minmax(0, 1fr);
+  min-height: 116px;
   overflow: hidden;
   gap: 11px;
   border-color: rgba(72, 170, 156, .42);
@@ -2429,7 +2496,7 @@ button {
 }
 
 .compact-monster-strip .monster-chip.star-sea-monster-summary .monster-emblem.sm {
-  --monster-size: 68px;
+  --monster-size: 74px;
   border-radius: 9px;
   box-shadow:
     0 0 0 1px rgba(255, 248, 214, .28),
@@ -2496,12 +2563,9 @@ button {
 
 .star-sea-monster-stats-mini small {
   display: grid !important;
-  gap: 2px;
+  gap: 1px;
   min-width: 0;
-  border: 1px solid rgba(255, 248, 214, .14);
-  border-radius: 6px;
-  padding: 4px 5px;
-  background: rgba(255, 253, 246, .09);
+  padding: 2px 0;
   line-height: 1.1 !important;
 }
 
@@ -2666,6 +2730,36 @@ button {
   padding: 7px 10px;
 }
 
+/* Keep the data-dense Star Sea report readable without enlarging other dungeon pages. */
+.dungeon-record-panel:has(.dungeon-sea-grid) > .section-head h3 {
+  font-size: 20px;
+}
+
+.dungeon-record-panel:has(.dungeon-sea-grid) > .section-head p {
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.dungeon-record-panel:has(.dungeon-sea-grid) > .section-head .tag {
+  font-size: 13px;
+  padding: 5px 10px;
+}
+
+.dungeon-record-panel:has(.dungeon-sea-grid) .dungeon-day-nav .secondary {
+  min-height: 34px;
+  font-size: 13px;
+}
+
+.dungeon-record-panel:has(.dungeon-sea-grid) .dungeon-date-select span,
+.dungeon-record-panel:has(.dungeon-sea-grid) .dungeon-date-select input[type="date"] {
+  font-size: 13px;
+}
+
+.dungeon-record-panel:has(.dungeon-sea-grid) > .loot-pool .loot-pool-summary span {
+  font-size: 14.5px;
+  line-height: 1.6;
+}
+
 .star-sea-overview-line .monster-chip strong,
 .star-sea-summary-chip b {
   font-size: 15px;
@@ -2721,13 +2815,14 @@ button {
 .star-sea-rank-head h3 {
   margin: 0;
   color: #49351d;
-  font-size: 16px;
+  font-size: 17px;
   line-height: 1.2;
 }
 
 .star-sea-rank-head small {
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .star-sea-rank-icon {
@@ -2813,10 +2908,56 @@ button {
   font-weight: 900;
 }
 
-.star-sea-rank-row:first-child .star-sea-rank-number {
+.star-sea-rank-row.rank-first .star-sea-rank-number {
   color: #fffaf0;
   background: linear-gradient(145deg, #d49a2b, #a96714);
   box-shadow: 0 3px 8px rgba(157, 96, 17, .22);
+}
+
+.star-sea-rank-row.team.player-team {
+  border-color: rgba(13, 148, 136, .7);
+  background:
+    linear-gradient(90deg, rgba(204, 251, 241, .82), rgba(255, 253, 246, .88));
+  box-shadow:
+    inset 4px 0 #0f766e,
+    0 0 0 1px rgba(13, 148, 136, .15),
+    0 5px 13px rgba(15, 118, 110, .12);
+}
+
+.star-sea-rank-row.team.player-team::after {
+  content: "所在队伍";
+  position: absolute;
+  top: 5px;
+  right: 7px;
+  color: #0f766e;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .04em;
+}
+
+.star-sea-rank-row.team.player-team .star-sea-rank-copy strong {
+  color: #075d55;
+}
+
+.star-sea-rank-row.team.player-team .character-portrait.sm {
+  box-shadow: 0 0 0 2px rgba(13, 148, 136, .23), 0 4px 9px rgba(15, 118, 110, .18);
+}
+
+.star-sea-rank-pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.star-sea-rank-pager .secondary {
+  min-height: 30px;
+  padding: 5px 10px;
+  font-size: 11px;
 }
 
 .star-sea-rank-copy {
@@ -2834,20 +2975,21 @@ button {
 
 .star-sea-rank-copy strong {
   color: #3d2b18;
-  font-size: 12.5px;
+  font-size: 13.5px;
   line-height: 1.2;
 }
 
 .star-sea-rank-copy small {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12.5px;
+  line-height: 1.25;
 }
 
 .star-sea-rank-result {
   min-width: max-content;
   border-radius: 999px;
   padding: 4px 7px;
-  font-size: 9.5px;
+  font-size: 10.5px;
   font-weight: 900;
 }
 
@@ -2871,19 +3013,19 @@ button {
 .star-sea-rank-stat small,
 .star-sea-output-value small {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 10.5px;
 }
 
 .star-sea-rank-stat b,
 .star-sea-output-value b {
   color: #3b2612;
-  font-size: 11.5px;
+  font-size: 12.5px;
   line-height: 1.1;
 }
 
 .star-sea-output-value b {
   color: #176f65;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .star-sea-rank-reward {
@@ -2892,7 +3034,7 @@ button {
   justify-content: flex-end;
   gap: 3px;
   color: #a56a14;
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 900;
 }
 
@@ -2954,7 +3096,7 @@ button {
   border-radius: 999px;
   background: rgba(255, 253, 246, .72);
   color: #5b4630;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 900;
 }
 
@@ -2989,6 +3131,61 @@ button {
     radial-gradient(circle at 0 0, rgba(15, 118, 110, .12), transparent 16rem);
 }
 
+.star-sea-cycle-day-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(120, 91, 43, .14);
+}
+
+.star-sea-cycle-day-controls .dungeon-day-nav {
+  margin: 0;
+  justify-content: flex-start;
+}
+
+.star-sea-daily-pool {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.star-sea-daily-pool span {
+  border: 1px solid rgba(120, 91, 43, .16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .58);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 3px 8px;
+}
+
+.star-sea-cycle-board-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.star-sea-cycle-board-modes button {
+  min-height: 32px;
+  border: 1px solid rgba(120, 91, 43, .2);
+  border-radius: 7px;
+  padding: 5px 11px;
+  color: #5b4630;
+  background: rgba(255, 253, 246, .68);
+  font-size: 12.5px;
+  font-weight: 900;
+}
+
+.star-sea-cycle-board-modes button.active {
+  border-color: rgba(15, 118, 110, .44);
+  color: #173f3a;
+  background: linear-gradient(135deg, rgba(15, 118, 110, .16), rgba(245, 158, 11, .14));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .42);
+}
+
 .star-sea-cycle-board-head {
   display: flex;
   align-items: flex-start;
@@ -3006,13 +3203,13 @@ button {
 
 .star-sea-cycle-board-head strong {
   color: var(--ink);
-  font-size: 16px;
+  font-size: 17px;
   line-height: 1.25;
 }
 
 .star-sea-cycle-board-head span {
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: 13.5px;
   line-height: 1.35;
 }
 
@@ -3020,7 +3217,7 @@ button {
   min-width: max-content;
   max-width: 42%;
   color: #7a4b13;
-  font-size: 12.5px;
+  font-size: 13.5px;
   font-weight: 800;
   font-style: normal;
   line-height: 1.35;
@@ -3061,7 +3258,59 @@ button {
   background: rgba(255, 253, 246, .7);
 }
 
-.star-sea-cycle-team-row:first-child {
+.star-sea-cycle-member-row {
+  display: grid;
+  grid-template-columns: 28px 34px minmax(170px, .9fr) minmax(160px, 1fr) 74px;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  min-height: 42px;
+  padding: 6px 8px;
+  border: 1px solid rgba(120, 91, 43, .13);
+  border-radius: 7px;
+  background: rgba(255, 253, 246, .7);
+}
+
+.star-sea-cycle-member-row.rank-first {
+  border-color: rgba(183, 121, 31, .34);
+  background: linear-gradient(135deg, rgba(255, 248, 221, .96), rgba(235, 222, 183, .72));
+}
+
+.star-sea-cycle-member-row .character-portrait.sm {
+  width: 32px;
+  height: 32px;
+  border-width: 1px;
+  box-shadow:
+    0 0 0 2px rgba(199, 137, 28, .1),
+    0 5px 10px rgba(58, 42, 21, .12);
+}
+
+.cycle-member-copy {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.cycle-member-copy strong,
+.cycle-member-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cycle-member-copy strong {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.cycle-member-copy small {
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.2;
+}
+
+.star-sea-cycle-team-row.rank-first {
   border-color: rgba(183, 121, 31, .34);
   background: linear-gradient(135deg, rgba(255, 248, 221, .96), rgba(235, 222, 183, .72));
 }
@@ -3078,7 +3327,12 @@ button {
   font-weight: 900;
 }
 
-.star-sea-cycle-team-row:first-child .cycle-rank {
+.star-sea-cycle-team-row.rank-first .cycle-rank {
+  background: #b7791f;
+  color: #fffaf0;
+}
+
+.star-sea-cycle-member-row.rank-first .cycle-rank {
   background: #b7791f;
   color: #fffaf0;
 }
@@ -3100,7 +3354,7 @@ button {
     0 5px 10px rgba(58, 42, 21, .12);
 }
 
-.star-sea-cycle-team-row:first-child .cycle-team-identity .character-portrait.sm {
+.star-sea-cycle-team-row.rank-first .cycle-team-identity .character-portrait.sm {
   box-shadow:
     0 0 0 2px rgba(183, 121, 31, .18),
     0 5px 12px rgba(91, 55, 12, .16);
@@ -3116,7 +3370,7 @@ button {
   min-width: 0;
   overflow: hidden;
   color: var(--ink);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 900;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3125,7 +3379,7 @@ button {
 .cycle-team-copy small {
   overflow: hidden;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11.5px;
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3146,11 +3400,33 @@ button {
   background: linear-gradient(90deg, #0f766e, #d99a2b);
 }
 
+.cycle-score-bar.personal i {
+  background: linear-gradient(90deg, #a56a14, #e0a631);
+}
+
 .star-sea-cycle-team-row strong {
   color: #3b1f0c;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 900;
   text-align: right;
+}
+
+.star-sea-cycle-member-row > strong {
+  color: #176f65;
+  font-size: 14px;
+  font-weight: 900;
+  text-align: right;
+}
+
+@media (max-width: 720px) {
+  .star-sea-cycle-member-row {
+    grid-template-columns: 28px 34px minmax(0, 1fr) 64px;
+    gap: 7px;
+  }
+
+  .star-sea-cycle-member-row .cycle-score-bar {
+    display: none;
+  }
 }
 
 .card {
@@ -7898,11 +8174,11 @@ button.event {
   height: 30px;
   display: inline-grid;
   place-items: center;
-  border-color: rgba(31, 83, 75, .26);
-  border-radius: 7px;
-  background: rgba(233, 248, 235, .72);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: #1b4f49;
-  padding: 2px;
+  padding: 0;
 }
 
 .sect-province-panel .defender-chip.icon-only {
@@ -7910,9 +8186,9 @@ button.event {
 }
 
 .sect-province-panel .defender-chip .character-portrait {
-  --portrait-size: 24px;
+  --portrait-size: 30px;
   flex: 0 0 auto;
-  border-radius: 5px;
+  border-radius: 50%;
 }
 
 .sect-province-panel .defender-tooltip {
@@ -7925,12 +8201,12 @@ button.event {
   transform: translate(-50%, 4px);
   opacity: 0;
   pointer-events: none;
-  border: 1px solid rgba(102, 72, 30, .38);
-  border-radius: 4px;
+  border: 1px solid rgba(163, 119, 50, .36);
+  border-radius: 6px;
   background:
-    linear-gradient(180deg, rgba(36, 29, 19, .98), rgba(20, 17, 13, .98));
-  color: #f6e3aa !important;
-  box-shadow: 0 8px 18px rgba(28, 18, 8, .32);
+    linear-gradient(180deg, rgba(255, 253, 239, .98), rgba(239, 222, 182, .98));
+  color: #513a1c !important;
+  box-shadow: 0 8px 18px rgba(72, 48, 18, .2);
   font: 900 12px/1.3 "Noto Serif SC", serif;
   padding: 6px 8px;
   text-align: center;
@@ -7945,9 +8221,9 @@ button.event {
   top: 100%;
   width: 8px;
   height: 8px;
-  border-right: 1px solid rgba(102, 72, 30, .38);
-  border-bottom: 1px solid rgba(102, 72, 30, .38);
-  background: rgba(20, 17, 13, .98);
+  border-right: 1px solid rgba(163, 119, 50, .36);
+  border-bottom: 1px solid rgba(163, 119, 50, .36);
+  background: rgba(239, 222, 182, .98);
   transform: translate(-50%, -4px) rotate(45deg);
 }
 

@@ -982,21 +982,6 @@
           <div class="panel section-head">
             <div>
               <h3>副本闯关记录</h3>
-              <p>每日副本战报。</p>
-            </div>
-            <div class="dungeon-day-nav">
-              <button class="secondary" type="button" :disabled="!canShowPreviousDungeonDay" @click="showPreviousDungeonDay">前一日</button>
-              <label class="dungeon-date-select">
-                <span>查看日期</span>
-                <input
-                  v-model="selectedDungeonCalendarDate"
-                  type="date"
-                  :min="dungeonDateMin"
-                  :max="dungeonDateMax"
-                  aria-label="选择副本记录日期"
-                >
-              </label>
-              <button class="secondary" type="button" :disabled="!canShowNextDungeonDay" @click="showNextDungeonDay">后一日</button>
             </div>
           </div>
 
@@ -1052,9 +1037,16 @@
             <div class="section-head compact">
               <div>
                 <h3>血色禁地</h3>
-                <p>洞窟战果 · 妖兽属性{{ showDungeonLoot ? " · 掉落池" : "" }}</p>
               </div>
               <span class="tag">{{ bloodTrialClearCount }} 人次通关</span>
+            </div>
+            <div class="dungeon-day-nav dungeon-record-day-nav">
+              <button class="secondary" type="button" :disabled="!canShowPreviousDungeonDay" @click="showPreviousDungeonDay">前一日</button>
+              <label class="dungeon-date-select">
+                <span>查看日期</span>
+                <input v-model="selectedDungeonCalendarDate" type="date" :min="dungeonDateMin" :max="dungeonDateMax" aria-label="选择血色禁地记录日期">
+              </label>
+              <button class="secondary" type="button" :disabled="!canShowNextDungeonDay" @click="showNextDungeonDay">后一日</button>
             </div>
             <div class="dungeon-cave-list" v-if="selectedDungeonDay.bloodTrial?.caves?.length">
               <article class="dungeon-cave-card" v-for="cave in selectedDungeonDay.bloodTrial?.caves || []" :key="cave.cave">
@@ -1077,11 +1069,13 @@
                   </div>
                   <div class="monster-info-panel">
                     <div class="monster-identity-copy">
-                      <h4 :title="cave.monster?.name || ''">{{ monsterShortName(cave.monster?.name) }}</h4>
+                      <div class="monster-identity-heading">
+                        <h4 :title="cave.monster?.name || ''">{{ monsterShortName(cave.monster?.name) }}</h4>
+                        <small class="monster-role-badge" :class="`monster-role-${cave.monster?.archetype || monsterArchetypeOf(cave.monster).id}`" :title="cave.monster?.archetypeText || monsterArchetypeOf(cave.monster).text">
+                          {{ cave.monster?.archetypeLabel || monsterArchetypeOf(cave.monster).label }}
+                        </small>
+                      </div>
                       <p :title="`${cave.monster?.realm || ''} · ${cave.monster?.rootName || ''}`">{{ cave.monster?.realm }} · {{ cave.monster?.rootName }}</p>
-                      <small class="monster-role-badge" :class="`monster-role-${cave.monster?.archetype || monsterArchetypeOf(cave.monster).id}`" :title="cave.monster?.archetypeText || monsterArchetypeOf(cave.monster).text">
-                        {{ cave.monster?.archetypeLabel || monsterArchetypeOf(cave.monster).label }}
-                      </small>
                     </div>
                     <div class="monster-stats">
                       <span v-for="stat in monsterStatItems(cave.monster)" :key="stat.icon" :aria-label="`${stat.label} ${stat.value}`" :title="`${stat.label}：${stat.value}`">
@@ -1137,7 +1131,15 @@
                 <h3>虚天殿</h3>
                 <p>宗门车轮战 · 妖物记录</p>
               </div>
-              <span class="tag">{{ voidHallSuccessCount }} 宗通关</span>
+              <span class="tag void-hall-success-tag">{{ voidHallSuccessCount }} 宗通关</span>
+            </div>
+            <div class="dungeon-day-nav dungeon-record-day-nav">
+              <button class="secondary" type="button" :disabled="!canShowPreviousDungeonDay" @click="showPreviousDungeonDay">前一日</button>
+              <label class="dungeon-date-select">
+                <span>查看日期</span>
+                <input v-model="selectedDungeonCalendarDate" type="date" :min="dungeonDateMin" :max="dungeonDateMax" aria-label="选择虚天殿记录日期">
+              </label>
+              <button class="secondary" type="button" :disabled="!canShowNextDungeonDay" @click="showNextDungeonDay">后一日</button>
             </div>
             <section v-if="dungeonLootPool('void_hall')" class="void-loot-panel">
               <template v-if="showDungeonLoot">
@@ -1361,9 +1363,9 @@
                 <div class="section-head compact">
                   <div>
                     <h3>{{ record.sect }}</h3>
-                    <p>{{ record.monster }} · {{ record.monsterRealm }} · {{ record.success ? "通关" : "未通关" }}<span v-if="record.highestRealmName"> · 宗门最高 {{ record.highestRealmName }}</span></p>
+                    <p>{{ monsterShortName(record.monster) }} · {{ record.monsterRealm }}</p>
                   </div>
-                  <span class="tag">{{ record.success ? `分润 +${record.spiritShare || 0}` : "未通关无分润" }}</span>
+                  <span class="tag">{{ record.success ? `宗门灵石 +${voidHallSectSpirit(record)}` : "未通关无灵石" }}</span>
                 </div>
                 <div class="attribute-list compact">
                   <button class="dungeon-monster-card compact void-monster-button" type="button" @click="openVoidHallRecord(record)">
@@ -1393,11 +1395,6 @@
                     <span>总输出</span>
                     <b>{{ record.totalDamage }}</b>
                     <small>妖物血量 {{ record.monsterStats?.maxHp || record.requiredDamage || "?" }} · 剩余 {{ voidHallRemainingHp(record) }}</small>
-                  </div>
-                  <div class="attribute-row" v-if="record.success">
-                    <span>灵石包</span>
-                    <b>{{ voidHallSectSpirit(record) }}</b>
-                    <small>本境界总池 {{ record.spiritPool || `${record.spiritPoolRange?.min || 0}-${record.spiritPoolRange?.max || 0}` }} · {{ voidHallMemberSpiritText(record) }}</small>
                   </div>
                   <div class="attribute-row" v-if="record.item">
                     <span>装备</span>
@@ -1442,7 +1439,6 @@
               <div class="loot-pool-summary">
                 <span v-if="showDungeonLoot">{{ dungeonLootPool('star_sea').acquiredCount || 0 }} 已获取</span>
                 <span v-if="showDungeonLoot">{{ dungeonLootPool('star_sea').remainingCount || 0 }} 未获取</span>
-                <span v-for="line in starSeaSpiritLines" :key="line">{{ line }}</span>
               </div>
               <div v-if="showDungeonLoot" class="loot-pool-items">
                 <span v-for="item in starSeaLootItems" :key="item.id" class="loot-pool-item" :class="[{ acquired: item.ownerId }, `tier-${item.tier}`]">
@@ -1475,17 +1471,35 @@
                   </button>
                 </div>
                 <article class="star-sea-cycle-board" v-if="activeStarSeaCycle">
+                  <div class="star-sea-cycle-day-controls">
+                    <div class="dungeon-day-nav">
+                      <button class="secondary" type="button" :disabled="!canShowPreviousDungeonDay" @click="showPreviousDungeonDay">前一日</button>
+                      <label class="dungeon-date-select">
+                        <span>查看日期</span>
+                        <input v-model="selectedDungeonCalendarDate" type="date" :min="dungeonDateMin" :max="dungeonDateMax" aria-label="选择乱星海记录日期">
+                      </label>
+                      <button class="secondary" type="button" :disabled="!canShowNextDungeonDay" @click="showNextDungeonDay">后一日</button>
+                    </div>
+                    <div class="star-sea-daily-pool">
+                      <span v-for="line in starSeaSpiritLines" :key="line">{{ line }}</span>
+                    </div>
+                  </div>
+                  <div class="star-sea-cycle-board-modes" role="tablist" aria-label="周期排行榜类型">
+                    <button type="button" :class="{ active: activeStarSeaCycleBoard === 'teams' }" @click="activeStarSeaCycleBoard = 'teams'">队伍总评分</button>
+                    <button type="button" :class="{ active: activeStarSeaCycleBoard === 'members' }" @click="activeStarSeaCycleBoard = 'members'">个人总输出</button>
+                  </div>
                   <div class="star-sea-cycle-board-head">
                     <div>
-                      <strong>第 {{ activeStarSeaCycle.cycle }} 期总评分榜</strong>
-                      <span>第 {{ activeStarSeaCycle.cycleStartDay }}-{{ activeStarSeaCycle.cycleEndDay }} 日 · {{ activeStarSeaCycle.settled ? "已结算" : "进行中" }} · 已计 {{ activeStarSeaCycle.dayCount || 0 }}/10 日</span>
+                      <strong>第 {{ activeStarSeaCycle.cycle }} 期{{ activeStarSeaCycleBoard === "teams" ? "总评分榜" : "个人输出榜" }}</strong>
+                      <span>第 {{ activeStarSeaCycle.cycleStartDay }}-{{ activeStarSeaCycle.cycleEndDay }} 日 · {{ activeStarSeaCycle.settled ? "已结算" : "进行中" }} · 已计 {{ activeStarSeaCycle.dayCount || 0 }}/10 日 · {{ activeStarSeaCycleBoard === "teams" ? "按队伍总评分" : "按个人累计输出" }}</span>
                     </div>
                     <em>{{ starSeaCycleRewardText(activeStarSeaCycle) }}</em>
                   </div>
-                  <div class="star-sea-cycle-board-list" v-if="activeStarSeaCycleTeamList.length">
+                  <div v-if="activeStarSeaCycleBoard === 'teams'" class="star-sea-cycle-board-list" v-show="pagedStarSeaCycleTeams.length">
                     <div
                       class="star-sea-cycle-team-row"
-                      v-for="team in activeStarSeaCycleTeamList"
+                      :class="{ 'rank-first': Number(team.rank) === 1 }"
+                      v-for="team in pagedStarSeaCycleTeams"
                       :key="`${activeStarSeaCycle.cycle}-${team.id || team.name}`"
                     >
                       <span class="cycle-rank">{{ team.rank }}</span>
@@ -1502,8 +1516,37 @@
                       <strong>{{ team.totalScore }}</strong>
                     </div>
                   </div>
-                  <div class="star-sea-cycle-empty" v-else>
-                    <b>暂无第 {{ activeStarSeaCycle.cycle }} 期总评分记录</b>
+                  <div v-else class="star-sea-cycle-board-list" v-show="pagedStarSeaCycleMembers.length">
+                    <div
+                      class="star-sea-cycle-member-row"
+                      :class="{ 'rank-first': starSeaCycleMemberRankStart + index === 0 }"
+                      v-for="(member, index) in pagedStarSeaCycleMembers"
+                      :key="`${activeStarSeaCycle.cycle}-${member.id}-${member.teamName || ''}`"
+                    >
+                      <span class="cycle-rank">{{ starSeaCycleMemberRankStart + index + 1 }}</span>
+                      <CharacterPortrait :person="personByRef(member)" size="sm" />
+                      <span class="cycle-member-copy">
+                        <strong>{{ member.name }}</strong>
+                        <small>{{ member.teamName || member.sect || "散修" }}</small>
+                      </span>
+                      <span class="cycle-score-bar personal" aria-hidden="true">
+                        <i :style="{ width: `${starSeaCycleMemberDamagePercent(member)}%` }"></i>
+                      </span>
+                      <strong>{{ member.damage }}</strong>
+                    </div>
+                  </div>
+                  <div v-if="activeStarSeaCycleBoard === 'teams' && starSeaCycleTeamRankPageCount > 1" class="star-sea-rank-pager" aria-label="周期队伍总评分榜分页">
+                    <button class="secondary" type="button" :disabled="safeStarSeaCycleTeamRankPage <= 1" @click="starSeaCycleTeamRankPage--">上一页</button>
+                    <span>第 {{ safeStarSeaCycleTeamRankPage }} / {{ starSeaCycleTeamRankPageCount }} 页</span>
+                    <button class="secondary" type="button" :disabled="safeStarSeaCycleTeamRankPage >= starSeaCycleTeamRankPageCount" @click="starSeaCycleTeamRankPage++">下一页</button>
+                  </div>
+                  <div v-else-if="activeStarSeaCycleBoard === 'members' && starSeaCycleMemberRankPageCount > 1" class="star-sea-rank-pager" aria-label="周期个人总输出榜分页">
+                    <button class="secondary" type="button" :disabled="safeStarSeaCycleMemberRankPage <= 1" @click="starSeaCycleMemberRankPage--">上一页</button>
+                    <span>第 {{ safeStarSeaCycleMemberRankPage }} / {{ starSeaCycleMemberRankPageCount }} 页</span>
+                    <button class="secondary" type="button" :disabled="safeStarSeaCycleMemberRankPage >= starSeaCycleMemberRankPageCount" @click="starSeaCycleMemberRankPage++">下一页</button>
+                  </div>
+                  <div v-if="activeStarSeaCycleBoard === 'teams' ? !pagedStarSeaCycleTeams.length : !pagedStarSeaCycleMembers.length" class="star-sea-cycle-empty">
+                    <b>暂无第 {{ activeStarSeaCycle.cycle }} 期{{ activeStarSeaCycleBoard === "teams" ? "总评分" : "个人输出" }}记录</b>
                     <span>该期没有可汇总的乱星海战报。</span>
                   </div>
                 </article>
@@ -1576,7 +1619,7 @@
                   <span><h3>队伍排名</h3><small>按当日猎妖评分排序</small></span>
                 </div>
                 <div class="star-sea-rank-list">
-                  <button class="star-sea-rank-row team" type="button" v-for="team in starSeaTeamRanking" :key="team.id || team.name" :disabled="!hasReplay(team)" @click="openStarSeaTeamReplay(team)">
+                  <button class="star-sea-rank-row team" :class="{ 'rank-first': Number(team.rank) === 1, 'player-team': starSeaTeamHasPlayer(team) }" type="button" v-for="team in pagedStarSeaTeamRanking" :key="team.id || team.name" :disabled="!hasReplay(team)" @click="openStarSeaTeamReplay(team)">
                     <span class="star-sea-rank-number">{{ team.rank }}</span>
                     <CharacterPortrait :person="starSeaTeamLeader(team)" size="sm" />
                     <span class="star-sea-rank-copy">
@@ -1591,6 +1634,11 @@
                     <span class="star-sea-rank-reward"><Gem :size="14" aria-hidden="true" /> +{{ team.spirit }}</span>
                   </button>
                 </div>
+                <div v-if="starSeaTeamRankPageCount > 1" class="star-sea-rank-pager" aria-label="队伍排名分页">
+                  <button class="secondary" type="button" :disabled="safeStarSeaTeamRankPage <= 1" @click="starSeaTeamRankPage--">上一页</button>
+                  <span>第 {{ safeStarSeaTeamRankPage }} / {{ starSeaTeamRankPageCount }} 页</span>
+                  <button class="secondary" type="button" :disabled="safeStarSeaTeamRankPage >= starSeaTeamRankPageCount" @click="starSeaTeamRankPage++">下一页</button>
+                </div>
               </div>
               <div class="panel flat sea-personal-rank">
                 <div class="star-sea-rank-head">
@@ -1598,8 +1646,8 @@
                   <span><h3>个人输出</h3><small>当日修士伤害贡献</small></span>
                 </div>
                 <div class="star-sea-rank-list">
-                  <button class="star-sea-rank-row personal" type="button" v-for="(entry, index) in selectedDungeonDay.public?.top || []" :key="`${entry.id}-${entry.teamRank || entry.teamName || ''}`" :disabled="!hasStarSeaMemberReplay(entry)" @click="openStarSeaMemberReplay(entry)">
-                    <span class="star-sea-rank-number">{{ index + 1 }}</span>
+                  <button class="star-sea-rank-row personal" :class="{ 'rank-first': starSeaPersonalRankStart + index === 0 }" type="button" v-for="(entry, index) in pagedStarSeaPersonalRanking" :key="`${entry.id}-${entry.teamRank || entry.teamName || ''}`" :disabled="!hasStarSeaMemberReplay(entry)" @click="openStarSeaMemberReplay(entry)">
+                    <span class="star-sea-rank-number">{{ starSeaPersonalRankStart + index + 1 }}</span>
                     <CharacterPortrait :person="personByRef(entry)" size="sm" />
                     <span class="star-sea-rank-copy">
                       <strong>{{ entry.name }}</strong>
@@ -1608,6 +1656,11 @@
                     <span class="star-sea-output-value"><small>输出</small><b>{{ entry.damage }}</b></span>
                     <span class="star-sea-rank-reward"><Gem :size="14" aria-hidden="true" /> +{{ entry.spirit }}</span>
                   </button>
+                </div>
+                <div v-if="starSeaPersonalRankPageCount > 1" class="star-sea-rank-pager" aria-label="个人输出分页">
+                  <button class="secondary" type="button" :disabled="safeStarSeaPersonalRankPage <= 1" @click="starSeaPersonalRankPage--">上一页</button>
+                  <span>第 {{ safeStarSeaPersonalRankPage }} / {{ starSeaPersonalRankPageCount }} 页</span>
+                  <button class="secondary" type="button" :disabled="safeStarSeaPersonalRankPage >= starSeaPersonalRankPageCount" @click="starSeaPersonalRankPage++">下一页</button>
                 </div>
               </div>
             </div>
@@ -1824,7 +1877,6 @@
           <div v-else-if="activeSectSubTab === 'strategy'" class="panel sect-system-panel sect-province-panel sect-strategy-board">
             <div class="section-head compact sect-panel-title strategy-board-heading">
               <div class="strategy-title-copy">
-                <span class="strategy-title-seal" aria-hidden="true">令</span>
                 <h3>明日战略</h3>
                 <p>第 {{ planTargetDay }} 天执行；未设置的攻守由宗门自行补齐。</p>
               </div>
@@ -1834,9 +1886,18 @@
               <div class="strategy-mode-field">
                 <span class="strategy-field-label">战略态度</span>
                 <div class="strategy-mode-options" role="group" aria-label="战略态度">
-                  <button type="button" :class="{ active: sectPlanDraft.mode === 'conservative' }" @click="sectPlanDraft.mode = 'conservative'">保守</button>
-                  <button type="button" :class="{ active: sectPlanDraft.mode === 'balanced' }" @click="sectPlanDraft.mode = 'balanced'">均衡</button>
-                  <button type="button" :class="{ active: sectPlanDraft.mode === 'aggressive' }" @click="sectPlanDraft.mode = 'aggressive'">激进</button>
+                  <button type="button" :class="{ active: sectPlanDraft.mode === 'conservative' }" @click="sectPlanDraft.mode = 'conservative'">
+                    保守
+                    <span class="strategy-mode-tooltip" role="tooltip">优先稳守城池，仅在预估胜率较高时攻城；扩张较慢，战损更低。</span>
+                  </button>
+                  <button type="button" :class="{ active: sectPlanDraft.mode === 'balanced' }" @click="sectPlanDraft.mode = 'balanced'">
+                    均衡
+                    <span class="strategy-mode-tooltip" role="tooltip">兼顾守备与扩张，按目标价值、距离和胜率综合安排攻守。</span>
+                  </button>
+                  <button type="button" :class="{ active: sectPlanDraft.mode === 'aggressive' }" @click="sectPlanDraft.mode = 'aggressive'">
+                    激进
+                    <span class="strategy-mode-tooltip" role="tooltip">优先争夺城池，可接受较低胜率的攻势；扩张更快，但战损风险更高。</span>
+                  </button>
                 </div>
               </div>
               <label class="strategy-target-field"><span class="strategy-field-label">攻城目标</span>
@@ -2290,6 +2351,20 @@
                   <button v-if="provinceWarSearch" class="search-clear" type="button" aria-label="清空攻城记录搜索" @click="provinceWarSearch = ''">×</button>
                 </span>
               </label>
+              <label class="war-filter"><span>战果筛选</span>
+                <select v-model="provinceWarOutcomeFilter" aria-label="筛选攻城战果">
+                  <option value="all">全部战果</option>
+                  <option value="captured">攻破城市</option>
+                  <option value="defended">守住城市</option>
+                </select>
+              </label>
+              <label class="war-filter"><span>城市档位</span>
+                <select v-model="provinceWarTierSort" aria-label="城市档位排序">
+                  <option value="default">原始顺序</option>
+                  <option value="desc">档位高到低</option>
+                  <option value="asc">档位低到高</option>
+                </select>
+              </label>
             </div>
 
             <div class="war-day-list" v-if="selectedProvinceWarDayRecord">
@@ -2298,7 +2373,7 @@
                   <div class="war-battle-identity">
                     <span class="war-battle-number">第 {{ String(warIndex + 1).padStart(2, "0") }} 战</span>
                     <strong>{{ war.provinceName }}</strong>
-                    <small>{{ war.attacker }} 进攻 {{ war.defender }}</small>
+                    <small>{{ provinceWarTierText(war) }}</small>
                   </div>
                   <span class="war-outcome" :class="war.captured ? 'captured' : 'defended'">
                     <Sword v-if="war.captured" :size="16" aria-hidden="true" />
@@ -2357,7 +2432,7 @@
                   <span>查看完整战报 <ChevronRight :size="15" aria-hidden="true" /></span>
                 </div>
               </button>
-              <div v-if="!filteredProvinceWars.length" class="empty">没有匹配“{{ provinceWarSearch }}”的省份或宗门。</div>
+              <div v-if="!filteredProvinceWars.length" class="empty">没有符合当前检索、战果或城市档位筛选的战报。</div>
             </div>
             <div v-else class="empty">没有找到 {{ selectedProvinceWarDate }} 的攻城记录。</div>
           </div>
@@ -2939,7 +3014,7 @@
                 <h3>灵珠</h3>
                 <p>副本碎片自动凝练；本命灵珠加成翻倍。</p>
               </div>
-              <span class="tag">灵尘 {{ spiritPearlState.dust || 0 }}</span>
+              <span class="tag">灵尘 {{ spiritPearlState.dust || 0 }} · 每 10 自动换随机灵珠</span>
             </div>
             <div class="equipment-inventory-grid">
               <article
@@ -3260,7 +3335,7 @@
             <div class="panel flat dossier-pearl-panel dossier-pearl-strip">
                 <div class="dossier-pearl-head">
                   <h3>灵珠资产</h3>
-                  <span>灵尘 {{ personSpiritPearls(selectedPerson).dust || 0 }}</span>
+                  <span>灵尘 {{ personSpiritPearls(selectedPerson).dust || 0 }} · 每 10 自动换随机灵珠</span>
                 </div>
                 <div class="dossier-pearl-summary">
                   <span><b>{{ personPearlFragmentTotal(selectedPerson) }}</b> 碎片</span>
@@ -3423,7 +3498,7 @@
                         <span class="member-badge" :class="{ player: member.isPlayer }">{{ member.isPlayer ? "你" : "NPC" }}</span>
                       </div>
                       <strong>{{ member.name }}</strong>
-                      <small>{{ genderLabel(member.gender) }}</small>
+                      <small>{{ genderLabel(member.gender) }} · 疲劳 {{ sectMemberFatigue(member) }}</small>
                     </div>
                     <div class="sect-member-power">
                       <b>{{ member.power }}</b>
@@ -4043,11 +4118,17 @@ const equipmentSlotFilter = ref("");
 const equipmentOwnedFilter = ref("");
 const equipmentSortMode = ref("tier");
 const equipmentSortDirection = ref("desc");
-const dungeonDayIndex = ref(0);
+const dungeonDayIndexes = reactive({ blood: 0, void: 0, sea: 0 });
 const activeDungeonRecordTab = ref("blood");
 const showDungeonLoot = ref(false);
 const showDungeonBestiary = ref(false);
 const selectedStarSeaCycle = ref(null);
+const starSeaRankPageSize = 10;
+const activeStarSeaCycleBoard = ref("teams");
+const starSeaCycleTeamRankPage = ref(1);
+const starSeaCycleMemberRankPage = ref(1);
+const starSeaTeamRankPage = ref(1);
+const starSeaPersonalRankPage = ref(1);
 const selectedVoidHallSect = ref("");
 const detailView = ref("rank");
 const selectedPersonId = ref("player");
@@ -4060,6 +4141,8 @@ const selectedProvinceWarDay = ref(null);
 const selectedHomeLogDay = ref(null);
 const selectedProvinceWarId = ref("");
 const provinceWarSearch = ref("");
+const provinceWarOutcomeFilter = ref("all");
+const provinceWarTierSort = ref("default");
 const provinceResourceTypeFilter = ref("");
 const provinceResourceOwnerFilter = ref("");
 const sectPlanDraft = reactive({
@@ -4584,9 +4667,10 @@ const dungeonMonsterStages = monsterStageNames.map((stageName, stage) => ({
   monsters: monsterImageEntries.filter((monster) => monster.stage === stage)
 }));
 const dungeonDays = computed(() => gameState.value.dungeonDays || []);
-const selectedDungeonDay = computed(() => dungeonDays.value[dungeonDayIndex.value] || null);
-const canShowPreviousDungeonDay = computed(() => dungeonDayIndex.value < dungeonDays.value.length - 1);
-const canShowNextDungeonDay = computed(() => dungeonDayIndex.value > 0);
+const activeDungeonDayIndex = computed(() => dungeonDayIndexes[activeDungeonRecordTab.value] || 0);
+const selectedDungeonDay = computed(() => dungeonDays.value[activeDungeonDayIndex.value] || null);
+const canShowPreviousDungeonDay = computed(() => activeDungeonDayIndex.value < dungeonDays.value.length - 1);
+const canShowNextDungeonDay = computed(() => activeDungeonDayIndex.value > 0);
 const dungeonDateMin = computed(() => dateForDay(Math.max(1, (gameState.value.day || 1) - 6)));
 const dungeonDateMax = computed(() => currentDate.value);
 const selectedDungeonCalendarDate = computed({
@@ -4597,7 +4681,7 @@ const selectedDungeonCalendarDate = computed({
     const day = clampDay(dayForDate(value));
     const index = dungeonDays.value.findIndex((record) => Number(record.day) === Number(day));
     if (index >= 0) {
-      dungeonDayIndex.value = index;
+      dungeonDayIndexes[activeDungeonRecordTab.value] = index;
       closeBattleReplay();
     }
   }
@@ -4687,8 +4771,27 @@ const starSeaSpiritLines = computed(() => {
   return [`本日总池 ${240 + stage * 140 + killed * 90}-${380 + stage * 180 + killed * 120} 灵石，前三名重奖，余下按排名递减分配`];
 });
 const starSeaTeamRanking = computed(() => [...(selectedDungeonDay.value?.public?.teams || [])]
-  .sort((a, b) => (a.rank || 999) - (b.rank || 999) || b.score - a.score)
-  .slice(0, 10));
+  .sort((a, b) => (a.rank || 999) - (b.rank || 999) || b.score - a.score));
+const starSeaPersonalRanking = computed(() => (selectedDungeonDay.value?.public?.teams || [])
+  .flatMap((team) => (team.members || []).map((member) => ({
+    ...member,
+    teamName: member.teamName || team.name,
+    teamRank: member.teamRank || team.rank
+  })))
+  .sort((a, b) => b.damage - a.damage || b.spirit - a.spirit));
+const starSeaTeamRankPageCount = computed(() => Math.max(1, Math.ceil(starSeaTeamRanking.value.length / starSeaRankPageSize)));
+const safeStarSeaTeamRankPage = computed(() => Math.min(starSeaTeamRankPage.value, starSeaTeamRankPageCount.value));
+const pagedStarSeaTeamRanking = computed(() => starSeaTeamRanking.value.slice(
+  (safeStarSeaTeamRankPage.value - 1) * starSeaRankPageSize,
+  safeStarSeaTeamRankPage.value * starSeaRankPageSize
+));
+const starSeaPersonalRankPageCount = computed(() => Math.max(1, Math.ceil(starSeaPersonalRanking.value.length / starSeaRankPageSize)));
+const safeStarSeaPersonalRankPage = computed(() => Math.min(starSeaPersonalRankPage.value, starSeaPersonalRankPageCount.value));
+const starSeaPersonalRankStart = computed(() => (safeStarSeaPersonalRankPage.value - 1) * starSeaRankPageSize);
+const pagedStarSeaPersonalRanking = computed(() => starSeaPersonalRanking.value.slice(
+  starSeaPersonalRankStart.value,
+  starSeaPersonalRankStart.value + starSeaRankPageSize
+));
 const currentStarSeaCycleSummary = computed(() => visibleStarSeaCycleSummary(selectedDungeonDay.value?.public?.cycle));
 const starSeaRecentCycles = computed(() => {
   const byCycle = new Map((gameState.value.starSeaCycleHistory || []).map((record) => [record.cycle, record]));
@@ -4753,8 +4856,23 @@ const activeStarSeaCycle = computed(() => {
     || starSeaCycleOptions.value[0]
     || null;
 });
-const activeStarSeaCycleTeams = computed(() => (activeStarSeaCycle.value?.topTeams || []).slice(0, 10));
+const activeStarSeaCycleTeams = computed(() => activeStarSeaCycle.value?.topTeams || []);
 const activeStarSeaCycleTeamList = computed(() => (Array.isArray(activeStarSeaCycleTeams.value) ? activeStarSeaCycleTeams.value : []));
+const activeStarSeaCycleMemberList = computed(() => [...(activeStarSeaCycle.value?.topMembers || [])]
+  .sort((a, b) => b.damage - a.damage || b.spirit - a.spirit));
+const starSeaCycleTeamRankPageCount = computed(() => Math.max(1, Math.ceil(activeStarSeaCycleTeamList.value.length / starSeaRankPageSize)));
+const safeStarSeaCycleTeamRankPage = computed(() => Math.min(starSeaCycleTeamRankPage.value, starSeaCycleTeamRankPageCount.value));
+const pagedStarSeaCycleTeams = computed(() => activeStarSeaCycleTeamList.value.slice(
+  (safeStarSeaCycleTeamRankPage.value - 1) * starSeaRankPageSize,
+  safeStarSeaCycleTeamRankPage.value * starSeaRankPageSize
+));
+const starSeaCycleMemberRankPageCount = computed(() => Math.max(1, Math.ceil(activeStarSeaCycleMemberList.value.length / starSeaRankPageSize)));
+const safeStarSeaCycleMemberRankPage = computed(() => Math.min(starSeaCycleMemberRankPage.value, starSeaCycleMemberRankPageCount.value));
+const starSeaCycleMemberRankStart = computed(() => (safeStarSeaCycleMemberRankPage.value - 1) * starSeaRankPageSize);
+const pagedStarSeaCycleMembers = computed(() => activeStarSeaCycleMemberList.value.slice(
+  starSeaCycleMemberRankStart.value,
+  starSeaCycleMemberRankStart.value + starSeaRankPageSize
+));
 const selectedStarSeaCycleReward = computed(() => selectedStarSeaCycleSummary.value?.reward || null);
 const starSeaTodayEquipmentName = computed(() => selectedStarSeaCycleReward.value?.itemName || "待结算");
 const starSeaTodayEquipmentItem = computed(() => {
@@ -4807,6 +4925,7 @@ function visibleStarSeaCycleSummary(cycle) {
   if (!records.length) return null;
 
   const teamMap = new Map();
+  const memberMap = new Map();
   for (const record of records) {
     for (const team of record.teams || []) {
       const key = team.id || team.name;
@@ -4828,13 +4947,33 @@ function visibleStarSeaCycleSummary(cycle) {
       summary.battles += 1;
       summary.memberCount = Math.max(summary.memberCount, (team.members || []).length);
       teamMap.set(key, summary);
+
+      for (const member of team.members || []) {
+        const memberKey = member.id || `${team.id || team.name}-${member.name}`;
+        const memberSummary = memberMap.get(memberKey) || {
+          id: member.id || memberKey,
+          name: member.name || "无名修士",
+          sect: member.sect || "",
+          realm: member.realm,
+          gender: member.gender,
+          portraitUrl: member.portraitUrl,
+          teamName: team.name || "猎妖小队",
+          teamRank: team.rank || 0,
+          damage: 0,
+          spirit: 0
+        };
+        memberSummary.damage += Number(member.damage || 0);
+        memberSummary.spirit += Number(member.spirit || 0);
+        memberMap.set(memberKey, memberSummary);
+      }
     }
   }
 
   const topTeams = [...teamMap.values()]
     .sort((a, b) => b.totalScore - a.totalScore || b.totalDamage - a.totalDamage || b.successes - a.successes)
-    .map((team, index) => ({ ...team, rank: index + 1 }))
-    .slice(0, 10);
+    .map((team, index) => ({ ...team, rank: index + 1 }));
+  const topMembers = [...memberMap.values()]
+    .sort((a, b) => b.damage - a.damage || b.spirit - a.spirit);
   const latest = records.sort((a, b) => Number(b.day || 0) - Number(a.day || 0))[0] || {};
   const cycleStartDay = Number(latest.cycleStartDay || ((safeCycle - 1) * 10 + 1));
   const cycleEndDay = Number(latest.cycleEndDay || (cycleStartDay + 9));
@@ -4848,7 +4987,8 @@ function visibleStarSeaCycleSummary(cycle) {
     totalDamage: topTeams.reduce((sum, team) => sum + team.totalDamage, 0),
     settled: false,
     reward: null,
-    topTeams
+    topTeams,
+    topMembers
   };
 }
 function starSeaCycleForDay(day = 1) {
@@ -4882,6 +5022,11 @@ function starSeaCycleScorePercent(team, cycle) {
   return Math.max(5, Math.min(100, Math.round(Number(team?.totalScore || 0) / max * 100)));
 }
 
+function starSeaCycleMemberDamagePercent(member) {
+  const max = Math.max(...activeStarSeaCycleMemberList.value.map((item) => Number(item.damage || 0)), 1);
+  return Math.max(5, Math.min(100, Math.round(Number(member?.damage || 0) / max * 100)));
+}
+
 function starSeaTeamLeader(team) {
   return personByRef({
     ...(team?.leader || {}),
@@ -4893,6 +5038,11 @@ function starSeaTeamLeader(team) {
 function starSeaTeamLeaderName(team) {
   return team?.leaderName || String(team?.name || "猎妖修士").replace(/之队$/, "");
 }
+
+function starSeaTeamHasPlayer(team) {
+  return (team?.members || []).some((member) => member?.id === "player");
+}
+
 const starSeaSectRanking = computed(() => {
   const map = new Map();
   for (const entry of selectedDungeonDay.value?.public?.top || []) {
@@ -5271,8 +5421,18 @@ const normalizedProvinceWarSearch = computed(() => provinceWarSearch.value.trim(
 const filteredProvinceWars = computed(() => {
   const wars = selectedProvinceWarDayRecord.value?.wars || [];
   const keyword = normalizedProvinceWarSearch.value;
-  if (!keyword) return wars;
-  return wars.filter((war) => provinceWarSearchText(war).includes(keyword));
+  const outcome = provinceWarOutcomeFilter.value;
+  const direction = provinceWarTierSort.value;
+  const rankByProvince = new Map(provinceTerritories.value.map((province) => [province.id, Number(province.rank) || 999]));
+  const filtered = wars.filter((war) => (
+    (!keyword || provinceWarSearchText(war).includes(keyword)) &&
+    (outcome === "all" || (outcome === "captured" ? war.captured : !war.captured))
+  ));
+  if (direction === "default") return filtered;
+  return [...filtered].sort((left, right) => {
+    const delta = (rankByProvince.get(left.provinceId) || 999) - (rankByProvince.get(right.provinceId) || 999);
+    return direction === "asc" ? delta : -delta;
+  });
 });
 const selectedProvinceWar = computed(() => selectedProvinceWarDayRecord.value?.wars.find((war) => war.id === selectedProvinceWarId.value));
 const selectedProvinceWarDate = computed(() => selectedProvinceWarDayRecord.value?.date || dateForDay(selectedProvinceWarDay.value));
@@ -5790,11 +5950,11 @@ function skillVisualStyle(skill) {
 }
 
 function showPreviousDungeonDay() {
-  dungeonDayIndex.value = Math.min(dungeonDays.value.length - 1, dungeonDayIndex.value + 1);
+  dungeonDayIndexes[activeDungeonRecordTab.value] = Math.min(dungeonDays.value.length - 1, activeDungeonDayIndex.value + 1);
 }
 
 function showNextDungeonDay() {
-  dungeonDayIndex.value = Math.max(0, dungeonDayIndex.value - 1);
+  dungeonDayIndexes[activeDungeonRecordTab.value] = Math.max(0, activeDungeonDayIndex.value - 1);
 }
 
 function dungeonLootPool(id) {
@@ -6703,7 +6863,7 @@ async function openSectVoidHallRecord(record) {
   activeTab.value = "dungeon";
   activeDungeonRecordTab.value = "void";
   const index = dungeonDays.value.findIndex((day) => (day.sects || []).some((item) => item.sect === record.sect && item.day === record.day));
-  if (index >= 0) dungeonDayIndex.value = index;
+  if (index >= 0) dungeonDayIndexes.void = index;
   await nextTick();
   selectedVoidHallSect.value = record.sect || "";
   clearBattleReplay();
@@ -6962,6 +7122,12 @@ function provinceGdpTier(rank) {
   return "E";
 }
 
+function provinceWarTierText(war) {
+  const province = provinceTerritories.value.find((item) => item.id === war?.provinceId);
+  const rank = province?.rank || 99;
+  return `城市档位 ${provinceGdpTier(rank)} · 全国第 ${rank}`;
+}
+
 function provinceHighlightSortValue(province) {
   const tierOrder = { S: 0, A: 1, B: 2, C: 3, D: 4, E: 5 };
   return tierOrder[provinceGdpTier(province?.rank)] ?? 99;
@@ -7083,6 +7249,10 @@ function togglePlanDefender(provinceId, id) {
 
 function planMemberLabel(member) {
   return `${member.name} · ${realmName(member.realm)} · 战力 ${formatCompact(personPower(member))} · 疲劳 ${member.fatigue || 0}`;
+}
+
+function sectMemberFatigue(member) {
+  return Math.max(0, Number(derived.value.sectStrategy?.fatigue?.[member?.id] ?? gameState.value.sectFatigue?.[member?.id]) || 0);
 }
 
 function fatigueHelpText(member) {
@@ -10258,6 +10428,33 @@ watch(() => selectedDungeonDay.value?.public?.cycle, (cycle) => {
   selectedStarSeaCycle.value = cycle || null;
 });
 
+watch([activeDungeonRecordTab, activeDungeonDayIndex], () => {
+  if (activeDungeonRecordTab.value !== "sea") return;
+  starSeaTeamRankPage.value = 1;
+  starSeaPersonalRankPage.value = 1;
+});
+
+watch(() => activeStarSeaCycle.value?.cycle, () => {
+  starSeaCycleTeamRankPage.value = 1;
+  starSeaCycleMemberRankPage.value = 1;
+});
+
+watch(starSeaTeamRankPageCount, () => {
+  if (starSeaTeamRankPage.value > starSeaTeamRankPageCount.value) starSeaTeamRankPage.value = starSeaTeamRankPageCount.value;
+});
+
+watch(starSeaPersonalRankPageCount, () => {
+  if (starSeaPersonalRankPage.value > starSeaPersonalRankPageCount.value) starSeaPersonalRankPage.value = starSeaPersonalRankPageCount.value;
+});
+
+watch(starSeaCycleTeamRankPageCount, () => {
+  if (starSeaCycleTeamRankPage.value > starSeaCycleTeamRankPageCount.value) starSeaCycleTeamRankPage.value = starSeaCycleTeamRankPageCount.value;
+});
+
+watch(starSeaCycleMemberRankPageCount, () => {
+  if (starSeaCycleMemberRankPage.value > starSeaCycleMemberRankPageCount.value) starSeaCycleMemberRankPage.value = starSeaCycleMemberRankPageCount.value;
+});
+
 watch([enabledTaskDefinitions, () => taskForm.category], () => {
   if (!enabledTaskDefinitions.value.length) {
     taskForm.category = "";
@@ -10306,12 +10503,13 @@ watch(rankPage, () => {
 });
 
 watch(dungeonDays, () => {
-  if (dungeonDayIndex.value > Math.max(0, dungeonDays.value.length - 1)) {
-    dungeonDayIndex.value = Math.max(0, dungeonDays.value.length - 1);
+  const maxIndex = Math.max(0, dungeonDays.value.length - 1);
+  for (const tab of dungeonRecordTabs) {
+    if (dungeonDayIndexes[tab.id] > maxIndex) dungeonDayIndexes[tab.id] = maxIndex;
   }
 });
 
-watch([activeDungeonRecordTab, dungeonDayIndex], () => {
+watch([activeDungeonRecordTab, activeDungeonDayIndex], () => {
   selectedVoidHallSect.value = "";
 });
 </script>

@@ -1071,12 +1071,15 @@ const equipmentTierMap = Object.fromEntries(equipmentTiers.map((tier) => [tier.i
 const spiritPearlMap = Object.fromEntries(spiritPearls.map((pearl) => [pearl.id, pearl]));
 const equipmentVersion = 3;
 const dungeonRecordVersion = 4;
-const spiritPearlVersion = 1;
+const spiritPearlVersion = 2;
+const spiritDustExchangeCost = 10;
 const starSeaTeamSize = 10;
 const starSeaCycleLength = 10;
 const starSeaCycleHistoryLimit = 10;
 const starSeaMaxRounds = 100;
-const starSeaDropChance = 1;
+// Daily auctions stay uncommon so the 10-day finale remains the primary reward.
+const starSeaDailyDropChance = 0.03;
+const starSeaCycleDropChance = 0.5;
 const dungeonTierNames = ["血色外谷", "石殿甬道", "熔岩石窟", "玄冰洞府", "坠魔裂谷", "虚天残境", "乱星海深渊", "昆吾灵山", "真灵天门"];
 const monsterNamesByStage = [
   ["赤火蟾", "碧水猿", "金背妖狼", "青木蜈蚣"],
@@ -1202,7 +1205,7 @@ const dungeonLootRules = {
       min: Math.floor(240 + stage * 140 + killed * 90),
       max: Math.floor(380 + stage * 180 + killed * 120)
     }),
-    sourceText: "全副本共享装备池；乱星海每期必出 1 件装备，低品质掉落权重更高"
+    sourceText: "全副本共享装备池；乱星海每日有概率竞拍，期末 50% 概率追加 1 件，低品质掉落权重更高"
   }
 };
 
@@ -1390,10 +1393,52 @@ function normalizeSpiritPearlState(current) {
 function ensureSpiritPearls(state, entity = state.player) {
   const isPlayer = entity?.id === state.player?.id;
   const previous = entity?.spiritPearls || (isPlayer ? state.spiritPearls : null);
-  const { asset, changed } = normalizeSpiritPearlState(previous);
+  const normalized = normalizeSpiritPearlState(previous);
+  const asset = normalized.asset;
+  let changed = normalized.changed;
   if (entity) entity.spiritPearls = asset;
   if (isPlayer) state.spiritPearls = asset;
+  const exchanges = exchangeSpiritDust(state, entity, asset);
+  if (exchanges.length) {
+    changed = true;
+    if (isPlayer) {
+      log(state, `灵尘自动兑换，消耗 ${exchanges.length * spiritDustExchangeCost} 灵尘，换得 ${exchanges.map((record) => `1 枚${record.pearlName}碎片`).join("、")}。`, "gold");
+    }
+  }
   return changed;
+}
+
+function exchangeSpiritDust(state, entity, asset) {
+  const exchanges = [];
+  const count = Math.floor(Math.max(0, Number(asset?.dust) || 0) / spiritDustExchangeCost);
+  for (let index = 0; index < count; index += 1) {
+    const pearl = pick(spiritPearls);
+    const entry = asset.pearls[pearl.id];
+    entry.fragments["1"] = Math.max(0, Math.floor(Number(entry.fragments["1"]) || 0)) + 1;
+    asset.dust -= spiritDustExchangeCost;
+    const record = {
+      day: state.day,
+      date: stateDateForDay(state),
+      type: "dust_exchange",
+      pearlId: pearl.id,
+      pearlName: pearl.name,
+      tier: 1,
+      amount: 1,
+      dustCost: spiritDustExchangeCost,
+      context: "灵尘自动兑换",
+      receiverId: entity?.id || "player",
+      receiverName: entity?.name || "主角"
+    };
+    asset.history.unshift(record);
+    exchanges.push(record);
+  }
+  if (exchanges.length) {
+    asset.history = asset.history.slice(0, recentRecordDays);
+    for (const pearlId of new Set(exchanges.map((record) => record.pearlId))) {
+      autoUpgradeSpiritPearl(state, entity, pearlId, "灵尘自动兑换", true);
+    }
+  }
+  return exchanges;
 }
 
 function spiritPearlForgeCost(tier = 1) {
@@ -1530,8 +1575,8 @@ function rollSpiritPearlFragmentReward(state, dungeonId, options = {}) {
   return addSpiritPearlReward(state, pearlId, tier, amount, options.context || "副本历练", options.receiver || state.player);
 }
 
-function autoUpgradeSpiritPearl(state, entity, pearlId, context = "") {
-  ensureSpiritPearls(state, entity);
+function autoUpgradeSpiritPearl(state, entity, pearlId, context = "", skipEnsure = false) {
+  if (!skipEnsure) ensureSpiritPearls(state, entity);
   const asset = entity.spiritPearls;
   const entry = asset.pearls[pearlId];
   const config = spiritPearlMap[pearlId];
@@ -2410,7 +2455,8 @@ function runSoloDungeonFor(state, entity, date, caves) {
     clears += 1;
     const tierCap = equipmentTierForRealm(monster.realm);
     const candidate = rollEquipmentDrop(state, tierCap, "blood_trial", { cave: cave.cave });
-    if (candidate) drop = candidate;
+    const transfer = candidate ? awardEquipment(state, entity, candidate, `${cave.name}通关`) : null;
+    if (transfer) drop = transfer;
     finalOutput = output;
     finalRounds = rounds;
     const challenger = cave.challengers.find((item) => item.id === entity.id);
@@ -2432,8 +2478,8 @@ function runSoloDungeonFor(state, entity, date, caves) {
       endHp: battle.leftHp,
       endMana: battle.leftMana,
       spirit,
-      item: candidate?.name || "",
-      tierName: candidate ? equipmentTier(candidate).name : "",
+      item: transfer?.itemName || "",
+      tierName: transfer?.tierName || "",
       replay: finalReplay
     };
     clearEntry.score = bloodClearScoreValue(clearEntry);
@@ -2443,7 +2489,6 @@ function runSoloDungeonFor(state, entity, date, caves) {
   const score = clears ? finalRealm + clears * 8 : stageIndexOfRealm(entity.realm) * 10;
   if (clears) updateDungeonBest(entity, "血色禁地", score, clears);
   if (!clears) addSpiritDust(state, 1, "血色禁地败退", entity);
-  const transfer = drop ? awardEquipment(state, entity, drop, "血色禁地") : null;
   const entry = {
     type: "solo",
     name: "血色禁地",
@@ -2456,21 +2501,18 @@ function runSoloDungeonFor(state, entity, date, caves) {
     damage: finalOutput,
     rounds: finalRounds,
     replay: finalReplay,
-    item: transfer?.itemName || "",
-    tierName: transfer?.tierName || "",
-    compensation: transfer?.compensation || 0,
+    item: drop?.itemName || "",
+    tierName: drop?.tierName || "",
+    compensation: drop?.compensation || 0,
     result: clears ? `连破 ${clears} 洞` : "外谷败退"
   };
   for (const cave of caves.slice(0, clears)) {
     const clear = cave.clears.find((item) => item.id === entity.id);
-    if (clear && transfer?.itemName && cave.cave === clears) {
-      clear.item = transfer.itemName;
-      clear.tierName = transfer.tierName;
-      const challenger = cave.challengers.find((item) => item.id === entity.id);
-      if (challenger) {
-        challenger.item = transfer.itemName;
-        challenger.tierName = transfer.tierName;
-      }
+    if (!clear?.item) continue;
+    const challenger = cave.challengers.find((item) => item.id === entity.id);
+    if (challenger) {
+      challenger.item = clear.item;
+      challenger.tierName = clear.tierName;
     }
   }
   pushDungeonHistory(entity, entry);
@@ -2635,11 +2677,12 @@ function settleVoidHallRewards(state, sectRecords) {
       }
     }
 
-    const maxMonsterRealm = Math.max(...records.map((record) => record.monsterStats?.realmIndex || stage * 10));
-    const item = rollEquipmentDrop(state, equipmentTierForRealm(maxMonsterRealm), "void_hall", { cave: stage + 1, stage });
-    if (item) {
-      const candidates = records
-        .flatMap((record) => (record.rewardCandidates || []).map((candidate) => ({ ...candidate, record })))
+    for (const record of records) {
+      const maxMonsterRealm = record.monsterStats?.realmIndex || stage * 10;
+      const item = rollEquipmentDrop(state, equipmentTierForRealm(maxMonsterRealm), "void_hall", { cave: stage + 1, stage });
+      if (!item) continue;
+      const candidates = (record.rewardCandidates || [])
+        .map((candidate) => ({ ...candidate, record }))
         .sort((a, b) => (b.damage || 0) - (a.damage || 0));
       let transfer = null;
       let winnerRecord = null;
@@ -2675,7 +2718,7 @@ function settleVoidHallRewards(state, sectRecords) {
           history.item = itemName;
           history.tierName = tierName;
         }
-        log(state, `${winnerRecord.sect}攻破虚天殿，${winnerName}凭同境界最高贡献得「${itemName}」。`, "gold");
+        log(state, `${winnerRecord.sect}攻破虚天殿，${winnerName}凭宗门最高贡献得「${itemName}」。`, "gold");
       }
     }
 
@@ -3185,8 +3228,7 @@ function migrateStarSeaSpiritRewards(state) {
     assignStarSeaSpiritShares(publicRecord.teams, Number(publicRecord.spiritPool || 0));
     publicRecord.top = publicRecord.teams
       .flatMap((record) => (record.members || []).map((member) => ({ ...member, teamName: record.name, teamRank: record.rank })))
-      .sort((a, b) => b.damage - a.damage)
-      .slice(0, 10);
+      .sort((a, b) => b.damage - a.damage);
 
     for (const team of publicRecord.teams) {
       for (const member of team.members || []) {
@@ -3325,8 +3367,7 @@ function buildStarSeaCycleSummary(state, publicRecord, previousReward = null) {
 
   const topMembers = teams
     .flatMap((team) => team.members.map((member) => ({ ...member, teamName: team.name, teamRank: team.rank })))
-    .sort((a, b) => b.damage - a.damage || b.spirit - a.spirit)
-    .slice(0, 10);
+    .sort((a, b) => b.damage - a.damage || b.spirit - a.spirit);
 
   const reward = previousReward?.settled ? previousReward : null;
   return {
@@ -3338,7 +3379,7 @@ function buildStarSeaCycleSummary(state, publicRecord, previousReward = null) {
     totalScore: teams.reduce((sum, team) => sum + team.totalScore, 0),
     totalDamage: teams.reduce((sum, team) => sum + team.totalDamage, 0),
     teams,
-    topTeams: teams.slice(0, 10),
+    topTeams: teams,
     topMembers,
     settled: Boolean(reward),
     reward,
@@ -3347,8 +3388,9 @@ function buildStarSeaCycleSummary(state, publicRecord, previousReward = null) {
   };
 }
 
-function settleStarSeaCycleReward(state, summary, monster) {
+function settleStarSeaAuctionReward(state, summary, monster, options = {}) {
   if (!summary || summary.reward?.settled) return summary?.reward || null;
+  const label = options.label || `乱星海第 ${summary.cycle} 期期末`;
   const participantIds = [...new Set((summary.teams || []).flatMap((team) => (team.members || []).map((member) => member.id)).filter(Boolean))];
   const participants = participantIds.map((id) => cultivatorById(state, id)).filter(Boolean);
   const item = rollStarSeaEquipmentDrop(state, monster);
@@ -3372,7 +3414,7 @@ function settleStarSeaCycleReward(state, summary, monster) {
       date: stateDateForDay(state),
       text: `装备池已空，按${equipmentTier(fallback).name}「${fallback.name}」价值 ${value} 灵石平分`
     };
-    log(state, `乱星海第 ${summary.cycle} 期期末奖励：装备池已空，众修士平分 ${value} 灵石，每人 ${distribution.share}。`, "gold");
+    log(state, `${label}：装备池已空，众修士平分 ${value} 灵石，每人 ${distribution.share}。`, "gold");
     return reward;
   }
 
@@ -3419,10 +3461,10 @@ function settleStarSeaCycleReward(state, summary, monster) {
         replacedItemId: soldItem?.id || "",
         replacedItemName: soldItem?.name || "",
         soldValue,
-        chance: starSeaDropChance,
+        chance: options.chance || 1,
         day: state.day,
         date: stateDateForDay(state),
-        context: `乱星海猎妖第${summary.cycle}期竞拍`
+        context: `${label}竞拍`
       };
       appendEquipmentTransferHistory(item, transfer, entity, transfer.context);
       state.equipmentTransfers ??= [];
@@ -3438,7 +3480,7 @@ function settleStarSeaCycleReward(state, summary, monster) {
       candidate.item = item.name;
       candidate.tierName = equipmentTier(item).name;
       const soldText = soldItem ? `，并卖出旧装备「${soldItem.name}」得 ${soldValue} 灵石` : "";
-      log(state, `乱星海第 ${summary.cycle} 期期末奖励：${entity.name}以 ${value} 灵石竞得${equipmentTier(item).name}「${item.name}」${soldText}，本期其余修士各分润 ${distribution.share} 灵石。`, item.tier >= 4 ? "gold" : "");
+      log(state, `${label}：${entity.name}以 ${value} 灵石竞得${equipmentTier(item).name}「${item.name}」${soldText}，其余参与者各分润 ${distribution.share} 灵石。`, item.tier >= 4 ? "gold" : "");
       return {
         settled: true,
         type: "auction",
@@ -3484,8 +3526,20 @@ function settleStarSeaCycleReward(state, summary, monster) {
     date: stateDateForDay(state),
     text: `${equipmentTier(item).name}「${item.name}」无人竞拍，折算 ${value} 灵石平分`
   };
-  log(state, `乱星海第 ${summary.cycle} 期期末奖励：${equipmentTier(item).name}「${item.name}」无人竞拍，折算 ${value} 灵石平分。`, "gold");
+  log(state, `${label}：${equipmentTier(item).name}「${item.name}」无人竞拍，折算 ${value} 灵石平分。`, "gold");
   return reward;
+}
+
+function settleStarSeaDailyAuction(state, publicRecord, monster) {
+  if (Math.random() >= starSeaDailyDropChance) {
+    return { settled: false, type: "none", chance: starSeaDailyDropChance, reason: "daily_no_drop" };
+  }
+  const label = `乱星海第${publicRecord.cycle}期第${publicRecord.day - publicRecord.cycleStartDay + 1}日竞拍`;
+  const reward = settleStarSeaAuctionReward(state, {
+    cycle: publicRecord.cycle,
+    teams: publicRecord.teams
+  }, monster, { label, chance: starSeaDailyDropChance });
+  return { ...reward, chance: starSeaDailyDropChance };
 }
 
 function starSeaBackfilledCycleReward(state, summary, publicRecord) {
@@ -3522,7 +3576,20 @@ function upsertStarSeaCycleHistory(state, publicRecord, monster) {
   const previous = state.starSeaCycleHistory.find((record) => record.cycle === publicRecord.cycle);
   const summary = buildStarSeaCycleSummary(state, publicRecord, previous?.reward);
   if ((state.day || publicRecord.day || 1) >= summary.cycleEndDay && !summary.reward?.settled) {
-    summary.reward = settleStarSeaCycleReward(state, summary, monster);
+    summary.reward = Math.random() < starSeaCycleDropChance
+      ? settleStarSeaAuctionReward(state, summary, monster, {
+        label: `乱星海第 ${summary.cycle} 期期末竞拍`,
+        chance: starSeaCycleDropChance
+      })
+      : {
+        settled: true,
+        type: "none",
+        reason: "cycle_no_drop",
+        chance: starSeaCycleDropChance,
+        day: state.day,
+        date: stateDateForDay(state),
+        text: `乱星海第 ${summary.cycle} 期未发现可竞拍装备`
+      };
     summary.settled = Boolean(summary.reward?.settled);
   }
   state.starSeaCycleHistory = [
@@ -3666,19 +3733,31 @@ function runStarSeaDungeon(state, roster, date) {
     totalDamage: teamRecords.reduce((sum, record) => sum + (record.damage || 0), 0),
     spiritPoolRange: spiritRange,
     spiritPool,
-    dropChance: starSeaDropChance,
+    dropChance: { daily: starSeaDailyDropChance, cycle: starSeaCycleDropChance },
     replay: publicStarSeaTeamReplay(teamRecords[0], monster, state),
     teams: teamRecords,
     top: teamRecords.flatMap((record) => record.members.map((member) => ({ ...member, teamName: record.name, teamRank: record.rank })))
-      .sort((a, b) => b.damage - a.damage)
-      .slice(0, 10),
+      .sort((a, b) => b.damage - a.damage),
     item: "",
     itemOwner: "",
     tierName: "",
     itemValue: 0,
     auctionDividend: 0,
+    dailyAuction: null,
     cycleSummary: null
   };
+  const dailyAuction = settleStarSeaDailyAuction(state, publicRecord, monster);
+  publicRecord.dailyAuction = dailyAuction;
+  if (dailyAuction?.settled && dailyAuction.type === "auction") {
+    publicRecord.item = dailyAuction.itemName || "";
+    publicRecord.itemId = dailyAuction.itemId || "";
+    publicRecord.itemSlot = dailyAuction.itemSlot || "";
+    publicRecord.itemTier = dailyAuction.itemTier || 0;
+    publicRecord.itemOwner = dailyAuction.winnerName || "";
+    publicRecord.tierName = dailyAuction.tierName || "";
+    publicRecord.itemValue = dailyAuction.itemValue || 0;
+    publicRecord.auctionDividend = dailyAuction.dividend || 0;
+  }
   const cycleSummary = upsertStarSeaCycleHistory(state, publicRecord, monster);
   const cycleReward = cycleSummary.reward || null;
   if (cycleReward?.settled) {
@@ -3741,8 +3820,7 @@ function runStarSeaDungeon(state, roster, date) {
 
   publicRecord.teams = teamRecords;
   publicRecord.top = teamRecords.flatMap((record) => record.members.map((member) => ({ ...member, teamName: record.name, teamRank: record.rank })))
-    .sort((a, b) => b.damage - a.damage)
-    .slice(0, 10);
+    .sort((a, b) => b.damage - a.damage);
   publicRecord.cycleSummary = state.starSeaCycleHistory.find((record) => record.cycle === cycleInfo.cycle) || cycleSummary;
   return publicRecord;
 }
@@ -4995,6 +5073,17 @@ function withSiegeActionModifiers(state, entity, { defender = false, distance = 
   };
 }
 
+function siegeModifierEvent(entity, modifier, side) {
+  const lines = [];
+  const fatiguePercent = Math.round((modifier?.fatigue || 0) * 3);
+  const distancePercent = Math.round(Math.min(0.25, Math.max(0, (modifier?.distance || 1) - 1) * 0.06) * 100);
+  if (fatiguePercent) lines.push(`疲劳 ${modifier.fatigue}，五维降低 ${fatiguePercent}%`);
+  if (!modifier?.defender && distancePercent) lines.push(`远征 ${modifier.distance} 格，五维降低 ${distancePercent}%`);
+  if (modifier?.defender) lines.push("守城阵法加成，五维提高 10%");
+  if (!lines.length) return null;
+  return { round: 0, kind: "siege", side, text: `${entity.name}${lines.join("；")}。`, modifier };
+}
+
 function runWheelBattle(state, province, attackerSect, defenderSect, options = {}) {
   const map = cultivatorMap(state);
   const attackerIds = [...new Set(options.attackerIds || membersForSectAscending(state, attackerSect).map((member) => member.entity.id))]
@@ -5033,6 +5122,12 @@ function runWheelBattle(state, province, attackerSect, defenderSect, options = {
       mana: carry.defenderMana ?? effectiveMaxMana(defenderWithBuff, state)
     };
     const battle = runTurnBattle(left, right, { maxRounds: 16, state });
+    const modifierEvents = [
+      siegeModifierEvent(attacker.entity, attackerWithPenalty.siegeModifier, "left"),
+      siegeModifierEvent(defender.entity, defenderWithBuff.siegeModifier, "right")
+    ].filter(Boolean);
+    const rootEventCount = battle.events.filter((event) => event.kind === "root").length;
+    battle.events.splice(rootEventCount, 0, ...modifierEvents);
     const attackerWon = battle.winner === "left";
     battles.push({
       order: battles.length + 1,
@@ -5115,10 +5210,19 @@ function provinceGrade(province) {
 }
 
 function provinceMonsterSiegeCount(state, province) {
-  const baseByGrade = { S: 6, A: 5, B: 4, C: 3, D: 2, E: 1 };
   const grade = provinceGrade(province);
-  const variation = stableUnit(`province-monster-count|${state.day}|${province?.id}`) >= 0.5 ? 1 : 0;
-  return (baseByGrade[grade] || 1) + variation;
+  // High-value cities remain pressure points, but a full five-person garrison must have
+  // a reasonable chance to hold rather than facing more monsters than it can cycle through.
+  const rangeByGrade = {
+    S: [3, 4],
+    A: [3, 3],
+    B: [2, 3],
+    C: [2, 2],
+    D: [1, 2],
+    E: [1, 1]
+  };
+  const [min, max] = rangeByGrade[grade] || rangeByGrade.E;
+  return min + (max > min && stableUnit(`province-monster-count|${state.day}|${province?.id}`) >= 0.5 ? 1 : 0);
 }
 
 function makeSiegeMonsterForProvince(state, province, defenderSect, index = 0) {
@@ -5183,8 +5287,18 @@ function runMonsterSiegeBattle(state, territory, province, defenderSect) {
       carry.defenderMana = null;
     } else {
       monsterIndex += 1;
-      carry.defenderHp = Math.max(1, battle.rightHp);
-      carry.defenderMana = battle.rightMana;
+      // Clearing one wave gives the surviving defender a short chance to regroup.
+      // This offsets the unavoidable attrition of a multi-monster wheel battle.
+      const recoveryHp = Math.floor(effectiveMaxHp(defenderWithBuff, state) * 0.22);
+      const recoveryMana = Math.floor(effectiveMaxMana(defenderWithBuff, state) * 0.26);
+      carry.defenderHp = Math.min(
+        effectiveMaxHp(defenderWithBuff, state),
+        Math.max(1, battle.rightHp) + recoveryHp
+      );
+      carry.defenderMana = Math.min(
+        effectiveMaxMana(defenderWithBuff, state),
+        Math.max(0, battle.rightMana) + recoveryMana
+      );
       carry.monsterHp = null;
       carry.monsterMana = null;
     }
@@ -7334,6 +7448,7 @@ function publicStarSeaRecord(record, currentDay = 1, parentDay = null, people = 
     tierName: record.tierName || "",
     itemValue: record.itemValue || 0,
     auctionDividend: record.auctionDividend || 0,
+    dailyAuction: record.dailyAuction || null,
     cycleSummary: record.cycleSummary ? publicStarSeaCycleSummary(record.cycleSummary, people) : null,
     replayId,
     hasReplay: Boolean(record.replay || record.replayId) && isReplayWithinDays(replayRecord, currentDay),
@@ -7430,7 +7545,7 @@ function publicStarSeaCycleSummary(record, people = null) {
       date: reward.date || "",
       text: reward.text || ""
     } : null,
-    topTeams: (record.topTeams || record.teams || []).slice(0, 10).map((team) => {
+    topTeams: (record.topTeams || record.teams || []).map((team) => {
       const leader = people?.get(team.leaderId);
       return {
         id: team.id,
@@ -7451,7 +7566,7 @@ function publicStarSeaCycleSummary(record, people = null) {
         itemValue: team.itemValue || 0
       };
     }),
-    topMembers: (record.topMembers || []).slice(0, 10).map((member) => publicStarSeaMember(member, people))
+    topMembers: (record.topMembers || []).map((member) => publicStarSeaMember(member, people))
   };
 }
 
@@ -8244,7 +8359,13 @@ export function updateCultivatorProfile(state, payload = {}) {
   entity.primaryRootKey = rootSet.primaryRootKey;
   entity.root = rootSet.primaryRoot;
   applyAdminCultivatorStats(state, entity, payload);
-  const portraitUrl = normalizePortraitUrl(payload.portraitUrl);
+  // Public state exposes stored portraits through this route. Treat that value as unchanged,
+  // otherwise a profile edit unrelated to the portrait fails image-data validation.
+  const portraitProxy = /^\/api\/cultivators\/portrait\?id=([^&]+)/;
+  const portraitMatch = String(payload.portraitUrl || "").match(portraitProxy);
+  const portraitUrl = portraitMatch && decodeURIComponent(portraitMatch[1]) === id
+    ? undefined
+    : normalizePortraitUrl(payload.portraitUrl);
   if (portraitUrl !== undefined) {
     entity.portraitUrl = portraitUrl;
     entity.portraitVariant = Math.max(0, Number(entity.portraitVariant) || 0) + 1;
@@ -8531,8 +8652,6 @@ function runDuelMatch(state, left, right, options = {}) {
   const replay = buildReplay(leftBefore, rightBefore, battle, result, foughtAt, state);
   const replayId = `duel-${state.day}-${left.id}-${right.id}-${foughtAt}`;
   replay.replayId = replayId;
-  const transfer = tryTransferEquipment(state, winner, loser, "每日切磋");
-  if (transfer) replay.equipmentTransfer = transfer;
   queueBattleReplay(state, replay, options.matchId || "");
 
   left.duelHistory.unshift({

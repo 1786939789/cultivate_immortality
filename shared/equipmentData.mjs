@@ -7,12 +7,12 @@ export const equipmentSlots = [
 ];
 
 export const equipmentTiers = [
-  { id: 1, name: "凡器", min: 0.03, max: 0.05, stealChance: 0.012 },
-  { id: 2, name: "法器", min: 0.06, max: 0.09, stealChance: 0.01 },
-  { id: 3, name: "灵器", min: 0.1, max: 0.14, stealChance: 0.008 },
-  { id: 4, name: "古宝", min: 0.15, max: 0.2, stealChance: 0.005 },
-  { id: 5, name: "法宝", min: 0.21, max: 0.28, stealChance: 0.003 },
-  { id: 6, name: "通天灵宝", min: 0.3, max: 0.4, stealChance: 0.0015 }
+  { id: 1, name: "凡器", min: 0.03, max: 0.05, stealChance: 0.004 },
+  { id: 2, name: "法器", min: 0.06, max: 0.09, stealChance: 0.003 },
+  { id: 3, name: "灵器", min: 0.1, max: 0.14, stealChance: 0.002 },
+  { id: 4, name: "古宝", min: 0.15, max: 0.2, stealChance: 0.0015 },
+  { id: 5, name: "法宝", min: 0.21, max: 0.28, stealChance: 0.001 },
+  { id: 6, name: "通天灵宝", min: 0.3, max: 0.4, stealChance: 0.0005 }
 ];
 
 export const equipmentCatalog = [
