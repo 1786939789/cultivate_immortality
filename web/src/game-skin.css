@@ -5171,7 +5171,17 @@ body::before {
 
 /* Equipment atlas: inventory-grid presentation inspired by classic RPG bags. */
 .equipment-surface .equipment-panel {
+  position: relative;
+  z-index: 1;
   overflow: visible;
+}
+
+/* Let an equipment tooltip cross the following spirit-pearl panel. */
+.equipment-surface .equipment-panel:has(.equipment-card:hover),
+.equipment-surface .equipment-panel:has(.equipment-card:focus),
+.equipment-surface .equipment-panel:has(.equipment-card:focus-visible),
+.equipment-surface .equipment-panel:has(.equipment-card:focus-within) {
+  z-index: 10002;
 }
 
 .equipment-surface .equipment-inventory-grid {
@@ -6748,7 +6758,7 @@ body::before {
 }
 
 .rank-surface .sect-detail-sections.sect-record-sections {
-  align-items: stretch;
+  align-items: start;
 }
 
 .rank-surface .sect-detail-sections.sect-record-sections > .sect-member-panel {
@@ -6756,7 +6766,7 @@ body::before {
 }
 
 .rank-surface .sect-detail-sections.sect-record-sections > .sect-war-panel {
-  align-self: stretch;
+  align-self: start;
 }
 
 .rank-surface .sect-detail-sections.sect-record-sections > .sect-war-panel .detail-scroll {
@@ -7973,6 +7983,29 @@ body::before {
   color: #5f4528;
 }
 
+.view.active.sect-war-room .war-strategy-panel header strong {
+  font-size: 18px;
+}
+
+.view.active.sect-war-room .war-strategy-panel header small {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.view.active.sect-war-room .war-strategy-note > span,
+.view.active.sect-war-room .war-strategy-metrics em {
+  font-size: 12px;
+}
+
+.view.active.sect-war-room .war-strategy-note strong {
+  font-size: 16px;
+}
+
+.view.active.sect-war-room .war-strategy-note p {
+  font-size: 13.5px;
+  line-height: 1.62;
+}
+
 .view.active.sect-war-room .war-strategy-note {
   background: rgba(255, 251, 232, .58);
 }
@@ -8097,8 +8130,8 @@ body::before {
   position: absolute;
   z-index: 30;
   left: 50%;
-  top: calc(100% + 9px);
-  bottom: auto;
+  top: auto;
+  bottom: calc(100% + 9px);
   width: min(260px, 78vw);
   padding: 9px 10px;
   border: 1px solid rgba(239, 201, 125, .42);
@@ -8112,7 +8145,7 @@ body::before {
   opacity: 0;
   pointer-events: none;
   text-align: left;
-  transform: translate(-50%, 4px);
+  transform: translate(-50%, -4px);
   transition: opacity .14s ease, transform .14s ease;
   visibility: hidden;
 }
@@ -8121,12 +8154,12 @@ body::before {
   content: "";
   position: absolute;
   left: 50%;
-  top: -5px;
-  bottom: auto;
+  top: auto;
+  bottom: -5px;
   width: 9px;
   height: 9px;
-  border-top: 1px solid rgba(239, 201, 125, .42);
-  border-left: 1px solid rgba(239, 201, 125, .42);
+  border-right: 1px solid rgba(239, 201, 125, .42);
+  border-bottom: 1px solid rgba(239, 201, 125, .42);
   background: rgba(25, 43, 38, .97);
   transform: translateX(-50%) rotate(45deg);
 }
@@ -10398,6 +10431,15 @@ body::before {
   max-height: none;
   overflow-y: auto;
   gap: 7px;
+}
+
+.rank-surface.view.active > .character-dossier .pearl-history-panel .event {
+  border-left-color: rgba(129, 96, 171, .55);
+}
+
+.rank-surface.view.active > .character-dossier .pearl-history-panel .event.gold {
+  border-left-color: rgba(185, 125, 28, .78);
+  background: linear-gradient(90deg, rgba(255, 244, 202, .72), rgba(255, 250, 229, .38));
 }
 
 .rank-surface.view.active > .character-dossier .root-chip-list,

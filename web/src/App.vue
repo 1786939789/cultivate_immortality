@@ -1471,19 +1471,6 @@
                   </button>
                 </div>
                 <article class="star-sea-cycle-board" v-if="activeStarSeaCycle">
-                  <div class="star-sea-cycle-day-controls">
-                    <div class="dungeon-day-nav">
-                      <button class="secondary" type="button" :disabled="!canShowPreviousDungeonDay" @click="showPreviousDungeonDay">前一日</button>
-                      <label class="dungeon-date-select">
-                        <span>查看日期</span>
-                        <input v-model="selectedDungeonCalendarDate" type="date" :min="dungeonDateMin" :max="dungeonDateMax" aria-label="选择乱星海记录日期">
-                      </label>
-                      <button class="secondary" type="button" :disabled="!canShowNextDungeonDay" @click="showNextDungeonDay">后一日</button>
-                    </div>
-                    <div class="star-sea-daily-pool">
-                      <span v-for="line in starSeaSpiritLines" :key="line">{{ line }}</span>
-                    </div>
-                  </div>
                   <div class="star-sea-cycle-board-modes" role="tablist" aria-label="周期排行榜类型">
                     <button type="button" :class="{ active: activeStarSeaCycleBoard === 'teams' }" @click="activeStarSeaCycleBoard = 'teams'">队伍总评分</button>
                     <button type="button" :class="{ active: activeStarSeaCycleBoard === 'members' }" @click="activeStarSeaCycleBoard = 'members'">个人总输出</button>
@@ -1554,6 +1541,19 @@
               <div class="panel flat star-sea-overview-panel">
                 <h3>猎妖概览</h3>
                 <div class="star-sea-overview-line">
+                  <div class="star-sea-overview-controls">
+                    <div class="dungeon-day-nav">
+                      <button class="secondary" type="button" :disabled="!canShowPreviousDungeonDay" @click="showPreviousDungeonDay">前一日</button>
+                      <label class="dungeon-date-select">
+                        <span>查看日期</span>
+                        <input v-model="selectedDungeonCalendarDate" type="date" :min="dungeonDateMin" :max="dungeonDateMax" aria-label="选择乱星海记录日期">
+                      </label>
+                      <button class="secondary" type="button" :disabled="!canShowNextDungeonDay" @click="showNextDungeonDay">后一日</button>
+                    </div>
+                    <div class="star-sea-daily-pool">
+                      <span v-for="line in starSeaSpiritLines" :key="line">{{ line }}</span>
+                    </div>
+                  </div>
                   <div class="monster-strip compact-monster-strip" v-if="selectedDungeonDay.public?.monsters?.length">
                     <div class="monster-chip with-emblem star-sea-monster-summary" v-for="monster in selectedDungeonDay.public.monsters" :key="monster.id || monster.name">
                       <MonsterEmblem :monster="monster" size="sm" />
@@ -1860,12 +1860,9 @@
                     v-for="defender in defendersFor(territory)"
                     :key="`${territory.id}-${defender.id}`"
                     class="defender-chip icon-only"
-                    :title="defenderTooltip(defender)"
                     :aria-label="defenderTooltip(defender)"
-                    tabindex="0"
                   >
                     <CharacterPortrait :person="defender" size="xs" />
-                    <span class="defender-tooltip" role="tooltip">{{ defenderTooltip(defender) }}</span>
                   </span>
                 </span>
                 <span v-else>未派驻</span>
@@ -2106,7 +2103,9 @@
                   <article v-for="section in warStrategySections(selectedProvinceWar)" :key="section.key" class="war-strategy-note">
                     <span>{{ section.label }}</span>
                     <strong>{{ section.title }}</strong>
-                    <p v-for="point in section.points" :key="point">{{ point }}</p>
+                    <p v-for="(point, index) in section.points" :key="point">
+                      <b class="war-strategy-point-type">{{ warStrategyPointType(section.key, index) }}</b>{{ point }}
+                    </p>
                     <div v-if="section.metrics.length" class="war-strategy-metrics">
                       <em v-for="metric in section.metrics" :key="`${section.key}-${metric.label}`">
                         {{ metric.label }}<b>{{ metric.value }}</b>
@@ -2795,7 +2794,7 @@
                     :class="{ selected: selectedMarketItemId === item.id, disabled: !item.canBuy }"
                     @click="selectedMarketItemId = item.id"
                   >
-                    <img class="market-product-icon" :src="marketItemIconSrc(item)" alt="" aria-hidden="true" loading="lazy">
+                    <span class="market-product-icon" aria-hidden="true"><img :src="marketItemIconSrc(item)" alt="" loading="lazy"></span>
                     <span class="market-product-main">
                       <b>{{ item.name }}</b>
                       <small>{{ marketItemText(item) }}</small>
@@ -2829,7 +2828,7 @@
                     :class="{ selected: selectedMarketItemId === entry.id }"
                     @click="selectedMarketItemId = entry.id"
                   >
-                    <img class="market-product-icon" :src="marketItemIconSrc(entry.item)" alt="" aria-hidden="true" loading="lazy">
+                    <span class="market-product-icon" aria-hidden="true"><img :src="marketItemIconSrc(entry.item)" alt="" loading="lazy"></span>
                     <span class="market-product-main">
                       <b>{{ entry.item.name }}</b>
                       <small>{{ marketItemText(entry.item) }}</small>
@@ -2848,7 +2847,9 @@
               </main>
 
               <aside class="market-detail-panel" v-if="selectedMarketItem">
-                <img class="market-detail-orb" :src="marketItemIconSrc(selectedMarketItem)" alt="" aria-hidden="true" loading="lazy">
+                <span class="market-detail-orb" aria-hidden="true">
+                  <img :src="marketItemIconSrc(selectedMarketItem)" alt="" loading="lazy">
+                </span>
                 <span>{{ selectedMarketItem.categoryName }}</span>
                 <h4>{{ selectedMarketItem.name }}</h4>
                 <p>{{ marketItemText(selectedMarketItem) }}</p>
@@ -2890,7 +2891,7 @@
                     class="market-bag-mini"
                     @click="selectedMarketItemId = entry.id; marketSubTab = 'bag'"
                   >
-                    <img class="market-bag-mini-icon" :src="marketItemIconSrc(entry.item)" alt="" aria-hidden="true" loading="lazy">
+                    <span class="market-bag-mini-icon" aria-hidden="true"><img :src="marketItemIconSrc(entry.item)" alt="" loading="lazy"></span>
                     <b>{{ entry.item.name }}</b>
                     <small>x{{ entry.count }}</small>
                   </button>
@@ -3014,7 +3015,7 @@
                 <h3>灵珠</h3>
                 <p>副本碎片自动凝练；本命灵珠加成翻倍。</p>
               </div>
-              <span class="tag">灵尘 {{ spiritPearlState.dust || 0 }} · 每 10 自动换随机灵珠</span>
+              <span class="tag">灵尘 {{ spiritPearlState.dust || 0 }} · 每 10 自动换随机灵珠碎片</span>
             </div>
             <div class="equipment-inventory-grid">
               <article
@@ -3335,7 +3336,7 @@
             <div class="panel flat dossier-pearl-panel dossier-pearl-strip">
                 <div class="dossier-pearl-head">
                   <h3>灵珠资产</h3>
-                  <span>灵尘 {{ personSpiritPearls(selectedPerson).dust || 0 }} · 每 10 自动换随机灵珠</span>
+                  <span>灵尘 {{ personSpiritPearls(selectedPerson).dust || 0 }} · 每 10 自动换随机灵珠碎片</span>
                 </div>
                 <div class="dossier-pearl-summary">
                   <span><b>{{ personPearlFragmentTotal(selectedPerson) }}</b> 碎片</span>
@@ -3410,6 +3411,40 @@
                 </div>
               </div>
               <div class="panel flat">
+                <h3>秘境记录</h3>
+                <div class="timeline detail-scroll">
+                  <button
+                    class="event event-button"
+                    :class="{ bad: dungeonRecordFailed(record), gold: dungeonRecordSucceeded(record), replayable: hasReplay(record) }"
+                    v-for="record in selectedPerson.dungeonHistory || []"
+                    :key="`${record.day}-${record.type}-${record.name}-${record.result}`"
+                    type="button"
+                    :disabled="!hasReplay(record)"
+                    @click="openReplay(record)"
+                  >
+                    <strong>{{ dungeonRecordTitle(record) }}</strong>
+                    <span>{{ dungeonRecordMetaText(record) }}</span>
+                    <small v-if="record.item">{{ record.tierName }}「{{ record.item }}」</small>
+                  </button>
+                  <div v-if="!selectedPerson.dungeonHistory?.length" class="empty">暂无副本闯关记录。</div>
+                </div>
+              </div>
+              <div class="panel flat pearl-history-panel">
+                <h3>灵珠流水 · 近30天</h3>
+                <div class="timeline detail-scroll">
+                  <div
+                    class="event"
+                    :class="{ gold: pearlHistoryIsExchange(record) || pearlHistoryIsUpgrade(record) }"
+                    v-for="record in personPearlHistory(selectedPerson)"
+                    :key="pearlHistoryKey(record)"
+                  >
+                    <strong>{{ pearlHistoryTitle(record) }}</strong>
+                    <span>{{ pearlHistoryMeta(record) }}</span>
+                  </div>
+                  <div v-if="!personPearlHistory(selectedPerson).length" class="empty">近 30 天暂无灵尘或灵珠记录。</div>
+                </div>
+              </div>
+              <div class="panel flat">
                 <h3>切磋战绩</h3>
                 <p>第 {{ duelSeasonInfo.season }} 赛季：{{ duelRankText(selectedPerson) }}，{{ selectedPerson.duelSeason?.wins || 0 }} 胜 {{ selectedPerson.duelSeason?.losses || 0 }} 负；累计 {{ selectedPerson.duelWins || 0 }} 胜 {{ selectedPerson.duelLosses || 0 }} 负。</p>
                 <div class="duel-history-strip" v-if="selectedPerson.duelSeasonHistory?.length">
@@ -3431,25 +3466,6 @@
                     <span>{{ duelRecordMeta(record) }}</span>
                   </button>
                   <div v-if="!selectedPerson.duelHistory?.length" class="empty">暂无切磋明细。</div>
-                </div>
-              </div>
-              <div class="panel flat">
-                <h3>秘境记录</h3>
-                <div class="timeline detail-scroll">
-                  <button
-                    class="event event-button"
-                    :class="{ bad: dungeonRecordFailed(record), gold: dungeonRecordSucceeded(record), replayable: hasReplay(record) }"
-                    v-for="record in selectedPerson.dungeonHistory || []"
-                    :key="`${record.day}-${record.type}-${record.name}-${record.result}`"
-                    type="button"
-                    :disabled="!hasReplay(record)"
-                    @click="openReplay(record)"
-                  >
-                    <strong>{{ dungeonRecordTitle(record) }}</strong>
-                    <span>{{ dungeonRecordMetaText(record) }}</span>
-                    <small v-if="record.item">{{ record.tierName }}「{{ record.item }}」</small>
-                  </button>
-                  <div v-if="!selectedPerson.dungeonHistory?.length" class="empty">暂无副本闯关记录。</div>
                 </div>
               </div>
               <div class="panel flat">
@@ -3481,7 +3497,7 @@
               </div>
             </div>
             <div class="grid detail-sections sect-detail-sections sect-record-sections">
-              <div class="panel flat sect-member-panel">
+              <div ref="sectMemberPanelEl" class="panel flat sect-member-panel">
                 <div class="section-head compact">
                   <div>
                     <h3>人物列表</h3>
@@ -3507,7 +3523,7 @@
                   </button>
                 </div>
               </div>
-              <div class="panel flat sect-war-panel">
+              <div ref="sectWarPanelEl" class="panel flat sect-war-panel" :style="sectWarPanelHeight ? { height: `${sectWarPanelHeight}px` } : null">
                 <h3>攻守城战绩</h3>
                 <p class="sect-war-summary">
                   攻守城战绩：
@@ -4166,6 +4182,10 @@ const adminSearch = ref("");
 const adminSelectedCultivatorId = ref("player");
 const adminSelectedSectName = ref("");
 const adminSelectedTaskId = ref("");
+const sectMemberPanelEl = ref(null);
+const sectWarPanelEl = ref(null);
+const sectWarPanelHeight = ref(0);
+let sectMemberPanelObserver = null;
 const adminCultivatorDraft = reactive({
   id: "player",
   name: "",
@@ -5430,8 +5450,9 @@ const filteredProvinceWars = computed(() => {
   ));
   if (direction === "default") return filtered;
   return [...filtered].sort((left, right) => {
+    // A smaller national rank represents a higher city tier (S before A through E).
     const delta = (rankByProvince.get(left.provinceId) || 999) - (rankByProvince.get(right.provinceId) || 999);
-    return direction === "asc" ? delta : -delta;
+    return direction === "desc" ? delta : -delta;
   });
 });
 const selectedProvinceWar = computed(() => selectedProvinceWarDayRecord.value?.wars.find((war) => war.id === selectedProvinceWarId.value));
@@ -7374,6 +7395,40 @@ function personPearlTooltip(pearl) {
   return `${name} · ${stateText} · 碎片 ${fragments}`;
 }
 
+function personPearlHistory(person) {
+  const history = personSpiritPearls(person).history || [];
+  const latestDay = Math.max(...history.map((record) => Number(record.day) || 0), Number(gameState.value.day) || 1);
+  const floor = Math.max(1, latestDay - 29);
+  return history.filter((record) => (Number(record.day) || 0) >= floor).slice(0, 120);
+}
+
+function pearlHistoryIsExchange(record) {
+  return record?.type === "dust_exchange";
+}
+
+function pearlHistoryIsUpgrade(record) {
+  return record?.type === "upgrade";
+}
+
+function pearlHistoryKey(record) {
+  return [record?.day, record?.type, record?.pearlId || "dust", record?.tier || "", record?.star || "", record?.amount || "", record?.cost || "", record?.context || ""].join("-");
+}
+
+function pearlHistoryTitle(record) {
+  const date = shortDisplayDate(record);
+  if (record?.type === "dust") return `${date} · 灵尘 +${record.amount || 0}`;
+  if (record?.type === "dust_exchange") return `${date} · 灵尘兑换 · ${record.pearlName || "灵珠"}碎片 +${record.amount || 0}`;
+  if (record?.type === "fragment") return `${date} · ${record.pearlName || "灵珠"}${record.tier || 1}阶碎片 +${record.amount || 0}`;
+  if (record?.type === "upgrade") return `${date} · ${record.pearlName || "灵珠"}凝练至 ${record.tier || 1}阶${record.star || 0}星`;
+  return `${date} · 灵珠记录`;
+}
+
+function pearlHistoryMeta(record) {
+  if (record?.type === "dust_exchange") return `消耗 ${record.dustCost || 10} 灵尘 · ${record.context || "每日自动兑换"}`;
+  if (record?.type === "upgrade") return `消耗 ${record.fragmentTier || 1}阶碎片 ${record.cost || 0} · ${record.context || "每日自动兑换"}`;
+  return record?.context || "灵珠获取";
+}
+
 function withDuelRank(person) {
   if (!person) return person;
   const rankState = derived.value.duelRanks
@@ -7724,6 +7779,15 @@ function strategyMetricList(metrics) {
   return (Array.isArray(metrics) ? metrics : [])
     .filter((metric) => metric?.label && metric?.value !== undefined && metric?.value !== null)
     .map((metric) => ({ label: metric.label, value: metric.value }));
+}
+
+function warStrategyPointType(sectionKey, index) {
+  const labels = {
+    attack: ["判断", "依据", "预估"],
+    attackers: ["选将", "主力", "疲劳"],
+    defenders: ["布防", "守备", "风险"]
+  };
+  return labels[sectionKey]?.[index] || "说明";
 }
 
 function fallbackWarStrategySections(war) {
@@ -8716,6 +8780,25 @@ function selectAdminCultivator(id) {
   if (!person) return;
   syncAdminCultivatorDraft(person);
   ensurePersonDetail(id);
+}
+
+function syncSectRecordPanelHeight() {
+  const memberPanel = sectMemberPanelEl.value;
+  if (!memberPanel || detailView.value !== "sect") {
+    sectWarPanelHeight.value = 0;
+    return;
+  }
+  sectWarPanelHeight.value = Math.ceil(memberPanel.getBoundingClientRect().height);
+}
+
+function observeSectRecordPanelHeight() {
+  sectMemberPanelObserver?.disconnect();
+  sectMemberPanelObserver = null;
+  if (typeof ResizeObserver === "undefined") return;
+  const memberPanel = sectMemberPanelEl.value;
+  if (!memberPanel || detailView.value !== "sect") return;
+  sectMemberPanelObserver = new ResizeObserver(syncSectRecordPanelHeight);
+  sectMemberPanelObserver.observe(memberPanel);
 }
 
 function toggleAdminRoot(key) {
@@ -10357,6 +10440,7 @@ onMounted(async () => {
 onUnmounted(() => {
   clearInterval(timer);
   clearInterval(battleTimer);
+  sectMemberPanelObserver?.disconnect();
   window.removeEventListener("resize", resizeChinaMap);
   window.removeEventListener("keydown", handleMapFullscreenKey);
   window.removeEventListener("click", closeAccountMenu);
@@ -10423,6 +10507,12 @@ watch([adminSearch, adminMode], () => {
 watch([detailView, selectedPersonId], () => {
   if (detailView.value === "person") ensurePersonDetail(selectedPersonId.value);
 });
+
+watch([detailView, selectedSectName, () => selectedSect.value?.members?.length], async () => {
+  await nextTick();
+  observeSectRecordPanelHeight();
+  syncSectRecordPanelHeight();
+}, { flush: "post" });
 
 watch(() => selectedDungeonDay.value?.public?.cycle, (cycle) => {
   selectedStarSeaCycle.value = cycle || null;

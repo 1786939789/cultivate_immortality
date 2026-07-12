@@ -2425,6 +2425,25 @@ button {
   align-items: stretch;
 }
 
+.star-sea-overview-controls {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(120, 91, 43, .16);
+  border-radius: 9px;
+  background: rgba(255, 253, 246, .58);
+}
+
+.star-sea-overview-controls .dungeon-day-nav {
+  margin: 0;
+  justify-content: flex-start;
+}
+
 .compact-monster-strip {
   display: grid;
   margin: 0;
@@ -3129,21 +3148,6 @@ button {
   background:
     linear-gradient(135deg, rgba(255, 253, 246, .9), rgba(235, 222, 183, .62)),
     radial-gradient(circle at 0 0, rgba(15, 118, 110, .12), transparent 16rem);
-}
-
-.star-sea-cycle-day-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px 12px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid rgba(120, 91, 43, .14);
-}
-
-.star-sea-cycle-day-controls .dungeon-day-nav {
-  margin: 0;
-  justify-content: flex-start;
 }
 
 .star-sea-daily-pool {
@@ -6258,8 +6262,19 @@ select {
   width: 68px;
   height: 68px;
   border-radius: 16px;
-  object-fit: contain;
+  display: block;
+  overflow: hidden;
   background: radial-gradient(circle at 50% 45%, rgba(255, 244, 196, .22), rgba(53, 32, 16, .2));
+}
+
+.market-product-icon img,
+.market-detail-orb img,
+.market-bag-mini-icon img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  object-position: center;
 }
 
 .market-product-main {
@@ -6342,10 +6357,15 @@ select {
   width: 104px;
   height: 104px;
   border-radius: 24px;
+  display: block;
   justify-self: center;
   margin-bottom: 2px;
-  object-fit: contain;
+  overflow: hidden;
   background: radial-gradient(circle at 50% 45%, rgba(255, 244, 196, .18), rgba(28, 18, 10, .2));
+}
+
+.market-detail-orb img {
+  width: 100%;
 }
 
 .market-detail-panel > span {
@@ -6471,7 +6491,8 @@ select {
   width: 30px;
   height: 30px;
   border-radius: 9px;
-  object-fit: contain;
+  display: block;
+  overflow: hidden;
   background: rgba(255, 246, 218, .1);
   box-shadow: inset 0 0 0 1px rgba(255, 244, 203, .28);
 }
@@ -7088,6 +7109,21 @@ button.event {
   font-size: 12px;
   line-height: 1.55;
   margin: 0;
+}
+
+.war-strategy-point-type {
+  display: inline-block;
+  margin-right: 6px;
+  border: 1px solid rgba(15, 118, 110, .2);
+  border-radius: 4px;
+  background: rgba(236, 253, 245, .66);
+  color: #0f766e;
+  font-size: .84em;
+  font-weight: 900;
+  letter-spacing: .05em;
+  line-height: 1.35;
+  padding: 1px 4px;
+  vertical-align: 1px;
 }
 
 .war-strategy-metrics {
@@ -8189,49 +8225,6 @@ button.event {
   --portrait-size: 30px;
   flex: 0 0 auto;
   border-radius: 50%;
-}
-
-.sect-province-panel .defender-tooltip {
-  position: absolute;
-  left: 50%;
-  bottom: calc(100% + 8px);
-  z-index: 20;
-  min-width: max-content;
-  max-width: 180px;
-  transform: translate(-50%, 4px);
-  opacity: 0;
-  pointer-events: none;
-  border: 1px solid rgba(163, 119, 50, .36);
-  border-radius: 6px;
-  background:
-    linear-gradient(180deg, rgba(255, 253, 239, .98), rgba(239, 222, 182, .98));
-  color: #513a1c !important;
-  box-shadow: 0 8px 18px rgba(72, 48, 18, .2);
-  font: 900 12px/1.3 "Noto Serif SC", serif;
-  padding: 6px 8px;
-  text-align: center;
-  white-space: nowrap;
-  transition: opacity .14s ease, transform .14s ease;
-}
-
-.sect-province-panel .defender-tooltip::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 100%;
-  width: 8px;
-  height: 8px;
-  border-right: 1px solid rgba(163, 119, 50, .36);
-  border-bottom: 1px solid rgba(163, 119, 50, .36);
-  background: rgba(239, 222, 182, .98);
-  transform: translate(-50%, -4px) rotate(45deg);
-}
-
-.sect-province-panel .defender-chip:hover .defender-tooltip,
-.sect-province-panel .defender-chip:focus .defender-tooltip,
-.sect-province-panel .defender-chip:focus-visible .defender-tooltip {
-  opacity: 1;
-  transform: translate(-50%, 0);
 }
 
 .sect-province-panel .plan-defender-stack {

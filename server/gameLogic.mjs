@@ -40,6 +40,7 @@ const stageXpBudgets = [
   220000
 ];
 const xpModeVersion = 2;
+const realmTerminologyVersion = 1;
 const playerDailyBaseXp = 10;
 const taskDefinitionLimit = 80;
 const taskCompletionLimit = 120;
@@ -1071,7 +1072,7 @@ const equipmentTierMap = Object.fromEntries(equipmentTiers.map((tier) => [tier.i
 const spiritPearlMap = Object.fromEntries(spiritPearls.map((pearl) => [pearl.id, pearl]));
 const equipmentVersion = 3;
 const dungeonRecordVersion = 4;
-const spiritPearlVersion = 2;
+const spiritPearlVersion = 3;
 const spiritDustExchangeCost = 10;
 const starSeaTeamSize = 10;
 const starSeaCycleLength = 10;
@@ -1366,14 +1367,14 @@ function normalizeSpiritPearlEntry(entry, id) {
   };
 }
 
-function normalizeSpiritPearlState(current) {
+function normalizeSpiritPearlState(current, currentDay = 1) {
   let changed = false;
   let asset = current;
   if (!asset || asset.version !== spiritPearlVersion) {
     const previous = asset || {};
     const next = createSpiritPearlState();
     next.dust = Math.max(0, Math.floor(Number(previous.dust) || 0));
-    next.history = Array.isArray(previous.history) ? previous.history.slice(0, recentRecordDays) : [];
+    next.history = Array.isArray(previous.history) ? previous.history : [];
     for (const pearl of spiritPearls) {
       next.pearls[pearl.id] = normalizeSpiritPearlEntry(previous.pearls?.[pearl.id], pearl.id);
     }
@@ -1386,25 +1387,18 @@ function normalizeSpiritPearlState(current) {
   }
   asset.version = spiritPearlVersion;
   asset.dust = Math.max(0, Math.floor(Number(asset.dust) || 0));
-  asset.history = Array.isArray(asset.history) ? asset.history.slice(0, recentRecordDays) : [];
+  asset.history = trimRecordsByDay(asset.history || [], currentDay, recentRecordDays, detailRecordLimit);
   return { asset, changed };
 }
 
 function ensureSpiritPearls(state, entity = state.player) {
   const isPlayer = entity?.id === state.player?.id;
   const previous = entity?.spiritPearls || (isPlayer ? state.spiritPearls : null);
-  const normalized = normalizeSpiritPearlState(previous);
+  const normalized = normalizeSpiritPearlState(previous, state.day);
   const asset = normalized.asset;
   let changed = normalized.changed;
   if (entity) entity.spiritPearls = asset;
   if (isPlayer) state.spiritPearls = asset;
-  const exchanges = exchangeSpiritDust(state, entity, asset);
-  if (exchanges.length) {
-    changed = true;
-    if (isPlayer) {
-      log(state, `灵尘自动兑换，消耗 ${exchanges.length * spiritDustExchangeCost} 灵尘，换得 ${exchanges.map((record) => `1 枚${record.pearlName}碎片`).join("、")}。`, "gold");
-    }
-  }
   return changed;
 }
 
@@ -1432,13 +1426,28 @@ function exchangeSpiritDust(state, entity, asset) {
     asset.history.unshift(record);
     exchanges.push(record);
   }
-  if (exchanges.length) {
-    asset.history = asset.history.slice(0, recentRecordDays);
-    for (const pearlId of new Set(exchanges.map((record) => record.pearlId))) {
-      autoUpgradeSpiritPearl(state, entity, pearlId, "灵尘自动兑换", true);
+  if (exchanges.length) asset.history = trimRecordsByDay(asset.history, state.day, recentRecordDays, detailRecordLimit);
+  return exchanges;
+}
+
+function settleDailySpiritPearlAssets(state) {
+  const playerSummary = { exchanges: [], upgrades: [] };
+  for (const { entity } of allCultivators(state)) {
+    ensureSpiritPearls(state, entity);
+    const asset = entity.spiritPearls;
+    const exchanges = exchangeSpiritDust(state, entity, asset);
+    const upgrades = spiritPearls.flatMap((pearl) => autoUpgradeSpiritPearl(state, entity, pearl.id, "每日灵珠自动兑换", true));
+    if (entity.id === state.player.id) {
+      playerSummary.exchanges.push(...exchanges);
+      playerSummary.upgrades.push(...upgrades);
     }
   }
-  return exchanges;
+  if (playerSummary.exchanges.length || playerSummary.upgrades.length) {
+    const parts = [];
+    if (playerSummary.exchanges.length) parts.push(`灵尘兑换 ${playerSummary.exchanges.length} 枚碎片`);
+    if (playerSummary.upgrades.length) parts.push(`灵珠凝练 ${playerSummary.upgrades.length} 次`);
+    log(state, `每日灵珠自动结算：${parts.join("；")}。`, "gold");
+  }
 }
 
 function spiritPearlForgeCost(tier = 1) {
@@ -1536,8 +1545,7 @@ function addSpiritPearlReward(state, pearlId, tier, amount, context, receiver = 
     receiverName: receiver?.name || "主角"
   };
   asset.history.unshift(record);
-  asset.history = asset.history.slice(0, recentRecordDays);
-  autoUpgradeSpiritPearl(state, receiver, id, context);
+  asset.history = trimRecordsByDay(asset.history, state.day, recentRecordDays, detailRecordLimit);
   return record;
 }
 
@@ -1548,7 +1556,7 @@ function addSpiritDust(state, amount, context, receiver = state.player) {
   if (!safeAmount) return;
   asset.dust += safeAmount;
   asset.history.unshift({ day: state.day, date: stateDateForDay(state), type: "dust", amount: safeAmount, context, receiverId: receiver.id, receiverName: receiver.name });
-  asset.history = asset.history.slice(0, recentRecordDays);
+  asset.history = trimRecordsByDay(asset.history, state.day, recentRecordDays, detailRecordLimit);
 }
 
 function spiritPearlTierForDungeon(dungeonId, stage = 0, success = true) {
@@ -1618,7 +1626,7 @@ function autoUpgradeSpiritPearl(state, entity, pearlId, context = "", skipEnsure
       log(state, `${config.name}凝练至 ${entry.tier}阶${entry.star}星。`, "gold");
     }
   }
-  asset.history = asset.history.slice(0, recentRecordDays);
+  asset.history = trimRecordsByDay(asset.history, state.day, recentRecordDays, detailRecordLimit);
   return upgrades;
 }
 
@@ -6226,6 +6234,20 @@ function migrateRoster(state) {
 
 export function ensureStateShape(state) {
   let changed = false;
+  if (state.realmTerminologyVersion !== realmTerminologyVersion) {
+    const replaceLegacyRealmTerm = (value) => {
+      if (typeof value === "string") return value.replaceAll("炼气", "练气");
+      if (Array.isArray(value)) return value.map(replaceLegacyRealmTerm);
+      if (value && typeof value === "object") {
+        return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, replaceLegacyRealmTerm(entry)]));
+      }
+      return value;
+    };
+    const migratedState = replaceLegacyRealmTerm(state);
+    Object.assign(state, migratedState);
+    state.realmTerminologyVersion = realmTerminologyVersion;
+    changed = true;
+  }
   if (state.rosterVersion !== rosterVersion) {
     migrateRoster(state);
     changed = true;
@@ -8016,6 +8038,7 @@ export function dailySettlement(state, options = {}) {
     note: `每日修行：${playerProgressNote}；副本：${playerSoloDungeon?.name || "今日历练"} ${playerSoloDungeon?.result || ""}${playerProvinceSpirit ? `；宗门灵石包 +${playerProvinceSpirit} 灵石` : ""}${playerDuelSeasonReward ? `；切磋赛季奖励 +${playerDuelSeasonReward} 灵石` : ""}`
   });
   state.player.dailyRecords = trimRecordsByDay(state.player.dailyRecords, state.day, growthRecordDays, growthRecordLimit);
+  settleDailySpiritPearlAssets(state);
   runDailyDuels(state);
   state.lastSettlementDate = dateKey();
 
