@@ -3251,7 +3251,7 @@ button {
 
 .star-sea-cycle-team-row {
   display: grid;
-  grid-template-columns: 28px minmax(190px, .9fr) minmax(160px, 1fr) 74px;
+  grid-template-columns: 58px minmax(190px, .9fr) minmax(160px, 1fr) 74px;
   align-items: center;
   gap: 9px;
   min-width: 0;
@@ -3329,6 +3329,36 @@ button {
   color: #173f3a;
   font-size: 12px;
   font-weight: 900;
+}
+
+.cycle-rank-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.cycle-rank-shift {
+  min-width: 25px;
+  color: #8b7b60;
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: -.02em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.cycle-rank-shift.gain {
+  color: #167052;
+}
+
+.cycle-rank-shift.loss {
+  color: #a64a3b;
+}
+
+.cycle-rank-shift.new {
+  color: #526f79;
+  font-size: 12px;
 }
 
 .star-sea-cycle-team-row.rank-first .cycle-rank {
@@ -6869,6 +6899,12 @@ button.event {
   padding-right: 34px;
 }
 
+/* The page supplies its own clear button; suppress Chromium's duplicate search cancel control. */
+.search-field input[type="search"]::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 .search-clear {
   position: absolute;
   right: 6px;
@@ -7269,7 +7305,7 @@ button.event {
   display: inline-flex !important;
   align-items: center;
   border-bottom: 1px dotted currentColor;
-  cursor: help;
+  cursor: default;
   outline: none;
 }
 
@@ -7813,8 +7849,10 @@ button.event {
 }
 
 .sect-rank-medal {
+  box-sizing: border-box;
   width: 34px;
   height: 34px;
+  padding: 0;
   border: 2px solid rgba(110, 78, 34, .4);
   border-radius: 50%;
   display: grid;
@@ -7822,7 +7860,10 @@ button.event {
   background:
     radial-gradient(circle at 35% 28%, #fff7c6, #bd8435 72%);
   color: #55340f;
-  font-weight: 900;
+  font: 900 13px/1 "Cinzel", "Microsoft YaHei", sans-serif;
+  line-height: 1;
+  text-align: center;
+  text-indent: 0;
   box-shadow: 0 3px 8px rgba(50, 34, 16, .18);
 }
 
@@ -7848,8 +7889,8 @@ button.event {
 .sect-rank-table-head,
 .sect-rank-table .sect-territory-card {
   display: grid;
-  grid-template-columns: 64px minmax(140px, .95fr) 76px minmax(100px, .8fr) minmax(100px, .8fr) minmax(100px, .8fr) minmax(180px, 1.2fr);
-  gap: 10px;
+  grid-template-columns: 58px minmax(130px, .86fr) 68px repeat(4, minmax(76px, .58fr)) minmax(280px, 1.65fr);
+  gap: 8px;
   align-items: center;
 }
 
@@ -7872,6 +7913,43 @@ button.event {
 
 .sect-rank-table .sect-territory-rank {
   justify-content: center;
+}
+
+.sect-rank-table .sect-rank-medal {
+  line-height: 1;
+}
+
+.sect-rank-table .territory-count {
+  display: inline-flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: flex-start;
+  gap: 4px;
+  justify-self: start;
+  margin-left: 5px;
+  white-space: nowrap;
+}
+
+.sect-rank-table-head > :nth-child(3) {
+  padding-left: 5px;
+}
+
+.sect-rank-table .territory-count b {
+  font: inherit;
+}
+
+.sect-rank-table .territory-count small {
+  color: #8b7b60;
+  font: 900 14px/1 "Microsoft YaHei", sans-serif;
+  letter-spacing: -.01em;
+}
+
+.sect-rank-table .territory-count small.gain {
+  color: #167052;
+}
+
+.sect-rank-table .territory-count small.loss {
+  color: #a64a3b;
 }
 
 .sect-rank-name {
@@ -7962,6 +8040,12 @@ button.event {
   background:
     radial-gradient(circle at 34% 26%, rgba(255, 255, 255, .96), rgba(199, 190, 255, .74) 28%, transparent 31%),
     linear-gradient(145deg, #6674d8, #393a91);
+}
+
+.resource-pill.dust svg {
+  background:
+    radial-gradient(circle at 34% 26%, rgba(255, 255, 255, .96), rgba(146, 218, 244, .78) 28%, transparent 31%),
+    linear-gradient(145deg, #347ca4, #21496d);
 }
 
 .resource-pill.breakthrough svg {
@@ -8180,6 +8264,10 @@ button.event {
   color: #167f6a;
 }
 
+.province-resource-bonus.dust svg {
+  color: #287eaa;
+}
+
 .province-resource-bonus.breakthrough svg {
   color: #a33443;
 }
@@ -8203,11 +8291,58 @@ button.event {
   scrollbar-width: thin;
 }
 
+.province-battle-roster {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.province-battle-roster .defender-stack {
+  min-width: 0;
+}
+
+.province-roster-label {
+  display: inline-grid;
+  place-items: center;
+  min-width: 32px;
+  padding: 3px 4px;
+  border: 1px solid rgba(87, 72, 45, .28);
+  border-radius: 4px;
+  background: rgba(255, 250, 226, .72);
+  color: #6d5940 !important;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.province-roster-label.attack {
+  border-color: rgba(156, 60, 48, .5);
+  background: rgba(165, 61, 46, .12);
+  color: #973d31 !important;
+}
+
+.province-roster-label.defense {
+  border-color: rgba(27, 111, 90, .48);
+  background: rgba(33, 116, 91, .1);
+  color: #176a58 !important;
+}
+
+.sect-province-panel .defender-chip.monster {
+  border: 1px solid rgba(144, 59, 42, .55);
+  background: rgba(120, 41, 31, .12);
+}
+
+.sect-province-panel .defender-chip.monster .monster-emblem {
+  --monster-emblem-size: 28px;
+}
+
 .sect-province-panel .defender-chip {
   position: relative;
   flex: 0 0 auto;
-  width: 30px;
-  height: 30px;
+  width: 38px;
+  height: 38px;
   display: inline-grid;
   place-items: center;
   border: 0;
@@ -8222,7 +8357,7 @@ button.event {
 }
 
 .sect-province-panel .defender-chip .character-portrait {
-  --portrait-size: 30px;
+  --portrait-size: 38px;
   flex: 0 0 auto;
   border-radius: 50%;
 }
@@ -10325,14 +10460,30 @@ button.event {
   white-space: nowrap;
 }
 
-.sect-member-main small {
+.sect-member-main .sect-member-meta {
   display: block;
-  color: var(--muted);
-  font-size: 12px;
+  color: #66523a;
+  font-size: 13px;
+  font-weight: 800;
   margin-top: 2px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.sect-member-meta i {
+  color: #a18559;
+  font-style: normal;
+  margin: 0 3px;
+}
+
+.sect-member-fatigue {
+  color: #176750;
+  font-weight: 900;
+}
+
+.sect-member-fatigue.tired {
+  color: #a64032;
 }
 
 .member-badge {
@@ -12503,6 +12654,188 @@ button.event {
   margin-top: 16px;
 }
 
+.admin-wiki-layout {
+  display: grid;
+  grid-template-columns: minmax(250px, 310px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+  margin-top: 16px;
+}
+
+.admin-wiki-toc {
+  position: sticky;
+  top: 16px;
+  display: grid;
+  gap: 8px;
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid rgba(92, 64, 35, .18);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(255, 252, 239, .78), rgba(226, 211, 174, .46));
+}
+
+.admin-wiki-toc-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #30594d;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.admin-wiki-toc > p {
+  margin: 0 0 4px;
+  color: #796348;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.admin-wiki-toc-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 2px 8px;
+  width: 100%;
+  padding: 9px 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: #3f3020;
+  text-align: left;
+  background: transparent;
+}
+
+.admin-wiki-toc-row:hover,
+.admin-wiki-toc-row:focus-visible,
+.admin-wiki-toc-row.active {
+  border-color: rgba(29, 94, 82, .38);
+  outline: none;
+  background: linear-gradient(135deg, rgba(232, 247, 238, .92), rgba(218, 236, 218, .7));
+}
+
+.admin-wiki-toc-row > span {
+  grid-row: span 2;
+  align-self: start;
+  border-radius: 5px;
+  padding: 3px 2px;
+  color: #f8edd0;
+  background: #3c7868;
+  font-size: 10px;
+  font-weight: 900;
+  text-align: center;
+}
+
+.admin-wiki-toc-row strong,
+.admin-wiki-toc-row small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-wiki-toc-row strong {
+  font-size: 13px;
+}
+
+.admin-wiki-toc-row small {
+  color: #796348;
+  font-size: 11px;
+}
+
+.admin-wiki-reader {
+  min-width: 0;
+  padding: clamp(16px, 2vw, 28px);
+  border: 1px solid rgba(92, 64, 35, .2);
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, rgba(255, 253, 244, .96), rgba(241, 228, 195, .74)),
+    radial-gradient(circle at 92% 7%, rgba(36, 115, 93, .12), transparent 16rem);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .44), 0 12px 26px rgba(66, 45, 20, .08);
+}
+
+.admin-wiki-reader > header {
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(92, 64, 35, .2);
+}
+
+.admin-wiki-reader > header > span {
+  display: inline-block;
+  border: 1px solid rgba(29, 94, 82, .24);
+  border-radius: 999px;
+  padding: 3px 9px;
+  color: #236354;
+  background: rgba(229, 246, 237, .76);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.admin-wiki-reader > header h3 {
+  margin: 10px 0 6px;
+  color: #352618;
+  font-size: clamp(24px, 2.1vw, 34px);
+  line-height: 1.15;
+}
+
+.admin-wiki-reader > header p {
+  margin: 0;
+  color: #71563c;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.admin-wiki-section {
+  padding: 18px 0;
+  border-bottom: 1px dashed rgba(92, 64, 35, .22);
+}
+
+.admin-wiki-section:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.admin-wiki-section h4 {
+  margin: 0 0 10px;
+  color: #285e50;
+  font-size: 18px;
+}
+
+.admin-wiki-section p,
+.admin-wiki-section li {
+  color: #4f3c2a;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.admin-wiki-section p {
+  margin: 0 0 10px;
+}
+
+.admin-wiki-section ul {
+  display: grid;
+  gap: 7px;
+  margin: 12px 0;
+  padding: 12px 16px 12px 34px;
+  border-radius: 8px;
+  background: rgba(229, 246, 237, .42);
+}
+
+.admin-wiki-section li::marker {
+  color: #167260;
+}
+
+.admin-wiki-tip {
+  margin-top: 12px !important;
+  padding: 10px 12px;
+  border-left: 4px solid #c38325;
+  border-radius: 0 7px 7px 0;
+  background: rgba(255, 241, 195, .56);
+}
+
+.admin-wiki-tip b {
+  margin-right: 8px;
+  color: #9a5910;
+  font-size: 12px;
+}
+
 .admin-list {
   display: grid;
   gap: 9px;
@@ -12869,8 +13202,14 @@ button.event {
 
 @media (max-width: 720px) {
   .admin-layout,
+  .admin-wiki-layout,
   .admin-form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .admin-wiki-toc {
+    position: static;
+    max-height: 360px;
   }
 
   .admin-stat-grid {

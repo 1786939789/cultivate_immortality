@@ -1489,7 +1489,14 @@
                       v-for="team in pagedStarSeaCycleTeams"
                       :key="`${activeStarSeaCycle.cycle}-${team.id || team.name}`"
                     >
-                      <span class="cycle-rank">{{ team.rank }}</span>
+                      <span class="cycle-rank-wrap">
+                        <span class="cycle-rank">{{ team.rank }}</span>
+                        <span
+                          class="cycle-rank-shift"
+                          :class="starSeaCycleTeamRankChange(team).direction"
+                          :title="starSeaCycleTeamRankChange(team).title"
+                        >{{ starSeaCycleTeamRankChange(team).text }}</span>
+                      </span>
                       <span class="cycle-team-identity">
                         <CharacterPortrait :person="starSeaTeamLeader(team)" size="sm" />
                         <span class="cycle-team-copy">
@@ -1768,6 +1775,7 @@
               <span>宗门</span>
               <span>已占领</span>
               <span>灵石总包</span>
+              <span>灵尘总包</span>
               <span>经验总包</span>
               <span>突破总包</span>
               <span>主要占领省份</span>
@@ -1781,16 +1789,26 @@
                   <span class="sect-emblem" :style="{ background: sectColor(sect.name) }">{{ sect.name.slice(0, 1) }}</span>
                   <strong>{{ sect.name }}</strong>
                 </div>
-                <span class="rank-number">{{ sect.provinceCount }}</span>
+                <span class="rank-number territory-count">
+                  <b>{{ sect.provinceCount }}</b>
+                  <small
+                    :class="sectProvinceChange(sect.name, sect.provinceCount).direction"
+                    :title="sectProvinceChange(sect.name, sect.provinceCount).title"
+                  >{{ sectProvinceChange(sect.name, sect.provinceCount).text }}</small>
+                </span>
                 <span class="resource-pill spirit" aria-label="灵石总包">
                   <Coins :size="18" :stroke-width="2.6" aria-hidden="true" />
                   <b>{{ resourcePlanValue(sect.resourcePlan?.spirit, "spirit") }}</b>
+                </span>
+                <span class="resource-pill dust" aria-label="灵尘总包">
+                  <Gem :size="18" :stroke-width="2.6" aria-hidden="true" />
+                  <b>{{ resourcePlanValue(sect.resourcePlan?.dust, "dust") }}</b>
                 </span>
                 <span class="resource-pill xp" aria-label="经验总包">
                   <Sparkles :size="18" :stroke-width="2.6" aria-hidden="true" />
                   <b>{{ resourcePlanValue(sect.resourcePlan?.xp, "xp") }}</b>
                 </span>
-                <span class="resource-pill breakthrough" aria-label="突破总包">
+                <span class="resource-pill breakthrough" aria-label="突破总包" :title="breakthroughResourcePlanTitle(sect.resourcePlan?.breakthrough)">
                   <Zap :size="18" :stroke-width="2.6" aria-hidden="true" />
                   <b>{{ resourcePlanValue(sect.resourcePlan?.breakthrough, "breakthrough") }}</b>
                 </span>
@@ -1817,6 +1835,7 @@
                 <select v-model="provinceResourceTypeFilter">
                   <option value="">全部加成</option>
                   <option value="spirit">灵石</option>
+                  <option value="dust">灵尘</option>
                   <option value="xp">经验</option>
                   <option value="breakthrough">突破</option>
                 </select>
@@ -1844,7 +1863,7 @@
                 <span>GDP档位</span>
                 <span>加成</span>
                 <span>占领宗门</span>
-                <span>守城人员</span>
+                <span>今日战果人员</span>
               </div>
               <div v-for="(territory, index) in filteredProvinceResourceRanking" :key="territory.id" class="province-table-row" :style="{ '--sect-color': sectColor(territory.owner) }">
                 <span class="province-rank-number">{{ index + 1 }}</span>
@@ -1855,17 +1874,22 @@
                   <b>{{ provinceResourceTotalValue(territory.effect) }}</b>
                 </span>
                 <span class="province-owner-name">{{ territory.owner || "无主之地" }}</span>
-                <span class="defender-stack" v-if="defendersFor(territory).length">
-                  <span
-                    v-for="defender in defendersFor(territory)"
-                    :key="`${territory.id}-${defender.id}`"
-                    class="defender-chip icon-only"
-                    :aria-label="defenderTooltip(defender)"
-                  >
-                    <CharacterPortrait :person="defender" size="xs" />
+                <span v-if="provinceBattleRoster(territory).participants.length" class="province-battle-roster">
+                  <small class="province-roster-label" :class="provinceBattleRoster(territory).status">{{ provinceBattleRoster(territory).label }}</small>
+                  <span class="defender-stack">
+                    <span
+                      v-for="participant in provinceBattleRoster(territory).participants"
+                      :key="`${territory.id}-${provinceBattleRoster(territory).status}-${participant.id}`"
+                      class="defender-chip icon-only"
+                      :class="{ monster: participant.kind === 'monster' }"
+                      :aria-label="provinceRosterParticipantTooltip(participant)"
+                    >
+                      <MonsterEmblem v-if="participant.kind === 'monster'" :monster="participant" size="xs" />
+                      <CharacterPortrait v-else :person="participant" size="xs" />
+                    </span>
                   </span>
                 </span>
-                <span v-else>未派驻</span>
+                <span v-else>{{ territory.owner ? "暂无参战人员" : "无主无驻守" }}</span>
               </div>
               <div v-if="!filteredProvinceResourceRanking.length" class="empty province-filter-empty">没有符合筛选条件的省份。</div>
             </div>
@@ -1928,10 +1952,12 @@
                     :key="`attack-${member.id}`"
                     class="event event-button strategy-member-row"
                     type="button"
-                    :class="{ active: assignedAttackIds.has(member.id) }"
+                    :class="{ active: assignedAttackIds.has(member.id), guarding: assignedDefenseIds.has(member.id) }"
+                    :disabled="assignedDefenseIds.has(member.id)"
+                    :title="assignedDefenseIds.has(member.id) ? '已被指定守城，不能同时参与攻城' : planMemberLabel(member)"
                     @click="togglePlanAttackMember(member.id)"
                   >
-                    <span class="strategy-member-index" aria-hidden="true">{{ assignedAttackIds.has(member.id) ? "攻" : "候" }}</span>
+                    <span class="strategy-member-index" aria-hidden="true">{{ assignedAttackIds.has(member.id) ? "攻" : assignedDefenseIds.has(member.id) ? "守" : "候" }}</span>
                     <span class="strategy-member-main">
                       <strong>{{ member.name }}</strong>
                       <small>{{ realmName(member.realm) }}</small>
@@ -1951,30 +1977,52 @@
                 <div class="section-head compact strategy-section-heading">
                   <div>
                     <h3>己方布防</h3>
-                    <p>攻城成员不能同时守城；空缺会由 AI 按价值补齐。</p>
+                    <p>先选择城池再指定守军；已守城成员不能重复守城或参与攻城。</p>
                   </div>
                   <span class="strategy-count-badge defense">{{ playerOwnedProvinces.length }} 座城池</span>
                 </div>
                 <div class="timeline compact-list strategy-defense-list">
-                  <section class="event strategy-city-card" v-for="province in playerOwnedProvinces" :key="`defense-${province.id}`">
+                  <div v-if="playerOwnedProvinces.length" class="strategy-defense-city-picker" role="group" aria-label="选择布防城池">
+                    <span class="strategy-defense-picker-label">布防城池</span>
+                    <div class="strategy-defense-city-options">
+                      <button
+                        v-for="province in playerOwnedProvinces"
+                        :key="`defense-city-${province.id}`"
+                        type="button"
+                        class="strategy-defense-city-option"
+                        :class="{ active: selectedDefenseProvinceId === province.id }"
+                        :aria-pressed="selectedDefenseProvinceId === province.id"
+                        @click="selectedDefenseProvinceId = province.id"
+                      >
+                        <span>{{ province.name }}</span>
+                        <b>{{ (sectPlanDraft.defense[province.id] || []).length }} / {{ province.defenderLimit || maxSiegeTeamSize }}</b>
+                      </button>
+                    </div>
+                  </div>
+                  <section v-if="selectedDefenseProvince" class="event strategy-city-card selected-defense-city">
                     <div class="strategy-city-heading">
                       <span class="strategy-city-seal" aria-hidden="true">守</span>
                       <div>
-                        <strong>{{ province.name }}</strong>
-                        <span>{{ province.effect.label || "宗门资源" }} · 防守价值 {{ province.defenseValue || 0 }}</span>
+                        <strong>驻守 {{ selectedDefenseProvince.name }}</strong>
+                        <span>{{ selectedDefenseProvince.effect.label || "宗门资源" }} · {{ selectedDefenseProvince.effect.text || "暂无资源产出" }} · 防守价值 {{ selectedDefenseProvince.defenseValue || 0 }}</span>
                       </div>
-                      <b>{{ (sectPlanDraft.defense[province.id] || []).length }} / {{ province.defenderLimit || maxSiegeTeamSize }}</b>
+                      <b>{{ (sectPlanDraft.defense[selectedDefenseProvince.id] || []).length }} / {{ selectedDefenseProvince.defenderLimit || maxSiegeTeamSize }}</b>
                     </div>
+                    <p class="strategy-defense-assignment-hint">点击成员，即指定其驻守「{{ selectedDefenseProvince.name }}」。同一成员仅能守一座城，也不能同时攻城。</p>
                     <div class="defender-stack plan-defender-stack">
                       <button
                         v-for="member in playerSectMembers"
-                        :key="`${province.id}-${member.id}`"
+                        :key="`defense-member-${member.id}`"
                         type="button"
                         class="defender-chip"
-                        :class="{ active: (sectPlanDraft.defense[province.id] || []).includes(member.id), muted: assignedAttackIds.has(member.id) }"
-                        :disabled="assignedAttackIds.has(member.id)"
-                        :title="planMemberLabel(member)"
-                        @click="togglePlanDefender(province.id, member.id)"
+                        :class="{
+                          'guarding-current': (sectPlanDraft.defense[selectedDefenseProvince.id] || []).includes(member.id),
+                          muted: assignedAttackIds.has(member.id),
+                          'guarding-other': assignedDefenseIds.has(member.id) && !(sectPlanDraft.defense[selectedDefenseProvince.id] || []).includes(member.id)
+                        }"
+                        :disabled="assignedAttackIds.has(member.id) || (assignedDefenseIds.has(member.id) && !(sectPlanDraft.defense[selectedDefenseProvince.id] || []).includes(member.id))"
+                        :title="`${planMemberLabel(member)}${assignedAttackIds.has(member.id) ? ' · 已在攻城队，不能守城' : assignedDefenseIds.has(member.id) && !(sectPlanDraft.defense[selectedDefenseProvince.id] || []).includes(member.id) ? ' · 已驻守其他城池，不能重复派驻' : ''}`"
+                        @click="togglePlanDefender(selectedDefenseProvince.id, member.id)"
                       >
                         {{ member.name }}
                       </button>
@@ -1991,7 +2039,7 @@
               <div class="duel-replay-title">
                 <div>
                   <h3>攻城实况</h3>
-                  <p>{{ lastBattle.left.name }} 对阵 {{ lastBattle.right.name }}，{{ battleStatusText }}</p>
+                  <p>{{ battleDisplayName(lastBattle.left) }} 对阵 {{ battleDisplayName(lastBattle.right) }}，{{ battleStatusText }}</p>
                 </div>
                 <div class="duel-replay-actions">
                   <button class="secondary" @click="replayBattle">重播</button>
@@ -2001,10 +2049,11 @@
 
               <div class="duel-arena-stage">
                 <div class="duel-fighter left">
-                  <CharacterPortrait :person="battlePerson(lastBattle.left)" size="lg" />
-                  <strong>{{ lastBattle.left.name }}</strong>
+                  <MonsterEmblem v-if="isBattleMonster(lastBattle.left)" :monster="lastBattle.left" size="lg" />
+                  <CharacterPortrait v-else :person="battlePerson(lastBattle.left)" size="lg" />
+                  <strong>{{ battleDisplayName(lastBattle.left) }}</strong>
                   <small>{{ realmName(lastBattle.left.realm) }}</small>
-                  <div class="duel-fighter-attrs" :aria-label="`${lastBattle.left.name} 战斗属性`">
+                  <div class="duel-fighter-attrs" :aria-label="`${battleDisplayName(lastBattle.left)} 战斗属性`">
                     <span class="root">{{ battleRootName(lastBattle.left) }}</span>
                     <span v-for="stat in battleCompactStats(lastBattle.left)" :key="stat.label">{{ stat.short }}{{ stat.value }}</span>
                   </div>
@@ -2017,10 +2066,11 @@
                   <small>{{ battleStatusText }}</small>
                 </div>
                 <div class="duel-fighter right">
-                  <CharacterPortrait :person="battlePerson(lastBattle.right)" size="lg" />
-                  <strong>{{ lastBattle.right.name }}</strong>
+                  <MonsterEmblem v-if="isBattleMonster(lastBattle.right)" :monster="lastBattle.right" size="lg" />
+                  <CharacterPortrait v-else :person="battlePerson(lastBattle.right)" size="lg" />
+                  <strong>{{ battleDisplayName(lastBattle.right) }}</strong>
                   <small>{{ realmName(lastBattle.right.realm) }}</small>
-                  <div class="duel-fighter-attrs" :aria-label="`${lastBattle.right.name} 战斗属性`">
+                  <div class="duel-fighter-attrs" :aria-label="`${battleDisplayName(lastBattle.right)} 战斗属性`">
                     <span class="root">{{ battleRootName(lastBattle.right) }}</span>
                     <span v-for="stat in battleCompactStats(lastBattle.right)" :key="stat.label">{{ stat.short }}{{ stat.value }}</span>
                   </div>
@@ -2068,19 +2118,20 @@
                     <strong v-if="skillDamageText(event)" class="skill-cast-damage">{{ skillDamageText(event) }}</strong>
                   </div>
                   <span>{{ event.round ? `回合 ${event.round}` : "回合 1" }}</span>
-                  <p>{{ event.text }}</p>
+                  <p>{{ siegeBattleEventText(event) }}</p>
                 </div>
               </div>
             </section>
           </div>
 
           <div v-else-if="selectedProvinceWar" class="panel sect-system-panel sect-war-detail-panel">
-            <div class="section-head compact sect-panel-title">
-              <div>
-                <h3>{{ selectedProvinceWar.provinceName }} 攻城详情</h3>
-                <p>{{ selectedProvinceWar.result }}。</p>
-              </div>
-              <button class="primary" type="button" @click="closeProvinceWarDetail">返回今日总览</button>
+              <div class="section-head compact sect-panel-title">
+                <div>
+                  <h3>{{ selectedProvinceWar.provinceName }} 攻城详情</h3>
+                  <p>{{ selectedProvinceWar.result }}。</p>
+                  <p class="war-owner-timeline">战后归属：{{ warOwnerAfterLabel(selectedProvinceWar) }} · 当前归属：{{ currentWarProvinceOwnerLabel(selectedProvinceWar) }}</p>
+                </div>
+                <button class="primary" type="button" @click="closeProvinceWarDetail">返回今日总览</button>
             </div>
 
             <div class="war-day-card captured-detail" :class="{ captured: selectedProvinceWar.captured }">
@@ -2159,7 +2210,8 @@
                       @click="openProvinceBattle(battle)"
                     >
                       <div class="match-person duel-combatant" :class="{ winner: battle.winnerSide === 'attacker' || battle.replay?.winner === 'left' }">
-                        <CharacterPortrait :person="battlePerson(battle.attacker)" size="sm" />
+                        <MonsterEmblem v-if="isBattleMonster(battle.attacker)" :monster="battle.attacker" size="sm" />
+                        <CharacterPortrait v-else :person="battlePerson(battle.attacker)" size="sm" />
                         <div class="duel-person-copy">
                           <strong>{{ battleName(battle, "attacker") }}<span v-if="battle.attacker?.id === player.id">我</span></strong>
                           <small>{{ realmName(battlePerson(battle.attacker).realm) }}</small>
@@ -2171,7 +2223,8 @@
                         <span>第 {{ battle.order }} 战</span>
                       </div>
                       <div class="match-person duel-combatant" :class="{ winner: battle.winnerSide === 'defender' || battle.replay?.winner === 'right' }">
-                        <CharacterPortrait :person="battlePerson(battle.defender)" size="sm" />
+                        <MonsterEmblem v-if="isBattleMonster(battle.defender)" :monster="battle.defender" size="sm" />
+                        <CharacterPortrait v-else :person="battlePerson(battle.defender)" size="sm" />
                         <div class="duel-person-copy">
                           <strong>{{ battleName(battle, "defender") }}<span v-if="battle.defender?.id === player.id">我</span></strong>
                           <small>{{ realmName(battlePerson(battle.defender).realm) }}</small>
@@ -2189,7 +2242,7 @@
                   <div class="duel-replay-title">
                     <div>
                       <h3>车轮战实况</h3>
-                      <p>{{ lastBattle ? `${lastBattle.left.name} 对阵 ${lastBattle.right.name}，${battleStatusText}` : "选择左侧场次查看战斗回放。" }}</p>
+                      <p>{{ lastBattle ? `${battleDisplayName(lastBattle.left)} 对阵 ${battleDisplayName(lastBattle.right)}，${battleStatusText}` : "选择左侧场次查看战斗回放。" }}</p>
                     </div>
                     <div class="duel-replay-actions" v-if="lastBattle">
                       <button class="secondary" @click="replayBattle">重播</button>
@@ -2206,10 +2259,11 @@
                   <template v-else-if="lastBattle">
                     <div class="duel-arena-stage">
                       <div class="duel-fighter left">
-                        <CharacterPortrait :person="battlePerson(lastBattle.left)" size="lg" />
-                        <strong>{{ lastBattle.left.name }}</strong>
+                        <MonsterEmblem v-if="isBattleMonster(lastBattle.left)" :monster="lastBattle.left" size="lg" />
+                        <CharacterPortrait v-else :person="battlePerson(lastBattle.left)" size="lg" />
+                        <strong>{{ battleDisplayName(lastBattle.left) }}</strong>
                         <small>{{ realmName(lastBattle.left.realm) }}</small>
-                        <div class="duel-fighter-attrs" :aria-label="`${lastBattle.left.name} 战斗属性`">
+                        <div class="duel-fighter-attrs" :aria-label="`${battleDisplayName(lastBattle.left)} 战斗属性`">
                           <span class="root">{{ battleRootName(lastBattle.left) }}</span>
                           <span v-for="stat in battleCompactStats(lastBattle.left)" :key="stat.label">{{ stat.short }}{{ stat.value }}</span>
                         </div>
@@ -2222,10 +2276,11 @@
                         <small>{{ battleStatusText }}</small>
                       </div>
                       <div class="duel-fighter right">
-                        <CharacterPortrait :person="battlePerson(lastBattle.right)" size="lg" />
-                        <strong>{{ lastBattle.right.name }}</strong>
+                        <MonsterEmblem v-if="isBattleMonster(lastBattle.right)" :monster="lastBattle.right" size="lg" />
+                        <CharacterPortrait v-else :person="battlePerson(lastBattle.right)" size="lg" />
+                        <strong>{{ battleDisplayName(lastBattle.right) }}</strong>
                         <small>{{ realmName(lastBattle.right.realm) }}</small>
-                        <div class="duel-fighter-attrs" :aria-label="`${lastBattle.right.name} 战斗属性`">
+                        <div class="duel-fighter-attrs" :aria-label="`${battleDisplayName(lastBattle.right)} 战斗属性`">
                           <span class="root">{{ battleRootName(lastBattle.right) }}</span>
                           <span v-for="stat in battleCompactStats(lastBattle.right)" :key="stat.label">{{ stat.short }}{{ stat.value }}</span>
                         </div>
@@ -2273,7 +2328,7 @@
                           <strong v-if="skillDamageText(event)" class="skill-cast-damage">{{ skillDamageText(event) }}</strong>
                         </div>
                         <span>{{ event.round ? `回合 ${event.round}` : "回合 1" }}</span>
-                        <p>{{ event.text }}</p>
+                        <p>{{ siegeBattleEventText(event) }}</p>
                       </div>
                     </div>
                   </template>
@@ -2390,8 +2445,11 @@
                         :key="`${war.id}-attacker-${member.id || member.name}`"
                         class="war-roster-card"
                       >
-                        <span class="war-portrait-frame"><CharacterPortrait :person="battlePerson(member)" size="sm" /></span>
-                        <strong>{{ member.name }}</strong>
+                        <span class="war-portrait-frame">
+                          <MonsterEmblem v-if="isBattleMonster(member)" :monster="member" size="sm" />
+                          <CharacterPortrait v-else :person="battlePerson(member)" size="sm" />
+                        </span>
+                        <strong>{{ battleDisplayName(member) }}</strong>
                         <small>{{ realmName(member.realm) }}</small>
                       </div>
                     </div>
@@ -2411,8 +2469,11 @@
                         :key="`${war.id}-defender-${member.id || member.name}`"
                         class="war-roster-card"
                       >
-                        <span class="war-portrait-frame"><CharacterPortrait :person="battlePerson(member)" size="sm" /></span>
-                        <strong>{{ member.name }}</strong>
+                        <span class="war-portrait-frame">
+                          <MonsterEmblem v-if="isBattleMonster(member)" :monster="member" size="sm" />
+                          <CharacterPortrait v-else :person="battlePerson(member)" size="sm" />
+                        </span>
+                        <strong>{{ battleDisplayName(member) }}</strong>
                         <small>{{ realmName(member.realm) }}</small>
                       </div>
                     </div>
@@ -3514,7 +3575,11 @@
                         <span class="member-badge" :class="{ player: member.isPlayer }">{{ member.isPlayer ? "你" : "NPC" }}</span>
                       </div>
                       <strong>{{ member.name }}</strong>
-                      <small>{{ genderLabel(member.gender) }} · 疲劳 {{ sectMemberFatigue(member) }}</small>
+                      <small class="sect-member-meta">
+                        <span>{{ genderLabel(member.gender) }}</span>
+                        <i aria-hidden="true">·</i>
+                        <span class="sect-member-fatigue" :class="{ tired: sectMemberFatigue(member) >= 8 }">疲劳 {{ sectMemberFatigue(member) }}</span>
+                      </small>
                     </div>
                     <div class="sect-member-power">
                       <b>{{ member.power }}</b>
@@ -3585,12 +3650,13 @@
               <div class="admin-head-actions">
                 <label class="admin-search">
                   <span>搜索</span>
-                  <input v-model.trim="adminSearch" :placeholder="adminMode === 'cultivators' ? '人物名或宗门名' : adminMode === 'sects' ? '宗门名' : '任务名或分类'">
+                  <input v-model.trim="adminSearch" :placeholder="adminMode === 'cultivators' ? '人物名或宗门名' : adminMode === 'sects' ? '宗门名' : adminMode === 'tasks' ? '任务名或分类' : '搜索指导书'">
                 </label>
                 <div class="segmented">
                   <button class="segment" :class="{ active: adminMode === 'cultivators' }" type="button" @click="adminMode = 'cultivators'">角色</button>
                   <button class="segment" :class="{ active: adminMode === 'sects' }" type="button" @click="adminMode = 'sects'">宗门</button>
                   <button class="segment" :class="{ active: adminMode === 'tasks' }" type="button" @click="adminMode = 'tasks'">现实任务</button>
+                  <button class="segment" :class="{ active: adminMode === 'wiki' }" type="button" @click="adminMode = 'wiki'">游戏指导书</button>
                 </div>
               </div>
             </div>
@@ -3783,7 +3849,7 @@
               </form>
             </div>
 
-            <div v-else class="admin-layout">
+            <div v-else-if="adminMode === 'tasks'" class="admin-layout">
               <div class="admin-list" role="list" aria-label="现实任务列表">
                 <button
                   v-for="task in filteredAdminTasks"
@@ -3868,6 +3934,45 @@
                   <button class="primary" type="submit" :disabled="isActionPending(adminTaskDraft.id ? '/api/task-definitions/update' : '/api/task-definitions')">保存任务</button>
                 </div>
               </form>
+            </div>
+
+            <div v-else class="admin-wiki-layout">
+              <aside class="admin-wiki-toc" aria-label="游戏指导书目录">
+                <div class="admin-wiki-toc-head">
+                  <BookOpen :size="19" aria-hidden="true" />
+                  <span>游戏指导书</span>
+                </div>
+                <p>规则以当前版本实际结算逻辑为准。</p>
+                <button
+                  v-for="article in filteredAdminWikiArticles"
+                  :key="article.id"
+                  class="admin-wiki-toc-row"
+                  :class="{ active: adminWikiArticleId === article.id }"
+                  type="button"
+                  @click="adminWikiArticleId = article.id"
+                >
+                  <span>{{ article.order }}</span>
+                  <strong>{{ article.title }}</strong>
+                  <small>{{ article.summary }}</small>
+                </button>
+                <div v-if="!filteredAdminWikiArticles.length" class="empty">没有匹配的指导文章。</div>
+              </aside>
+
+              <article v-if="adminWikiArticle" class="admin-wiki-reader">
+                <header>
+                  <span>{{ adminWikiArticle.order }} · {{ adminWikiArticle.category }}</span>
+                  <h3>{{ adminWikiArticle.title }}</h3>
+                  <p>{{ adminWikiArticle.summary }}</p>
+                </header>
+                <section v-for="section in adminWikiArticle.sections" :key="section.title" class="admin-wiki-section">
+                  <h4>{{ section.title }}</h4>
+                  <p v-for="paragraph in section.paragraphs" :key="paragraph">{{ paragraph }}</p>
+                  <ul v-if="section.bullets?.length">
+                    <li v-for="bullet in section.bullets" :key="bullet">{{ bullet }}</li>
+                  </ul>
+                  <p v-if="section.tip" class="admin-wiki-tip"><b>提示</b>{{ section.tip }}</p>
+                </section>
+              </article>
             </div>
           </div>
         </section>
@@ -4161,6 +4266,7 @@ const provinceWarOutcomeFilter = ref("all");
 const provinceWarTierSort = ref("default");
 const provinceResourceTypeFilter = ref("");
 const provinceResourceOwnerFilter = ref("");
+const selectedDefenseProvinceId = ref("");
 const sectPlanDraft = reactive({
   mode: "balanced",
   attackTarget: "",
@@ -4182,6 +4288,7 @@ const adminSearch = ref("");
 const adminSelectedCultivatorId = ref("player");
 const adminSelectedSectName = ref("");
 const adminSelectedTaskId = ref("");
+const adminWikiArticleId = ref("getting-started");
 const sectMemberPanelEl = ref(null);
 const sectWarPanelEl = ref(null);
 const sectWarPanelHeight = ref(0);
@@ -4215,6 +4322,305 @@ const adminTaskDraft = reactive({
   maxMultiplier: 4,
   enabled: true
 });
+const adminWikiArticles = [
+  {
+    id: "getting-started",
+    order: "01",
+    category: "入门总览",
+    title: "从一天开始的修行循环",
+    summary: "先完成现实任务，再规划突破与资源；每日结算会集中推进世界。",
+    sections: [
+      {
+        title: "一天会结算什么",
+        paragraphs: [
+          "点击“推进一天”或跨越现实子时都会触发同一套每日结算。游戏日数前进后，今日突破次数重置，宗门攻守城、领地资源、NPC 修炼、副本、灵珠自动兑换与全员切磋依次处理。",
+          "玩家每日基础获得 10 点修为；若宗门持有经验城，还会按个人分配获得额外经验。灵石则主要来自副本、领地资源、赛季奖励与任务。"
+        ],
+        bullets: [
+          "每日副本、攻守城和全员切磋均在推进一天时自动结算。",
+          "手动推进不会改变现实日期，只推进游戏内日期；自动结算在服务器跨日时触发。",
+          "气血、法力、装备与灵珠的有效属性会共同影响当日战斗结果。",
+          "当天先处理攻守城和领地灵石，再让 NPC 获得日常修为并尝试突破；玩家获得每日修为、自动突破与三类副本，最后处理灵珠和全员切磋。",
+          "玩家、NPC 的每日成长、突破、切磋、副本与灵珠流水都会写进人物详情；近期记录有保留窗口，不应把历史面板当成永久档案。"
+        ],
+        tip: "推进前可先使用丹药、安排明日战略；推进后查看日志、战报与人物记录复盘。"
+      },
+      {
+        title: "核心属性与战斗",
+        paragraphs: [
+          "攻击决定正面伤害，防御抵扣伤害，血量归零即负；神识影响先手与闪避机会，法力用于施放技能。战力面板以攻击、防御、血量、神识和法力的加权结果展示，仅用于衡量，实际胜负仍取决于回合战。",
+          "普通攻击的基础结算为“攻击×技能倍率 − 防御×(1−穿透) + 0 至 4 的随机浮动”，最低仍会造成 1 点伤害；护盾类效果在此之后按比例减伤。技能会受法力和冷却约束，无法施放时改为普通攻击。",
+          "战斗会应用灵根相克、技能冷却、法力消耗、持续状态与装备/灵珠加成。五行相克时被克方五维默认降低 10%；若被克方高出攻击方一个大境界，惩罚减半，最低仍为 1%。攻守城回放展示的是开战当日的快照，不能与之后成长过的个人面板直接比较。"
+        ],
+        bullets: [
+          "战力公式：攻击×2.8 + 防御×2 + 血量×0.42 + 神识×1.35 + 法力×0.55。",
+          "有效属性采用“基础属性×(1 + 灵根加成 + 同部位装备加成 + 灵珠加成)”后向下取整；面板基础值与战斗有效值可能不同。",
+          "持续伤害、治疗、护盾、眩晕、闪避、吸血、反伤等均由技能类型决定，建议用回放确认实际触发。"
+        ]
+      }
+    ]
+  },
+  {
+    id: "cultivation",
+    order: "02",
+    category: "修行与突破",
+    title: "境界、灵根、技能与突破",
+    summary: "经验到线后才可冲关；大境界瓶颈更难，丹药和领地可以提供助力。",
+    sections: [
+      {
+        title: "境界与突破条件",
+        paragraphs: [
+          "境界从练气到真仙，每个大境界各十层。经验达到当前层所需总经验后，才能尝试进入下一层；第十层进入下一大境界属于瓶颈，基础成功率会显著下降。",
+          "突破成功会提升基础成长并刷新气血、法力上限；失败会损失部分气血与法力，但不会倒退境界。高阶大境界瓶颈设有 1% 的最低概率上限保护。"
+        ],
+        bullets: [
+          "每日默认可尝试 1 次突破；续脉丹可在当日增加额外次数，含额外次数在内每日最多 4 次。",
+          "水灵根会提高修为获取并提升突破倍率；突破城会提供额外突破加成。",
+          "破境丹只作用于下一次突破，可叠加但最多同时保留 4 枚，成败后都会消耗。",
+          "基础概率按层数和大境界递减：一般公式为 72% − (当前小层−1)×2.8% − 大境界序号×6.8%，第十层另扣 30% + 大境界序号×4.5%；筑基十层固定 10%，结丹十层固定 6%。"
+        ],
+        tip: "经验刚满且成功率偏低时，先服用破境丹并确认今日次数，比直接反复尝试更稳妥。"
+      },
+      {
+        title: "灵根与技能",
+        paragraphs: [
+          "金、木、水、火、土、天灵根分别偏向攻击、血量、修为/突破、神识、防御和法力。多灵根会分摊对应加成；特定组合会转化为雷、风或隐灵根，并拥有更特殊的相克关系。",
+          "每位修士装备一项主动技能，技能有法力消耗与冷却。技能升级会提高战斗表现，战斗记录和回放能用于观察法力是否足够、技能是否适合当前敌人。"
+        ],
+        bullets: [
+          "单灵根获得完整属性区间：金/土为 5%–10%，木/火/天为 10%–20%，水为 40%–60% 修为；多灵根将同类加成除以灵根数。",
+          "多灵根还有额外衰减：修为倍率每多一根灵根−8%（最低 60%），突破倍率每多一根−6%（最低 70%）。",
+          "组合仅为金木土时转雷灵根，仅为水火天时转风灵根，金木水火土五根齐全时转隐灵根；特殊灵根克其组成的普通灵根，不被其他灵根相克。"
+        ]
+      }
+    ]
+  },
+  {
+    id: "tasks-market",
+    order: "03",
+    category: "现实任务与坊市",
+    title: "把现实行动转为修为与丹药规划",
+    summary: "任务是主动成长主来源；坊市丹药针对修为、突破次数和永久属性提供补强。",
+    sections: [
+      {
+        title: "现实任务结算",
+        paragraphs: [
+          "后台可配置任务名称、分类、奖励、是否量化及上限。完整任务完成一次给固定奖励；量化任务按完成量/标准数量换算，最高不超过该任务的最高倍数。",
+          "任务可补记最近 3 个游戏日。修为丹会乘算现实任务获得的修为，任务记录会写明基础修为、丹药倍率和最终收益；灵石奖励不受修为丹倍率影响。"
+        ],
+        bullets: [
+          "任务定义停用后不能提交，但历史完成记录保留。",
+          "服用更弱的修为丹不会覆盖现有更强效果；同级或更强效果会延长有效天数。",
+          "完成任务后若经验达到门槛，系统会自动尝试一次突破。",
+          "量化倍率 = 完成量 ÷ 标准数量，再限制到 0 至最高倍数；基础修为与灵石奖励都会先向下取整。",
+          "任务定义最多保留 80 项，完成记录最多保留 120 条；补记日期不能早于当前日往前第 2 日，也不能是未来日期。"
+        ]
+      },
+      {
+        title: "坊市与丹药",
+        paragraphs: [
+          "坊市价格每日浮动，购买需满足灵石与限购条件；出售按当日行情九折换灵石。今日价格 =（基础价 + 已购永久丹次数×涨价步长）×每日因子，因子范围为 0.800–1.200。修为丹提高现实任务修为；破境丹累积下一次突破成功率；续脉丹增加当日突破次数；淬体丹永久提高一项基础属性。",
+          "永久丹药存在单项服用上限，且随着购买次数价格上涨。购买、服用和出售都会反映在背包、人物属性与日志中；永久丹出售时按最近一枚的阶梯价再打九折，避免通过重复买卖获利。"
+        ],
+        bullets: [
+          "修为丹：x1.5 或 x2，持续 1、3 或 7 日，仅作用现实任务修为。",
+          "破境丹：单枚 +4%、+8%、+12% 或 +16%，每日/周期/本境界限购以具体丹方为准，最多同时存 4 枚效果。",
+          "续脉丹：当日额外 +1 或 +2 次突破，但总次数仍封顶 4。",
+          "淬体丹：攻击、防御、神识各 +2，血量、法力各 +10；每类永久药性最多服用 100 枚。"
+        ]
+      }
+    ]
+  },
+  {
+    id: "dungeons",
+    order: "04",
+    category: "副本",
+    title: "三类副本：血色禁地、虚天殿、乱星海",
+    summary: "副本每日自动运行，分别对应个人闯关、宗门协作和十日组队竞拍。",
+    sections: [
+      {
+        title: "血色禁地：单人九关",
+        paragraphs: [
+          "每位修士每日从第一洞开始连续挑战，最多九关；越深处的妖物境界与装备品质上限越高。每关胜利后，幸存者会恢复部分气血和法力再前进，败退则停止当日闯关。",
+          "每一关的通关者共享该关灵石基础包，排名前三再按 5:3:2 分配奖金包。排名会综合输出、回合数、剩余气血和法力；装备掉落在通关时立即归属获胜者，不参与赛后抽签。"
+        ],
+        bullets: [
+          "通关有机会得到灵珠碎片；失败通常获得少量灵尘。",
+          "装备部位只会自动保留当前更优者；更弱同部位装备会折价处理。",
+          "战报中的“本关灵石包”与个人实际所得有关，前三奖励只奖励该关前三。",
+          "第 n 关、当前大境界档位为 s 时：基础包为 22 + 24s + 14n 至 46 + 32s + 18n；前三奖金包为 8 + 9s + 5n 至 18 + 12s + 7n。",
+          "每关战斗上限为 13 + 关数回合；胜利后以本关结束气血/法力为基础，各恢复自身上限的 50%，再进下一关。"
+        ]
+      },
+      {
+        title: "虚天殿：宗门车轮战",
+        paragraphs: [
+          "同一宗门成员按顺序车轮挑战妖王，妖王血量和法力会在成员之间继承。妖王境界依据宗门最高境界生成：较低阶段以本境界十层为基准，随后转为下一大境界一层，最高不超过真仙。",
+          "每个胜利宗门独立进入该境界档次的灵石池判定，宗门之间平分该档次总池；宗门所得再在全体成员中分配，剩余灵石优先补给输出靠前者。通关装备会优先给输出高且该部位能提升的人，若都不能提升才给最高输出者。"
+        ],
+        bullets: [
+          "未破殿门时没有通关灵石池与装备奖励。",
+          "宗门通关成员可获得灵珠碎片判定；人物详情与副本页保留战报和回放。",
+          "第 s 个大境界档的灵石池为 90 + 82s 至 159 + 82s；同档所有通关宗门先均分，再在该宗门所有成员之间均分，余数依次补给输出靠前者。",
+          "每名成员与妖王对战最多 16 回合；妖王未被击杀时，后续成员继续面对剩余的妖王气血与法力。",
+          "装备候选按总输出降序；系统先寻找能替换该成员当前同部位装备的人，找不到才给第一名。"
+        ]
+      },
+      {
+        title: "乱星海：十日一队",
+        paragraphs: [
+          "所有修士按固定队伍参加乱星海猎妖，一期 10 天。每日同队共同挑战妖物，队伍排名综合击杀、回合数和输出；每日灵石总池按队伍排名递减分配，并记录队伍与个人输出榜。",
+          "每日只有 3% 概率生成一件装备竞拍；若有人愿意支付装备价值则最高可支付者获得，其余同场成员分红；无人竞拍时按装备价值折算灵石平分。每期结束另有 50% 概率必定结算一次装备竞拍，具体装备品质仍按妖物境界随机，高品质概率更低。"
+        ],
+        bullets: [
+          "期末未掉落时会明确记录“未发现可竞拍装备”，不是漏结算。",
+          "竞拍赢家可能自动卖出被替换的旧同部位装备，所得灵石会写入流转记录。",
+          "乱星海也会产出灵珠碎片或灵尘。",
+          "每日总池为 240 + 140s + 90×击杀队数 至 380 + 180s + 120×击杀队数，至少不低于参赛队数×10 灵石。",
+          "每队固定 10 人，妖物对一支队伍的车轮战最多 100 回合；总榜每期按 10 日累积队伍评分或个人输出统计。",
+          "期末“50% 概率一定获得一件”指每期独立一次 50% 判定；触发后才进入竞拍，未触发不补发等值装备。"
+        ],
+        tip: "不要把每日竞拍当作稳定装备来源；十日期末的 50% 判定才是该玩法的主要装备期望。"
+      }
+    ]
+  },
+  {
+    id: "sect-war",
+    order: "05",
+    category: "宗门与攻守城",
+    title: "领地资源、明日战略与妖潮守城",
+    summary: "城市提供资源；攻城队和守军会受距离、疲劳、城防与战斗胜负影响。",
+    sections: [
+      {
+        title: "城市与资源分配",
+        paragraphs: [
+          "城市按全国排名分为 S 至 E 档，S 档资源价值最高。领地提供灵石、经验或突破三类资源；同宗门成员按身份权重分配，掌门权重最高、长老其次、当日成功守城者再次，普通成员也保有基础份额。",
+          "宗门成员数同时约束可占领城市数量。城市被攻破后易主；妖潮攻破时城市会变为无主，并在短期内留下瘴气状态。"
+        ],
+        bullets: [
+          "经验城在每日结算中增加修为，灵石城增加灵石，突破城增加突破成功率。",
+          "后台可指定掌门与长老，影响资源分配身份；宗门页展示各项分润。",
+          "城市档位排序的“高到低”即 S→A→B→C→D→E。",
+          "34 座城市按全国排名换算：第 1–3 名为 S，4–8 为 A，9–14 为 B，15–21 为 C，22–28 为 D，其余为 E。",
+          "单城基准随排名变化：灵石 +14 至 +24/人，经验 +47% 至 +64%/人，突破 +3.8% 至 +6.5%/人；同类多城会累加。",
+          "资源分配权重为掌门 6、长老 3、当日成功守城者 2、普通成员 1；成员较多时掌门最高不超过总池 22%，单位长老不超过 12%。"
+        ]
+      },
+      {
+        title: "明日战略与攻城顺序",
+        paragraphs: [
+          "可为玩家宗门保存下一日的保守、均衡或激进策略，并手动指定攻城目标、攻城成员和守军；自动补位会在结算时按规则补齐。没有手动目标时，系统为各宗门生成计划。当前版本会随机打乱各宗门的计划处理顺序，不存在“占城更少必定先攻”的固定规则；同一城市一日只会被一个计划锁定。",
+          "攻城成员最多 5 人。有效攻城战力会扣除疲劳与远征距离；守城成员享受城防加成。攻守城战报会解释择城、选将、布防、疲劳、灵根相克和城防等快照因素。"
+        ],
+        bullets: [
+          "妖潮每天会随机挑选若干已占领城市，优先关注资源高、持有久、领地多的目标，并为刚被袭击的城市提供短暂保护权重。",
+          "守城胜利的成员会获得守妖灵珠碎片判定。",
+          "装备夺取只可能发生在攻守城战斗胜利方对失败方的极低概率判定；品质越高，夺取率越低。切磋绝不触发装备夺取。",
+          "疲劳范围 0–20；每点使五维降低 2.5%，满疲劳单独造成 50% 降幅。攻城每超过 1 格距离再降低 6%，最多降低 25%；攻守修正最低仍保留 45% 五维。",
+          "守城阵法使守方攻击、防御、血量、神识、法力统一提高 10%。守城后疲劳 +2；攻城基础 +3，远征每多 1 格再 +1；未参与者每天恢复 3 点。",
+          "装备抢夺仅从失败者已穿戴且非当天新得的装备中随机抽取一件：凡器 0.4%、法器 0.3%、灵器 0.2%、古宝 0.15%、法宝 0.1%、通天灵宝 0.05%。",
+          "妖潮数量随游戏日增长：第 1–49 日每天 1 场，之后每满 50 日增加 1 场，最多 4 场；S/A/B/C/D/E 城每次妖潮为 3–4/3/2–3/2/1–2/1 只妖物。"
+        ],
+        tip: "先占一座资源适配的近城建立据点，再扩张；远征与疲劳会明显拉低实际攻城战力。"
+      }
+    ]
+  },
+  {
+    id: "duel",
+    order: "06",
+    category: "切磋与赛季",
+    title: "段位切磋、积分与赛季奖励",
+    summary: "切磋是纯竞技回合战，只改变战绩和积分，不会抢装备。",
+    sections: [
+      {
+        title: "匹配与战斗",
+        paragraphs: [
+          "主动切磋只能匹配不同宗门且段位差不超过两档的对手。每日结算时，全员也会自动按段位和战力尽量匹配；没有合适对手则轮空。每场切磋均以满气血、满法力开局，结束后恢复双方状态。",
+          "胜者 +2 分，负者 -1 分，积分范围为 0 到 120。切磋记录、赛季战绩和可用回放都会写入人物详情。"
+        ],
+        bullets: [
+          "段位区间依次为：黑铁 0–14、青铜 15–29、白银 30–44、黄金 45–59、铂金 60–74、钻石 75–89、超凡大师 90–104、最强王者 105–120。",
+          "一个赛季为 60 个游戏日；赛季切换时按最终段位发放 30、60、100、150、220、320、450、650 灵石并重置赛季积分。",
+          "切磋不会造成装备丢失、不会触发装备掠夺，也不消耗副本次数。",
+          "自动匹配会优先在段位合法的候选中选择战力差较小者；同宗门修士不互相切磋，找不到对手即轮空。"
+        ]
+      }
+    ]
+  },
+  {
+    id: "equipment-pearls",
+    order: "07",
+    category: "装备与灵珠",
+    title: "装备自动择优、极低夺取与灵珠养成",
+    summary: "装备按部位选最优，灵珠靠碎片凝练；两者都会直接进入有效属性。",
+    sections: [
+      {
+        title: "装备规则",
+        paragraphs: [
+          "装备分武器、胸甲、头部、腿部、饰品五个部位，以及凡器到通天灵宝六档品质。系统会为每个部位自动装备评分更高的那一件，属性加成按对应部位作用于攻击、防御、血量、法力或神识。",
+          "血色禁地装备立即归属；虚天殿按通关输出与可提升性确定归属；乱星海通过竞拍决定归属。攻守城才存在掠取失败方装备的判定，基础概率本就极低，品质越高概率越低；切磋永不抢装备。"
+        ],
+        bullets: [
+          "若新装备无法超过当前同部位装备，会折算补偿或在竞拍中处理。",
+          "装备图鉴可查看掉落源、最近流转和当前归属。",
+          "套装会在装备库中按所属展示，优先关注能补齐当前短板的部位。",
+          "品质加成区间：凡器 3%–5%、法器 6%–9%、灵器 10%–14%、古宝 15%–20%、法宝 21%–28%、通天灵宝 30%–40%。",
+          "装备比较先看品质，再看百分比加成；每个部位只取评分最高的一件进入有效属性。"
+        ]
+      },
+      {
+        title: "灵尘、碎片与灵珠",
+        paragraphs: [
+          "副本胜利有机会掉落灵珠碎片，未获得碎片时常改为灵尘。每次每日结算，灵尘每满 10 会自动随机兑换 1 枚一阶灵珠碎片；随后系统会检查所有灵珠，碎片足够便自动凝练或升星。",
+          "灵珠最高九阶五星。凝练与升星都消耗对应阶的碎片；与自身灵根或特殊灵根契合时效果翻倍，部分特殊灵根对子灵珠也有部分契合加成。人物详情保留近 30 天的灵尘、碎片、兑换与凝练记录。"
+        ],
+        bullets: [
+          "金、木、水、火、土、天灵珠分别强化攻击、血量、修为、神识、防御、法力。",
+          "雷、风、隐灵珠提供复合效果；隐灵珠还可提供突破相关加成。",
+          "自动兑换发生在推进一天的结算阶段，不是获得灵尘的瞬间。",
+          "碎片判定基础率：血色禁地 18%、虚天殿 55%、乱星海 42%；再受洞窟深度、阶段和胜负修正，最终被限制在 8%–88%。未触发时，成功一般获得 2 + 楼层/2 向下取整的灵尘起点，失败获得 1 灵尘。",
+          "一阶凝练需要 20 枚一阶碎片；后续同阶升星费用为 6 + 阶数×5 + 下一星数×(4 + 阶数×2)，五星后升下一阶改用下一阶碎片。",
+          "灵珠基础效果随阶数和星数增长；本命灵根/特殊灵根同名灵珠为 x2，雷/风对子灵珠为 x1.25，隐灵根对子灵珠为 x1.15。"
+        ]
+      }
+    ]
+  },
+  {
+    id: "records-admin",
+    order: "08",
+    category: "记录与管理",
+    title: "日志、回放、榜单与后台管理",
+    summary: "用记录复盘数值和战斗；后台负责维护人物、宗门、任务和本指南。",
+    sections: [
+      {
+        title: "如何复盘",
+        paragraphs: [
+          "首页日志记录关键事件；人物详情汇总每日成长、突破、切磋、副本和灵珠流水；副本、攻守城、切磋都提供战斗回放。回放属性是战斗发生时的快照，因此可能与之后已成长或已换装的人物面板不同。",
+          "榜单可从个人战力、切磋段位、宗门战力、副本闯关和境界统计切换。乱星海提供队伍与个人输出两个榜单，并支持十日期榜回看。"
+        ],
+        bullets: [
+          "攻城战报可按关键词、攻破/守住结果与城市档位排序筛选。",
+          "副本日期、切磋日期和乱星海日期各自独立控制，可用于查看近期历史。",
+          "部分历史记录有保留天数上限，应在近期及时复盘。",
+          "装备单件保存最近 5 次流转；日志、战报和人物详情各有独立裁剪窗口，旧记录被清理后无法从前端恢复。",
+          "回放里的气血、法力、疲劳、距离、灵根相克和城防文字均是开战时快照；不要用当前属性反推旧战斗是否异常。"
+        ]
+      },
+      {
+        title: "后台使用边界",
+        paragraphs: [
+          "后台的角色页可维护名称、性别、技能、资源、基础属性、灵根和头像；宗门页可维护名称、头像、掌门与长老；现实任务页可新增、修改、停用或删除任务定义。保存角色时即使只改性别，也会提交完整档案。",
+          "本指导书是只读规则说明，内容依据当前游戏逻辑编写。调整后端数值、掉落概率、赛季或资源规则时，应同步更新对应文章，避免页面说明与实际结算脱节。"
+        ],
+        bullets: [
+          "修改角色基础属性会立即影响后续有效属性与战斗；已保存的旧回放不会被改写。",
+          "修改宗门掌门/长老会影响后续领地资源分配，不回溯已经结算的灵石。",
+          "后台搜索在角色、宗门、任务和指导书四个分类中独立生效；指导书按文章标题、分类、正文、列表与提示全文检索。"
+        ]
+      }
+    ]
+  }
+];
 const cropCanvas = ref(null);
 const imageEditor = reactive({
   open: false,
@@ -4676,6 +5082,19 @@ const filteredAdminTasks = computed(() => {
   ].filter(Boolean).join(" ").toLowerCase().includes(keyword));
 });
 const adminTaskDefinition = computed(() => taskDefinitions.value.find((task) => task.id === adminSelectedTaskId.value) || null);
+const filteredAdminWikiArticles = computed(() => {
+  const keyword = normalizedAdminSearch.value;
+  if (!keyword) return adminWikiArticles;
+  return adminWikiArticles.filter((article) => [
+    article.category,
+    article.title,
+    article.summary,
+    ...article.sections.flatMap((section) => [section.title, ...(section.paragraphs || []), ...(section.bullets || []), section.tip])
+  ].filter(Boolean).join(" ").toLowerCase().includes(keyword));
+});
+const adminWikiArticle = computed(() => filteredAdminWikiArticles.value.find((article) => article.id === adminWikiArticleId.value)
+  || filteredAdminWikiArticles.value[0]
+  || null);
 const dungeonRecordTabs = [
   { id: "blood", label: "血色禁地" },
   { id: "void", label: "虚天殿" },
@@ -4878,6 +5297,40 @@ const activeStarSeaCycle = computed(() => {
 });
 const activeStarSeaCycleTeams = computed(() => activeStarSeaCycle.value?.topTeams || []);
 const activeStarSeaCycleTeamList = computed(() => (Array.isArray(activeStarSeaCycleTeams.value) ? activeStarSeaCycleTeams.value : []));
+const activeStarSeaCyclePreviousRanks = computed(() => {
+  const cycle = Number(activeStarSeaCycle.value?.cycle || 0);
+  if (!cycle) return new Map();
+
+  const recordsByDay = new Map();
+  for (const dayRecord of dungeonDays.value) {
+    const record = dayRecord?.public;
+    if (record && Number(record.cycle) === cycle) recordsByDay.set(Number(record.day || dayRecord.day), record);
+  }
+  const selectedRecord = selectedDungeonDay.value?.public;
+  if (selectedRecord && Number(selectedRecord.cycle) === cycle) {
+    recordsByDay.set(Number(selectedRecord.day || selectedDungeonDay.value?.day), selectedRecord);
+  }
+  const records = [...recordsByDay.values()].filter((record) => Number.isFinite(Number(record.day)));
+  const latestDay = Math.max(...records.map((record) => Number(record.day)));
+  if (!Number.isFinite(latestDay)) return new Map();
+
+  const totals = new Map();
+  for (const record of records) {
+    if (Number(record.day) >= latestDay) continue;
+    for (const team of record.teams || []) {
+      const key = team.id || team.name;
+      if (!key) continue;
+      const current = totals.get(key) || { score: 0, damage: 0, successes: 0 };
+      current.score += Number(team.score || 0);
+      current.damage += Number(team.damage || 0);
+      current.successes += team.success ? 1 : 0;
+      totals.set(key, current);
+    }
+  }
+  return new Map([...totals.entries()]
+    .sort(([, a], [, b]) => b.score - a.score || b.damage - a.damage || b.successes - a.successes)
+    .map(([key], index) => [key, index + 1]));
+});
 const activeStarSeaCycleMemberList = computed(() => [...(activeStarSeaCycle.value?.topMembers || [])]
   .sort((a, b) => b.damage - a.damage || b.spirit - a.spirit));
 const starSeaCycleTeamRankPageCount = computed(() => Math.max(1, Math.ceil(activeStarSeaCycleTeamList.value.length / starSeaRankPageSize)));
@@ -5298,6 +5751,15 @@ const todayDuelCount = computed(() => {
   }).length || 0;
 });
 const provinceWarRecords = computed(() => gameState.value.provinceWars || []);
+const todayProvinceWarsByProvinceId = computed(() => {
+  const records = new Map();
+  for (const war of provinceWarRecords.value) {
+    if (Number(war.day) === Number(gameState.value.day) && war.provinceId && !records.has(war.provinceId)) {
+      records.set(war.provinceId, war);
+    }
+  }
+  return records;
+});
 const provinceTerritories = computed(() => {
   const owners = new Map((gameState.value.provinces || []).map((item) => [item.id, item]));
   const strategy = derived.value.sectStrategy || {};
@@ -5341,11 +5803,13 @@ const sectTerritoryRanking = computed(() => sectSummaries.value
       || a.name.localeCompare(b.name, "zh-Hans-CN")
     );
     const spiritItems = provinces.filter((province) => province.effect.type === "spirit").map((province) => ({ name: province.name, value: province.effect.value, text: province.effect.text }));
+    const dustItems = provinces.filter((province) => province.effect.type === "dust").map((province) => ({ name: province.name, value: province.effect.value, text: province.effect.text }));
     const xpItems = provinces.filter((province) => province.effect.type === "xp").map((province) => ({ name: province.name, value: province.effect.value, text: province.effect.text }));
     const breakthroughItems = provinces.filter((province) => province.effect.type === "breakthrough").map((province) => ({ name: province.name, value: province.effect.value, text: province.effect.text }));
     return {
       name: sect.name,
       provinceCount: provinces.length,
+      highestProvinceRank: Math.min(...provinces.map((province) => Number(province.rank) || 99), 99),
       provinceNames: provinces.map((province) => province.name),
       provinceHighlights: highlightedProvinces.slice(0, 5).map((province) => ({
         id: province.id,
@@ -5354,16 +5818,38 @@ const sectTerritoryRanking = computed(() => sectSummaries.value
         tier: provinceGdpTier(province.rank)
       })),
       spirit: spiritItems.reduce((sum, item) => sum + (Number(item.value) || 0), 0),
+      dust: dustItems.reduce((sum, item) => sum + (Number(item.value) || 0), 0),
       xp: xpItems.reduce((sum, item) => sum + (Number(item.value) || 0), 0),
       breakthrough: breakthroughItems.reduce((sum, item) => sum + (Number(item.value) || 0), 0),
       spiritItems,
+      dustItems,
       xpItems,
       breakthroughItems,
       resourcePlan: sect.resourcePlan || {}
     };
   })
-  .sort((a, b) => b.provinceCount - a.provinceCount || b.spirit - a.spirit || b.xp - a.xp));
+  .sort((a, b) => b.provinceCount - a.provinceCount
+    || a.highestProvinceRank - b.highestProvinceRank
+    || b.spirit - a.spirit
+    || b.dust - a.dust
+    || b.xp - a.xp
+    || a.name.localeCompare(b.name, "zh-Hans-CN")));
 const topSectTerritories = computed(() => sectTerritoryRanking.value.slice(0, 5));
+const previousProvinceCountBySectName = computed(() => {
+  const ownerByProvinceId = new Map(provinceTerritories.value.map((province) => [province.id, province.owner]));
+  for (const war of provinceWarRecords.value) {
+    if (Number(war.day) !== Number(gameState.value.day) || !war.captured || !war.provinceId) continue;
+    const ownerBefore = Object.hasOwn(war, "ownerBefore")
+      ? war.ownerBefore
+      : (war.defender === "无主之地" ? "" : war.defender || "");
+    ownerByProvinceId.set(war.provinceId, ownerBefore || "");
+  }
+  const counts = new Map(sectSummaries.value.map((sect) => [sect.name, 0]));
+  for (const owner of ownerByProvinceId.values()) {
+    if (owner) counts.set(owner, (counts.get(owner) || 0) + 1);
+  }
+  return counts;
+});
 const provinceResourceRanking = computed(() => {
   if (activeTab.value !== "sect" || activeSectSubTab.value !== "provinces") return [];
   return [...provinceTerritories.value].sort((a, b) => a.rank - b.rank);
@@ -5384,11 +5870,15 @@ const playerSectMembers = computed(() => sectMembers(sectByName(playerSectNameFo
   ...member,
   fatigue: derived.value.sectStrategy?.fatigue?.[member.id] || 0
 })));
-const playerOwnedProvinces = computed(() => provinceTerritories.value.filter((province) => province.owner === playerSectNameForPlan.value));
+const playerOwnedProvinces = computed(() => provinceTerritories.value
+  .filter((province) => province.owner === playerSectNameForPlan.value)
+  .sort((a, b) => (b.defenseValue || 0) - (a.defenseValue || 0) || (a.rank || 99) - (b.rank || 99)));
 const attackableProvinces = computed(() => provinceTerritories.value
   .filter((province) => province.owner !== playerSectNameForPlan.value)
   .sort((a, b) => (a.distance || 9) - (b.distance || 9) || (b.resourceValue || 0) - (a.resourceValue || 0)));
 const selectedAttackProvince = computed(() => provinceTerritories.value.find((province) => province.id === sectPlanDraft.attackTarget) || null);
+const selectedDefenseProvince = computed(() => playerOwnedProvinces.value
+  .find((province) => province.id === selectedDefenseProvinceId.value) || null);
 const sectPlanMemberById = computed(() => new Map(playerSectMembers.value.map((member) => [member.id, member])));
 const assignedAttackIds = computed(() => new Set(sectPlanDraft.attackMemberIds));
 const assignedDefenseIds = computed(() => new Set(Object.values(sectPlanDraft.defense).flat()));
@@ -6139,12 +6629,14 @@ function playerDailyProgressHomeLogs(day) {
   if (!record) return [];
   const xp = Number(record.xp || record.passiveXp || 0);
   const provinceSpirit = Number(record.provinceSpirit || 0);
+  const provinceDust = Number(record.provinceDust || 0);
   const duelSeasonReward = Number(record.duelSeasonReward || 0);
   const progressText = dailyProgressText(record);
-  if (!xp && !provinceSpirit && !duelSeasonReward && !progressText) return [];
+  if (!xp && !provinceSpirit && !provinceDust && !duelSeasonReward && !progressText) return [];
   const gains = [
     progressText || (xp ? `经验 +${xp}` : ""),
     provinceSpirit ? `宗门灵石包 +${provinceSpirit}` : "",
+    provinceDust ? `宗门灵尘包 +${provinceDust}` : "",
     duelSeasonReward ? `切磋赛季奖励 +${duelSeasonReward}` : ""
   ].filter(Boolean).join("，");
   return [{
@@ -6250,7 +6742,7 @@ function playerEquipmentHomeLogs(day) {
     return {
       day: drop.day || day,
       date: drop.date || dateForDay(day),
-      time: "",
+      time: logEntryMinute(drop.time || drop.createdAt) || "00:00",
       order: 760 + index,
       category: "equipment",
       type: "good",
@@ -6439,7 +6931,27 @@ function monsterStatItems(monster = {}) {
 
 function monsterShortName(name) {
   const text = String(name || "").trim();
-  return text.includes("·") ? text.split("·").pop() || text : text || "未知妖物";
+  const afterMarker = text.includes("·") ? text.split("·").pop() || text : text;
+  const provinceNames = provinceTerritories.value
+    .map((province) => province.name)
+    .sort((a, b) => b.length - a.length);
+  let shortName = afterMarker.replace(/^妖潮/, "");
+  for (const provinceName of provinceNames) {
+    if (shortName.startsWith(provinceName)) {
+      shortName = shortName.slice(provinceName.length);
+      break;
+    }
+  }
+  return shortName || "未知妖物";
+}
+
+function siegeBattleEventText(event) {
+  const text = String(event?.text || "");
+  const provinceNames = provinceTerritories.value
+    .map((province) => province.name)
+    .sort((a, b) => b.length - a.length);
+  if (!provinceNames.length) return text.replace(/妖潮·?/g, "");
+  return text.replace(new RegExp(`妖潮·?(?:${provinceNames.join("|")})?`, "g"), "");
 }
 
 function monsterArchetypeOf(monster) {
@@ -7121,6 +7633,10 @@ function provinceEffect(province) {
     const value = Math.round(8 + 16 * tier);
     return { type: province.type, value, text: `灵石包基准 +${value}/人` };
   }
+  if (province.type === "dust") {
+    const value = Math.max(1, Math.floor(Number(province.dustYield) || (1 + 3 * tier)));
+    return { type: province.type, value, text: `灵尘包基准 +${value}/人` };
+  }
   if (province.type === "xp") {
     const value = Number((0.36 + 0.28 * tier).toFixed(3));
     return { type: province.type, value, text: `经验包基准 +${Math.round(value * 100)}%/人` };
@@ -7149,6 +7665,16 @@ function provinceWarTierText(war) {
   return `城市档位 ${provinceGdpTier(rank)} · 全国第 ${rank}`;
 }
 
+function warOwnerAfterLabel(war) {
+  if (Object.hasOwn(war || {}, "ownerAfter")) return war.ownerAfter || "无主之地";
+  if (!war?.captured) return war?.defender || "无主之地";
+  return war?.kind === "monster" || war?.attacker === "妖物" ? "无主之地" : (war?.attacker || "无主之地");
+}
+
+function currentWarProvinceOwnerLabel(war) {
+  return provinceTerritories.value.find((province) => province.id === war?.provinceId)?.owner || "无主之地";
+}
+
 function provinceHighlightSortValue(province) {
   const tierOrder = { S: 0, A: 1, B: 2, C: 3, D: 4, E: 5 };
   return tierOrder[provinceGdpTier(province?.rank)] ?? 99;
@@ -7168,19 +7694,20 @@ function bonusItemsText(items, type) {
 }
 
 function resourcePlanValue(plan, type) {
-  if (!plan || !Number(plan.total)) return type === "spirit" ? "0" : "+0%";
+  if (!plan || !Number(plan.total)) return type === "spirit" || type === "dust" ? "0" : "+0%";
   const total = Number(plan.total) || 0;
-  if (type === "spirit") return `${Math.round(total)}`;
+  if (type === "spirit" || type === "dust") return `${Math.round(total)}`;
   return `+${Math.round(total * 100)}%`;
 }
 
 function resourceShareValue(value, type) {
   const amount = Number(value) || 0;
-  if (type === "spirit") return `${Math.round(amount)}`;
+  if (type === "spirit" || type === "dust") return `${Math.round(amount)}`;
   return `+${Math.round(amount * 100)}%`;
 }
 
 function provinceResourceIcon(type) {
+  if (type === "dust") return Gem;
   if (type === "xp") return Sparkles;
   if (type === "breakthrough") return Zap;
   return Coins;
@@ -7189,11 +7716,12 @@ function provinceResourceIcon(type) {
 function provinceResourceTotalValue(effect) {
   const type = effect?.type || "spirit";
   const total = (Number(effect?.value) || 0) * 10;
-  if (type === "spirit") return `${Math.round(total)}`;
+  if (type === "spirit" || type === "dust") return `${Math.round(total)}`;
   return `+${Math.round(total * 100)}%`;
 }
 
 function provinceResourceTotalLabel(effect) {
+  if (effect?.type === "dust") return `灵尘总包 ${provinceResourceTotalValue(effect)}`;
   if (effect?.type === "xp") return `经验总包 ${provinceResourceTotalValue(effect)}`;
   if (effect?.type === "breakthrough") return `突破总包 ${provinceResourceTotalValue(effect)}`;
   return `灵石总包 ${provinceResourceTotalValue(effect)}`;
@@ -7231,6 +7759,54 @@ function defendersFor(territory) {
   return cultivators.value.filter((person) => ids.has(person.id));
 }
 
+function provinceBattleRoster(territory) {
+  if (!territory.owner) return { status: "vacant", label: "无主", participants: [] };
+  const war = todayProvinceWarsByProvinceId.value.get(territory.id);
+  if (!war) {
+    return { status: "garrison", label: "现驻", participants: defendersFor(territory) };
+  }
+  const attackersWon = Boolean(war.captured);
+  const refs = attackersWon ? war.attackerLineup || [] : war.defenderLineup || [];
+  const people = new Map(cultivators.value.map((person) => [person.id, person]));
+  return {
+    status: attackersWon ? "attack" : "defense",
+    label: attackersWon ? (war.attacker === "妖物" ? "妖破" : "攻破") : "守住",
+    participants: refs.map((ref) => (ref?.kind === "monster" ? ref : people.get(ref?.id) || ref)).filter(Boolean)
+  };
+}
+
+function provinceRosterParticipantTooltip(participant) {
+  if (participant?.kind === "monster") return `${participant.name} · 妖潮攻城者`;
+  return defenderTooltip(participant);
+}
+
+function sectProvinceChange(sectName, currentCount) {
+  const previousCount = previousProvinceCountBySectName.value.get(sectName) || 0;
+  const change = Number(currentCount || 0) - previousCount;
+  if (change > 0) return { direction: "gain", text: `↑${change}`, title: `较昨日新增 ${change} 座城池` };
+  if (change < 0) return { direction: "loss", text: `↓${Math.abs(change)}`, title: `较昨日失去 ${Math.abs(change)} 座城池` };
+  return { direction: "stable", text: "—", title: "与昨日占领城市数持平" };
+}
+
+function starSeaCycleTeamRankChange(team) {
+  const key = team?.id || team?.name;
+  const currentRank = Number(team?.rank || 0);
+  const previousRank = activeStarSeaCyclePreviousRanks.value.get(key);
+  if (!currentRank || !previousRank) return { direction: "new", text: "新", title: "昨日无排名" };
+  const change = previousRank - currentRank;
+  if (change > 0) return { direction: "gain", text: `↑${change}`, title: `较昨日上升 ${change} 名` };
+  if (change < 0) return { direction: "loss", text: `↓${Math.abs(change)}`, title: `较昨日下降 ${Math.abs(change)} 名` };
+  return { direction: "stable", text: "—", title: "与昨日排名持平" };
+}
+
+function breakthroughResourcePlanTitle(plan) {
+  const candidates = plan?.priorityCandidates || [];
+  if (plan?.priorityMode === "breakthrough-ready" && candidates.length) {
+    return `今日优先：${candidates.map((item) => item.name).join("、")}已满足突破条件，获得更高突破资源权重。`;
+  }
+  return "今日暂无可突破成员，按掌门、长老、守城成员与普通成员的既有权重分配。";
+}
+
 function defenderTooltip(defender) {
   return `${defender.name} · ${realmName(defender.realm)}`;
 }
@@ -7245,25 +7821,37 @@ function syncSectPlanDraft() {
   sectPlanDraft.mode = plan.mode || "balanced";
   sectPlanDraft.attackTarget = plan.attack?.targetProvinceId || "";
   sectPlanDraft.attackMemberIds = Array.isArray(plan.attack?.memberIds) ? [...new Set(plan.attack.memberIds)].slice(0, maxSiegeTeamSize) : [];
+  const unavailableIds = new Set(sectPlanDraft.attackMemberIds);
   sectPlanDraft.defense = Object.fromEntries(Object.entries(plan.defense?.provinceIdToMemberIds || {})
-    .map(([provinceId, ids]) => [provinceId, [...new Set(Array.isArray(ids) ? ids : [])].slice(0, maxSiegeTeamSize)]));
+    .map(([provinceId, ids]) => {
+      const uniqueIds = [...new Set(Array.isArray(ids) ? ids : [])]
+        .filter((memberId) => !unavailableIds.has(memberId))
+        .slice(0, maxSiegeTeamSize);
+      uniqueIds.forEach((memberId) => unavailableIds.add(memberId));
+      return [provinceId, uniqueIds];
+    }));
+  if (!playerOwnedProvinces.value.some((province) => province.id === selectedDefenseProvinceId.value)) {
+    selectedDefenseProvinceId.value = playerOwnedProvinces.value[0]?.id || "";
+  }
 }
 
 function togglePlanAttackMember(id) {
+  if (assignedDefenseIds.value.has(id)) return;
   const next = new Set(sectPlanDraft.attackMemberIds);
   if (next.has(id)) next.delete(id);
   else if (next.size < (selectedAttackProvince.value?.attackerLimit || maxSiegeTeamSize)) next.add(id);
   sectPlanDraft.attackMemberIds = [...next];
-  for (const provinceId of Object.keys(sectPlanDraft.defense)) {
-    sectPlanDraft.defense[provinceId] = (sectPlanDraft.defense[provinceId] || []).filter((memberId) => memberId !== id);
-  }
 }
 
 function togglePlanDefender(provinceId, id) {
-  if (assignedAttackIds.value.has(id)) return;
-  const next = new Set(sectPlanDraft.defense[provinceId] || []);
-  if (next.has(id)) next.delete(id);
-  else next.add(id);
+  const currentDefenseIds = new Set(sectPlanDraft.defense[provinceId] || []);
+  if (assignedAttackIds.value.has(id) || (assignedDefenseIds.value.has(id) && !currentDefenseIds.has(id))) return;
+  const next = currentDefenseIds;
+  if (next.has(id)) {
+    next.delete(id);
+  } else {
+    next.add(id);
+  }
   const province = provinceTerritories.value.find((item) => item.id === provinceId);
   sectPlanDraft.defense[provinceId] = [...next].slice(0, province?.defenderLimit || maxSiegeTeamSize);
 }
@@ -7278,8 +7866,8 @@ function sectMemberFatigue(member) {
 
 function fatigueHelpText(member) {
   const fatigue = Math.max(0, Number(member?.fatigue) || 0);
-  const penalty = Math.round(fatigue * 3);
-  return `疲劳来自连续参与攻守城：守城当日 +1，攻城按距离增加，最高 8 点；未参战一日恢复 2 点。当前 ${fatigue} 点，使攻守城基础战力降低约 ${penalty}%。`;
+  const penalty = Math.round(fatigue * 2.5);
+  return `疲劳来自连续参与攻守城：守城当日 +2，攻城基础 +3，远征每多 1 格再 +1，最高 20 点；未参战一日恢复 3 点。当前 ${fatigue} 点，使攻守城五维降低约 ${penalty}%。`;
 }
 
 function planProvinceLabel(province) {
@@ -7739,7 +8327,7 @@ function battleName(battle, side) {
   const ref = side === "attacker"
     ? battle?.replay?.left || battle?.attacker
     : battle?.replay?.right || battle?.defender;
-  return battlePerson(ref)?.name || ref?.name || "未知修士";
+  return battleDisplayName(battlePerson(ref) || ref) || "未知修士";
 }
 
 function battleWinnerName(battle) {
@@ -7762,7 +8350,7 @@ function warKillRanking(war, side) {
     const person = battlePerson(ref);
     const key = person?.id || person?.name || ref?.id || ref?.name;
     if (!key) continue;
-    const current = kills.get(key) || { id: person?.id || ref?.id || key, name: person?.name || ref?.name || "未知修士", kills: 0 };
+    const current = kills.get(key) || { id: person?.id || ref?.id || key, name: battleDisplayName(person || ref) || "未知修士", kills: 0 };
     current.kills += 1;
     kills.set(key, current);
   }
@@ -10476,6 +11064,9 @@ watch(activeTab, () => {
     if (adminMode.value === "cultivators") syncAdminCultivatorDraft(adminCultivatorPerson.value);
     if (adminMode.value === "sects") syncAdminSectDraft(adminSelectedSectName.value);
     if (adminMode.value === "tasks") syncAdminTaskDraft(adminTaskDefinition.value || filteredAdminTasks.value[0]);
+    if (adminMode.value === "wiki" && !filteredAdminWikiArticles.value.some((article) => article.id === adminWikiArticleId.value)) {
+      adminWikiArticleId.value = filteredAdminWikiArticles.value[0]?.id || "";
+    }
   }
 });
 
@@ -10501,7 +11092,10 @@ watch([adminSearch, adminMode], () => {
     syncAdminCultivatorDraft(adminCultivatorPerson.value);
   }
   else if (adminMode.value === "sects") syncAdminSectDraft(adminSelectedSectName.value);
-  else syncAdminTaskDraft(adminTaskDefinition.value || filteredAdminTasks.value[0]);
+  else if (adminMode.value === "tasks") syncAdminTaskDraft(adminTaskDefinition.value || filteredAdminTasks.value[0]);
+  else if (!filteredAdminWikiArticles.value.some((article) => article.id === adminWikiArticleId.value)) {
+    adminWikiArticleId.value = filteredAdminWikiArticles.value[0]?.id || "";
+  }
 });
 
 watch([detailView, selectedPersonId], () => {

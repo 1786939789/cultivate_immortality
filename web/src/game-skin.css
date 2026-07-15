@@ -848,7 +848,7 @@ body::before {
 
 .loot-ticker-content {
   gap: 44px;
-  animation-duration: 32s;
+  animation-duration: 52s;
 }
 
 .brand {
@@ -8251,6 +8251,120 @@ body::before {
   padding: 10px;
 }
 
+.view.active.sect-war-room .strategy-defense-city-picker {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid rgba(62, 104, 86, .26);
+  background: rgba(229, 239, 212, .58);
+}
+
+.view.active.sect-war-room .strategy-defense-picker-label {
+  color: #426052;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.view.active.sect-war-room .strategy-defense-city-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.view.active.sect-war-room .strategy-defense-city-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 8px;
+  border: 1px solid rgba(69, 101, 77, .34);
+  border-radius: 2px;
+  background: rgba(255, 250, 226, .72);
+  color: #425342;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.view.active.sect-war-room .strategy-defense-city-option b {
+  color: #9a463b;
+  font-size: 11px;
+}
+
+.view.active.sect-war-room .strategy-defense-city-option.active {
+  border-color: #1f7061;
+  background: #276b5d;
+  color: #fff0bd;
+  box-shadow: inset 0 -2px rgba(16, 63, 55, .7);
+}
+
+.view.active.sect-war-room .strategy-defense-city-option.active b {
+  color: #ffe0a1;
+}
+
+.view.active.sect-war-room .strategy-defense-assignment-hint {
+  margin: -2px 0 0;
+  color: #655337;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.view.active.sect-war-room .plan-defender-stack .defender-chip.relocated {
+  border-style: dashed;
+  border-color: rgba(57, 113, 96, .7);
+  color: #276d5d;
+}
+
+.view.active.sect-war-room .plan-defender-stack .defender-chip.guarding-current {
+  border-color: #9b5724 !important;
+  background: linear-gradient(180deg, #9f4b2f, #753022) !important;
+  color: #fff1bd !important;
+  font-weight: 900;
+  box-shadow: inset 0 -2px rgba(73, 25, 18, .78), 0 1px 4px rgba(123, 61, 31, .34);
+}
+
+.view.active.sect-war-room .plan-defender-stack .defender-chip.guarding-current::before {
+  content: "守";
+  display: inline-grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  margin-right: 3px;
+  border: 1px solid rgba(255, 229, 159, .72);
+  border-radius: 50%;
+  color: #ffe29d;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.view.active.sect-war-room .plan-defender-stack .defender-chip.guarding-other,
+.view.active.sect-war-room .plan-defender-stack .defender-chip.guarding-other:disabled {
+  border-style: dashed;
+  border-color: rgba(99, 96, 77, .48);
+  background: rgba(202, 193, 159, .48);
+  color: #766d54;
+  opacity: .72;
+}
+
+.view.active.sect-war-room .strategy-member-row.guarding,
+.view.active.sect-war-room .strategy-member-row.guarding:disabled {
+  border-color: rgba(136, 78, 37, .4);
+  background: rgba(177, 112, 56, .1);
+  color: #84603b;
+  cursor: not-allowed;
+}
+
+.view.active.sect-war-room .strategy-member-row.guarding .strategy-member-index {
+  border-color: rgba(147, 76, 34, .48);
+  background: #a45330;
+  color: #ffe8b3;
+}
+
+.view.active.sect-war-room .war-owner-timeline {
+  margin-top: 4px;
+  color: #746044;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .view.active.sect-war-room .strategy-member-row {
   grid-template-columns: 34px minmax(110px, 1fr) auto;
   align-items: center;
@@ -9225,7 +9339,7 @@ body::before {
 .view.active.sect-war-room .sect-war-replay-panel .duel-battle-feed .battle-event {
   position: relative;
   display: grid;
-  grid-template-columns: 70px 1fr 48px;
+  grid-template-columns: 70px minmax(0, 1fr);
   gap: 8px;
   align-items: start;
   min-height: 35px;
@@ -9267,10 +9381,13 @@ body::before {
 
 .view.active.sect-war-room .sect-war-replay-panel .duel-battle-feed .battle-event p {
   margin: 0;
+  min-width: 0;
   color: #e7d2a1;
   font-size: 13px;
   line-height: 1.45;
   font-weight: 700;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .view.active .wheel-replay-panel .duel-battle-feed {
@@ -11023,6 +11140,11 @@ body::before {
   box-shadow: 0 3px 7px rgba(8, 8, 6, .4);
 }
 
+.view.active.sect-war-room .war-roster-card .monster-emblem.sm {
+  --monster-size: 46px;
+  border-radius: 2px;
+}
+
 .view.active.sect-war-room .war-roster-card strong {
   color: #fff0bf;
   font-size: 12px;
@@ -11222,6 +11344,10 @@ body::before {
   .view.active.sect-war-room .war-roster-card .character-portrait {
     width: 44px;
     height: 44px;
+  }
+
+  .view.active.sect-war-room .war-roster-card .monster-emblem.sm {
+    --monster-size: 44px;
   }
 
   .view.active.sect-war-room .war-team-defender .war-team-name {
