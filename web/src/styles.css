@@ -1375,6 +1375,86 @@ button {
   }
 }
 
+.task-cultivation-plan {
+  margin: 12px 0 18px;
+  padding: 12px 24px;
+  border: 1px solid rgba(126, 94, 47, .34);
+  border-radius: 2px;
+  background:
+    linear-gradient(180deg, rgba(255, 250, 235, .92), rgba(239, 225, 193, .84)),
+    url("/assets/tasks/task-bg-parchment.svg") center / cover no-repeat;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .34);
+}
+
+.task-cultivation-plan-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: baseline;
+}
+
+.task-cultivation-plan-head h4 { margin: 0; color: #24180d; font-size: 21px; font-weight: 900; }
+.task-cultivation-plan-head span,
+.task-cultivation-plan-head small { color: #50391e; font-size: 14px; font-weight: 800; }
+
+.plan-home-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.plan-home-grid > div,
+.strategy-forecast-card {
+  border: 1px solid rgba(29, 94, 82, .24);
+  background: rgba(220, 238, 224, .35);
+  padding: 10px;
+}
+
+.task-cultivation-plan .plan-home-grid {
+  gap: 0;
+  margin-top: 10px;
+  border-top: 1px solid rgba(126, 94, 47, .16);
+}
+
+.task-cultivation-plan .plan-home-grid > div {
+  padding: 8px 14px;
+  border: 0;
+  border-right: 1px solid rgba(126, 94, 47, .18);
+  background: transparent;
+}
+
+.task-cultivation-plan .plan-home-grid > div:first-child { padding-left: 0; }
+.task-cultivation-plan .plan-home-grid > div:last-child { border-right: 0; }
+.task-cultivation-plan .plan-home-grid span { color: #5a4020; font-size: 13px; font-weight: 800; }
+.task-cultivation-plan .plan-home-grid strong { color: #1e544d; font-size: 19px; font-weight: 900; line-height: 1.25; }
+
+.plan-home-grid span,
+.plan-home-grid strong,
+.strategy-forecast-card span,
+.strategy-forecast-card strong,
+.strategy-forecast-card small { display: block; }
+.plan-home-grid span,
+.strategy-forecast-card span { color: #6d5a44; font-size: 12px; }
+.plan-home-grid strong { margin-top: 4px; font-size: 14px; }
+.plan-home-actions { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 12px; font-size: 13px; color: #6d5a44; }
+.strategy-forecast-card { min-width: 128px; }
+.strategy-forecast-card strong { color: #1d5e52; font-size: 18px; }
+
+.battle-strategy-panel { margin-bottom: 14px; }
+.battle-strategy-options { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.battle-strategy-options button { min-height: 62px; text-align: left; }
+.battle-strategy-options button.active { border-color: #1d5e52; background: rgba(220, 238, 224, .7); }
+.battle-strategy-options strong,
+.battle-strategy-options small { display: block; }
+.battle-strategy-options small { margin-top: 4px; color: #6d5a44; line-height: 1.35; }
+
+@media (max-width: 720px) {
+  .plan-home-grid, .battle-strategy-options { grid-template-columns: 1fr 1fr; }
+  .task-cultivation-plan { margin: 0 14px 14px; }
+  .task-cultivation-plan-head { align-items: flex-start; flex-direction: column; }
+}
+
 .cave-loot-strip {
   display: flex;
   flex-wrap: wrap;

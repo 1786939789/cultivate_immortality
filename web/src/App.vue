@@ -528,6 +528,21 @@
               </div>
             </header>
 
+            <section class="task-cultivation-plan" aria-label="今日修行计划">
+              <div class="task-cultivation-plan-head">
+                <div>
+                  <h4>今日修行计划</h4>
+                  <span>还差 {{ todayPlan.remainingXp || remainingXp }} 修为</span>
+                </div>
+                <small>{{ featuredDungeonForecast }}</small>
+              </div>
+              <div class="plan-home-grid">
+                <div><span>有效任务修为</span><strong>{{ todayPlan.effectiveTaskXp || 0 }} / {{ todayPlan.fullTaskXpBudget || 360 }}</strong></div>
+                <div><span>追赶助益</span><strong>x{{ Number(todayPlan.catchup?.multiplier || 1).toFixed(2) }}</strong></div>
+                <div><span>推荐行动</span><strong>{{ todayPlan.suggestedTask?.name || "今日任务已完成" }}</strong></div>
+              </div>
+            </section>
+
             <div class="task-system-grid">
               <section class="task-bounty-board" aria-label="今日悬赏">
                 <header class="task-board-head">
@@ -596,6 +611,7 @@
                       <span>{{ normalizedTaskCategory(selectedTaskDefinition.category) }}</span>
                       <span>{{ selectedTaskTypeText }}</span>
                       <span v-if="selectedTaskDefinition.type === 'measurable'">上限 x{{ formatMultiplier(selectedTaskDefinition.maxMultiplier || 1) }}</span>
+                      <span>{{ selectedTaskProgressText }}</span>
                     </div>
 
                     <div v-if="selectedTaskDefinition.type === 'measurable'" class="task-amount-panel">
@@ -666,8 +682,8 @@
                     </div>
 
                     <div class="task-detail-footer">
-                      <button class="primary task-complete-button" :disabled="isActionPending('/api/tasks') || !selectedTaskDefinition">
-                        {{ isActionPending("/api/tasks") ? "结算中..." : "完成任务" }}
+                      <button class="primary task-complete-button" :disabled="isActionPending('/api/tasks') || !taskCanSettle">
+                        {{ isActionPending("/api/tasks") ? "结算中..." : taskCompleteButtonText }}
                       </button>
                     </div>
                   </form>
@@ -736,6 +752,30 @@
         </section>
 
         <section v-if="activeTab === 'cultivation' && cultivationSubTab === 'skills'" class="view active cultivation-surface skills-surface">
+          <div class="panel battle-strategy-panel">
+            <div class="section-head compact">
+              <div>
+                <h3>斗法策略</h3>
+                <p>策略会在切磋、副本与攻守城中改变五维倾向，回放会记录本次选择。</p>
+              </div>
+              <span class="tag">当前：{{ battleStrategyLabel(player.battleStrategy) }}</span>
+            </div>
+            <div class="battle-strategy-options" role="group" aria-label="斗法策略">
+              <button
+                v-for="strategy in battleStrategies"
+                :key="strategy.id"
+                class="secondary"
+                :class="{ active: player.battleStrategy === strategy.id }"
+                type="button"
+                :disabled="isActionPending('/api/player/battle-strategy')"
+                @click="setBattleStrategy(strategy.id)"
+              >
+                <strong>{{ strategy.label }}</strong>
+                <small>{{ battleStrategyHint(strategy.id) }}</small>
+              </button>
+            </div>
+          </div>
+
           <div class="panel">
             <div class="section-head">
               <div>
@@ -1939,6 +1979,11 @@
                   </option>
                 </select>
               </label>
+              <div v-if="selectedAttackForecast" class="strategy-forecast-card" aria-label="攻城预测">
+                <span>推演胜率</span>
+                <strong>{{ formatPercent(selectedAttackForecast.winChance) }}</strong>
+                <small>{{ selectedAttackForecast.risk }} · 远征 {{ selectedAttackForecast.distance }} 格</small>
+              </div>
               <div class="strategy-command-actions">
                 <button class="secondary" type="button" @click="resetSectPlanAuto">恢复自动</button>
                 <button class="primary" type="button" :disabled="isActionPending('/api/sect/plan')" @click="saveSectPlan">
@@ -4788,6 +4833,11 @@ const currentDateLabel = computed(() => formatDateLabel(currentDate.value));
 const taskDefinitions = computed(() => gameState.value.taskDefinitions || []);
 const enabledTaskDefinitions = computed(() => taskDefinitions.value.filter((task) => task.enabled !== false));
 const taskDailyGoal = computed(() => Math.max(6, enabledTaskDefinitions.value.length || 0));
+const taskProgressState = computed(() => {
+  const progress = gameState.value.taskProgress || {};
+  return progress.entries ? progress : { entries: progress, baseXp: 0, fullXpBudget: 360, reducedMultiplier: 0.4 };
+});
+const todayPlan = computed(() => derived.value.todayPlan || {});
 const taskSelectableDayCount = 3;
 const frontTaskCategories = computed(() => {
   const categories = [];
@@ -4887,6 +4937,24 @@ const filteredTaskDefinitions = computed(() => {
     .map(({ task }) => task);
 });
 const selectedTaskDefinition = computed(() => filteredTaskDefinitions.value.find((task) => task.id === taskForm.taskId) || filteredTaskDefinitions.value[0] || null);
+const selectedTaskProgress = computed(() => taskProgressState.value.entries?.[selectedTaskDefinition.value?.id] || { amount: 0, awardedMultiplier: 0 });
+const selectedTaskProgressText = computed(() => {
+  const task = selectedTaskDefinition.value;
+  if (!task) return "";
+  if (task.type !== "measurable") return selectedTaskProgress.value.awardedMultiplier >= 1 ? "今日已结算" : "今日可结算 1 次";
+  const max = Math.max(0.01, Number(task.targetAmount) || 1) * Math.max(1, Number(task.maxMultiplier) || 1);
+  return `已计入 ${formatTaskAmount(selectedTaskProgress.value.amount)} / ${formatTaskAmount(max)} ${task.unitName}`;
+});
+const taskCanSettle = computed(() => {
+  const task = selectedTaskDefinition.value;
+  if (!task) return false;
+  const progress = selectedTaskProgress.value;
+  if (task.type !== "measurable") return Number(progress.awardedMultiplier) < 1;
+  const target = Math.max(0.01, Number(task.targetAmount) || 1);
+  const requested = Math.min(taskAmountMax.value, Math.max(0, Number(taskForm.completedAmount) || 0));
+  return requested / target > Number(progress.awardedMultiplier || 0) + 0.000001;
+});
+const taskCompleteButtonText = computed(() => taskCanSettle.value ? "结算新增进度" : "进度已全部结算");
 const taskCategoryCounts = computed(() => enabledTaskDefinitions.value.reduce((counts, task) => {
   const category = normalizedTaskCategory(task.category);
   counts[category] = (counts[category] || 0) + 1;
@@ -4936,17 +5004,27 @@ const taskRewardPreview = computed(() => {
   const amount = task.type === "measurable" ? Math.max(0, Number(taskForm.completedAmount) || 0) : 1;
   const target = Math.max(0.01, Number(task.targetAmount) || 1);
   const maxMultiplier = Math.max(0.01, Number(task.maxMultiplier) || 1);
-  const multiplier = task.type === "measurable" ? Math.min(amount / target, maxMultiplier) : 1;
+  const completedMultiplier = task.type === "measurable" ? Math.min(amount / target, maxMultiplier) : 1;
+  const multiplier = Math.max(0, completedMultiplier - Number(selectedTaskProgress.value.awardedMultiplier || 0));
   const rawXp = Number(task.xpReward) || 0;
-  const baseXp = Math.floor(rawXp * multiplier);
+  const requestedBaseXp = Math.floor(rawXp * multiplier);
+  const usedBaseXp = Math.max(0, Number(taskProgressState.value.baseXp) || 0);
+  const fullBudget = Math.max(0, Number(taskProgressState.value.fullXpBudget) || 360);
+  const full = Math.min(requestedBaseXp, Math.max(0, fullBudget - usedBaseXp));
+  const reduced = Math.max(0, requestedBaseXp - full);
+  const baseXp = Math.floor(full + reduced * Number(taskProgressState.value.reducedMultiplier || 0.4));
   const elixirMultiplier = Math.max(1, Number(selectedTaskMultiplierRecord.value?.elixirMultiplier) || 1);
-  const xpMultiplier = Math.max(1, Number(selectedTaskMultiplierRecord.value?.totalMultiplier) || elixirMultiplier);
+  const catchupMultiplier = Math.max(1, Number(todayPlan.value.catchup?.multiplier) || 1);
+  const xpMultiplier = Math.max(1, Number(selectedTaskMultiplierRecord.value?.totalMultiplier) || elixirMultiplier) * catchupMultiplier;
   return {
     xp: Math.floor(baseXp * xpMultiplier),
     rawXp,
     baseXp,
     spirit: Math.floor((Number(task.spiritReward) || 0) * multiplier),
     multiplier,
+    completedMultiplier,
+    requestedBaseXp,
+    reducedBaseXp: reduced,
     elixirMultiplier,
     xpMultiplier
   };
@@ -4957,9 +5035,10 @@ const taskRewardFormulaText = computed(() => {
   const dayLabel = selectedTaskDayMeta.value?.label || "所选日";
   if (!task) return `${dayLabel}修为公式：请选择任务。`;
   const parts = [`基础 +${Math.floor(preview.rawXp || 0)}`];
-  if (task.type === "measurable") parts.push(`完成度 x${formatFormulaMultiplier(preview.multiplier)}`);
+  if (task.type === "measurable") parts.push(`新增进度 x${formatFormulaMultiplier(preview.multiplier)}`);
   parts.push(`丹药 x${formatFormulaMultiplier(preview.elixirMultiplier)}`);
-  return `${dayLabel}修为公式：${parts.join(" × ")} = +${preview.xp}（总加成 ${formatTaskBonusPercent(preview.xpMultiplier)}）`;
+  const budget = preview.reducedBaseXp ? "；超出有效修行预算部分按 40% 计入" : "";
+  return `${dayLabel}修为公式：${parts.join(" × ")} = +${preview.xp}（总加成 ${formatTaskBonusPercent(preview.xpMultiplier)}）${budget}`;
 });
 const selectedTaskTypeText = computed(() => {
   const task = selectedTaskDefinition.value;
@@ -5031,6 +5110,12 @@ const playerPortraitPerson = computed(() => ({
   portraitUrl: playerPortraitUrl.value
 }));
 const combatSkills = computed(() => catalog.value.combatSkills?.length ? catalog.value.combatSkills : [fallbackSkill]);
+const battleStrategies = computed(() => catalog.value.battleStrategies || [
+  { id: "balanced", label: "均衡" },
+  { id: "burst", label: "爆发" },
+  { id: "guard", label: "守势" },
+  { id: "focus", label: "凝神" }
+]);
 const homeSummary = computed(() => gameState.value.home || {});
 const skillUpgrade = computed(() => derived.value.skillUpgrade || {});
 const skillUpgradePlan = computed(() => derived.value.skillUpgradePlan || []);
@@ -5727,6 +5812,11 @@ const featuredDungeon = computed(() => ({
   realm: derived.value.nextRealm || realmName(player.value.realm),
   summary: homeSummary.value.dungeonSummary?.summary || todayDungeonSummary.value
 }));
+const featuredDungeonForecast = computed(() => {
+  const forecast = todayPlan.value.dungeonForecasts?.[0];
+  if (!forecast) return "副本预测将在日结算后生成";
+  return `${forecast.name} ${forecast.risk} · 预计胜率 ${formatPercent(forecast.winChance)}`;
+});
 const todayDungeonSummary = computed(() => {
   const day = dungeonDays.value.find((item) => item.day === gameState.value.day) || selectedDungeonDay.value;
   if (!day) return [{ key: "none", icon: "今", text: "今日副本尚未结算" }];
@@ -5947,6 +6037,10 @@ const attackableProvinces = computed(() => provinceTerritories.value
   .filter((province) => province.owner && province.owner !== playerSectNameForPlan.value)
   .sort((a, b) => (a.distance || 9) - (b.distance || 9) || (b.resourceValue || 0) - (a.resourceValue || 0)));
 const selectedAttackProvince = computed(() => provinceTerritories.value.find((province) => province.id === sectPlanDraft.attackTarget) || null);
+const selectedAttackForecast = computed(() => {
+  const province = selectedAttackProvince.value || attackableProvinces.value[0];
+  return province ? derived.value.sectStrategy?.forecasts?.[province.id] || null : null;
+});
 const selectedDefenseProvince = computed(() => playerOwnedProvinces.value
   .find((province) => province.id === selectedDefenseProvinceId.value) || null);
 const sectPlanMemberById = computed(() => new Map(playerSectMembers.value.map((member) => [member.id, member])));
@@ -6436,7 +6530,10 @@ function selectTaskDefinition(id) {
   const task = enabledTaskDefinitions.value.find((item) => item.id === id);
   if (!task) return;
   taskForm.taskId = task.id;
-  taskForm.completedAmount = task.type === "measurable" ? Number(task.targetAmount) || 1 : 1;
+  const progress = taskProgressState.value.entries?.[task.id];
+  taskForm.completedAmount = task.type === "measurable"
+    ? Math.max(Number(task.targetAmount) || 1, Number(progress?.amount) || 0)
+    : 1;
 }
 
 function adjustTaskAmount(delta) {
@@ -11003,6 +11100,24 @@ async function advanceDay() {
 
 async function upgradeSkill() {
   await act("/api/skills/upgrade", {}, { scope: "lite" });
+}
+
+function battleStrategyLabel(strategy) {
+  return battleStrategies.value.find((item) => item.id === strategy)?.label || "均衡";
+}
+
+function battleStrategyHint(strategy) {
+  return ({
+    balanced: "五维不变，适合未知对手。",
+    burst: "攻击 +8%，防御 -6%。",
+    guard: "防御 +10%，攻击 -6%，法力 +5%。",
+    focus: "神识 +10%，防御 -2%，法力 +8%。"
+  })[strategy] || "均衡应对。";
+}
+
+async function setBattleStrategy(strategy) {
+  if (strategy === player.value.battleStrategy) return;
+  await act("/api/player/battle-strategy", { strategy }, { scope: "lite" });
 }
 
 async function buyMarketItem(id) {

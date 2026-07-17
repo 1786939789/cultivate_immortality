@@ -51,6 +51,11 @@ const playerDailyBaseXp = 10;
 const taskDefinitionLimit = 80;
 const taskCompletionLimit = 120;
 const taskMultiplierRecordDays = 3;
+const taskProgressRecordDays = 15;
+const taskDailyFullXpBudget = 360;
+const taskDailyReducedXpMultiplier = 0.4;
+const permanentStatSoftCap = 36;
+const battleStrategies = ["balanced", "burst", "guard", "focus"];
 const taskCategories = ["生活", "学习", "工作", "运动"];
 const defaultTaskDefinitions = [
   { id: "task-work-hour", name: "加班", detail: "按实际投入时间记录额外工作。", type: "measurable", category: "工作", unitName: "小时", targetAmount: 1, xpReward: 100, spiritReward: 10, maxMultiplier: 4, enabled: true },
@@ -714,6 +719,46 @@ function combatSnapshot(entity, state) {
   };
 }
 
+function battleStrategyProfile(entity) {
+  const strategy = battleStrategies.includes(entity?.battleStrategy) ? entity.battleStrategy : "balanced";
+  if (strategy === "burst") return { strategy, attack: 1.08, defense: 0.94, divineSense: 1, mana: 1 };
+  if (strategy === "guard") return { strategy, attack: 0.94, defense: 1.1, divineSense: 1, mana: 1.05 };
+  if (strategy === "focus") return { strategy, attack: 1, defense: 0.98, divineSense: 1.1, mana: 1.08 };
+  return { strategy: "balanced", attack: 1, defense: 1, divineSense: 1, mana: 1 };
+}
+
+function battleStrategyLabel(strategy) {
+  return ({ balanced: "均衡", burst: "爆发", guard: "守势", focus: "凝神" })[strategy] || "均衡";
+}
+
+function applyBattleStrategy(snapshot, entity) {
+  const profile = battleStrategyProfile(entity);
+  return {
+    ...snapshot,
+    attack: Math.max(1, Math.floor(snapshot.attack * profile.attack)),
+    defense: Math.max(0, Math.floor(snapshot.defense * profile.defense)),
+    divineSense: Math.max(0, Math.floor(snapshot.divineSense * profile.divineSense)),
+    maxMana: Math.max(1, Math.floor(snapshot.maxMana * profile.mana)),
+    mana: Math.max(0, Math.floor(snapshot.mana * profile.mana)),
+    strategy: profile.strategy
+  };
+}
+
+function seededBattleRandom(seed = "") {
+  let value = 2166136261;
+  for (const char of String(seed)) {
+    value ^= char.charCodeAt(0);
+    value = Math.imul(value, 16777619);
+  }
+  return () => {
+    value += 0x6D2B79F5;
+    let next = value;
+    next = Math.imul(next ^ (next >>> 15), next | 1);
+    next ^= next + Math.imul(next ^ (next >>> 7), next | 61);
+    return ((next ^ (next >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 function applyBattleRootPenalty(snapshot, penalty) {
   if (!penalty) return snapshot;
   return {
@@ -726,11 +771,14 @@ function applyBattleRootPenalty(snapshot, penalty) {
 }
 
 function runTurnBattle(left, right, options = {}) {
+  const random = options.random || (options.seed ? seededBattleRandom(options.seed) : Math.random);
   const leftPenalty = rootCounterPenalty(right, left);
   const rightPenalty = rootCounterPenalty(left, right);
-  const a = applyBattleRootPenalty(combatSnapshot(left, options.state), leftPenalty);
-  const b = applyBattleRootPenalty(combatSnapshot(right, options.state), rightPenalty);
-  const order = a.divineSense >= b.divineSense ? ["left", "right"] : ["right", "left"];
+  const a = applyBattleRootPenalty(applyBattleStrategy(combatSnapshot(left, options.state), left), leftPenalty);
+  const b = applyBattleRootPenalty(applyBattleStrategy(combatSnapshot(right, options.state), right), rightPenalty);
+  const order = a.divineSense === b.divineSense
+    ? (random() < 0.5 ? ["left", "right"] : ["right", "left"])
+    : (a.divineSense > b.divineSense ? ["left", "right"] : ["right", "left"]);
   const maxRounds = options.maxRounds || 18;
   let leftHp = a.hp;
   let rightHp = b.hp;
@@ -748,6 +796,8 @@ function runTurnBattle(left, right, options = {}) {
 
   if (leftPenalty) pushEvent("root", `${right.name}主灵根克制${left.name}，${left.name}攻击、防御、神识降低 ${Math.round(leftPenalty * 1000) / 10}%`, { side: "left", penalty: leftPenalty });
   if (rightPenalty) pushEvent("root", `${left.name}主灵根克制${right.name}，${right.name}攻击、防御、神识降低 ${Math.round(rightPenalty * 1000) / 10}%`, { side: "right", penalty: rightPenalty });
+  if (a.strategy !== "balanced") pushEvent("strategy", `${left.name}采用${battleStrategyLabel(a.strategy)}策略`, { side: "left", strategy: a.strategy });
+  if (b.strategy !== "balanced") pushEvent("strategy", `${right.name}采用${battleStrategyLabel(b.strategy)}策略`, { side: "right", strategy: b.strategy });
 
   const sideState = (side) => side === "left"
     ? { actor: a, target: b, actorName: left.name, targetName: right.name, hp: leftHp, targetHp: rightHp, mana: leftMana, targetMana: rightMana }
@@ -820,7 +870,7 @@ function runTurnBattle(left, right, options = {}) {
 
     const baseDodge = divineSenseDodgeChance(state.target, state.actor);
     const extraDodge = effectValue(targetSide, "evasion", "chance");
-    if (Math.random() < clamp(baseDodge + extraDodge, 0, 0.62)) {
+    if (random() < clamp(baseDodge + extraDodge, 0, 0.62)) {
       pushEvent("dodge", `${state.targetName}凭神识预判避开一击`, {
         actorSide: targetSide,
         targetSide: side,
@@ -840,7 +890,7 @@ function runTurnBattle(left, right, options = {}) {
     const defense = Math.max(0, state.target.defense + defenseBonus - defensePenalty);
     const pierce = options.pierce || 0;
     const rawDamage = attack * multiplier - defense * (1 - pierce);
-    let damage = Math.max(1, Math.floor(rawDamage + Math.random() * 5));
+    let damage = Math.max(1, Math.floor(rawDamage + random() * 5));
     const reduction = effectValue(targetSide, "shield", "reduce");
     damage = Math.max(1, Math.floor(damage * (1 - reduction)));
     setHp(targetSide, state.targetHp - damage);
@@ -5021,7 +5071,8 @@ function staticCatalog() {
     equipmentSlots,
     equipmentTiers,
     equipmentCatalog,
-    duelRanks
+    duelRanks,
+    battleStrategies: battleStrategies.map((id) => ({ id, label: battleStrategyLabel(id) }))
   };
   return cachedStaticCatalog;
 }
@@ -5168,13 +5219,41 @@ function publicSectStrategy(state) {
   const owned = (state.provinces || []).filter((territory) => territory.owner === playerSect);
   const plan = normalizePlayerSectPlan(state.playerSectPlan, state.playerSectPlan?.targetDay || state.day + 1);
   const fatiguePrevious = state.sectFatiguePrevious || {};
+  const ownedIds = owned.map((territory) => territory.id);
+  const defaultAttackers = membersForSect(state, playerSect)
+    .sort((a, b) => powerOf(b.entity, state) - powerOf(a.entity, state))
+    .slice(0, maxSiegeTeamSize)
+    .map(({ entity }) => entity.id);
+  const attackerIds = plan.attack.memberIds.length ? plan.attack.memberIds : defaultAttackers;
+  const forecastByProvince = Object.fromEntries((state.provinces || [])
+    .filter((territory) => territory.owner && territory.owner !== playerSect)
+    .map((territory) => {
+      const distance = ownedIds.length ? provinceDistance(ownedIds, territory.id) : 2;
+      const attackerPower = attackerIds
+        .map((id) => cultivatorById(state, id))
+        .filter(Boolean)
+        .reduce((sum, entity) => sum + effectiveSiegePower(state, entity, distance), 0);
+      const defenderPower = (territory.defenders || [])
+        .map((id) => cultivatorById(state, id))
+        .filter(Boolean)
+        .reduce((sum, entity) => sum + effectiveSiegePower(state, entity, 1), 0);
+      const defenseValue = defenseValueForProvince(state, territory, territory.owner);
+      const winChance = estimatedWinChance(attackerPower, defenderPower + defenseValue * 2);
+      return [territory.id, {
+        winChance,
+        attackerPower,
+        defenderPower,
+        distance,
+        risk: winChance >= 0.68 ? "稳妥" : winChance >= 0.45 ? "可尝试" : "高风险"
+      }];
+    }));
   return {
     plan: { ...plan, isManual: playerSectPlanIsManual(plan) },
     fatigue: Object.fromEntries(membersForSect(state, playerSect).map(({ entity }) => [entity.id, sectFatigueOf(state, entity.id)])),
     fatiguePrevious: Object.fromEntries(membersForSect(state, playerSect)
       .filter(({ entity }) => Object.hasOwn(fatiguePrevious, entity.id))
       .map(({ entity }) => [entity.id, clamp(Math.floor(Number(fatiguePrevious[entity.id]) || 0), 0, sectFatigueMax)])),
-    ownedProvinceIds: owned.map((territory) => territory.id),
+    ownedProvinceIds: ownedIds,
     distances: Object.fromEntries((state.provinces || []).map((territory) => [territory.id, owned.length ? provinceDistance(owned.map((item) => item.id), territory.id) : 2])),
     values: Object.fromEntries((state.provinces || []).map((territory) => {
       const province = provinceById(territory.id);
@@ -5184,7 +5263,8 @@ function publicSectStrategy(state) {
         defenderLimit: province ? defenderLimitForProvince(province) : 0,
         attackerLimit: province ? attackerLimitForProvince(province) : 0
       }];
-    }))
+    })),
+    forecasts: forecastByProvince
   };
 }
 
@@ -6048,6 +6128,7 @@ function makeNpc(name, index) {
     maxMana: stats.maxMana,
     skillId,
     skillRanks: { [skillId]: 1 },
+    battleStrategy: pick(battleStrategies),
     lastSkillUpgradeDay: 0,
     spiritPearls: createSpiritPearlState(),
     spirit: 0,
@@ -6208,6 +6289,143 @@ function normalizeTaskDefinition(definition = {}, fallback = {}) {
   };
 }
 
+function normalizeTaskProgress(state) {
+  const source = state.taskProgress && typeof state.taskProgress === "object" ? state.taskProgress : {};
+  const minDay = Math.max(1, Number(state.day || 1) - taskProgressRecordDays + 1);
+  const normalized = {};
+  for (const [dayKey, entries] of Object.entries(source)) {
+    const day = Math.floor(Number(dayKey) || 0);
+    if (day < minDay || day > Number(state.day || day)) continue;
+    if (!entries || typeof entries !== "object") continue;
+    const dayEntries = {};
+    for (const [taskId, entry] of Object.entries(entries)) {
+      const amount = Math.max(0, Number(entry?.amount) || 0);
+      const awardedMultiplier = Math.max(0, Number(entry?.awardedMultiplier) || 0);
+      if (!taskId || (!amount && !awardedMultiplier)) continue;
+      dayEntries[taskId] = { amount, awardedMultiplier };
+    }
+    if (Object.keys(dayEntries).length) normalized[day] = dayEntries;
+  }
+  for (const record of state.taskCompletions || []) {
+    const day = Math.floor(Number(record?.day) || 0);
+    const taskId = String(record?.taskId || "");
+    if (!day || day < minDay || !taskId) continue;
+    normalized[day] ??= {};
+    const previous = normalized[day][taskId] || { amount: 0, awardedMultiplier: 0 };
+    const target = Math.max(0.01, Number(record.targetAmount) || 1);
+    const amount = Number(record.completedAmount) || target * Math.max(0, Number(record.multiplier) || 1);
+    normalized[day][taskId] = {
+      amount: Math.max(previous.amount, amount),
+      awardedMultiplier: Math.max(previous.awardedMultiplier, Number(record.multiplier) || 1)
+    };
+  }
+  const before = JSON.stringify(state.taskProgress || {});
+  state.taskProgress = normalized;
+  return before !== JSON.stringify(normalized);
+}
+
+function taskProgressEntry(state, day, taskId) {
+  normalizeTaskProgress(state);
+  const safeDay = Math.max(1, Math.floor(Number(day) || state.day || 1));
+  state.taskProgress[safeDay] ??= {};
+  state.taskProgress[safeDay][taskId] ??= { amount: 0, awardedMultiplier: 0 };
+  return state.taskProgress[safeDay][taskId];
+}
+
+function taskBaseXpForDay(state, day) {
+  return (state.taskCompletions || [])
+    .filter((record) => Number(record.day) === Number(day))
+    .reduce((sum, record) => sum + Math.max(0, Number(record.baseXp) || 0), 0);
+}
+
+function formatTaskProgressAmount(amount, definition) {
+  const rounded = Math.round((Number(amount) || 0) * 100) / 100;
+  return `${rounded}${definition?.unitName ? ` ${definition.unitName}` : ""}`;
+}
+
+function taskEfficiencyForDay(state, day, requestedBaseXp) {
+  const prior = taskBaseXpForDay(state, day);
+  const requested = Math.max(0, Number(requestedBaseXp) || 0);
+  const full = Math.max(0, Math.min(requested, taskDailyFullXpBudget - prior));
+  const reduced = Math.max(0, requested - full);
+  const effectiveBaseXp = Math.floor(full + reduced * taskDailyReducedXpMultiplier);
+  return {
+    priorBaseXp: prior,
+    fullBaseXp: full,
+    reducedBaseXp: reduced,
+    effectiveBaseXp,
+    multiplier: requested > 0 ? effectiveBaseXp / requested : 1
+  };
+}
+
+function playerCatchupProfile(state) {
+  const npcRealms = (state.npcs || []).map((npc) => Number(npc.realm) || 0).sort((a, b) => a - b);
+  const medianRealm = npcRealms.length ? npcRealms[Math.floor(npcRealms.length / 2)] : state.player.realm || 0;
+  const realmGap = Math.max(0, medianRealm - (Number(state.player.realm) || 0));
+  const recentMinDay = Math.max(1, Number(state.day || 1) - 6);
+  const activeDays = new Set((state.taskCompletions || [])
+    .filter((task) => Number(task.day) >= recentMinDay)
+    .map((task) => Number(task.day)))
+    .size;
+  const multiplier = activeDays > 0 && realmGap > 0
+    ? 1 + Math.min(0.2, realmGap * 0.04 + Math.max(0, 3 - activeDays) * 0.015)
+    : 1;
+  return { medianRealm, realmGap, activeDays, multiplier };
+}
+
+function publicTaskProgress(state, day = state.day) {
+  normalizeTaskProgress(state);
+  const safeDay = Math.max(1, Math.floor(Number(day) || state.day || 1));
+  return {
+    day: safeDay,
+    entries: state.taskProgress[safeDay] || {},
+    baseXp: taskBaseXpForDay(state, safeDay),
+    fullXpBudget: taskDailyFullXpBudget,
+    reducedMultiplier: taskDailyReducedXpMultiplier
+  };
+}
+
+function estimatedWinChance(leftPower, rightPower) {
+  const left = Math.max(1, Number(leftPower) || 1);
+  const right = Math.max(1, Number(rightPower) || 1);
+  return clamp(0.5 + (left - right) / Math.max(240, (left + right) * 0.9), 0.08, 0.92);
+}
+
+function publicDungeonForecasts(state) {
+  const playerPower = powerOf(state.player, state);
+  return dungeons.map((dungeon) => {
+    const recommendedPower = Math.max(48, Number(dungeon.power) || 48);
+    const winChance = estimatedWinChance(playerPower, recommendedPower);
+    return {
+      id: dungeon.id,
+      name: dungeon.name,
+      recommendedPower,
+      playerPower,
+      winChance,
+      risk: winChance >= 0.7 ? "稳妥" : winChance >= 0.45 ? "可挑战" : "高风险"
+    };
+  });
+}
+
+function publicTodayPlan(state) {
+  const catchup = playerCatchupProfile(state);
+  const progress = publicTaskProgress(state);
+  const remainingXp = Math.max(0, xpNeed(state.player.realm) - (Number(state.player.xp) || 0));
+  const taskDefinitions = (state.taskDefinitions || []).filter((task) => task.enabled !== false);
+  const suggestedTask = taskDefinitions
+    .filter((task) => !progress.entries[task.id] || Number(progress.entries[task.id].awardedMultiplier) < 1)
+    .sort((a, b) => (Number(b.xpReward) || 0) - (Number(a.xpReward) || 0))[0] || null;
+  return {
+    remainingXp,
+    effectiveTaskXp: progress.baseXp,
+    fullTaskXpBudget: progress.fullXpBudget,
+    catchup,
+    suggestedTask: suggestedTask ? { id: suggestedTask.id, name: suggestedTask.name, xpReward: suggestedTask.xpReward } : null,
+    dungeonForecasts: publicDungeonForecasts(state),
+    battleStrategy: battleStrategyProfile(state.player).strategy
+  };
+}
+
 function defaultRealityTasks() {
   return defaultTaskDefinitions.map((definition) => normalizeTaskDefinition(definition));
 }
@@ -6226,6 +6444,7 @@ function ensureTaskSystem(state) {
     state.taskCompletions = Array.isArray(state.tasks) ? [...state.tasks] : [];
     changed = true;
   }
+  changed = normalizeTaskProgress(state) || changed;
   state.tasks ??= [];
   const beforeRecords = JSON.stringify(state.taskMultiplierRecords || []);
   normalizeTaskMultiplierRecords(state);
@@ -6270,6 +6489,7 @@ export function createDefaultState() {
       maxMana: stats.maxMana,
       skillId,
       skillRanks: { [skillId]: 1 },
+      battleStrategy: "balanced",
       lastSkillUpgradeDay: 0,
       spiritPearls: createSpiritPearlState(),
       breakthroughAttemptsToday: 0,
@@ -6311,6 +6531,7 @@ export function createDefaultState() {
     tasks: [],
     taskDefinitions: defaultRealityTasks(),
     taskCompletions: [],
+    taskProgress: {},
     taskMultiplierRecords: [{ day: 1, date: openingDate, elixirMultiplier: 1, totalMultiplier: 1 }],
     npcs: npcNames.map((name, index) => makeNpc(name, index)),
     sectNameMap: {},
@@ -6678,6 +6899,10 @@ export function ensureStateShape(state) {
   state.player.id ??= "player";
   changed = ensureField(state.player, "name", "李昕纾") || changed;
   changed = ensureField(state.player, "gender", "female") || changed;
+  if (!battleStrategies.includes(state.player.battleStrategy)) {
+    state.player.battleStrategy = "balanced";
+    changed = true;
+  }
   changed = ensureTalent(state.player, { rebirth: state.rebirth }) || changed;
   state.sect ??= {
     name: state.player.sect || "落云宗",
@@ -6837,6 +7062,10 @@ export function ensureStateShape(state) {
     changed = ensureField(full, "sect", sectForNpcIndex(index)) || changed;
     changed = ensureField(full, "root", () => normalizeRoot(pick(roots))) || changed;
     changed = ensureField(full, "realm", () => Math.floor(Math.random() * 4)) || changed;
+    if (!battleStrategies.includes(full.battleStrategy)) {
+      full.battleStrategy = pick(battleStrategies);
+      changed = true;
+    }
     changed = ensureTalent(full, { rebirth: state.rebirth }) || changed;
     changed = ensureField(full, "xp", () => Math.floor(Math.random() * 90)) || changed;
     let npcBirthStats;
@@ -7078,6 +7307,7 @@ export function getPublicState(state, options = {}) {
     baseBreakChance: currentRealmInfo.baseBreakChance,
     skillUpgrade: previewSkillUpgradeForState(state, state.player),
     shop: publicShop(state),
+    todayPlan: publicTodayPlan(state),
     spiritPearls: publicSpiritPearls(state, state.player),
     sectStrategy: publicSectStrategy(state),
     sects: options.scope === "lite" ? sectSummaries.map(compactSectSummary) : sectSummaries,
@@ -7098,6 +7328,7 @@ export function getPublicState(state, options = {}) {
       tasks: state.tasks,
       taskDefinitions: state.taskDefinitions,
       taskCompletions: state.taskCompletions,
+      taskProgress: publicTaskProgress(state),
       taskMultiplierRecords: state.taskMultiplierRecords,
       log: state.log,
       logDays: publicLogDays(state),
@@ -7118,6 +7349,7 @@ export function getPublicState(state, options = {}) {
   const { adminProfiles, ...publicState } = state;
   return {
     ...publicState,
+    taskProgress: publicTaskProgress(state),
     player: publicCultivator(state.player, state, { includeRecentReplays: true, kind: "player" }),
     npcs: state.npcs.map((npc) => publicCultivator(npc, state, { kind: "npc", compact: true })),
     equipment: state.equipment.map((item) => publicEquipment(item, state)),
@@ -7171,6 +7403,7 @@ function getHomeState(state) {
     tasks: state.tasks,
     taskDefinitions: state.taskDefinitions,
     taskCompletions: state.taskCompletions,
+    taskProgress: publicTaskProgress(state),
     taskMultiplierRecords: state.taskMultiplierRecords,
     log: state.log,
     logDays: publicLogDays(state),
@@ -7197,7 +7430,8 @@ function getHomeState(state) {
       breakChance: breakthroughChanceFor(state, state.player),
       baseBreakChance: currentRealmInfo.baseBreakChance,
       skillUpgrade: previewSkillUpgradeForState(state, state.player),
-      shop: publicShop(state)
+      shop: publicShop(state),
+      todayPlan: publicTodayPlan(state)
     }
   };
 }
@@ -7552,6 +7786,7 @@ function publicCultivator(entity, state, options = {}) {
       skillId: entity.skillId,
       skillRanks: entity.skillRanks || {},
       skillRank: skillRankOf(entity, entity.skillId),
+      battleStrategy: battleStrategyProfile(entity).strategy,
       portraitUrl: compactPortraitUrl(entity.portraitUrl, entity.id, entity.portraitVariant),
       duelWins: entity.duelWins || 0,
       duelLosses: entity.duelLosses || 0,
@@ -8405,7 +8640,8 @@ export function dailySettlement(state, options = {}) {
   const playerSectXpShare = sectXpBonus(state, state.sect.name, state.player);
   const playerProvinceXp = Math.floor(playerDailyBaseXp * playerSectXpShare);
   const playerTalentXpMultiplier = talentSnapshot(state.player).xpMultiplier;
-  const playerPassiveXp = Math.floor((playerDailyBaseXp + playerProvinceXp) * playerTalentXpMultiplier);
+  const playerCatchup = playerCatchupProfile(state);
+  const playerPassiveXp = Math.floor((playerDailyBaseXp + playerProvinceXp) * playerTalentXpMultiplier * playerCatchup.multiplier);
   state.player.xp += playerPassiveXp;
   autoAttemptPlayerBreakthrough(state);
   runDailyDungeons(state, settlementDate);
@@ -8416,7 +8652,7 @@ export function dailySettlement(state, options = {}) {
   const playerProvinceSpirit = provinceResourceShareFor(state, state.sect.name, state.player, "spirit", { integer: true });
   const playerProvinceDust = provinceResourceShareFor(state, state.sect.name, state.player, "dust", { integer: true });
   const playerChanceParts = breakthroughChanceParts(state, state.player);
-  const playerProgressNote = `经验 +${playerPassiveXp}${playerProvinceXp ? `（宗门资源 +${playerProvinceXp}）` : ""}`;
+  const playerProgressNote = `经验 +${playerPassiveXp}${playerProvinceXp ? `（宗门资源 +${playerProvinceXp}）` : ""}${playerCatchup.multiplier > 1 ? `（追赶助益 x${playerCatchup.multiplier.toFixed(2)}）` : ""}`;
   state.player.dailyRecords.unshift({
     day: state.day,
     date: settlementDate,
@@ -8426,6 +8662,7 @@ export function dailySettlement(state, options = {}) {
     passiveXp: playerPassiveXp,
     provinceXp: playerProvinceXp,
     talentXpMultiplier: playerTalentXpMultiplier,
+    catchupMultiplier: playerCatchup.multiplier,
     spirit: playerDungeonSpirit + playerDuelSeasonReward + playerProvinceSpirit,
     provinceSpirit: playerProvinceSpirit,
     provinceDust: playerProvinceDust,
@@ -8468,27 +8705,47 @@ export function addTask(state, payload) {
   if (!definition.enabled) throw new Error("该现实任务已停用");
 
   const p = state.player;
-  const completedAmount = definition.type === "measurable"
-    ? Math.max(0, Number(payload.completedAmount ?? payload.amount ?? definition.targetAmount) || 0)
-    : 1;
-  if (completedAmount <= 0) throw new Error("完成量必须大于 0");
   const currentDay = Math.max(1, Math.floor(Number(state.day) || 1));
   const targetDay = Math.max(1, Math.floor(Number(payload.day ?? payload.targetDay ?? currentDay) || currentDay));
   if (targetDay > currentDay || targetDay < Math.max(1, currentDay - taskMultiplierRecordDays + 1)) {
     throw new Error("只能补记最近三天的现实任务");
   }
-  const rawMultiplier = definition.type === "measurable" ? completedAmount / definition.targetAmount : 1;
-  const multiplier = definition.type === "measurable" ? clamp(rawMultiplier, 0, definition.maxMultiplier) : 1;
-  const baseXpGain = Math.floor(definition.xpReward * multiplier);
-  const spiritGain = Math.floor(definition.spiritReward * multiplier);
+  const progress = taskProgressEntry(state, targetDay, definition.id);
+  const requestedAmount = definition.type === "measurable"
+    ? Math.max(0, Number(payload.completedAmount ?? payload.amount ?? definition.targetAmount) || 0)
+    : 1;
+  if (requestedAmount <= 0) throw new Error("完成量必须大于 0");
+  const maxAmount = definition.type === "measurable"
+    ? definition.targetAmount * definition.maxMultiplier
+    : 1;
+  const completedAmount = definition.type === "measurable"
+    ? clamp(requestedAmount, 0, maxAmount)
+    : 1;
+  if (definition.type === "complete" && progress.awardedMultiplier >= 1) {
+    throw new Error(`「${definition.name}」今日已结算，明日再来。`);
+  }
+  const nextMultiplier = definition.type === "measurable"
+    ? clamp(completedAmount / definition.targetAmount, 0, definition.maxMultiplier)
+    : 1;
+  const deltaMultiplier = Math.max(0, nextMultiplier - progress.awardedMultiplier);
+  if (deltaMultiplier <= 0.000001) {
+    throw new Error(`「${definition.name}」已计入 ${formatTaskProgressAmount(progress.amount, definition)}，提高完成量后再结算。`);
+  }
+  const requestedBaseXp = Math.floor(definition.xpReward * deltaMultiplier);
+  const efficiency = taskEfficiencyForDay(state, targetDay, requestedBaseXp);
+  const baseXpGain = efficiency.effectiveBaseXp;
+  const spiritGain = Math.floor(definition.spiritReward * deltaMultiplier);
   const dayMultiplier = taskMultiplierForDay(state, targetDay);
   const elixirMultiplier = Math.max(1, Number(dayMultiplier.totalMultiplier) || 1);
   const taskTalentMultiplier = talentSnapshot(p).xpMultiplier;
+  const catchup = playerCatchupProfile(state);
   const beforeTalentXp = Math.floor(baseXpGain * elixirMultiplier);
-  const xpMultiplier = elixirMultiplier * taskTalentMultiplier;
-  const xpGain = Math.floor(beforeTalentXp * taskTalentMultiplier);
+  const xpMultiplier = elixirMultiplier * taskTalentMultiplier * catchup.multiplier;
+  const xpGain = Math.floor(beforeTalentXp * taskTalentMultiplier * catchup.multiplier);
   p.xp += xpGain;
   p.spirit += spiritGain;
+  progress.amount = Math.max(progress.amount, completedAmount);
+  progress.awardedMultiplier = nextMultiplier;
 
   const completion = {
     id: makeId("task-done"),
@@ -8500,11 +8757,16 @@ export function addTask(state, payload) {
     unitName: definition.unitName,
     completedAmount,
     targetAmount: definition.targetAmount,
-    multiplier,
+    multiplier: deltaMultiplier,
+    completedMultiplier: nextMultiplier,
     xp: xpGain,
     baseXp: baseXpGain,
+    requestedBaseXp,
+    taskEfficiencyMultiplier: efficiency.multiplier,
+    taskBudgetReducedXp: efficiency.reducedBaseXp,
     elixirMultiplier: dayMultiplier.elixirMultiplier,
     talentMultiplier: taskTalentMultiplier,
+    catchupMultiplier: catchup.multiplier,
     xpMultiplier,
     spirit: spiritGain,
     day: targetDay,
@@ -8526,7 +8788,8 @@ export function addTask(state, payload) {
     date: completion.date
   });
   const bonusText = xpGain > baseXpGain ? `（加成 +${xpGain - baseXpGain}）` : "";
-  log(state, `完成「${definition.name}」，获得 ${xpGain} 经验${bonusText}与 ${spiritGain} 灵石。`, "gold");
+  const reducedText = efficiency.reducedBaseXp ? "，超出今日有效修行预算的部分按 40% 结算" : "";
+  log(state, `完成「${definition.name}」，获得 ${xpGain} 经验${bonusText}与 ${spiritGain} 灵石${reducedText}。`, "gold");
   autoAttemptPlayerBreakthrough(state);
 }
 
@@ -8898,6 +9161,24 @@ export function upgradePlayerSkill(state) {
   return attemptSkillUpgrade(state, state.player);
 }
 
+export function attemptBreakthrough(state) {
+  ensureStateShape(state);
+  const player = state.player;
+  if (player.realm >= realms.length - 1) throw new Error("已至当前境界尽头。 ");
+  if (player.xp < xpNeed(player.realm)) throw new Error("修为尚未圆满。 ");
+  if (breakthroughAttemptInfo(state).remaining <= 0) throw new Error("今日突破次数已用尽。 ");
+  return autoAttemptPlayerBreakthrough(state);
+}
+
+export function updatePlayerBattleStrategy(state, payload = {}) {
+  ensureStateShape(state);
+  const strategy = String(payload.strategy || "");
+  if (!battleStrategies.includes(strategy)) throw new Error("未知斗法策略。 ");
+  state.player.battleStrategy = strategy;
+  log(state, `你已将斗法策略调整为「${battleStrategyLabel(strategy)}」。`, "gold");
+  return { strategy };
+}
+
 export function runDungeon(state, id) {
   const dungeon = dungeons.find((item) => item.id === id);
   if (!dungeon) throw new Error("未知副本");
@@ -9071,11 +9352,12 @@ function queueBattleReplay(state, replay, matchId = "") {
 
 function runDuelMatch(state, left, right, options = {}) {
   const foughtAt = timestampKey();
+  const battleSeed = `duel|${state.day}|${options.matchId || "free"}|${left.id}|${right.id}|${foughtAt}`;
   const leftBefore = { ...left, duelSeason: { ...(left.duelSeason || {}) } };
   const rightBefore = { ...right, duelSeason: { ...(right.duelSeason || {}) } };
   const duelLeft = { ...left, hp: effectiveMaxHp(left, state), mana: effectiveMaxMana(left, state) };
   const duelRight = { ...right, hp: effectiveMaxHp(right, state), mana: effectiveMaxMana(right, state) };
-  const battle = runTurnBattle(duelLeft, duelRight, { state });
+  const battle = runTurnBattle(duelLeft, duelRight, { state, seed: battleSeed });
   const leftWon = battle.winner === "left";
   const winner = leftWon ? left : right;
   const loser = leftWon ? right : left;
@@ -9102,6 +9384,9 @@ function runDuelMatch(state, left, right, options = {}) {
   right.mana = effectiveMaxMana(right, state);
 
   const replay = buildReplay(leftBefore, rightBefore, battle, result, foughtAt, state);
+  replay.seed = battleSeed;
+  replay.left.strategy = battleStrategyProfile(leftBefore).strategy;
+  replay.right.strategy = battleStrategyProfile(rightBefore).strategy;
   const replayId = `duel-${state.day}-${left.id}-${right.id}-${foughtAt}`;
   replay.replayId = replayId;
   queueBattleReplay(state, replay, options.matchId || "");

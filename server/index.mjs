@@ -4,6 +4,7 @@ import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   addTask,
+  attemptBreakthrough,
   buyItem,
   changePlayerPortrait,
   createTaskDefinition,
@@ -26,6 +27,7 @@ import {
   updateCultivatorProfile,
   updateTaskDefinition,
   updatePlayerSectPlan,
+  updatePlayerBattleStrategy,
   updateSectProfile,
   upgradePlayerSkill,
   useItem
@@ -49,6 +51,7 @@ const rootDir = fileURLToPath(new URL("../", import.meta.url));
 const distDir = join(rootDir, "dist");
 const liteActionRoutes = new Set([
   "/api/tasks",
+  "/api/breakthrough",
   "/api/task-definitions",
   "/api/task-definitions/update",
   "/api/task-definitions/delete",
@@ -59,6 +62,7 @@ const liteActionRoutes = new Set([
   "/api/day/advance",
   "/api/sect/mission",
   "/api/sect/plan",
+  "/api/player/battle-strategy",
   "/api/duels/day",
   "/api/items/buy",
   "/api/items/use",
@@ -274,6 +278,7 @@ async function handleApi(req, res, url) {
   const body = await readJson(req);
   const routes = {
     "/api/tasks": (state) => addTask(state, body),
+    "/api/breakthrough": (state) => attemptBreakthrough(state),
     "/api/task-definitions": (state) => createTaskDefinition(state, body),
     "/api/task-definitions/update": (state) => updateTaskDefinition(state, body),
     "/api/task-definitions/delete": (state) => deleteTaskDefinition(state, body),
@@ -286,6 +291,7 @@ async function handleApi(req, res, url) {
     "/api/sect/mission": (state) => sectMission(state),
     "/api/sect/war": (state) => sectWar(state),
     "/api/sect/plan": (state) => updatePlayerSectPlan(state, body),
+    "/api/player/battle-strategy": (state) => updatePlayerBattleStrategy(state, body),
     "/api/duels/day": (state) => runDailyDuels(state),
     "/api/items/buy": (state) => buyItem(state, body.kind),
     "/api/items/use": (state) => useItem(state, body.kind),

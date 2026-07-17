@@ -7,6 +7,7 @@
     "dev": "node scripts/dev.mjs",
     "dev:api": "node server/index.mjs",
     "dev:web": "vite --host 127.0.0.1",
+    "check:balance": "node scripts/balance-check.mjs",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",
     "start": "node server/index.mjs"

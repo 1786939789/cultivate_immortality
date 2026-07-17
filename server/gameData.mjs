@@ -369,8 +369,8 @@ export const itemCatalog = {
     basePrice: 360,
     priceStep: 120,
     effect: { type: "permanentStat", stat: "attack", amount: 2 },
-    limit: { type: "permanent", max: 100, days: 0 },
-    text: "永久攻击 +2。"
+    limit: { type: "permanent", max: 36, days: 0 },
+    text: "永久攻击 +2。本世最多炼化 36 枚。"
   },
   xuanjia_dan: {
     name: "玄甲丹",
@@ -379,8 +379,8 @@ export const itemCatalog = {
     basePrice: 360,
     priceStep: 120,
     effect: { type: "permanentStat", stat: "defense", amount: 2 },
-    limit: { type: "permanent", max: 100, days: 0 },
-    text: "永久防御 +2。"
+    limit: { type: "permanent", max: 36, days: 0 },
+    text: "永久防御 +2。本世最多炼化 36 枚。"
   },
   jingang_cuiti_dan: {
     name: "金刚淬体丹",
@@ -389,8 +389,8 @@ export const itemCatalog = {
     basePrice: 320,
     priceStep: 100,
     effect: { type: "permanentStat", stat: "maxHp", amount: 10 },
-    limit: { type: "permanent", max: 100, days: 0 },
-    text: "永久气血上限 +10。"
+    limit: { type: "permanent", max: 36, days: 0 },
+    text: "永久气血上限 +10。本世最多炼化 36 枚。"
   },
   yanghun_dan: {
     name: "养魂丹",
@@ -399,8 +399,8 @@ export const itemCatalog = {
     basePrice: 520,
     priceStep: 180,
     effect: { type: "permanentStat", stat: "divineSense", amount: 2 },
-    limit: { type: "permanent", max: 100, days: 0 },
-    text: "永久神识 +2。"
+    limit: { type: "permanent", max: 36, days: 0 },
+    text: "永久神识 +2。本世最多炼化 36 枚。"
   },
   zhenyuan_dan: {
     name: "真元丹",
@@ -409,7 +409,7 @@ export const itemCatalog = {
     basePrice: 520,
     priceStep: 180,
     effect: { type: "permanentStat", stat: "maxMana", amount: 10 },
-    limit: { type: "permanent", max: 100, days: 0 },
-    text: "永久法力上限 +10。"
+    limit: { type: "permanent", max: 36, days: 0 },
+    text: "永久法力上限 +10。本世最多炼化 36 枚。"
   }
 };
