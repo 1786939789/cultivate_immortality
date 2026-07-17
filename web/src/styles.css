@@ -7188,6 +7188,54 @@ button.event {
   font-weight: 950;
 }
 
+.war-strategy-roster {
+  display: grid;
+  gap: 5px;
+  margin-top: 2px;
+}
+
+.war-strategy-roster > div {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 6px;
+  align-items: center;
+  border: 1px solid rgba(120, 91, 43, .16);
+  border-radius: 5px;
+  background: rgba(255, 248, 219, .58);
+  padding: 5px 6px;
+}
+
+.war-strategy-roster > div.selected {
+  border-color: rgba(15, 118, 110, .42);
+  background: rgba(218, 246, 235, .62);
+}
+
+.war-strategy-roster b {
+  border-radius: 3px;
+  background: rgba(120, 91, 43, .1);
+  color: #70583b;
+  font-size: 10px;
+  line-height: 1;
+  padding: 3px 4px;
+}
+
+.war-strategy-roster > div.selected > b {
+  background: rgba(15, 118, 110, .14);
+  color: #0f766e;
+}
+
+.war-strategy-roster strong {
+  min-width: 0;
+  font-size: 12px;
+}
+
+.war-strategy-roster small {
+  grid-column: 1 / -1;
+  color: #6b4b2b;
+  font-size: 11px;
+  line-height: 1.42;
+}
+
 .sect-territory-rank,
 .war-day-title {
   display: flex;
@@ -7307,6 +7355,25 @@ button.event {
   border-bottom: 1px dotted currentColor;
   cursor: default;
   outline: none;
+}
+
+.fatigue-delta {
+  margin-left: 4px;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.fatigue-delta.gain {
+  color: #a64032;
+}
+
+.fatigue-delta.loss {
+  color: #176750;
+}
+
+.fatigue-delta.stable {
+  color: #8a7553;
 }
 
 .sect-province-panel .event-button:has(.fatigue-help) {
@@ -7959,6 +8026,21 @@ button.event {
   gap: 9px;
 }
 
+button.sect-rank-name {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.sect-rank-name:hover strong,
+button.sect-rank-name:focus-visible strong {
+  color: #176b61;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
 .sect-emblem {
   flex: 0 0 auto;
   width: 34px;
@@ -8354,6 +8436,15 @@ button.event {
 
 .sect-province-panel .defender-chip.icon-only {
   font-size: 0;
+}
+
+button.defender-chip.person {
+  cursor: pointer;
+}
+
+button.defender-chip.person:hover .character-portrait,
+button.defender-chip.person:focus-visible .character-portrait {
+  box-shadow: 0 0 0 2px #d4af53, 0 4px 10px rgba(23, 107, 97, .32);
 }
 
 .sect-province-panel .defender-chip .character-portrait {
@@ -12626,6 +12717,62 @@ button.event {
     radial-gradient(circle at 84% 16%, rgba(33, 101, 83, .12), transparent 220px);
 }
 
+.admin-game-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin: 16px 0 4px;
+  padding: 14px 16px;
+  border: 1px solid rgba(143, 103, 47, .34);
+  border-radius: 10px;
+  background:
+    linear-gradient(100deg, rgba(250, 242, 210, .84), rgba(223, 204, 154, .52)),
+    radial-gradient(circle at 82% 48%, rgba(168, 108, 44, .18), transparent 150px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .54);
+}
+
+.admin-game-actions-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.admin-game-actions-copy > span {
+  color: #9a6b2b;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .12em;
+}
+
+.admin-game-actions-copy strong {
+  color: #3b3021;
+  font-size: 16px;
+}
+
+.admin-game-actions-copy small {
+  color: #755d3d;
+  line-height: 1.45;
+}
+
+.admin-game-actions-buttons {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 9px;
+}
+
+.admin-game-actions-buttons button {
+  min-width: 104px;
+}
+
+.admin-game-actions-buttons .danger {
+  color: #fff2e7;
+  border-color: rgba(151, 60, 44, .76);
+  background: linear-gradient(180deg, #a74735, #742d26);
+}
+
 .admin-head-actions {
   display: flex;
   flex-wrap: wrap;
@@ -13237,6 +13384,20 @@ button.event {
 
   .admin-head-actions {
     justify-content: stretch;
+  }
+
+  .admin-game-actions {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .admin-game-actions-buttons {
+    justify-content: stretch;
+  }
+
+  .admin-game-actions-buttons button {
+    flex: 1 1 140px;
   }
 
   .admin-search {

@@ -4164,6 +4164,13 @@ function defaultPlayerSectPlan(targetDay = 1) {
   };
 }
 
+function playerSectPlanIsManual(plan) {
+  if (!plan) return false;
+  if (plan.mode && plan.mode !== "balanced") return true;
+  if (plan.attack?.targetProvinceId || (plan.attack?.memberIds || []).length) return true;
+  return Object.values(plan.defense?.provinceIdToMemberIds || {}).some((ids) => Array.isArray(ids) && ids.length);
+}
+
 function provinceDistance(fromIds, targetId) {
   const starts = Array.isArray(fromIds) ? fromIds.filter(Boolean) : [fromIds].filter(Boolean);
   if (!starts.length || !targetId) return 2;
@@ -4513,6 +4520,49 @@ function lineupStrategySummary(state, members, distance = 1) {
   };
 }
 
+function siegeStrategyRoster(state, sectName, selectedIds, { role, targetProvinceId, distance = 1, manualMemberIds = [] } = {}) {
+  const selected = new Set(selectedIds || []);
+  const manual = new Set(manualMemberIds || []);
+  const assignments = new Map();
+  for (const territory of state.provinces || []) {
+    if (territory.owner !== sectName) continue;
+    for (const id of territory.defenders || []) assignments.set(id, territory.id);
+  }
+  const targetName = provinceById(targetProvinceId)?.name || "此城";
+  const roster = membersForSect(state, sectName)
+    .map(({ entity }) => ({ entity, power: effectiveSiegePower(state, entity, distance), fatigue: sectFatigueOf(state, entity.id) }))
+    .sort((a, b) => b.power - a.power || a.entity.name.localeCompare(b.entity.name, "zh-Hans-CN"));
+  const selectedNames = roster.filter((entry) => selected.has(entry.entity.id)).map((entry) => entry.entity.name);
+
+  return roster.map((entry, index) => {
+    const selectedHere = selected.has(entry.entity.id);
+    const assignedProvinceId = assignments.get(entry.entity.id);
+    const assignedName = provinceById(assignedProvinceId)?.name || "其他城池";
+    let reason;
+    if (selectedHere && role === "attack") {
+      reason = manual.has(entry.entity.id)
+        ? "按手动军令指定，列入本次攻城队。"
+        : `攻城战力排第 ${index + 1}，补入本次攻城名额。`;
+    } else if (selectedHere) {
+      reason = `守备排第 ${index + 1}，负责驻守${targetName}。`;
+    } else if (assignedProvinceId && assignedProvinceId !== targetProvinceId) {
+      reason = `已编入${assignedName}守城队，不能同日调往${targetName}。`;
+    } else if (role === "attack") {
+      reason = `攻城战力排第 ${index + 1}，本次 ${selected.size} 个名额已由${selectedNames.join("、") || "其他成员"}占用。`;
+    } else {
+      reason = `守备排第 ${index + 1}，${targetName}本次 ${selected.size} 个守城名额已确定。`;
+    }
+    return {
+      id: entry.entity.id,
+      name: entry.entity.name,
+      power: entry.power,
+      fatigue: entry.fatigue,
+      selected: selectedHere,
+      reason
+    };
+  });
+}
+
 function provinceWarStrategyForPlan(state, plan, target, province, defenderSect) {
   const attackerSect = plan.sectName;
   const ownedIds = provinceIdsForSect(state, attackerSect);
@@ -4522,6 +4572,15 @@ function provinceWarStrategyForPlan(state, plan, target, province, defenderSect)
   const attackers = lineupStrategySummary(state, plan.attack?.attackers || [], distance);
   const defenderIds = target.defenders || [];
   const defenders = lineupStrategySummary(state, defenderIds.map((id) => cultivatorById(state, id)).filter(Boolean), 1);
+  const attackerRoster = siegeStrategyRoster(state, attackerSect, (plan.attack?.attackers || []).map((member) => member.entity.id), {
+    role: "attack",
+    targetProvinceId: target.id,
+    distance,
+    manualMemberIds: plan.attack?.manualMemberIds || []
+  });
+  const defenderRoster = defenderSect
+    ? siegeStrategyRoster(state, defenderSect, defenderIds, { role: "defense", targetProvinceId: target.id })
+    : [];
   const defenderPower = defenderSect ? Math.max(1, estimateDefenderPower(state, target)) : 0;
   const winRate = defenderSect
     ? Math.round((plan.attack?.winRate ?? (attackers.totalPower / Math.max(1, attackers.totalPower + defenderPower))) * 100)
@@ -4563,7 +4622,8 @@ function provinceWarStrategyForPlan(state, plan, target, province, defenderSect)
         attackerPoint,
         attackers.topNames.length ? `主力为 ${attackers.topNames.join("、")}，当前队伍总攻城战力 ${attackers.totalPower}。` : "没有可用攻城成员。",
         attackers.tiredNames.length ? `${attackers.tiredNames.join("、")}疲劳偏高，需警惕连续出阵导致的战力衰减。` : "本次出阵成员疲劳可控。"
-      ]
+      ],
+      roster: attackerRoster
     },
     defenders: {
       title: defenderSect ? "守城布防" : "守方情报",
@@ -4571,7 +4631,8 @@ function provinceWarStrategyForPlan(state, plan, target, province, defenderSect)
         defenderPoint,
         defenderSect && defenders.topNames.length ? `守城核心为 ${defenders.topNames.join("、")}，依托城防获得阵地加成。` : "没有守城队列。",
         defenderSect ? "守城成员不会同时加入本宗攻城队，避免同日两线奔袭。" : "攻下后明日会按新归属重新安排防守。"
-      ]
+      ],
+      roster: defenderRoster
     }
   };
 }
@@ -4581,6 +4642,9 @@ function monsterWarStrategyForProvince(state, target, province, defenderSect) {
   const held = Math.max(0, Number(target.heldDays) || 0);
   const ownerCount = (state.provinces || []).filter((item) => item.owner === defenderSect).length;
   const defenders = lineupStrategySummary(state, (target.defenders || []).map((id) => cultivatorById(state, id)).filter(Boolean), 1);
+  const defenderRoster = defenderSect
+    ? siegeStrategyRoster(state, defenderSect, target.defenders || [], { role: "defense", targetProvinceId: target.id })
+    : [];
   const grade = provinceGrade(province);
   const monsterCount = provinceMonsterSiegeCount(state, province);
   return {
@@ -4588,9 +4652,9 @@ function monsterWarStrategyForProvince(state, target, province, defenderSect) {
     attack: {
       title: "妖潮择城",
       points: [
-        "妖潮优先冲击资源价值高、持有时间较久、宗门领地较多的城市。",
+        "妖潮优先冲击资源价值高、持有时间较久、宗门领地较多的城市；长期未易主会提高被选中的权重。",
         `守方当前拥有 ${ownerCount} 城，${province.name}的资源评分为 ${value}。`,
-        "近期刚遭妖潮的城市会被降低权重，避免连续袭同一城。"
+        "每次仍会按权重随机抽取，长期持有并不等于必定受袭；近期刚遭妖潮的城市会被降低权重。"
       ],
       metrics: [
         { label: "资源评分", value },
@@ -4604,7 +4668,7 @@ function monsterWarStrategyForProvince(state, target, province, defenderSect) {
       title: "妖物阵容",
       points: [
         `本次妖潮规模为 ${monsterCount} 只，城市档位越高，妖物数量越多。`,
-        "妖物强度会参考守方最高境界，妖物依次加入车轮战。"
+        "妖物境界通常低于守方最高境界一层，并依次加入车轮战。"
       ]
     },
     defenders: {
@@ -4612,7 +4676,8 @@ function monsterWarStrategyForProvince(state, target, province, defenderSect) {
       points: [
         defenders.count ? `守军 ${defenders.count} 人，总守备 ${defenders.totalPower}，核心为 ${defenders.topNames.join("、")}。` : "此城没有有效守军，妖潮极易破城。",
         "守城成员依托城防获得阵地加成，疲劳会削弱实战表现。"
-      ]
+      ],
+      roster: defenderRoster
     }
   };
 }
@@ -4649,7 +4714,19 @@ function buildSectSiegePlan(state, sectName, targeted, options = {}) {
         ? buildDefenseAssignments(state, sectName, new Set(attackers.map((member) => member.entity.id)), manualDefense, mode)
         : { assignments: new Map(), used: new Set(attackers.map((member) => member.entity.id)) };
       targeted.add(manualAttackTarget.id);
-      return { sectName, mode, defense, attack: { territory: manualAttackTarget, province, distance, attackers, playerDirected: true } };
+      return {
+        sectName,
+        mode,
+        defense,
+        attack: {
+          territory: manualAttackTarget,
+          province,
+          distance,
+          attackers,
+          playerDirected: true,
+          manualMemberIds: [...manualAttackMembers]
+        }
+      };
     }
   }
 
@@ -4947,9 +5024,14 @@ function publicShop(state) {
 function publicSectStrategy(state) {
   const playerSect = state.sect.name;
   const owned = (state.provinces || []).filter((territory) => territory.owner === playerSect);
+  const plan = normalizePlayerSectPlan(state.playerSectPlan, state.playerSectPlan?.targetDay || state.day + 1);
+  const fatiguePrevious = state.sectFatiguePrevious || {};
   return {
-    plan: normalizePlayerSectPlan(state.playerSectPlan, state.playerSectPlan?.targetDay || state.day + 1),
+    plan: { ...plan, isManual: playerSectPlanIsManual(plan) },
     fatigue: Object.fromEntries(membersForSect(state, playerSect).map(({ entity }) => [entity.id, sectFatigueOf(state, entity.id)])),
+    fatiguePrevious: Object.fromEntries(membersForSect(state, playerSect)
+      .filter(({ entity }) => Object.hasOwn(fatiguePrevious, entity.id))
+      .map(({ entity }) => [entity.id, clamp(Math.floor(Number(fatiguePrevious[entity.id]) || 0), 0, sectFatigueMax)])),
     ownedProvinceIds: owned.map((territory) => territory.id),
     distances: Object.fromEntries((state.provinces || []).map((territory) => [territory.id, owned.length ? provinceDistance(owned.map((item) => item.id), territory.id) : 2])),
     values: Object.fromEntries((state.provinces || []).map((territory) => {
@@ -5274,6 +5356,7 @@ function applyPlannedDefenders(state, plans) {
 
 function updateSectFatigue(state, plans) {
   state.sectFatigue ??= {};
+  state.sectFatiguePrevious = { ...state.sectFatigue };
   const active = new Map();
   for (const plan of plans || []) {
     for (const ids of plan.defense?.assignments?.values?.() || []) {
@@ -5327,9 +5410,10 @@ function makeSiegeMonsterForProvince(state, province, defenderSect, index = 0) {
   const highestRealm = defenders.length ? Math.max(...defenders.map(({ entity }) => entity.realm || 0)) : state.player.realm;
   const stage = stageIndexOfRealm(highestRealm);
   const tier = provinceTier(province);
-  const realm = capRealm(highestRealm + Math.max(0, Math.floor(tier / 2) - 1));
+  // A city siege should pressure a garrison without routinely exceeding its strongest defender.
+  const realm = capRealm(highestRealm - 1);
   const monsterName = monsterNameForStage(stage, `province-monster|${state.day}|${province.id}|${index}`);
-  return makeMonster(`妖潮·${province.name}${monsterName}`, realm, pick(roots).key, 0.9 + tier * 0.18 + Math.min(0.35, (state.day || 1) / 500));
+  return makeMonster(`妖潮·${province.name}${monsterName}`, realm, pick(roots).key, 0.62 + tier * 0.1 + Math.min(0.14, (state.day || 1) / 1000));
 }
 
 function monsterEntityRef(monster) {
@@ -5421,7 +5505,8 @@ function pickMonsterSiegeTargets(state, targeted = new Set()) {
         const value = provinceResourceValue(province, state, territory.owner);
         const held = Math.max(0, Number(territory.heldDays) || 0);
         const protection = Math.max(0, 3 - (state.day - Number(territory.lastMonsterSiegeDay || 0))) * 40;
-        return { territory, weight: Math.max(1, value * 1.2 + ownerCount * 4 + held * 2 - protection) };
+        const longHeldBias = Math.min(220, Math.max(0, held - 2) * 12);
+        return { territory, weight: Math.max(1, 42 + value * 1.1 + ownerCount * 4 + longHeldBias - protection) };
       });
     const total = weighted.reduce((sum, item) => sum + item.weight, 0);
     let roll = Math.random() * total;
@@ -6091,6 +6176,7 @@ export function createDefaultState() {
     sectProfiles: Object.fromEntries(sects.map((name) => [name, { name, portraitUrl: "", leaderId: "", elderIds: [] }])),
     playerSectPlan: defaultPlayerSectPlan(2),
     sectFatigue: {},
+    sectFatiguePrevious: {},
     provinceVersion,
     provinces: createNeutralProvinceState(),
     provinceWars: [],
@@ -6483,7 +6569,16 @@ export function ensureStateShape(state) {
   state.sect.warWins ??= 0;
   state.sect.warLosses ??= 0;
   state.playerSectPlan = normalizePlayerSectPlan(state.playerSectPlan, state.playerSectPlan?.targetDay || (state.day + 1));
+  const plannedTarget = state.playerSectPlan.attack.targetProvinceId
+    ? provinceStateById(state, state.playerSectPlan.attack.targetProvinceId)
+    : null;
+  if (plannedTarget && (!plannedTarget.owner || plannedTarget.owner === state.sect.name)) {
+    state.playerSectPlan.attack.targetProvinceId = "";
+    state.playerSectPlan.attack.memberIds = [];
+    changed = true;
+  }
   state.sectFatigue ??= {};
+  state.sectFatiguePrevious ??= {};
   state.shop ??= {};
   state.shop.purchases ??= {};
   state.shop.permanentPurchases ??= {};
@@ -8921,33 +9016,34 @@ function syncDuelDayRecords(state) {
   }
 }
 
-export function duel(state, index) {
-  const npc = state.npcs[Number(index)];
-  if (!npc) throw new Error("未知对手");
-  if (!canDuelMatch(state.player, npc)) {
-    if ((state.player.sect || "") && state.player.sect === npc.sect) throw new Error("同宗门修士不进行切磋。");
-    throw new Error("段位相差超过两个段位，无法匹配切磋。");
-  }
-  const { replay } = runDuelMatch(state, state.player, npc, { logPlayer: true });
-
-  return replay;
-}
-
 function findDuelOpponentIndex(state, queue, current) {
-  let bestIndex = -1;
-  let bestScore = Infinity;
-  for (let index = 0; index < queue.length; index += 1) {
-    const candidate = queue[index];
-    if (!canDuelMatch(current.entity, candidate.entity)) continue;
-    const rankGap = duelRankGap(current.entity, candidate.entity);
-    const powerGap = Math.abs(powerOf(current.entity, state) - powerOf(candidate.entity, state));
-    const score = powerGap * 100 + rankGap * 10 + index * 0.01;
-    if (score < bestScore) {
-      bestScore = score;
-      bestIndex = index;
-    }
+  const currentPower = powerOf(current.entity, state);
+  const recentOpponentIds = new Set(
+    (current.entity.duelHistory || [])
+      .filter((record) => Number(record.day || 0) >= state.day - 3)
+      .map((record) => record.opponentId)
+      .filter(Boolean)
+  );
+  const candidates = queue.flatMap((candidate, index) => {
+    if (!canDuelMatch(current.entity, candidate.entity)) return [];
+
+    const candidatePower = powerOf(candidate.entity, state);
+    const powerGap = Math.abs(currentPower - candidatePower);
+    const powerScale = Math.max(120, Math.max(currentPower, candidatePower) * 0.25);
+    const rankWeight = [1, 0.45, 0.15][duelRankGap(current.entity, candidate.entity)] || 0.1;
+    const powerWeight = Math.exp(-powerGap / powerScale);
+    const rematchWeight = recentOpponentIds.has(candidate.entity.id) ? 0.18 : 1;
+    return [{ index, weight: Math.max(0.01, rankWeight * powerWeight * rematchWeight) }];
+  });
+  if (!candidates.length) return -1;
+
+  const totalWeight = candidates.reduce((sum, candidate) => sum + candidate.weight, 0);
+  let roll = Math.random() * totalWeight;
+  for (const candidate of candidates) {
+    roll -= candidate.weight;
+    if (roll <= 0) return candidate.index;
   }
-  return bestIndex;
+  return candidates[candidates.length - 1].index;
 }
 
 export function runDailyDuels(state) {
@@ -8962,9 +9058,8 @@ export function runDailyDuels(state) {
     { entity: state.player, kind: "player" },
     ...state.npcs.map((npc) => ({ entity: npc, kind: "npc" }))
   ];
-  const shuffled = shuffle(roster);
   const matches = [];
-  const queue = [...shuffled].sort((a, b) => duelRankIndex(a.entity) - duelRankIndex(b.entity) || powerOf(a.entity, state) - powerOf(b.entity, state));
+  const queue = shuffle(roster);
   let order = 1;
 
   while (queue.length) {
@@ -9059,7 +9154,12 @@ export function sellItem(state, kind) {
 
 export function updatePlayerSectPlan(state, payload = {}) {
   ensureStateShape(state);
-  state.playerSectPlan = normalizePlayerSectPlan(payload, state.day + 1);
+  const plan = normalizePlayerSectPlan(payload, state.day + 1);
+  const target = plan.attack.targetProvinceId ? provinceStateById(state, plan.attack.targetProvinceId) : null;
+  if (target && (!target.owner || target.owner === state.sect.name)) {
+    throw new Error("明日战略只能指定其他宗门占领的城市。");
+  }
+  state.playerSectPlan = plan;
   log(state, `已保存${state.sect.name}第 ${state.day + 1} 天明日战略。`, "gold");
   return state.playerSectPlan;
 }

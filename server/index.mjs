@@ -9,7 +9,6 @@ import {
   createTaskDefinition,
   dailySettlement,
   deleteTaskDefinition,
-  duel,
   getDuelReplay,
   getDuelReplayId,
   getCultivatorPortrait,
@@ -60,7 +59,6 @@ const liteActionRoutes = new Set([
   "/api/day/advance",
   "/api/sect/mission",
   "/api/sect/plan",
-  "/api/duel",
   "/api/duels/day",
   "/api/items/buy",
   "/api/items/use",
@@ -288,7 +286,6 @@ async function handleApi(req, res, url) {
     "/api/sect/mission": (state) => sectMission(state),
     "/api/sect/war": (state) => sectWar(state),
     "/api/sect/plan": (state) => updatePlayerSectPlan(state, body),
-    "/api/duel": (state) => duel(state, body.index),
     "/api/duels/day": (state) => runDailyDuels(state),
     "/api/items/buy": (state) => buyItem(state, body.kind),
     "/api/items/use": (state) => useItem(state, body.kind),
@@ -305,7 +302,7 @@ async function handleApi(req, res, url) {
 
   const requestedScope = body.scope === "lite" || body.scope === "full" ? body.scope : "";
   const scope = requestedScope || (liteActionRoutes.has(url.pathname) ? "lite" : "full");
-  const storageOptions = url.pathname === "/api/duel" || url.pathname === "/api/duels/day"
+  const storageOptions = url.pathname === "/api/duels/day"
     ? { skipReplayExtraction: true, deferPersist: true }
     : undefined;
   const resultOnly = url.pathname === "/api/duels/day";

@@ -100,8 +100,6 @@
           <strong>{{ countdown }}</strong>
           <small>子时换日，诸事结算</small>
         </div>
-        <button class="secondary" :disabled="isActionPending('/api/day/advance')" @click="advanceDay">{{ isActionPending("/api/day/advance") ? "结算中..." : "推进一天" }}</button>
-        <button class="danger" :disabled="isActionPending('/api/reset')" @click="resetGame">重开一世</button>
         <div class="account-menu" :class="{ open: accountMenuOpen }" @click.stop>
           <button class="account-trigger" type="button" :aria-expanded="accountMenuOpen" aria-label="账号菜单" @click="toggleAccountMenu">
             <span class="account-avatar">{{ accountInitial }}</span>
@@ -1480,7 +1478,7 @@
                       <strong>第 {{ activeStarSeaCycle.cycle }} 期{{ activeStarSeaCycleBoard === "teams" ? "总评分榜" : "个人输出榜" }}</strong>
                       <span>第 {{ activeStarSeaCycle.cycleStartDay }}-{{ activeStarSeaCycle.cycleEndDay }} 日 · {{ activeStarSeaCycle.settled ? "已结算" : "进行中" }} · 已计 {{ activeStarSeaCycle.dayCount || 0 }}/10 日 · {{ activeStarSeaCycleBoard === "teams" ? "按队伍总评分" : "按个人累计输出" }}</span>
                     </div>
-                    <em>{{ starSeaCycleRewardText(activeStarSeaCycle) }}</em>
+                    <em v-if="starSeaCycleRewardText(activeStarSeaCycle)">{{ starSeaCycleRewardText(activeStarSeaCycle) }}</em>
                   </div>
                   <div v-if="activeStarSeaCycleBoard === 'teams'" class="star-sea-cycle-board-list" v-show="pagedStarSeaCycleTeams.length">
                     <div
@@ -1785,10 +1783,10 @@
                 <div class="sect-territory-rank">
                   <span class="sect-rank-medal">{{ index + 1 }}</span>
                 </div>
-                <div class="sect-rank-name">
+                <button class="sect-rank-name" type="button" :aria-label="`查看${sect.name}宗门属性`" @click="openSectTerritoryDetail(sect.name)">
                   <span class="sect-emblem" :style="{ background: sectColor(sect.name) }">{{ sect.name.slice(0, 1) }}</span>
                   <strong>{{ sect.name }}</strong>
-                </div>
+                </button>
                 <span class="rank-number territory-count">
                   <b>{{ sect.provinceCount }}</b>
                   <small
@@ -1877,16 +1875,28 @@
                 <span v-if="provinceBattleRoster(territory).participants.length" class="province-battle-roster">
                   <small class="province-roster-label" :class="provinceBattleRoster(territory).status">{{ provinceBattleRoster(territory).label }}</small>
                   <span class="defender-stack">
-                    <span
+                    <template
                       v-for="participant in provinceBattleRoster(territory).participants"
                       :key="`${territory.id}-${provinceBattleRoster(territory).status}-${participant.id}`"
-                      class="defender-chip icon-only"
-                      :class="{ monster: participant.kind === 'monster' }"
-                      :aria-label="provinceRosterParticipantTooltip(participant)"
                     >
-                      <MonsterEmblem v-if="participant.kind === 'monster'" :monster="participant" size="xs" />
-                      <CharacterPortrait v-else :person="participant" size="xs" />
-                    </span>
+                      <span
+                        v-if="participant.kind === 'monster'"
+                        class="defender-chip icon-only monster"
+                        :aria-label="provinceRosterParticipantTooltip(participant)"
+                      >
+                        <MonsterEmblem :monster="participant" size="xs" />
+                      </span>
+                      <button
+                        v-else
+                        class="defender-chip icon-only person"
+                        type="button"
+                        :aria-label="`查看${provinceRosterParticipantTooltip(participant)}的个人属性`"
+                        :title="`${provinceRosterParticipantTooltip(participant)} · 点击查看个人属性`"
+                        @click="openProvinceRosterPerson(participant)"
+                      >
+                        <CharacterPortrait :person="participant" size="xs" />
+                      </button>
+                    </template>
                   </span>
                 </span>
                 <span v-else>{{ territory.owner ? "暂无参战人员" : "无主无驻守" }}</span>
@@ -1899,9 +1909,9 @@
             <div class="section-head compact sect-panel-title strategy-board-heading">
               <div class="strategy-title-copy">
                 <h3>明日战略</h3>
-                <p>第 {{ planTargetDay }} 天执行；未设置的攻守由宗门自行补齐。</p>
+                <p>第 {{ planTargetDay }} 天执行 · {{ sectPlanControlLabel }}；未设置的攻守由宗门自行补齐。</p>
               </div>
-              <span class="strategy-sect-mark">{{ playerSectNameForPlan || "本宗" }} · 军令台</span>
+              <span class="strategy-sect-mark">{{ playerSectNameForPlan || "本宗" }} · {{ sectPlanControlLabel }}</span>
             </div>
             <div class="strategy-command-deck">
               <div class="strategy-mode-field">
@@ -1966,6 +1976,7 @@
                       <b>战力 {{ formatCompact(personPower(member)) }}</b>
                       <span class="fatigue-help" tabindex="0" @click.stop>
                         疲劳 {{ member.fatigue || 0 }}
+                        <em v-if="fatigueDelta(member).known" class="fatigue-delta" :class="fatigueDelta(member).direction">{{ fatigueDelta(member).text }}</em>
                         <span class="fatigue-tooltip" role="tooltip">{{ fatigueHelpText(member) }}</span>
                       </span>
                     </span>
@@ -2157,6 +2168,13 @@
                     <p v-for="(point, index) in section.points" :key="point">
                       <b class="war-strategy-point-type">{{ warStrategyPointType(section.key, index) }}</b>{{ point }}
                     </p>
+                    <div v-if="section.roster.length" class="war-strategy-roster" :aria-label="`${section.title}完整名单`">
+                      <div v-for="member in section.roster" :key="`${section.key}-${member.id}`" :class="{ selected: member.selected }">
+                        <b>{{ member.selected ? "入选" : "未选" }}</b>
+                        <strong>{{ member.name }}</strong>
+                        <small>战力 {{ member.power }} · 疲劳 {{ member.fatigue }} · {{ member.reason }}</small>
+                      </div>
+                    </div>
                     <div v-if="section.metrics.length" class="war-strategy-metrics">
                       <em v-for="metric in section.metrics" :key="`${section.key}-${metric.label}`">
                         {{ metric.label }}<b>{{ metric.value }}</b>
@@ -3396,12 +3414,15 @@
 
             <div class="panel flat dossier-pearl-panel dossier-pearl-strip">
                 <div class="dossier-pearl-head">
-                  <h3>灵珠资产</h3>
-                  <span>灵尘 {{ personSpiritPearls(selectedPerson).dust || 0 }} · 每 10 自动换随机灵珠碎片</span>
-                </div>
-                <div class="dossier-pearl-summary">
-                  <span><b>{{ personPearlFragmentTotal(selectedPerson) }}</b> 碎片</span>
-                  <span><b>{{ personFormedPearlCount(selectedPerson) }}</b> / 9</span>
+                  <div class="dossier-pearl-title">
+                    <h3>灵珠资产</h3>
+                    <span>每日结算：每 10 灵尘自动换 1 枚随机一阶碎片</span>
+                  </div>
+                  <div class="dossier-pearl-summary" aria-label="灵珠资产汇总">
+                    <span><small>灵尘</small><b>{{ personSpiritPearls(selectedPerson).dust || 0 }}</b></span>
+                    <span><small>碎片总计</small><b>{{ personPearlFragmentTotal(selectedPerson) }}</b></span>
+                    <span><small>已凝成</small><b>{{ personFormedPearlCount(selectedPerson) }} / 9</b></span>
+                  </div>
                 </div>
                 <div v-if="personDetailLoading.has(selectedPerson.id)" class="empty">灵珠档案读取中...</div>
                 <div v-else class="dossier-pearl-grid">
@@ -3410,11 +3431,25 @@
                     :key="`${selectedPerson.id}-pearl-${pearl.id}`"
                     class="dossier-pearl-item"
                     :class="{ formed: pearl.tier > 0, matched: pearl.matchMultiplier > 1 }"
-                    :title="personPearlTooltip(pearl)"
+                    tabindex="0"
                   >
-                    <img :src="rootIconPath(pearl.config?.rootKey || pearl.id)" alt="">
+                    <span class="dossier-pearl-orb">
+                      <img :src="rootIconPath(pearl.config?.rootKey || pearl.id)" alt="">
+                    </span>
                     <small>{{ pearl.config?.name || pearl.name }}</small>
-                    <b>{{ pearl.tier ? `${pearl.tier}阶${pearl.star}星` : personPearlFragmentCount(pearl) }}</b>
+                    <b>{{ personPearlStatusText(pearl) }}</b>
+                    <span class="dossier-pearl-progress" aria-hidden="true"><i :style="{ width: `${personPearlProgressInfo(pearl).percent}%` }"></i></span>
+                    <em v-if="!pearl.tier && personPearlFragmentCount(pearl)" class="dossier-pearl-total">总 {{ personPearlFragmentCount(pearl) }}</em>
+                    <span class="dossier-pearl-tooltip" role="tooltip">
+                      <span class="dossier-pearl-tooltip-head">
+                        <img :src="rootIconPath(pearl.config?.rootKey || pearl.id)" alt="">
+                        <span><strong>{{ pearl.config?.name || pearl.name }}</strong><small>{{ personPearlStatusText(pearl) }}</small></span>
+                      </span>
+                      <span><small>材料分阶</small><b>{{ personPearlFragmentBreakdown(pearl) }}</b></span>
+                      <span><small>下一步</small><b>{{ personPearlProgressInfo(pearl).detail }}</b></span>
+                      <span><small>属性加成</small><b>{{ personPearlEffectText(pearl) }}</b></span>
+                      <span><small>灵根契合</small><b>{{ personPearlMatchText(pearl) }}</b></span>
+                    </span>
                   </span>
                 </div>
             </div>
@@ -3660,6 +3695,18 @@
                 </div>
               </div>
             </div>
+
+            <section class="admin-game-actions" aria-label="存档与结算操作">
+              <div class="admin-game-actions-copy">
+                <span>存档与结算</span>
+                <strong>仅在需要时手动干预游戏进程</strong>
+                <small>推进一天会结算攻守城、副本、灵珠与切磋；重开一世会清空当前本地存档。</small>
+              </div>
+              <div class="admin-game-actions-buttons">
+                <button class="secondary" :disabled="isActionPending('/api/day/advance')" @click="advanceDay">{{ isActionPending("/api/day/advance") ? "结算中..." : "推进一天" }}</button>
+                <button class="danger" :disabled="isActionPending('/api/reset')" @click="resetGame">重开一世</button>
+              </div>
+            </section>
 
             <div v-if="adminMode === 'cultivators'" class="admin-layout">
               <div class="admin-list" role="list" aria-label="角色列表">
@@ -4535,14 +4582,14 @@ const adminWikiArticles = [
       {
         title: "匹配与战斗",
         paragraphs: [
-          "主动切磋只能匹配不同宗门且段位差不超过两档的对手。每日结算时，全员也会自动按段位和战力尽量匹配；没有合适对手则轮空。每场切磋均以满气血、满法力开局，结束后恢复双方状态。",
+          "每日结算时，全员会在不同宗门、段位差不超过两档的范围内自动匹配；没有合适对手则轮空。每场切磋均以满气血、满法力开局，结束后恢复双方状态。",
           "胜者 +2 分，负者 -1 分，积分范围为 0 到 120。切磋记录、赛季战绩和可用回放都会写入人物详情。"
         ],
         bullets: [
           "段位区间依次为：黑铁 0–14、青铜 15–29、白银 30–44、黄金 45–59、铂金 60–74、钻石 75–89、超凡大师 90–104、最强王者 105–120。",
           "一个赛季为 60 个游戏日；赛季切换时按最终段位发放 30、60、100、150、220、320、450、650 灵石并重置赛季积分。",
           "切磋不会造成装备丢失、不会触发装备掠夺，也不消耗副本次数。",
-          "自动匹配会优先在段位合法的候选中选择战力差较小者；同宗门修士不互相切磋，找不到对手即轮空。"
+          "自动匹配会在段位合法的候选中加权随机：段位与战力更接近者更容易被抽中，但其他合法对手也有机会；近 3 日交手过的对手会降低再次抽中的概率。同宗门修士不互相切磋，找不到对手即轮空。"
         ]
       }
     ]
@@ -5481,6 +5528,7 @@ function starSeaCycleRewardText(cycle) {
     const ended = Number(gameState.value.day || 1) > Number(cycle?.cycleEndDay || 0);
     return ended ? "装备奖励待补录" : "期末待结算";
   }
+  if (reward.reason === "cycle_no_drop") return "";
   if (reward.type === "auction") {
     return `${reward.winnerName || "未知修士"}竞得${reward.tierName || ""}「${reward.itemName || "装备"}」 · ${reward.itemValue || 0} 灵石 · 分红 ${reward.dividend || 0}/人`;
   }
@@ -5874,7 +5922,7 @@ const playerOwnedProvinces = computed(() => provinceTerritories.value
   .filter((province) => province.owner === playerSectNameForPlan.value)
   .sort((a, b) => (b.defenseValue || 0) - (a.defenseValue || 0) || (a.rank || 99) - (b.rank || 99)));
 const attackableProvinces = computed(() => provinceTerritories.value
-  .filter((province) => province.owner !== playerSectNameForPlan.value)
+  .filter((province) => province.owner && province.owner !== playerSectNameForPlan.value)
   .sort((a, b) => (a.distance || 9) - (b.distance || 9) || (b.resourceValue || 0) - (a.resourceValue || 0)));
 const selectedAttackProvince = computed(() => provinceTerritories.value.find((province) => province.id === sectPlanDraft.attackTarget) || null);
 const selectedDefenseProvince = computed(() => playerOwnedProvinces.value
@@ -5883,6 +5931,7 @@ const sectPlanMemberById = computed(() => new Map(playerSectMembers.value.map((m
 const assignedAttackIds = computed(() => new Set(sectPlanDraft.attackMemberIds));
 const assignedDefenseIds = computed(() => new Set(Object.values(sectPlanDraft.defense).flat()));
 const planTargetDay = computed(() => (derived.value.sectStrategy?.plan?.targetDay || gameState.value.day + 1));
+const sectPlanControlLabel = computed(() => derived.value.sectStrategy?.plan?.isManual ? "手动军令" : "自动推演");
 const spiritPearlState = computed(() => derived.value.spiritPearls || gameState.value.spiritPearls || { pearls: [], bonuses: {}, dust: 0, history: [] });
 const provinceWarDayRecords = computed(() => {
   if (activeTab.value !== "sect" && activeTab.value !== "arena") return [];
@@ -7780,6 +7829,14 @@ function provinceRosterParticipantTooltip(participant) {
   return defenderTooltip(participant);
 }
 
+function openProvinceRosterPerson(participant) {
+  if (!participant?.id || participant.kind === "monster") return;
+  openDetailFromCurrent("person");
+  selectedPersonId.value = participant.id;
+  activeTab.value = "rank";
+  ensurePersonDetail(participant.id);
+}
+
 function sectProvinceChange(sectName, currentCount) {
   const previousCount = previousProvinceCountBySectName.value.get(sectName) || 0;
   const change = Number(currentCount || 0) - previousCount;
@@ -7864,10 +7921,22 @@ function sectMemberFatigue(member) {
   return Math.max(0, Number(derived.value.sectStrategy?.fatigue?.[member?.id] ?? gameState.value.sectFatigue?.[member?.id]) || 0);
 }
 
+function fatigueDelta(member) {
+  const previous = derived.value.sectStrategy?.fatiguePrevious || {};
+  if (!member?.id || !Object.hasOwn(previous, member.id)) return { known: false, previous: 0, change: 0, direction: "stable", text: "" };
+  const previousValue = Math.max(0, Number(previous[member.id]) || 0);
+  const change = sectMemberFatigue(member) - previousValue;
+  if (change > 0) return { known: true, previous: previousValue, change, direction: "gain", text: `较昨日 +${change}` };
+  if (change < 0) return { known: true, previous: previousValue, change, direction: "loss", text: `较昨日 ${change}` };
+  return { known: true, previous: previousValue, change, direction: "stable", text: "较昨日持平" };
+}
+
 function fatigueHelpText(member) {
   const fatigue = Math.max(0, Number(member?.fatigue) || 0);
   const penalty = Math.round(fatigue * 2.5);
-  return `疲劳来自连续参与攻守城：守城当日 +2，攻城基础 +3，远征每多 1 格再 +1，最高 20 点；未参战一日恢复 3 点。当前 ${fatigue} 点，使攻守城五维降低约 ${penalty}%。`;
+  const delta = fatigueDelta(member);
+  const comparison = delta.known ? `昨日疲劳 ${delta.previous} 点，${delta.text}` : "昨日疲劳暂无记录";
+  return `疲劳来自连续参与攻守城：守城当日 +2，攻城基础 +3，远征每多 1 格再 +1，最高 20 点；未参战一日恢复 3 点。当前 ${fatigue} 点，使攻守城五维降低约 ${penalty}%；${comparison}。`;
 }
 
 function planProvinceLabel(province) {
@@ -7888,6 +7957,14 @@ async function saveSectPlan() {
     },
     scope: "lite"
   }, { scope: "lite", markStale: true });
+}
+
+async function openSectTerritoryDetail(sectName) {
+  if (!sectName) return;
+  openDetailFromCurrent("sect");
+  selectedSectName.value = sectName;
+  activeTab.value = "rank";
+  if (state.value && (!sectByName(sectName) || fullStateStale.value || !hasFullCultivatorRoster())) await ensureFullState();
 }
 
 async function resetSectPlanAuto() {
@@ -7972,15 +8049,51 @@ function personPearlFragmentTotal(person) {
   return (personSpiritPearls(person).pearls || []).reduce((sum, pearl) => sum + personPearlFragmentCount(pearl), 0);
 }
 
-function personFormedPearlCount(person) {
-  return (personSpiritPearls(person).pearls || []).filter((pearl) => pearl.tier > 0).length;
+function personPearlProgressInfo(pearl) {
+  const next = pearl?.next || {};
+  const fragmentTier = Math.max(1, Number(next.fragmentTier) || 1);
+  const cost = Math.max(1, Number(next.cost) || 20);
+  const count = Math.max(0, Number(pearl?.fragments?.[String(fragmentTier)]) || 0);
+  const complete = Number(pearl?.tier) >= 9 && Number(pearl?.star) >= 5;
+  return {
+    fragmentTier,
+    cost,
+    count,
+    percent: complete ? 100 : Math.max(0, Math.min(100, Math.round(count / cost * 100))),
+    detail: complete ? "已至圆满" : `${fragmentTier}阶碎片 ${count} / ${cost}`
+  };
 }
 
-function personPearlTooltip(pearl) {
-  const name = pearl?.config?.name || pearl?.name || "灵珠";
-  const fragments = personPearlFragmentCount(pearl);
-  const stateText = pearl?.tier ? `${pearl.tier}阶${pearl.star}星` : "未凝成";
-  return `${name} · ${stateText} · 碎片 ${fragments}`;
+function personPearlStatusText(pearl) {
+  if (pearl?.tier) return `${pearl.tier}阶${pearl.star}星`;
+  const progress = personPearlProgressInfo(pearl);
+  return `${progress.fragmentTier}阶 ${progress.count}/${progress.cost}`;
+}
+
+function personPearlMatchText(pearl) {
+  const multiplier = Number(pearl?.matchMultiplier) || 1;
+  return multiplier > 1 ? `本命契合 ×${multiplier}` : "普通契合";
+}
+
+function personPearlEffectText(pearl) {
+  const effects = pearl?.config?.effects || [];
+  const labels = effects.map((effect) => effect.label).filter(Boolean).join("、") || "属性加成";
+  if (!pearl?.tier) return `凝成后提升${labels}（当前未生效）`;
+  const value = Number(pearl.value || 0) * Number(pearl.matchMultiplier || 1);
+  return effects.map((effect) => `${effect.label} +${formatPercent(value * Number(effect.weight || 1))}`).join("、");
+}
+
+function personPearlFragmentBreakdown(pearl) {
+  const parts = Object.entries(pearl?.fragments || {})
+    .map(([tier, count]) => [Math.max(1, Number(tier) || 1), Math.max(0, Number(count) || 0)])
+    .filter(([, count]) => count > 0)
+    .sort(([a], [b]) => a - b)
+    .map(([tier, count]) => `${tier}阶 ${count}`);
+  return parts.join("、") || "无";
+}
+
+function personFormedPearlCount(person) {
+  return (personSpiritPearls(person).pearls || []).filter((pearl) => pearl.tier > 0).length;
 }
 
 function personPearlHistory(person) {
@@ -8369,6 +8482,19 @@ function strategyMetricList(metrics) {
     .map((metric) => ({ label: metric.label, value: metric.value }));
 }
 
+function strategyRosterList(roster) {
+  return (Array.isArray(roster) ? roster : [])
+    .filter((member) => member?.id && member?.name && member?.reason)
+    .map((member) => ({
+      id: member.id,
+      name: member.name,
+      power: Math.max(0, Number(member.power) || 0),
+      fatigue: Math.max(0, Number(member.fatigue) || 0),
+      selected: Boolean(member.selected),
+      reason: member.reason
+    }));
+}
+
 function warStrategyPointType(sectionKey, index) {
   const labels = {
     attack: ["判断", "依据", "预估"],
@@ -8429,6 +8555,7 @@ function warStrategySections(war) {
         label: labels[key],
         title: section.title || labels[key],
         points: strategyPointList(section.points),
+        roster: strategyRosterList(section.roster),
         metrics: strategyMetricList(section.metrics)
       };
     })
@@ -10670,7 +10797,6 @@ function shouldRefreshHomeState(path) {
     "/api/sect/mission",
     "/api/sect/war",
     "/api/sect/plan",
-    "/api/duel",
     "/api/duels/day",
     "/api/items/buy",
     "/api/items/use",
