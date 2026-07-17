@@ -3320,6 +3320,7 @@
                 <div class="dossier-header-tags">
                   <span class="tag skill-detail-tag" :title="skillTip(selectedPerson)">本命神通：{{ skillNameForDisplay(selectedPerson) }}</span>
                   <span class="tag rank-tag" :class="`duel-rank-${duelRankId(selectedPerson)}`">斗法排名：{{ duelRankText(selectedPerson) }}</span>
+                  <span class="tag" :title="talentHint(selectedPerson)">天赋：{{ talentInfo(selectedPerson).grade }} · {{ talentInfo(selectedPerson).score }}</span>
                   <span class="tag">{{ rootCounterText(selectedPerson) }}</span>
                   <span class="tag equipment-count-tag">装备：{{ equippedFor(selectedPerson).length }}/{{ equipmentSlots.length }}</span>
                 </div>
@@ -3759,6 +3760,23 @@
                         <option v-for="skill in combatSkills" :key="`admin-skill-${skill.id}`" :value="skill.id">{{ skill.name }}</option>
                       </select>
                     </label>
+                    <label>
+                      <span>预期境界</span>
+                      <select v-model.number="adminCultivatorDraft.potentialRealm">
+                        <option v-for="(realm, index) in catalog.realms || []" :key="`admin-potential-${index}`" :value="index">{{ realm }}</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>天赋模式</span>
+                      <select v-model="adminCultivatorDraft.talentMode">
+                        <option value="auto">随预期境界随机</option>
+                        <option value="manual">手动锁定</option>
+                      </select>
+                    </label>
+                    <label v-if="adminCultivatorDraft.talentMode === 'manual'">
+                      <span>天赋分数</span>
+                      <input v-model.number="adminCultivatorDraft.talentScore" type="number" min="1" max="100" step="1">
+                    </label>
                   </div>
                 </div>
                 <div class="admin-editor-section">
@@ -4151,7 +4169,8 @@ const powerSortOptions = [
   { id: "defense", label: "防御" },
   { id: "divineSense", label: "神识" },
   { id: "maxMana", label: "法力" },
-  { id: "spirit", label: "灵石" }
+  { id: "spirit", label: "灵石" },
+  { id: "talent", label: "天赋" }
 ];
 
 const emptyState = {
@@ -4347,6 +4366,9 @@ const adminCultivatorDraft = reactive({
   rootKeys: [],
   portraitUrl: "",
   skillId: "",
+  potentialRealm: 0,
+  talentMode: "auto",
+  talentScore: 50,
   xp: 0,
   spirit: 0,
   maxHp: 1,
@@ -8732,6 +8754,7 @@ function powerSortValue(person, effective = personEffectiveStats(person)) {
   if (powerSortKey.value === "divineSense") return Number(effective.divineSense || 0);
   if (powerSortKey.value === "maxMana") return Number(effective.maxMana || 0);
   if (powerSortKey.value === "spirit") return Number(person.spirit || 0);
+  if (powerSortKey.value === "talent") return Number(talentInfo(person).score || 0);
   return Number(person.power || 0);
 }
 
@@ -9481,6 +9504,9 @@ function syncAdminCultivatorDraft(person = adminCultivatorPerson.value) {
   adminCultivatorDraft.rootKeys = rootKeys(person).slice(0, 5);
   adminCultivatorDraft.portraitUrl = person.portraitUrl || "";
   adminCultivatorDraft.skillId = person.skillId || combatSkills.value[0]?.id || "";
+  adminCultivatorDraft.potentialRealm = Number(person.potentialRealm ?? person.talent?.potentialRealm ?? 0);
+  adminCultivatorDraft.talentMode = person.talent?.overridden ? "manual" : "auto";
+  adminCultivatorDraft.talentScore = Number(person.talent?.score || 50);
   adminCultivatorDraft.xp = adminNumber(person.xp);
   adminCultivatorDraft.spirit = adminNumber(person.spirit);
   adminCultivatorDraft.maxHp = Math.max(1, adminNumber(person.maxHp, 1));
@@ -9603,6 +9629,9 @@ async function saveCultivatorProfile() {
     rootKeys: adminCultivatorDraft.rootKeys,
     portraitUrl: adminCultivatorDraft.portraitUrl,
     skillId: adminCultivatorDraft.skillId,
+    potentialRealm: adminNumber(adminCultivatorDraft.potentialRealm),
+    talentMode: adminCultivatorDraft.talentMode,
+    talentScore: Math.max(1, Math.min(100, adminNumber(adminCultivatorDraft.talentScore, 50))),
     xp: adminNumber(adminCultivatorDraft.xp),
     spirit: adminNumber(adminCultivatorDraft.spirit),
     maxHp: Math.max(1, adminNumber(adminCultivatorDraft.maxHp, 1)),
@@ -9725,6 +9754,7 @@ function personStats(person) {
   const effective = personEffectiveStats(person);
   const power = personPower(person);
   const powerRank = personPowerRank(person);
+  const talent = talentInfo(person);
   const duelRankPosition = personDuelRankPosition(person);
   return [
     { label: "性别", value: genderLabel(person.gender), icon: "gender" },
@@ -9735,7 +9765,7 @@ function personStats(person) {
     dossierStatLine("防御", effective.defense, effective.bonuses.defense, "defense"),
     dossierStatLine("神识", effective.divineSense, effective.bonuses.divineSense, "sense"),
     { label: "技能", value: skillNameOnlyLabel(person), icon: "skill", help: skillTip(person) },
-    { label: "战斗力", value: power, icon: "power", help: personPowerFormula(person, effective, power) },
+    { label: "天赋", value: talent.score, icon: "power", help: talentHint(person) },
     { label: "战力排名", value: powerRank ? `#${powerRank}` : "未上榜", icon: "rank", help: powerRank ? `当前个人战力榜第 ${powerRank} 名。` : "当前不在个人战力榜中。" },
     { label: "段位", value: duelRankText(person), icon: `duel-rank-${duelRankId(person)}`, help: `第 ${duelSeasonInfo.value.season} 赛季段位：${duelRankText(person)}。` },
     { label: "段位排名", value: duelRankPosition ? `#${duelRankPosition}` : "未上榜", icon: "rank", help: duelRankPosition ? `当前切磋段位榜第 ${duelRankPosition} 名。` : "当前不在切磋段位榜中。" }
@@ -10131,8 +10161,9 @@ function personInsight(person) {
     },
     effectiveStats: null,
     power: null,
-    tomorrowXp: { baseXp: person?.isPlayer ? 10 : 100, rootMultiplier: 1, sectMultiplier: 1, total: person?.isPlayer ? 10 : 100 },
-    breakthrough: { realmBase: baseBreakthroughChance(person?.realm || 0), rootMultiplier: 1, sectMultiplier: 1, base: fallbackBreakthrough, bonus: 0, total: fallbackBreakthrough }
+    talent: person?.talent || { score: 50, grade: "上品", xpMultiplier: 1.06, breakthroughMultiplier: 1.015, potentialRealm: person?.realm || 0 },
+    tomorrowXp: { baseXp: person?.isPlayer ? 10 : 100, rootMultiplier: 1, talentMultiplier: 1, sectMultiplier: 1, total: person?.isPlayer ? 10 : 100 },
+    breakthrough: { realmBase: baseBreakthroughChance(person?.realm || 0), rootMultiplier: 1, talentMultiplier: 1, sectMultiplier: 1, base: fallbackBreakthrough, bonus: 0, total: fallbackBreakthrough }
   };
   const insight = derived.value.personInsights?.[person?.id] || {};
   const rootProfile = {
@@ -10152,6 +10183,15 @@ function personInsight(person) {
       ...(insight.breakthrough || {})
     }
   };
+}
+
+function talentInfo(person) {
+  return personInsight(person).talent || person?.talent || { score: 50, grade: "上品", xpMultiplier: 1.06, breakthroughMultiplier: 1.015, potentialRealm: person?.realm || 0 };
+}
+
+function talentHint(person) {
+  const talent = talentInfo(person);
+  return `${talent.grade}天赋 ${talent.score}；预期境界 ${realmName(talent.potentialRealm ?? person?.potentialRealm ?? 0)}；经验效率 ${formatPercent(talent.xpMultiplier)}；突破效率 ${formatPercent(talent.breakthroughMultiplier)}${talent.overridden ? "；后台锁定" : ""}`;
 }
 
 function personBreakthroughChance(person) {
@@ -10225,13 +10265,13 @@ function personEffectiveStats(person) {
 
 function tomorrowXpText(person) {
   const xp = personInsight(person).tomorrowXp;
-  return `基础 ${xp.baseXp} × 灵根 ${formatPercent(xp.rootMultiplier)} × 宗门 ${formatPercent(xp.sectMultiplier)} = ${tomorrowXpTotal(person)}`;
+  return `基础 ${xp.baseXp} × 灵根 ${formatPercent(xp.rootMultiplier)} × 天赋 ${formatPercent(xp.talentMultiplier)} × 宗门 ${formatPercent(xp.sectMultiplier)} = ${tomorrowXpTotal(person)}`;
 }
 
 function tomorrowXpTotal(person) {
   const xp = personInsight(person).tomorrowXp;
   if (typeof xp.baseXp === "number" && typeof xp.rootMultiplier === "number" && typeof xp.sectMultiplier === "number") {
-    return Math.floor(xp.baseXp * xp.rootMultiplier * xp.sectMultiplier);
+    return Math.floor(xp.baseXp * xp.rootMultiplier * (xp.talentMultiplier ?? 1) * xp.sectMultiplier);
   }
   return Math.floor(Number(xp.total) || 0);
 }
@@ -10240,7 +10280,7 @@ function breakthroughPartsText(person) {
   const parts = personInsight(person).breakthrough;
   const sectMultiplier = parts.sectMultiplier ?? (1 + (parts.bonus || 0));
   const potionText = Number(parts.potionBonus || 0) > 0 ? ` + 丹药 ${formatPercent(parts.potionBonus)}` : "";
-  return `境界基础 ${formatPercent(parts.realmBase)} × 灵根 ${formatPercent(parts.rootMultiplier)} × 宗门 ${formatPercent(sectMultiplier)}${potionText} = ${formatPercent(parts.total)}`;
+  return `境界基础 ${formatPercent(parts.realmBase)} × 灵根 ${formatPercent(parts.rootMultiplier)} × 天赋 ${formatPercent(parts.talentMultiplier ?? 1)} × 宗门 ${formatPercent(sectMultiplier)}${potionText} = ${formatPercent(parts.total)}`;
 }
 
 function statWithBonus(total, bonus = 0) {

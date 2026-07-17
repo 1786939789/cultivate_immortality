@@ -42,6 +42,34 @@ export const spiritPearls = [
 
 export const rosterVersion = 5;
 
+// Values are the expected peak realm index, not a character's current realm.
+// Profiles not listed here derive their initial expectation from their starting realm
+// and can be refined from the in-game admin panel.
+export const canonicalPotentialRealms = {
+  "韩立": 89,
+  "南宫婉": 74,
+  "银月": 84,
+  "冰凤": 78,
+  "向之礼": 68,
+  "车老妖": 68,
+  "乾老魔": 58,
+  "呼老魔": 58,
+  "大衍神君": 49,
+  "六道极圣": 48,
+  "极阴祖师": 39,
+  "玄骨上人": 39,
+  "蛮胡子": 39,
+  "万天明": 39,
+  "魏无涯": 49,
+  "至阳上人": 49,
+  "合欢老魔": 49,
+  "云露老魔": 49,
+  "元刹圣祖": 89,
+  "六极圣祖": 89,
+  "宝花圣祖": 89,
+  "螟虫之母": 89
+};
+
 export { duelLossScore, duelRanks, duelSeasonLength, duelSeasonMaxScore, duelSeasonOfDay, duelSeasonDay, duelWinScore, duelRankForScore } from "../shared/duelSeasonData.mjs";
 
 export const sectRoster = [

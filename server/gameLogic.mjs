@@ -1,4 +1,4 @@
-import { combatSkills, dungeons, duelLossScore, duelRankForScore, duelRanks, duelSeasonDay, duelSeasonLength, duelSeasonMaxScore, duelSeasonOfDay, duelWinScore, equipmentCatalog, equipmentSlots, equipmentTiers, itemCatalog, npcGenders, npcNames, provinceVersion, provinces, realms, realmStages, rootCycle, specialRoots, spiritPearls, roots, rosterVersion, sectRoster, sects, taskTemplates } from "./gameData.mjs";
+import { canonicalPotentialRealms, combatSkills, dungeons, duelLossScore, duelRankForScore, duelRanks, duelSeasonDay, duelSeasonLength, duelSeasonMaxScore, duelSeasonOfDay, duelWinScore, equipmentCatalog, equipmentSlots, equipmentTiers, itemCatalog, npcGenders, npcNames, provinceVersion, provinces, realms, realmStages, rootCycle, specialRoots, spiritPearls, roots, rosterVersion, sectRoster, sects, taskTemplates } from "./gameData.mjs";
 
 export function dateKey(date = new Date()) {
   const year = date.getFullYear();
@@ -41,6 +41,12 @@ const stageXpBudgets = [
 ];
 const xpModeVersion = 2;
 const realmTerminologyVersion = 1;
+const talentVersion = 1;
+const defaultPlayerPotentialRealm = 39;
+const talentScoreRanges = [
+  [18, 32], [30, 44], [43, 58], [56, 70], [67, 80],
+  [77, 88], [85, 94], [91, 98], [96, 100]
+];
 const playerDailyBaseXp = 10;
 const taskDefinitionLimit = 80;
 const taskCompletionLimit = 120;
@@ -403,7 +409,7 @@ export function effectiveStats(entity, state) {
   const { attack, defense, maxHp, divineSense, maxMana } = effectiveCombatStats(entity, state);
   return {
     attack, defense, maxHp, divineSense, maxMana,
-    xpMultiplier: xpGainMultiplier(entity, state),
+    xpMultiplier: xpGainMultiplier(entity, state) * talentSnapshot(entity).xpMultiplier,
     bonuses: {
       attack: attack - (entity.attack || 0),
       defense: defense - (entity.defense || 0),
@@ -419,7 +425,7 @@ export function xpGainMultiplier(entity, state = null) {
 }
 
 export function applyXpGain(entity, amount, extraMultiplier = 1) {
-  const gain = Math.floor(amount * xpGainMultiplier(entity) * extraMultiplier);
+  const gain = Math.floor(amount * xpGainMultiplier(entity) * talentSnapshot(entity).xpMultiplier * extraMultiplier);
   entity.xp += gain;
   return gain;
 }
@@ -1027,13 +1033,20 @@ function minimumBreakthroughChance(realm) {
   return Math.floor((realm || 0) / 10) >= 8 ? 0.01 : 0.035;
 }
 
-export function breakthroughChance(entity) {
-  const base = baseBreakthroughChance(entity.realm || 0);
+function rootBreakthroughChanceMultiplier(entity) {
   const waterBonus = normalizeRootSet(entity).roots
     .filter((root) => root.effect === "xp")
     .reduce((sum, root) => sum + ((root.breakMultiplier || 1.1) - 1) / rootCount(entity), 0);
-  const rootMultiplier = (1 + waterBonus) * rootBreakthroughMultiplier(entity);
-  return clamp(base * rootMultiplier, minimumBreakthroughChance(entity.realm || 0), 0.82);
+  return (1 + waterBonus) * rootBreakthroughMultiplier(entity);
+}
+
+export function breakthroughChance(entity) {
+  const base = baseBreakthroughChance(entity.realm || 0);
+  return clamp(
+    base * rootBreakthroughChanceMultiplier(entity) * talentSnapshot(entity).breakthroughMultiplier,
+    minimumBreakthroughChance(entity.realm || 0),
+    0.82
+  );
 }
 
 export function buildRealmProgression(entity) {
@@ -1053,6 +1066,119 @@ export function buildRealmProgression(entity) {
 
 export function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function potentialRealmFor(entity = {}) {
+  const configured = Number(entity.potentialRealm);
+  if (Number.isFinite(configured)) return clamp(Math.floor(configured), 0, realms.length - 1);
+  if (Number.isFinite(canonicalPotentialRealms[entity.name])) {
+    return clamp(canonicalPotentialRealms[entity.name], 0, realms.length - 1);
+  }
+  if (entity.id === "player") return defaultPlayerPotentialRealm;
+  const currentRealm = clamp(Math.floor(Number(entity.realm) || 0), 0, realms.length - 1);
+  return clamp(Math.max(9, currentRealm + 12), 0, realms.length - 1);
+}
+
+function talentScoreRange(potentialRealm) {
+  const stage = clamp(Math.floor(potentialRealm / 10), 0, talentScoreRanges.length - 1);
+  return talentScoreRanges[stage];
+}
+
+function talentGrade(score) {
+  if (score >= 92) return "道种";
+  if (score >= 80) return "天灵";
+  if (score >= 65) return "天骄";
+  if (score >= 45) return "上品";
+  if (score >= 25) return "良才";
+  return "凡才";
+}
+
+function talentXpMultiplier(score) {
+  return 0.92 + clamp(Number(score) || 0, 1, 100) * 0.0028;
+}
+
+function talentBreakthroughMultiplier(score) {
+  return 0.94 + clamp(Number(score) || 0, 1, 100) * 0.0015;
+}
+
+function rollTalentScore(entity, rebirth = 1) {
+  const potentialRealm = potentialRealmFor(entity);
+  const [min, max] = talentScoreRange(potentialRealm);
+  const seed = `talent|${entity.id || entity.name || "cultivator"}|${entity.name || ""}|${rebirth}|${potentialRealm}|${talentVersion}`;
+  return Math.min(max, min + Math.floor(stableUnit(seed) * (max - min + 1)));
+}
+
+function createTalent(entity, { rebirth = 1, score, overridden = false } = {}) {
+  const potentialRealm = potentialRealmFor(entity);
+  const safeScore = clamp(Math.floor(Number(score) || rollTalentScore({ ...entity, potentialRealm }, rebirth)), 1, 100);
+  return {
+    version: talentVersion,
+    score: safeScore,
+    grade: talentGrade(safeScore),
+    xpMultiplier: talentXpMultiplier(safeScore),
+    breakthroughMultiplier: talentBreakthroughMultiplier(safeScore),
+    rebirth: Math.max(1, Math.floor(Number(rebirth) || 1)),
+    overridden: Boolean(overridden)
+  };
+}
+
+function ensureTalent(entity, options = {}) {
+  if (!entity) return false;
+  let changed = false;
+  const expectedRealm = potentialRealmFor(entity);
+  if (entity.potentialRealm !== expectedRealm) {
+    entity.potentialRealm = expectedRealm;
+    changed = true;
+  }
+  if (!entity.potentialSource) {
+    entity.potentialSource = Number.isFinite(canonicalPotentialRealms[entity.name]) ? "lore" : "generated";
+    changed = true;
+  }
+  if (entity.talentOverride !== undefined && entity.talentOverride !== null) {
+    const override = clamp(Math.floor(Number(entity.talentOverride) || 1), 1, 100);
+    if (entity.talentOverride !== override) {
+      entity.talentOverride = override;
+      changed = true;
+    }
+  }
+  const existing = entity.talent;
+  const shouldReroll = Boolean(options.reroll);
+  const hasValidTalent = existing
+    && Number.isFinite(Number(existing.score))
+    && Number(existing.version) === talentVersion;
+  if (shouldReroll || !hasValidTalent) {
+    entity.talent = createTalent(entity, {
+      rebirth: options.rebirth || existing?.rebirth || 1,
+      score: entity.talentOverride,
+      overridden: entity.talentOverride !== undefined && entity.talentOverride !== null
+    });
+    return true;
+  }
+  const normalized = createTalent(entity, {
+    rebirth: existing.rebirth || 1,
+    score: entity.talentOverride ?? existing.score,
+    overridden: entity.talentOverride !== undefined && entity.talentOverride !== null
+  });
+  if (JSON.stringify(existing) !== JSON.stringify(normalized)) {
+    entity.talent = normalized;
+    changed = true;
+  }
+  return changed;
+}
+
+function talentSnapshot(entity) {
+  const talent = entity?.talent || createTalent(entity || {});
+  return {
+    score: talent.score,
+    grade: talent.grade,
+    xpMultiplier: talent.xpMultiplier,
+    breakthroughMultiplier: talent.breakthroughMultiplier,
+    rebirth: talent.rebirth,
+    overridden: Boolean(talent.overridden),
+    potentialRealm: potentialRealmFor(entity || {}),
+    potentialRealmName: realms[potentialRealmFor(entity || {})] || realms[0],
+    potentialSource: entity?.potentialSource || "generated"
+  };
 }
 
 function pick(list) {
@@ -4797,7 +4923,13 @@ function breakthroughChanceFor(state, entity) {
 
 function breakthroughChanceParts(state, entity) {
   const realmBase = baseBreakthroughChance(entity.realm || 0);
-  const base = breakthroughChance(entity);
+  const rootMultiplier = rootBreakthroughChanceMultiplier(entity);
+  const talentMultiplier = talentSnapshot(entity).breakthroughMultiplier;
+  const base = clamp(
+    realmBase * rootMultiplier * talentMultiplier,
+    minimumBreakthroughChance(entity.realm || 0),
+    0.82
+  );
   const sectName = entity.id === "player" ? state.sect.name : entity.sect;
   const bonus = sectBreakthroughBonus(state, sectName, entity);
   const sectMultiplier = 1 + bonus;
@@ -4806,7 +4938,8 @@ function breakthroughChanceParts(state, entity) {
   const beforePotion = base * sectMultiplier + pearlBonus;
   return {
     realmBase,
-    rootMultiplier: base / Math.max(0.0001, realmBase),
+    rootMultiplier,
+    talentMultiplier,
     sectMultiplier,
     base,
     bonus,
@@ -4819,16 +4952,20 @@ function breakthroughChanceParts(state, entity) {
 function xpPreviewParts(state, entity, baseXp = entity.id === "player" ? playerDailyBaseXp : 100) {
   const sectName = entity.id === "player" ? state.sect.name : entity.sect;
   const rootMultiplier = entity.id === "player" ? 1 : xpGainMultiplier(entity, state);
+  const talentMultiplier = talentSnapshot(entity).xpMultiplier;
   const sectMultiplier = 1 + sectXpBonus(state, sectName, entity);
   const rootTotal = Math.floor(baseXp * rootMultiplier);
-  const total = Math.floor(baseXp * rootMultiplier * sectMultiplier);
+  const talentTotal = Math.floor(rootTotal * talentMultiplier);
+  const total = Math.floor(talentTotal * sectMultiplier);
   return {
     baseXp,
     rootMultiplier,
+    talentMultiplier,
     sectMultiplier,
     total,
     rootDelta: rootTotal - baseXp,
-    sectDelta: total - rootTotal
+    talentDelta: talentTotal - rootTotal,
+    sectDelta: total - talentTotal
   };
 }
 
@@ -4836,6 +4973,7 @@ function personInsight(state, entity) {
   return {
     rootProfile: rootProfile(entity),
     effectiveStats: effectiveStats(entity, state),
+    talent: talentSnapshot(entity),
     power: powerOf(entity, state),
     tomorrowXp: xpPreviewParts(state, entity),
     breakthrough: breakthroughChanceParts(state, entity)
@@ -5890,7 +6028,7 @@ function makeNpc(name, index) {
   const innate = rollInnateStats();
   const skillId = randomSkillId();
 
-  return {
+  const npc = {
     id: `npc-${index}`,
     name,
     gender: npcGenders[name] || "male",
@@ -5933,6 +6071,10 @@ function makeNpc(name, index) {
     skillUpgrades: [],
     duelHistory: []
   };
+  npc.potentialRealm = potentialRealmFor(npc);
+  npc.potentialSource = Number.isFinite(canonicalPotentialRealms[name]) ? "lore" : "generated";
+  npc.talent = createTalent(npc);
+  return npc;
 }
 
 function log(state, text, type = "") {
@@ -6104,11 +6246,15 @@ export function createDefaultState() {
 
   return {
     day: 1,
+    rebirth: 1,
     xpModeVersion,
     player: {
       id: "player",
       name: "李昕纾",
       gender: "female",
+      potentialRealm: defaultPlayerPotentialRealm,
+      potentialSource: "generated",
+      talent: createTalent({ id: "player", name: "李昕纾", potentialRealm: defaultPlayerPotentialRealm }),
       root,
       roots: rootSet.roots,
       primaryRootKey: rootSet.primaryRootKey,
@@ -6238,6 +6384,11 @@ function copyCultivatorProfile(target, source) {
   if (source.sect) target.sect = source.sect;
   if (source.portraitUrl !== undefined) target.portraitUrl = source.portraitUrl;
   if (source.portraitVariant !== undefined) target.portraitVariant = source.portraitVariant;
+  if (source.potentialRealm !== undefined && source.potentialRealm !== null && Number.isFinite(Number(source.potentialRealm))) {
+    target.potentialRealm = source.potentialRealm;
+  }
+  if (source.potentialSource) target.potentialSource = source.potentialSource;
+  if (source.talentOverride !== undefined) target.talentOverride = source.talentOverride;
   if (Array.isArray(source.roots) && source.roots.length) {
     target.roots = source.roots.map((root) => ({ ...root }));
     target.primaryRootKey = source.primaryRootKey || target.roots[0]?.key;
@@ -6249,6 +6400,29 @@ function copyCultivatorProfile(target, source) {
     target.primaryRootKey = source.primaryRootKey || source.root.key;
     applyRootSet(target);
   }
+}
+
+function hasPersistedPotentialRealm(profile) {
+  return profile?.potentialRealm !== undefined
+    && profile?.potentialRealm !== null
+    && Number.isFinite(Number(profile.potentialRealm));
+}
+
+function resetCultivatorProfile(adminProfile, entityProfile) {
+  if (!adminProfile) return entityProfile;
+  if (!entityProfile) return adminProfile;
+  const hasAdminPotential = hasPersistedPotentialRealm(adminProfile);
+  return {
+    ...entityProfile,
+    ...adminProfile,
+    potentialRealm: hasAdminPotential ? adminProfile.potentialRealm : entityProfile.potentialRealm,
+    potentialSource: hasAdminPotential
+      ? (adminProfile.potentialSource || entityProfile.potentialSource)
+      : entityProfile.potentialSource,
+    talentOverride: Object.prototype.hasOwnProperty.call(adminProfile, "talentOverride")
+      ? adminProfile.talentOverride
+      : entityProfile.talentOverride
+  };
 }
 
 function ensureAdminProfiles(state) {
@@ -6270,7 +6444,10 @@ function cultivatorProfileSnapshot(entity) {
     portraitVariant: entity.portraitVariant || 0,
     root: entity.root ? { ...entity.root } : null,
     roots: (entity.roots || []).map((root) => ({ ...root })),
-    primaryRootKey: entity.primaryRootKey || entity.root?.key || ""
+    primaryRootKey: entity.primaryRootKey || entity.root?.key || "",
+    potentialRealm: potentialRealmFor(entity),
+    potentialSource: entity.potentialSource || "generated",
+    talentOverride: entity.talentOverride ?? null
   };
 }
 
@@ -6347,6 +6524,8 @@ function rebuildSectProfilesForReset(state, previousState) {
 export function preserveProfilesForReset(state, previousState) {
   if (!previousState) return state;
 
+  state.rebirth = Math.max(1, Math.floor(Number(previousState.rebirth) || 1) + 1);
+
   const previousAdminProfiles = previousState.adminProfiles || {};
   rebuildSectProfilesForReset(state, previousState);
 
@@ -6365,14 +6544,22 @@ export function preserveProfilesForReset(state, previousState) {
       : state.sectProfiles[state.sect.name]?.elderIds || []
   };
 
-  copyCultivatorProfile(state.player, previousAdminProfiles.cultivators?.player || previousState.player);
+  copyCultivatorProfile(
+    state.player,
+    resetCultivatorProfile(previousAdminProfiles.cultivators?.player, previousState.player)
+  );
   state.player.sect = state.sect.name;
+  ensureTalent(state.player, { rebirth: state.rebirth, reroll: true });
   rememberCultivatorProfile(state, state.player);
 
   const previousNpcMap = new Map((previousState.npcs || []).map((npc) => [npc.id, npc]));
   for (const npc of state.npcs || []) {
-    const previousNpc = previousAdminProfiles.cultivators?.[npc.id] || previousNpcMap.get(npc.id);
+    const previousNpc = resetCultivatorProfile(
+      previousAdminProfiles.cultivators?.[npc.id],
+      previousNpcMap.get(npc.id)
+    );
     copyCultivatorProfile(npc, previousNpc);
+    ensureTalent(npc, { rebirth: state.rebirth, reroll: true });
     rememberCultivatorProfile(state, npc);
     if (npc.sect && !state.sectProfiles[npc.sect]) {
       state.sectProfiles[npc.sect] = {
@@ -6434,6 +6621,12 @@ export function ensureStateShape(state) {
     migrateRoster(state);
     changed = true;
   }
+  if (!Number.isFinite(Number(state.rebirth)) || Number(state.rebirth) < 1) {
+    state.rebirth = 1;
+    changed = true;
+  } else {
+    state.rebirth = Math.floor(Number(state.rebirth));
+  }
   if (!state.calendarStartDate) {
     state.calendarStartDate = addDays(state.lastSettlementDate || dateKey(), 1 - Number(state.day || 1));
     changed = true;
@@ -6471,10 +6664,6 @@ export function ensureStateShape(state) {
   if (Array.isArray(state.provinceWars)) {
     for (const record of state.provinceWars) changed = ensureDatedRecord(record) || changed;
   }
-  if ("talent" in state.player) {
-    delete state.player.talent;
-    changed = true;
-  }
   if (needsRootMigration(state.player.root)) {
     state.player.root = normalizeRoot(state.player.root);
     changed = true;
@@ -6485,6 +6674,7 @@ export function ensureStateShape(state) {
   state.player.id ??= "player";
   changed = ensureField(state.player, "name", "李昕纾") || changed;
   changed = ensureField(state.player, "gender", "female") || changed;
+  changed = ensureTalent(state.player, { rebirth: state.rebirth }) || changed;
   state.sect ??= {
     name: state.player.sect || "落云宗",
     reputation: 20,
@@ -6631,10 +6821,6 @@ export function ensureStateShape(state) {
   state.npcs = state.npcs.map((npc, index) => {
     const full = { ...npc };
     full.id ??= `npc-${index}`;
-    if ("talent" in full) {
-      delete full.talent;
-      changed = true;
-    }
     if (needsRootMigration(full.root)) {
       full.root = normalizeRoot(full.root);
       changed = true;
@@ -6647,6 +6833,7 @@ export function ensureStateShape(state) {
     changed = ensureField(full, "sect", sectForNpcIndex(index)) || changed;
     changed = ensureField(full, "root", () => normalizeRoot(pick(roots))) || changed;
     changed = ensureField(full, "realm", () => Math.floor(Math.random() * 4)) || changed;
+    changed = ensureTalent(full, { rebirth: state.rebirth }) || changed;
     changed = ensureField(full, "xp", () => Math.floor(Math.random() * 90)) || changed;
     let npcBirthStats;
     const npcBaseStats = () => {
@@ -6700,12 +6887,20 @@ export function ensureStateShape(state) {
   });
   const adminProfiles = ensureAdminProfiles(state);
   adminProfiles.playerSect ||= state.sect.name;
-  if (!adminProfiles.cultivators.player) {
+  const playerProfile = adminProfiles.cultivators.player;
+  if (!playerProfile
+    || !hasPersistedPotentialRealm(playerProfile)
+    || Number(playerProfile.potentialRealm) !== potentialRealmFor(state.player)
+    || playerProfile.talentOverride !== (state.player.talentOverride ?? null)) {
     rememberCultivatorProfile(state, state.player);
     changed = true;
   }
   for (const npc of state.npcs || []) {
-    if (!adminProfiles.cultivators[npc.id]) {
+    const profile = adminProfiles.cultivators[npc.id];
+    if (!profile
+      || !hasPersistedPotentialRealm(profile)
+      || Number(profile.potentialRealm) !== potentialRealmFor(npc)
+      || profile.talentOverride !== (npc.talentOverride ?? null)) {
       rememberCultivatorProfile(state, npc);
       changed = true;
     }
@@ -7345,6 +7540,9 @@ function publicCultivator(entity, state, options = {}) {
       wealth: entity.wealth,
       heartDemon: entity.heartDemon,
       mood: entity.mood,
+      potentialRealm: potentialRealmFor(entity),
+      potentialSource: entity.potentialSource || "generated",
+      talent: talentSnapshot(entity),
       root: entity.root,
       roots: entity.roots,
       primaryRootKey: entity.primaryRootKey,
@@ -8111,7 +8309,8 @@ export function dailySettlement(state, options = {}) {
     const baseXp = 100;
     const sectXpShare = sectXpBonus(state, npc.sect, npc);
     const xpMultiplier = xpGainMultiplier(npc, state) * (1 + sectXpShare);
-    const totalXp = Math.floor(baseXp * xpMultiplier);
+    const npcTalentXpMultiplier = talentSnapshot(npc).xpMultiplier;
+    const totalXp = Math.floor(baseXp * xpMultiplier * npcTalentXpMultiplier);
     const bonusXp = Math.max(0, totalXp - baseXp);
     npc.xp += totalXp;
 
@@ -8177,12 +8376,14 @@ export function dailySettlement(state, options = {}) {
       provinceDust,
       duelSeasonReward,
       rootXpMultiplier: xpGainMultiplier(npc, state),
+      talentXpMultiplier: npcTalentXpMultiplier,
       sectXpMultiplier: 1 + sectXpShare,
       rootCount: rootCount(npc),
       realm: realms[npc.realm],
       breakChance: chanceParts.total,
       realmBaseBreakChance: chanceParts.realmBase,
       rootBreakMultiplier: chanceParts.rootMultiplier,
+      talentBreakMultiplier: chanceParts.talentMultiplier,
       sectBreakMultiplier: chanceParts.sectMultiplier,
       baseBreakChance: chanceParts.base,
       bonusBreakChance: chanceParts.bonus,
@@ -8200,7 +8401,8 @@ export function dailySettlement(state, options = {}) {
   }
   const playerSectXpShare = sectXpBonus(state, state.sect.name, state.player);
   const playerProvinceXp = Math.floor(playerDailyBaseXp * playerSectXpShare);
-  const playerPassiveXp = playerDailyBaseXp + playerProvinceXp;
+  const playerTalentXpMultiplier = talentSnapshot(state.player).xpMultiplier;
+  const playerPassiveXp = Math.floor((playerDailyBaseXp + playerProvinceXp) * playerTalentXpMultiplier);
   state.player.xp += playerPassiveXp;
   autoAttemptPlayerBreakthrough(state);
   runDailyDungeons(state, settlementDate);
@@ -8217,9 +8419,10 @@ export function dailySettlement(state, options = {}) {
     date: settlementDate,
     xp: playerPassiveXp,
     baseXp: playerDailyBaseXp,
-    bonusXp: playerProvinceXp,
+    bonusXp: playerPassiveXp - playerDailyBaseXp,
     passiveXp: playerPassiveXp,
     provinceXp: playerProvinceXp,
+    talentXpMultiplier: playerTalentXpMultiplier,
     spirit: playerDungeonSpirit + playerDuelSeasonReward + playerProvinceSpirit,
     provinceSpirit: playerProvinceSpirit,
     provinceDust: playerProvinceDust,
@@ -8228,6 +8431,7 @@ export function dailySettlement(state, options = {}) {
     breakChance: playerChanceParts.total,
     realmBaseBreakChance: playerChanceParts.realmBase,
     rootBreakMultiplier: playerChanceParts.rootMultiplier,
+    talentBreakMultiplier: playerChanceParts.talentMultiplier,
     sectBreakMultiplier: playerChanceParts.sectMultiplier,
     baseBreakChance: playerChanceParts.base,
     bonusBreakChance: playerChanceParts.bonus,
@@ -8275,8 +8479,11 @@ export function addTask(state, payload) {
   const baseXpGain = Math.floor(definition.xpReward * multiplier);
   const spiritGain = Math.floor(definition.spiritReward * multiplier);
   const dayMultiplier = taskMultiplierForDay(state, targetDay);
-  const xpMultiplier = Math.max(1, Number(dayMultiplier.totalMultiplier) || 1);
-  const xpGain = Math.floor(baseXpGain * xpMultiplier);
+  const elixirMultiplier = Math.max(1, Number(dayMultiplier.totalMultiplier) || 1);
+  const taskTalentMultiplier = talentSnapshot(p).xpMultiplier;
+  const beforeTalentXp = Math.floor(baseXpGain * elixirMultiplier);
+  const xpMultiplier = elixirMultiplier * taskTalentMultiplier;
+  const xpGain = Math.floor(beforeTalentXp * taskTalentMultiplier);
   p.xp += xpGain;
   p.spirit += spiritGain;
 
@@ -8294,6 +8501,7 @@ export function addTask(state, payload) {
     xp: xpGain,
     baseXp: baseXpGain,
     elixirMultiplier: dayMultiplier.elixirMultiplier,
+    talentMultiplier: taskTalentMultiplier,
     xpMultiplier,
     spirit: spiritGain,
     day: targetDay,
@@ -8306,18 +8514,20 @@ export function addTask(state, payload) {
   addTaskXpToDailyRecord(state, {
     xpGain,
     baseXpGain,
+    beforeTalentXp,
+    talentMultiplier: taskTalentMultiplier,
     taskName: definition.name,
     taskType: definition.category,
     spiritGain,
     day: targetDay,
     date: completion.date
   });
-  const bonusText = xpGain > baseXpGain ? `（丹药加成 +${xpGain - baseXpGain}）` : "";
+  const bonusText = xpGain > baseXpGain ? `（加成 +${xpGain - baseXpGain}）` : "";
   log(state, `完成「${definition.name}」，获得 ${xpGain} 经验${bonusText}与 ${spiritGain} 灵石。`, "gold");
   autoAttemptPlayerBreakthrough(state);
 }
 
-function addTaskXpToDailyRecord(state, { xpGain, baseXpGain, taskName, taskType, spiritGain = 0, day = state.day, date }) {
+function addTaskXpToDailyRecord(state, { xpGain, baseXpGain, beforeTalentXp = xpGain, talentMultiplier = 1, taskName, taskType, spiritGain = 0, day = state.day, date }) {
   const player = state.player;
   const today = Math.max(1, Math.floor(Number(day) || state.day || 1));
   const todayDate = date || stateDateForDay(state, today);
@@ -8336,6 +8546,7 @@ function addTaskXpToDailyRecord(state, { xpGain, baseXpGain, taskName, taskType,
       breakChance: chanceParts.total,
       realmBaseBreakChance: chanceParts.realmBase,
       rootBreakMultiplier: chanceParts.rootMultiplier,
+      talentBreakMultiplier: chanceParts.talentMultiplier,
       sectBreakMultiplier: chanceParts.sectMultiplier,
       baseBreakChance: chanceParts.base,
       bonusBreakChance: chanceParts.bonus,
@@ -8351,6 +8562,8 @@ function addTaskXpToDailyRecord(state, { xpGain, baseXpGain, taskName, taskType,
   record.spirit = (Number(record.spirit) || 0) + spiritGain;
   record.taskXp = (Number(record.taskXp) || 0) + xpGain;
   record.taskBaseXp = (Number(record.taskBaseXp) || 0) + baseXpGain;
+  record.taskBeforeTalentXp = (Number(record.taskBeforeTalentXp) || 0) + beforeTalentXp;
+  record.taskTalentMultiplier = talentMultiplier;
   record.taskBonusXp = (Number(record.taskBonusXp) || 0) + bonusXp;
   record.taskSpirit = (Number(record.taskSpirit) || 0) + spiritGain;
   record.taskCount = (Number(record.taskCount) || 0) + 1;
@@ -8578,6 +8791,23 @@ export function updateCultivatorProfile(state, payload = {}) {
   entity.primaryRootKey = rootSet.primaryRootKey;
   entity.root = rootSet.primaryRoot;
   applyAdminCultivatorStats(state, entity, payload);
+  const previousPotentialRealm = potentialRealmFor(entity);
+  if (payload.potentialRealm !== undefined && payload.potentialRealm !== null && payload.potentialRealm !== "") {
+    entity.potentialRealm = normalizeAdminInteger(payload.potentialRealm, previousPotentialRealm, { min: 0, max: realms.length - 1 });
+    entity.potentialSource = "admin";
+  }
+  const talentMode = payload.talentMode === "manual" ? "manual" : "auto";
+  if (talentMode === "manual") {
+    entity.talentOverride = normalizeAdminInteger(payload.talentScore, entity.talent?.score || 50, { min: 1, max: 100 });
+  } else {
+    entity.talentOverride = null;
+  }
+  const potentialChanged = potentialRealmFor(entity) !== previousPotentialRealm;
+  const talentModeChanged = Boolean(entity.talent?.overridden) !== (talentMode === "manual");
+  ensureTalent(entity, {
+    rebirth: state.rebirth,
+    reroll: potentialChanged || talentModeChanged || Boolean(payload.rerollTalent)
+  });
   // Public state exposes stored portraits through this route. Treat that value as unchanged,
   // otherwise a profile edit unrelated to the portrait fails image-data validation.
   const portraitProxy = /^\/api\/cultivators\/portrait\?id=([^&]+)/;
@@ -8592,7 +8822,7 @@ export function updateCultivatorProfile(state, payload = {}) {
   if (id === "player") state.player.sect = state.sect.name;
   rememberCultivatorProfile(state, entity);
   rememberSectProfiles(state);
-  log(state, `后台已更新${entity.name}的资料。`, "gold");
+  log(state, `后台已更新${entity.name}的资料与${entity.talent.grade}天赋。`, "gold");
 }
 
 export function updateSectProfile(state, payload = {}) {
