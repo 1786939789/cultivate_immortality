@@ -10794,7 +10794,6 @@ async function act(path, body = {}, options = {}) {
   try {
     const response = await postAction(path, body, options);
     const nextState = response.state || (response.result !== undefined ? null : response);
-    const refreshHomeAfterAction = options.refreshHome !== false && shouldRefreshHomeState(path);
     if (nextState) {
       applyState(nextState, options);
       syncSelectedDays();
@@ -10806,6 +10805,9 @@ async function act(path, body = {}, options = {}) {
       fullStateStale.value = true;
       if (!options.deferFullRefresh && needsHeavyState(activeTab.value)) ensureFullState();
     }
+    const refreshHomeAfterAction = options.refreshHome !== false
+      && shouldRefreshHomeState(path)
+      && !nextState;
     if (refreshHomeAfterAction) await refresh("home");
     error.value = "";
     return response.result;

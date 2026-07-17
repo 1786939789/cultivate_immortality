@@ -5001,8 +5001,11 @@ function rootRulesCatalog() {
   };
 }
 
+let cachedStaticCatalog = null;
+
 function staticCatalog() {
-  return {
+  if (cachedStaticCatalog) return cachedStaticCatalog;
+  cachedStaticCatalog = {
     realms,
     realmStages,
     roots,
@@ -5020,6 +5023,7 @@ function staticCatalog() {
     equipmentCatalog,
     duelRanks
   };
+  return cachedStaticCatalog;
 }
 
 const baseBreakthroughAttempts = 1;
@@ -7102,9 +7106,8 @@ export function getPublicState(state, options = {}) {
       playerSectPlan: state.playerSectPlan,
       sectFatigue: state.sectFatigue,
       equipmentTransfers: state.equipmentTransfers,
-      home: {
-        ticker: homeTickerForState(state)
-      },
+      // Lite actions update the home dashboard without requiring a follow-up request.
+      home: buildHomeSummary(state),
       provinces: state.provinces,
       sectProfiles: publicSectProfiles(state),
       catalog: staticCatalog(),

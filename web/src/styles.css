@@ -13012,6 +13012,8 @@ button.defender-chip.person:focus-visible .character-portrait {
   text-align: left;
   box-shadow: 0 8px 18px rgba(47, 36, 24, .06);
   transition: border-color .18s ease, background .18s ease, box-shadow .18s ease, transform .18s ease;
+  content-visibility: auto;
+  contain-intrinsic-size: 64px;
 }
 
 .admin-list-row.admin-sect-row,
