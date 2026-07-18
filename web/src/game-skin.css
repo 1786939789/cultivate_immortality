@@ -11,6 +11,49 @@
   --kenney: "/assets/kenney/ui-pack-rpg-expansion/PNG/";
 }
 
+/* Final scoped overrides: later legacy dungeon rules must not flatten the trial play surface. */
+.view.active .dao-trial-run-board .dao-trial-status,
+.view.active .dao-trial-run-board .dao-trial-decision,
+.view.active .dao-trial-run-board .dao-trial-seal-rack {
+  color: #f0e4c8;
+  border-color: rgba(202, 164, 89, .34);
+  background: rgba(37, 39, 32, .94);
+  box-shadow: inset 0 0 0 1px rgba(255, 235, 176, .04);
+}
+
+.view.active .dao-trial-run-board .dao-trial-player-line strong,
+.view.active .dao-trial-run-board .dao-trial-companion-mini b,
+.view.active .dao-trial-run-board .dao-trial-seal-rack b {
+  color: #f0dfae;
+}
+
+.view.active .dao-trial-run-board .dao-trial-player-line small,
+.view.active .dao-trial-run-board .dao-trial-companion-mini em,
+.view.active .dao-trial-run-board .dao-trial-seal-rack small,
+.view.active .dao-trial-run-board .dao-trial-seal-rack p {
+  color: #b9ad96;
+}
+
+.view.active .dao-trial-run-board .dao-trial-path > div {
+  color: #d9ccb0;
+  border-color: rgba(155, 126, 72, .34);
+  background: rgba(49, 49, 40, .92);
+}
+
+.view.active .dao-trial-run-board .dao-trial-path b { color: #d7c9aa; }
+.view.active .dao-trial-run-board .dao-trial-path small { color: #aaa08d; }
+.view.active .dao-trial-run-board .dao-trial-path .state-cleared { background: rgba(44, 92, 68, .9); }
+.view.active .dao-trial-run-board .dao-trial-path .state-current { background: rgba(76, 65, 41, .96); }
+.view.active .dao-trial-run-board .dao-trial-path .state-current b { color: #f4db8d; }
+
+.view.active .dao-trial-run-board .dao-trial-strategies > button,
+.view.active .dao-trial-run-board .dao-trial-seal-offer > button,
+.view.active .dao-trial-run-board .dao-trial-event-options > button {
+  color: #e3d6bd;
+  border-color: rgba(203, 166, 92, .34);
+  background: rgba(28, 35, 29, .96);
+}
+
 * {
   scrollbar-width: thin;
   scrollbar-color: rgba(214, 177, 92, .78) rgba(15, 18, 15, .58);
@@ -4503,6 +4546,529 @@ body::before {
     justify-self: stretch;
     width: 100%;
   }
+}
+
+/* Fate encounters and the seven-day Dao trial extend the existing parchment UI. */
+.encounter-home {
+  grid-column: 1 / -1;
+  min-height: 0;
+  color: #4b351d;
+  background:
+    radial-gradient(circle at 85% 12%, rgba(74, 126, 103, .16), transparent 22rem),
+    linear-gradient(180deg, rgba(224, 208, 171, .98), rgba(196, 171, 125, .98));
+  box-shadow: inset 0 0 0 1px rgba(255, 244, 202, .28), 0 14px 25px rgba(0, 0, 0, .22);
+}
+
+.encounter-home-head {
+  align-items: center;
+  border-bottom-color: rgba(80, 51, 23, .28);
+}
+
+.encounter-home-head h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #5d3a17;
+}
+
+.encounter-home-head p {
+  margin: 3px 0 0;
+  color: #735736;
+}
+
+.encounter-home-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(76px, 1fr));
+  gap: 8px;
+}
+
+.encounter-home-metrics span {
+  display: grid;
+  gap: 2px;
+  min-width: 76px;
+  padding: 7px 10px;
+  border: 1px solid rgba(90, 60, 27, .2);
+  border-radius: 4px;
+  background: rgba(255, 247, 219, .34);
+  text-align: center;
+}
+
+.encounter-home-metrics small,
+.encounter-home-metrics b { letter-spacing: 0; }
+.encounter-home-metrics small { color: #806443; }
+.encounter-home-metrics b { color: #2c6b55; }
+
+.encounter-queue {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(92, 61, 27, .18);
+}
+
+.encounter-queue button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 10px;
+  color: #5d452b;
+  border-color: rgba(99, 67, 31, .24);
+  background: rgba(244, 229, 195, .6);
+}
+
+.encounter-queue button span {
+  color: #28735d;
+  font-size: 11px;
+}
+
+.encounter-queue button.active {
+  color: #fff8dc;
+  border-color: #3f826d;
+  background: #315f51;
+}
+
+.encounter-queue button.active span { color: #d9f3dc; }
+
+.encounter-home-body {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr) minmax(220px, 270px);
+  gap: 18px;
+  align-items: stretch;
+}
+
+.encounter-actor-column {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding-right: 16px;
+  border-right: 1px solid rgba(89, 57, 26, .18);
+  text-align: center;
+}
+
+.encounter-actor-column strong,
+.encounter-actor-column span,
+.encounter-actor-column em {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  letter-spacing: 0;
+}
+
+.encounter-actor-column span { color: #7c6040; font-size: 12px; }
+.encounter-actor-column em { color: #28735d; font-size: 12px; font-style: normal; }
+
+.encounter-story-column {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.encounter-title-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.encounter-title-line h4 {
+  margin: 0;
+  color: #4e3216;
+  font-size: 21px;
+  letter-spacing: 0;
+}
+
+.encounter-title-line > small { color: #7b5b37; }
+
+.encounter-rarity {
+  padding: 3px 7px;
+  border: 1px solid rgba(79, 56, 27, .24);
+  border-radius: 3px;
+  color: #69481f;
+  background: rgba(255, 245, 209, .52);
+  font-size: 11px;
+}
+
+.encounter-rarity.rarity-uncommon { color: #276653; border-color: rgba(39, 102, 83, .4); }
+.encounter-rarity.rarity-rare { color: #7a3f85; border-color: rgba(122, 63, 133, .42); }
+.encounter-rarity.rarity-fated { color: #9b3c27; border-color: rgba(155, 60, 39, .44); background: rgba(251, 215, 160, .52); }
+
+.encounter-story-column > p {
+  min-height: 42px;
+  margin: 0;
+  color: #5d472e;
+  line-height: 1.75;
+}
+
+.encounter-choice-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.encounter-choice {
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  min-height: 62px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  color: #523719;
+  border-color: rgba(96, 64, 29, .3);
+  background: rgba(250, 237, 204, .56);
+  text-align: left;
+}
+
+.encounter-choice:hover:not(:disabled),
+.encounter-choice:focus-visible:not(:disabled) {
+  border-color: #4c8a73;
+  box-shadow: inset 0 0 0 1px rgba(76, 138, 115, .28);
+}
+
+.encounter-choice.tone-danger { border-left: 3px solid #a45c3d; }
+.encounter-choice.tone-bond { border-left: 3px solid #3e8169; }
+.encounter-choice.tone-steady { border-left: 3px solid #8a6a35; }
+.encounter-choice.tone-free { border-left: 3px solid #77706a; }
+.encounter-choice span { font-weight: 700; }
+.encounter-choice small { color: #7b6346; line-height: 1.35; }
+.encounter-expiry { color: #846a4a; }
+
+.encounter-recent-column {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+  padding-left: 16px;
+  border-left: 1px solid rgba(89, 57, 26, .18);
+}
+
+.encounter-recent-column > strong { color: #5f3e1c; }
+.encounter-recent-column button {
+  position: relative;
+  display: grid;
+  gap: 2px;
+  min-height: 44px;
+  padding: 6px 28px 6px 8px;
+  color: #594022;
+  border-color: rgba(99, 67, 31, .18);
+  background: rgba(247, 233, 198, .4);
+  text-align: left;
+}
+.encounter-recent-column button:disabled { opacity: .78; cursor: default; }
+.encounter-recent-column button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.encounter-recent-column button small { color: #816747; }
+.encounter-recent-column button svg { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); }
+.encounter-empty-copy { color: #8a7358; }
+
+.encounter-quiet-state {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(220px, 340px);
+  gap: 14px;
+  align-items: center;
+  min-height: 86px;
+}
+
+.encounter-quiet-mark {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  color: #3c8069;
+  border: 1px solid rgba(60, 128, 105, .32);
+  border-radius: 50%;
+  background: rgba(224, 241, 224, .28);
+}
+
+.encounter-quiet-state strong { color: #543718; font-size: 17px; }
+.encounter-quiet-state p { margin: 4px 0 0; color: #775d3d; }
+.encounter-last-note { display: grid; gap: 2px; min-width: 0; padding-left: 14px; border-left: 1px solid rgba(89, 57, 26, .18); }
+.encounter-last-note small { color: #80684b; }
+.encounter-last-note b { color: #4f351a; }
+.encounter-last-note span {
+  color: #72593c;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.encounter-longterm-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(100px, 1fr)) auto;
+  gap: 8px;
+  align-items: stretch;
+  padding-top: 10px;
+  border-top: 1px solid rgba(89, 57, 26, .18);
+}
+.encounter-longterm-strip > span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid rgba(90, 60, 27, .18);
+  border-radius: 4px;
+  background: rgba(255, 247, 219, .28);
+}
+.encounter-longterm-strip small { color: #806443; }
+.encounter-longterm-strip b { color: #2c6b55; overflow-wrap: anywhere; }
+.encounter-longterm-strip button { align-self: stretch; white-space: nowrap; }
+.encounter-promise-list { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; padding-top: 8px; }
+.encounter-promise-list > span { display: grid; gap: 2px; min-width: 0; padding: 6px 8px; border-left: 2px solid #3e8169; background: rgba(224, 241, 224, .26); }
+.encounter-promise-list b { color: #4e3a20; overflow-wrap: anywhere; }
+.encounter-promise-list small { color: #6f694e; }
+.encounter-archive { display: grid; gap: 9px; margin-top: 10px; padding: 10px; border: 1px solid rgba(89, 57, 26, .2); border-radius: 4px; background: rgba(255, 247, 219, .26); }
+.encounter-archive-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.encounter-archive-toolbar > div { display: grid; gap: 2px; margin-right: auto; }
+.encounter-archive-toolbar strong { color: #543718; }
+.encounter-archive-toolbar small { color: #806443; }
+.encounter-archive-toolbar select { min-height: 32px; color: #563d22; border-color: rgba(99, 67, 31, .28); background: rgba(255, 250, 232, .75); }
+.encounter-archive-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; max-height: 360px; overflow: auto; }
+.encounter-archive-grid > button { display: grid; gap: 5px; min-width: 0; padding: 8px 10px; color: #594022; border-color: rgba(99, 67, 31, .18); background: rgba(247, 233, 198, .42); text-align: left; }
+.encounter-archive-grid > button > span { display: grid; gap: 2px; min-width: 0; }
+.encounter-archive-grid small { color: #806747; }
+.encounter-archive-grid b, .encounter-archive-grid em { overflow-wrap: anywhere; }
+.encounter-archive-grid em { color: #6d5639; font-style: normal; line-height: 1.4; }
+
+.dossier-encounter-panel { grid-column: 1 / -1; }
+.dossier-encounter-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.dossier-encounter-head h3 { margin: 0; }
+.compact-button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 32px; padding: 5px 10px; }
+
+.relationship-gauges {
+  display: grid;
+  grid-template-columns: minmax(120px, .7fr) repeat(2, minmax(180px, 1fr));
+  gap: 12px;
+  margin: 10px 0;
+}
+
+.relationship-gauges > div,
+.relationship-gauges label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(109, 76, 36, .18);
+  border-radius: 4px;
+  background: rgba(246, 229, 190, .24);
+}
+.relationship-gauges > div span { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.relationship-gauges small { color: #80694e; }
+.relationship-gauges label > span { display: flex; justify-content: space-between; }
+.relationship-gauges label > i { height: 6px; overflow: hidden; border-radius: 3px; background: rgba(87, 63, 35, .16); }
+.relationship-gauges label > i > em { display: block; height: 100%; background: #3b8169; }
+.relationship-gauges label:nth-of-type(2) > i > em { background: #a57a31; }
+.encounter-detail-scroll { max-height: 260px; }
+
+.dao-trial-surface { display: grid; gap: 12px; }
+.dao-trial-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 18px; }
+.dao-trial-header > .dao-trial-affix-banner { grid-column: 1 / -1; width: 100%; box-sizing: border-box; }
+.dao-trial-header h3 { margin: 4px 0; font-size: 24px; }
+.dao-trial-header p { margin: 0; color: #5f4b32; }
+.dao-trial-header-stats { display: grid; grid-template-columns: repeat(3, minmax(96px, 1fr)); gap: 8px; }
+.dao-trial-header-stats span { display: grid; gap: 2px; min-width: 96px; padding: 8px 10px; border: 1px solid #8d7445; border-radius: 4px; background: #3b392f; text-align: center; }
+.dao-trial-header-stats small { color: #ded0ad; }
+.dao-trial-header-stats b { color: #ffe29a; font-size: 18px; }
+.dao-trial-affix-banner { display: grid; grid-template-columns: auto auto minmax(160px, 1fr); gap: 6px 10px; align-items: baseline; margin-top: 10px; padding: 8px 10px; border-left: 3px solid #cba455; color: #f0ddb0; background: rgba(47, 46, 38, .78); }
+.dao-trial-affix-banner span { display: inline-flex; align-items: center; gap: 5px; color: #e5bf68; font-size: 12px; }
+.dao-trial-affix-banner strong { color: #ffe29a; }
+.dao-trial-affix-banner small { color: #d0c7ae; overflow-wrap: anywhere; }
+.section-kicker { display: inline-flex; align-items: center; gap: 6px; color: #c9ad6f; }
+.dao-trial-surface .section-kicker { color: #886426; }
+
+.dao-trial-route-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.dao-trial-route-grid > button {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  grid-template-rows: 1fr auto;
+  gap: 8px 12px;
+  min-height: 144px;
+  padding: 15px;
+  color: #d9cfb8;
+  border-color: rgba(187, 151, 82, .28);
+  background: rgba(16, 20, 20, .88);
+  text-align: left;
+}
+.dao-trial-route-grid > button.active { border-color: #d4ad59; box-shadow: inset 0 0 0 1px rgba(212, 173, 89, .5), 0 10px 28px rgba(0, 0, 0, .24); }
+.dao-route-root { display: grid; place-items: center; width: 58px; height: 58px; border: 1px solid rgba(218, 187, 117, .34); border-radius: 50%; background: rgba(222, 190, 112, .08); }
+.dao-route-root img { width: 38px; height: 38px; object-fit: contain; }
+.dao-trial-route-grid button > span:nth-child(2) { display: grid; align-content: start; gap: 3px; min-width: 0; }
+.dao-trial-route-grid small { color: #c8bca5; }
+.dao-trial-route-grid strong { color: #f0d88f; font-size: 21px; }
+.dao-trial-route-grid em { color: #e0d5bf; font-style: normal; line-height: 1.4; }
+.dao-trial-route-grid i { grid-column: 1 / -1; color: #b8d2c5; font-style: normal; letter-spacing: 0; }
+.dao-trial-route-grid .route-cyan.active { border-color: #65b8b1; }
+.dao-trial-route-grid .route-violet.active { border-color: #aa82b6; }
+.dao-trial-route-detail { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; padding: 9px 10px; border: 1px solid rgba(109, 76, 36, .22); border-radius: 4px; background: rgba(246, 229, 190, .22); }
+.dao-trial-route-detail > div { grid-column: 1 / -1; display: grid; gap: 2px; }
+.dao-trial-route-detail strong { color: #543718; }
+.dao-trial-route-detail small { color: #806747; }
+.dao-trial-route-detail > span { min-width: 0; padding: 6px 7px; color: #694f2f; border: 1px solid rgba(99, 67, 31, .15); background: rgba(255, 247, 219, .34); font-size: 12px; overflow-wrap: anywhere; }
+.dao-trial-route-detail > span.elite { color: #865528; border-color: rgba(156, 104, 44, .35); }
+.dao-trial-route-detail > span.boss { color: #8a4432; border-color: rgba(157, 77, 51, .38); }
+.dao-trial-year-goals { display: grid; gap: 10px; }
+.dao-trial-goal-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.dao-trial-goal-grid > div { display: grid; gap: 6px; padding: 8px 10px; border: 1px solid rgba(109, 76, 36, .18); border-radius: 4px; background: rgba(246, 229, 190, .2); }
+.dao-trial-goal-grid > div > span { display: flex; justify-content: space-between; gap: 8px; }
+.dao-trial-goal-grid b { color: #5c4224; }
+.dao-trial-goal-grid small { color: #806747; }
+.dao-trial-goal-grid i { display: block; height: 5px; overflow: hidden; border-radius: 3px; background: rgba(87, 63, 35, .16); }
+.dao-trial-goal-grid em { display: block; height: 100%; background: #a57a31; transition: width .25s ease; }
+.dao-trial-goal-grid > div.complete em { background: #3b8169; }
+
+.dao-trial-prepare .section-head { align-items: center; }
+.dao-trial-prepare .section-head p,
+.dao-trial-seal-catalog .section-head p,
+.dao-trial-history .section-head p { color: #624d32; }
+.dao-trial-companion-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; }
+.dao-trial-companion-list > button { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; min-height: 62px; padding: 7px 9px; color: #f0e3c6; border-color: #76643f; background: #30382f; text-align: left; box-shadow: inset 0 0 0 1px rgba(255, 232, 170, .04); }
+.dao-trial-companion-list > button strong { color: #f4d991; }
+.dao-trial-companion-list > button.active { color: #fff0c5; border-color: #84b9a1; background: #315c4c; box-shadow: inset 0 0 0 1px rgba(174, 226, 199, .2); }
+.dao-trial-companion-list > button.active strong { color: #ffe7a4; }
+.dao-trial-companion-list > button span { display: grid; gap: 2px; min-width: 0; }
+.dao-trial-companion-list small { color: #c4d0c0; overflow-wrap: anywhere; }
+.dao-trial-companion-list > button.active small { color: #dce8dc; }
+.dao-companion-none { display: grid !important; place-items: center; width: 42px; height: 42px; border: 1px solid rgba(185, 151, 84, .3); border-radius: 50%; color: #d8bd76; }
+
+.dao-trial-run-board { display: grid; gap: 14px; }
+.dao-trial-run-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.dao-trial-run-heading h3 { margin: 5px 0 2px; font-size: 25px; }
+.dao-trial-run-heading p { margin: 0; }
+.dao-trial-live-score { color: #e1c270; font-weight: 700; }
+.dao-trial-run-affix { display: inline-flex; align-items: center; gap: 4px; color: #e6c873; font-size: 12px; }
+.dao-trial-path { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.dao-trial-path > div { position: relative; display: grid; justify-items: center; gap: 2px; min-width: 0; min-height: 74px; padding: 7px 5px; border: 1px solid rgba(174, 142, 77, .2); border-radius: 4px; background: rgba(12, 17, 17, .5); text-align: center; }
+.dao-trial-path > div::after { content: ""; position: absolute; left: calc(100% + 1px); top: 24px; width: 7px; height: 1px; background: rgba(181, 146, 77, .3); }
+.dao-trial-path > div:last-child::after { display: none; }
+.dao-trial-path span { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; color: #7d735f; background: rgba(151, 129, 88, .16); }
+.dao-trial-path b { max-width: 100%; color: #9c927e; font-size: 12px; overflow-wrap: anywhere; }
+.dao-trial-path small { color: #6f6a60; }
+.dao-trial-path .state-cleared { border-color: rgba(79, 140, 109, .45); background: rgba(42, 94, 69, .24); }
+.dao-trial-path .state-cleared span { color: #e3f1d5; background: #3d7c60; }
+.dao-trial-path .state-current { border-color: #cda951; box-shadow: inset 0 0 0 1px rgba(205, 169, 81, .28); }
+.dao-trial-path .state-current b { color: #ead087; }
+.dao-trial-path .boss.state-current { border-color: #a65d4b; }
+
+.dao-trial-play-grid { display: grid; grid-template-columns: minmax(220px, 270px) minmax(0, 1fr) minmax(180px, 230px); gap: 12px; }
+.dao-trial-status,
+.dao-trial-decision,
+.dao-trial-seal-rack { min-width: 0; padding: 12px; border: 1px solid rgba(174, 142, 77, .2); border-radius: 4px; background: rgba(11, 17, 17, .48); }
+.dao-trial-status { display: grid; align-content: start; gap: 10px; }
+.dao-trial-player-line { display: flex; align-items: center; gap: 10px; }
+.dao-trial-player-line > div { display: grid; gap: 2px; }
+.dao-trial-player-line small { color: #9b927f; }
+.dao-trial-companion-mini { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: center; padding-top: 10px; border-top: 1px solid rgba(171, 139, 77, .18); }
+.dao-trial-companion-mini > span { display: grid; gap: 1px; }
+.dao-trial-companion-mini small { color: #8fb29d; }
+.dao-trial-companion-mini em { color: #9e9585; font-size: 11px; font-style: normal; }
+.dao-trial-companion-mini > button { grid-column: 2; justify-self: start; min-height: 28px; padding: 4px 7px; color: #e7d39a; border-color: #78663f; background: rgba(51, 58, 46, .86); }
+.dao-trial-companion-mini > button:disabled { color: #9d9a8c; }
+.dao-trial-decision { display: grid; align-content: start; gap: 12px; }
+.dao-trial-current-node { display: grid; gap: 3px; }
+.dao-trial-current-node > span { color: #8fbea4; }
+.dao-trial-current-node h3 { margin: 0; color: #edd58c; font-size: 23px; }
+.dao-trial-current-node small { color: #9a917f; }
+.dao-trial-synergy-list { display: grid; gap: 5px; padding: 7px 9px; border-left: 2px solid #bb9450; background: rgba(96, 73, 35, .18); }
+.dao-trial-synergy-list > span { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 5px; align-items: baseline; min-width: 0; }
+.dao-trial-synergy-list svg { color: #dfbd68; }
+.dao-trial-synergy-list b { color: #edd28e; }
+.dao-trial-synergy-list small { color: #b6ab93; overflow-wrap: anywhere; }
+.dao-trial-offer-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.dao-trial-seal-offer,
+.dao-trial-strategies,
+.dao-trial-event-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.dao-trial-seal-offer > .dao-trial-offer-head,
+.dao-trial-strategies > span,
+.dao-trial-event-options > span { grid-column: 1 / -1; color: #c9b47f; }
+.dao-trial-seal-offer > button:not(.dao-trial-offer-head *),
+.dao-trial-strategies > button,
+.dao-trial-event-options > button { display: grid; align-content: start; gap: 4px; min-height: 92px; padding: 10px; color: #d7c9ae; border-color: rgba(179, 146, 80, .28); background: rgba(31, 37, 31, .72); text-align: left; }
+.dao-trial-strategies > button { grid-template-columns: auto 1fr; }
+.dao-trial-strategies > button small { grid-column: 1 / -1; }
+.dao-trial-seal-offer button span { color: #85b39c; font-size: 11px; }
+.dao-trial-seal-offer button strong,
+.dao-trial-strategies button strong,
+.dao-trial-event-options button strong { color: #f0d88f; }
+.dao-trial-seal-offer button small,
+.dao-trial-strategies button small,
+.dao-trial-event-options button small { color: #a9a08e; line-height: 1.4; }
+.dao-trial-seal-rack { display: grid; align-content: start; gap: 6px; }
+.dao-trial-seal-rack > strong { color: #d9c27f; }
+.dao-trial-seal-rack > span { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 6px 8px; border-left: 2px solid #6d9b80; background: rgba(60, 91, 73, .16); }
+.dao-trial-seal-rack small { color: #9a917e; }
+.dao-trial-seal-rack p { color: #8f8778; }
+
+.dao-trial-lower-grid { grid-template-columns: minmax(0, 1.4fr) minmax(300px, .8fr); }
+.dao-trial-seal-catalog > div:last-child { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+.dao-trial-seal-catalog > div:last-child > span { display: grid; gap: 2px; min-width: 0; padding: 7px 8px; border: 1px solid #756440; border-radius: 3px; background: #333a31; }
+.dao-trial-seal-catalog b { color: #ffe09a; overflow-wrap: anywhere; }
+.dao-trial-seal-catalog small { color: #c6d2c3; }
+.dao-trial-history .detail-scroll { max-height: 320px; }
+.dao-trial-history .empty { color: #4f3b24; }
+.dao-trial-archive { display: grid; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(109, 76, 36, .18); }
+.dao-trial-archive-toolbar { display: flex; align-items: center; gap: 8px; }
+.dao-trial-archive-toolbar select { min-height: 30px; color: #5a4125; border-color: rgba(99, 67, 31, .25); background: rgba(255, 250, 232, .76); }
+.dao-trial-archive-toolbar span { color: #806747; font-size: 12px; }
+.dao-trial-archive-list { display: grid; gap: 6px; max-height: 280px; overflow: auto; }
+.dao-trial-archive-list > button { display: flex; justify-content: space-between; gap: 8px; min-width: 0; padding: 7px 9px; color: #60472a; border-color: rgba(99, 67, 31, .16); background: rgba(247, 233, 198, .4); text-align: left; }
+.dao-trial-archive-list > button > span { display: grid; gap: 2px; min-width: 0; }
+.dao-trial-archive-list b, .dao-trial-archive-list em { overflow-wrap: anywhere; }
+.dao-trial-archive-list small { color: #806747; }
+.dao-trial-archive-list em { color: #6b5638; font-style: normal; white-space: nowrap; }
+
+@media (max-width: 1040px) {
+  .encounter-home-body { grid-template-columns: 112px minmax(0, 1fr); }
+  .encounter-recent-column { grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 10px 0 0; border-left: 0; border-top: 1px solid rgba(89, 57, 26, .18); }
+  .encounter-recent-column > strong,
+  .encounter-recent-column > .encounter-empty-copy { grid-column: 1 / -1; }
+  .dao-trial-play-grid { grid-template-columns: minmax(210px, 250px) minmax(0, 1fr); }
+  .dao-trial-seal-rack { grid-column: 1 / -1; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .dao-trial-seal-rack > strong,
+  .dao-trial-seal-rack > p { grid-column: 1 / -1; }
+  .dao-trial-seal-catalog > div:last-child { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+@media (max-width: 720px) {
+  .encounter-home { grid-column: auto; }
+  .encounter-home-head,
+  .dao-trial-header,
+  .dao-trial-run-heading,
+  .dao-trial-prepare .section-head { align-items: stretch; flex-direction: column; }
+  .dao-trial-header { grid-template-columns: minmax(0, 1fr); }
+  .encounter-home-metrics,
+  .dao-trial-header-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+  .encounter-home-metrics span,
+  .dao-trial-header-stats span { min-width: 0; padding-inline: 5px; }
+  .encounter-home-body { grid-template-columns: minmax(0, 1fr); }
+  .encounter-actor-column { grid-template-columns: auto minmax(0, 1fr); justify-items: start; align-items: center; padding: 0 0 10px; border-right: 0; border-bottom: 1px solid rgba(89, 57, 26, .18); text-align: left; }
+  .encounter-actor-column .character-portrait { grid-row: span 3; }
+  .encounter-choice-list,
+  .encounter-recent-column { grid-template-columns: minmax(0, 1fr); }
+  .encounter-longterm-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .encounter-longterm-strip button { grid-column: 1 / -1; }
+  .encounter-promise-list,
+  .encounter-archive-grid { grid-template-columns: minmax(0, 1fr); }
+  .encounter-recent-column { grid-column: auto; }
+  .encounter-quiet-state { grid-template-columns: auto minmax(0, 1fr); }
+  .encounter-last-note { grid-column: 1 / -1; padding: 10px 0 0; border-left: 0; border-top: 1px solid rgba(89, 57, 26, .18); }
+  .relationship-gauges { grid-template-columns: minmax(0, 1fr); }
+  .dao-trial-route-grid,
+  .dao-trial-play-grid,
+  .dao-trial-lower-grid { grid-template-columns: minmax(0, 1fr); }
+  .dao-trial-path { grid-template-columns: repeat(7, minmax(74px, 1fr)); overflow-x: auto; padding-bottom: 4px; }
+  .dao-trial-path > div { min-width: 74px; }
+  .dao-trial-seal-offer,
+  .dao-trial-strategies,
+  .dao-trial-event-options { grid-template-columns: minmax(0, 1fr); }
+  .dao-trial-seal-rack { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dao-trial-seal-catalog > div:last-child { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dao-trial-companion-list { grid-template-columns: minmax(0, 1fr); }
+  .dao-trial-affix-banner { grid-template-columns: auto auto; }
+  .dao-trial-affix-banner small { grid-column: 1 / -1; }
+  .dao-trial-route-detail { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dao-trial-goal-grid { grid-template-columns: minmax(0, 1fr); }
+  .dao-trial-archive-list > button { flex-direction: column; }
+  .dao-trial-archive-list em { white-space: normal; }
 }
 
 .equipment-surface .equipment-table-head,
@@ -11858,5 +12424,28 @@ body::before {
 
   .view.active.sect-war-room .war-result-footer > span {
     align-self: flex-end;
+  }
+}
+
+@media (min-width: 721px) and (max-width: 1040px) {
+  .stat-tip {
+    left: 50%;
+    top: calc(100% + 6px);
+    width: min(230px, calc(100% - 16px));
+    transform: translate(-50%, -3px);
+  }
+
+  .stat-tip::before {
+    left: 50%;
+    top: -6px;
+    transform: translateX(-50%) rotate(45deg);
+    border-left: 1px solid rgba(23, 32, 51, .18);
+    border-bottom: 0;
+    border-top: 1px solid rgba(23, 32, 51, .18);
+  }
+
+  .stat:hover .stat-tip,
+  .stat:focus-visible .stat-tip {
+    transform: translate(-50%, 0);
   }
 }

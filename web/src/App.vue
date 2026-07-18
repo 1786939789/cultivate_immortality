@@ -266,6 +266,136 @@
               <button class="primary game-cta" type="button" @click="switchTab('arena')">进入切磋</button>
             </article>
 
+            <article class="panel game-card encounter-home" :class="{ 'has-encounter': activeEncounter }">
+              <div class="section-head compact encounter-home-head">
+                <div>
+                  <h3><Handshake :size="19" aria-hidden="true" /> 因缘奇遇簿</h3>
+                  <p>每日基础 {{ Math.round((encounterState.baseChance || .5) * 100) }}% 遇见因缘 · {{ encounterState.definitionCount || 240 }} 个事件节点</p>
+                </div>
+                <div class="encounter-home-metrics">
+                  <span><small>待决</small><b>{{ pendingEncounters.length }}</b></span>
+                  <span><small>连空</small><b>{{ encounterState.emptyDays || 0 }} / {{ encounterState.pityDays || 3 }}</b></span>
+                  <span><small>进行中</small><b>{{ encounterState.activeChains?.length || 0 }} 条</b></span>
+                  <span><small>已发现</small><b>{{ encounterCollection.discovered || 0 }} / {{ encounterCollection.total || 240 }}</b></span>
+                </div>
+              </div>
+
+              <template v-if="activeEncounter">
+                <div v-if="pendingEncounters.length > 1" class="encounter-queue" role="tablist" aria-label="待处理因缘">
+                  <button
+                    v-for="event in pendingEncounters"
+                    :key="event.id"
+                    type="button"
+                    :class="{ active: activeEncounter.id === event.id }"
+                    @click="selectEncounter(event.id)"
+                  >
+                    <span>{{ encounterRarityLabel(event.rarity) }}</span>{{ event.title }}
+                  </button>
+                </div>
+                <div class="encounter-home-body">
+                  <div class="encounter-actor-column">
+                    <CharacterPortrait :person="activeEncounter.actor" size="lg" />
+                    <strong>{{ activeEncounter.actor?.name }}</strong>
+                    <span>{{ activeEncounter.actor?.sect }}</span>
+                    <em>{{ activeEncounter.categoryLabel }}</em>
+                  </div>
+                  <div class="encounter-story-column">
+                    <div class="encounter-title-line">
+                      <span class="encounter-rarity" :class="`rarity-${activeEncounter.rarity}`">{{ encounterRarityLabel(activeEncounter.rarity) }}</span>
+                      <h4>{{ activeEncounter.title }}</h4>
+                      <small v-if="activeEncounter.chainId">{{ activeEncounter.chainTitle }} · {{ activeEncounter.chainStep }}/{{ activeEncounter.chainLength }}</small>
+                    </div>
+                    <p>{{ activeEncounter.text }}</p>
+                    <div class="encounter-choice-list">
+                      <button
+                        v-for="choice in activeEncounter.choices"
+                        :key="choice.id"
+                        type="button"
+                        :class="['encounter-choice', `tone-${choice.tone}`]"
+                        :disabled="!choice.canChoose || isActionPending('/api/encounters/choose')"
+                        :title="choice.canChoose ? choice.hint : choice.reason"
+                        @click="chooseEncounter(choice)"
+                      >
+                        <span>{{ choice.label }}</span>
+                        <small>{{ choice.canChoose ? choice.hint : choice.reason }}</small>
+                      </button>
+                    </div>
+                    <small class="encounter-expiry">第 {{ activeEncounter.expiresDay }} 天结束前可处理，逾期平淡归档且不受处罚。</small>
+                  </div>
+                  <div class="encounter-recent-column">
+                    <strong>近日因缘</strong>
+                    <button
+                      v-for="record in encounterHistory.slice(0, 3)"
+                      :key="`${record.id}-${record.resolvedDay}`"
+                      type="button"
+                      :disabled="!record.replayId"
+                      @click="openEncounterReplay(record)"
+                    >
+                      <span>{{ record.title }}</span>
+                      <small>{{ record.choiceLabel }} · {{ record.actor?.name }}</small>
+                      <Play v-if="record.replayId" :size="13" aria-label="查看切磋回放" />
+                    </button>
+                    <span v-if="!encounterHistory.length" class="encounter-empty-copy">札记尚无旧缘。</span>
+                  </div>
+                </div>
+              </template>
+              <div v-else class="encounter-quiet-state">
+                <span class="encounter-quiet-mark"><Compass :size="28" aria-hidden="true" /></span>
+                <div>
+                  <strong>今日天机平静</strong>
+                  <p>推进一天时会进行一次固定种子判定；连续三日未遇奇缘，下一日必有回响。</p>
+                </div>
+                <div v-if="encounterHistory.length" class="encounter-last-note">
+                  <small>最近一笔</small>
+                  <b>{{ encounterHistory[0].title }}</b>
+                  <span>{{ encounterHistory[0].outcome }}</span>
+                </div>
+              </div>
+              <div class="encounter-longterm-strip">
+                <span><small>当前时序</small><b>{{ encounterSeasonLabel }}</b></span>
+                <span><small>因缘记忆</small><b>{{ encounterState.memoryCount || 0 }} 条</b></span>
+                <span><small>完成事件链</small><b>{{ encounterCollection.completedChains || 0 }} 条</b></span>
+                <span><small>待兑现承诺</small><b>{{ encounterState.promises?.length || 0 }} 项</b></span>
+                <button class="secondary compact-button" type="button" @click="toggleEncounterArchive">
+                  {{ encounterArchiveOpen ? "收起因缘档案" : `查看因缘档案 · ${encounterState.archiveCount || 0}` }}
+                </button>
+              </div>
+              <div v-if="encounterState.promises?.length" class="encounter-promise-list">
+                <span v-for="promise in encounterState.promises.slice(0, 4)" :key="promise.id">
+                  <b>{{ promise.title }}</b><small>第 {{ promise.dueDay }} 天回响</small>
+                </span>
+              </div>
+              <section v-if="encounterArchiveOpen" class="encounter-archive" aria-label="因缘档案">
+                <div class="encounter-archive-toolbar">
+                  <div><strong>因缘档案</strong><small>共 {{ encounterArchive.total }} 条已归档记录</small></div>
+                  <select v-model="encounterArchiveFilter.category" aria-label="筛选因缘分类" @change="loadEncounterArchive(true)">
+                    <option value="">全部分类</option>
+                    <option value="cultivation">修行感悟</option>
+                    <option value="duel">斗法因缘</option>
+                    <option value="dungeon">秘境见闻</option>
+                    <option value="sect">宗门风云</option>
+                    <option value="relationship">人物因缘</option>
+                    <option value="market">坊市轶闻</option>
+                  </select>
+                  <select v-model="encounterArchiveFilter.status" aria-label="筛选因缘类型" @change="loadEncounterArchive(true)">
+                    <option value="">全部类型</option>
+                    <option value="chain">事件链</option>
+                    <option value="seasonal">季节事件</option>
+                  </select>
+                </div>
+                <div class="encounter-archive-grid">
+                  <button v-for="record in encounterArchive.items" :key="`${record.id}-${record.resolvedDay}`" type="button" :disabled="!record.replayId" @click="openEncounterReplay(record)">
+                    <span><small>第 {{ record.resolvedDay }} 天 · {{ record.categoryLabel }}</small><b>{{ record.title }}</b></span>
+                    <em>{{ record.choiceLabel }} · {{ record.outcome }}</em>
+                  </button>
+                  <div v-if="!encounterArchive.items.length && !encounterArchiveLoading" class="empty">当前筛选下暂无记录。</div>
+                </div>
+                <button v-if="encounterArchive.hasMore" class="secondary" type="button" :disabled="encounterArchiveLoading" @click="loadEncounterArchive(false)">
+                  {{ encounterArchiveLoading ? "翻阅中..." : "继续翻阅" }}
+                </button>
+              </section>
+            </article>
+
             <article class="panel game-card equipment-home">
               <div class="section-head compact">
                 <h3>装备</h3>
@@ -1035,7 +1165,7 @@
               {{ tab.label }}
             </button>
           </div>
-          <div class="dungeon-loot-toggle">
+          <div v-if="activeDungeonRecordTab !== 'trial'" class="dungeon-loot-toggle">
             <button class="secondary" type="button" @click="showDungeonLoot = !showDungeonLoot">
               {{ showDungeonLoot ? "收起装备池" : "展开装备池" }}
             </button>
@@ -1044,7 +1174,7 @@
             </button>
           </div>
 
-          <section v-if="showDungeonBestiary" class="panel dungeon-bestiary-panel" aria-label="副本妖物图鉴">
+          <section v-if="activeDungeonRecordTab !== 'trial' && showDungeonBestiary" class="panel dungeon-bestiary-panel" aria-label="副本妖物图鉴">
             <div class="section-head compact">
               <div>
                 <h3>副本妖物图鉴</h3>
@@ -1071,7 +1201,199 @@
             </div>
           </section>
 
-          <div v-if="selectedDungeonDay && activeDungeonRecordTab === 'blood'" class="panel dungeon-record-panel">
+          <div v-if="activeDungeonRecordTab === 'trial'" class="dao-trial-surface">
+            <div class="panel dao-trial-header">
+              <div>
+                <span class="section-kicker"><Compass :size="16" aria-hidden="true" /> 七日问道</span>
+                <h3>第 {{ daoTrialState.cycle }} 期 · 问道秘境</h3>
+                <p>第 {{ daoTrialState.cycleStartDay }} 至 {{ daoTrialState.cycleEndDay }} 天 · 三次正式机会取最好成绩，之后可无奖励演练。</p>
+              </div>
+              <div class="dao-trial-header-stats">
+                <span><small>正式机会</small><b>{{ daoTrialState.attemptsRemaining }} / {{ daoTrialState.officialAttempts }}</b></span>
+                <span><small>最佳得分</small><b>{{ daoTrialState.bestScore || 0 }}</b></span>
+                <span><small>本期里程碑</small><b>{{ daoTrialState.claimedMilestones?.length || 0 }} / 3</b></span>
+              </div>
+              <div class="dao-trial-affix-banner">
+                <span><Sparkles :size="15" aria-hidden="true" /> 本期异象</span>
+                <strong>{{ daoTrialState.affix?.name }}</strong>
+                <small>{{ daoTrialState.affix?.text }}</small>
+              </div>
+            </div>
+
+            <template v-if="activeDaoTrialRun">
+              <div class="panel dao-trial-run-board">
+                <div class="dao-trial-run-heading">
+                  <div>
+                    <span class="tag" :class="`route-${activeDaoTrialRun.route?.accent}`">{{ activeDaoTrialRun.practice ? "演练" : `正式第 ${activeDaoTrialRun.attempt} 次` }}</span>
+                    <h3>{{ activeDaoTrialRun.route?.name }}</h3>
+                    <p>{{ activeDaoTrialRun.route?.subtitle }}</p>
+                  </div>
+                  <div class="actions">
+                    <span v-if="activeDaoTrialRun.affix" class="dao-trial-run-affix" :title="activeDaoTrialRun.affix.text"><Sparkles :size="14" aria-hidden="true" /> {{ activeDaoTrialRun.affix.name }}</span>
+                    <span class="dao-trial-live-score">当前 {{ activeDaoTrialRun.score }} 分</span>
+                    <button class="danger compact-button" type="button" :disabled="isActionPending('/api/dao-trial/abandon')" @click="abandonCurrentDaoTrial">
+                      <X :size="15" aria-hidden="true" /> 离境
+                    </button>
+                  </div>
+                </div>
+
+                <div class="dao-trial-path" aria-label="问道节点进度">
+                  <div v-for="(node, index) in activeDaoTrialRun.nodes" :key="node.id" :class="[`state-${node.state}`, { elite: node.elite, boss: node.boss }]">
+                    <span>{{ index + 1 }}</span>
+                    <b>{{ node.name }}</b>
+                    <small>{{ node.boss ? "心魔" : node.elite ? "精英" : node.type === "battle" ? "斗法" : node.type === "rest" ? "调息" : "抉择" }}</small>
+                  </div>
+                </div>
+
+                <div class="dao-trial-play-grid">
+                  <section class="dao-trial-status">
+                    <div class="dao-trial-player-line">
+                      <CharacterPortrait :person="player" size="lg" />
+                      <div>
+                        <strong>{{ player.name }}</strong>
+                        <small>{{ realmName(player.realm) }} · {{ activeDaoTrialRun.seals.length }} 道印</small>
+                      </div>
+                    </div>
+                    <Meter label="秘境血量" icon="health" :value="activeDaoTrialRun.combat.hp" :max="activeDaoTrialRun.combat.maxHp" tone="health" />
+                    <Meter label="秘境法力" icon="mana" :value="activeDaoTrialRun.combat.mana" :max="activeDaoTrialRun.combat.maxMana" tone="focus" />
+                    <div v-if="activeDaoTrialRun.companion" class="dao-trial-companion-mini">
+                      <CharacterPortrait :person="activeDaoTrialRun.companion.person" size="sm" />
+                      <span><small>同行 · {{ activeDaoTrialRun.companion.relationship }}</small><b>{{ activeDaoTrialRun.companion.person.name }}</b><em>{{ activeDaoTrialRun.companion.support.active?.name }} · {{ activeDaoTrialRun.companion.support.text }}</em></span>
+                      <button class="secondary compact-button" type="button" :disabled="activeDaoTrialRun.companion.supportUsed || isActionPending('/api/dao-trial/advance')" :title="activeDaoTrialRun.companion.supportUsed ? '本轮同行支援已使用' : '使用一次同行主动支援'" @click="useDaoTrialCompanionSupport">
+                        <Handshake :size="14" aria-hidden="true" /> {{ activeDaoTrialRun.companion.supportUsed ? "已支援" : "主动支援" }}
+                      </button>
+                    </div>
+                    <div v-else class="dao-trial-companion-mini empty"><span><small>独行</small><b>此轮未携同行者</b></span></div>
+                  </section>
+
+                  <section class="dao-trial-decision">
+                    <div class="dao-trial-current-node">
+                      <span>{{ activeDaoTrialRun.currentNode?.boss ? "心魔关" : activeDaoTrialRun.currentNode?.elite ? "精英关" : "当前节点" }}</span>
+                      <h3>{{ activeDaoTrialRun.currentNode?.name }}</h3>
+                      <small>悟机 {{ activeDaoTrialRun.insight }} · 可用于重观道印</small>
+                    </div>
+                    <div v-if="activeDaoTrialRun.synergies?.length" class="dao-trial-synergy-list">
+                      <span v-for="synergy in activeDaoTrialRun.synergies" :key="synergy.id" :title="synergy.text"><CheckCircle2 :size="14" aria-hidden="true" /><b>{{ synergy.name }}</b><small>{{ synergy.text }}</small></span>
+                    </div>
+
+                    <div v-if="activeDaoTrialRun.sealOffer.length" class="dao-trial-seal-offer">
+                      <div class="dao-trial-offer-head">
+                        <span>择一道印收入本轮</span>
+                        <button class="secondary compact-button" type="button" :disabled="!activeDaoTrialRun.canReroll || isActionPending('/api/dao-trial/advance')" @click="rerollDaoTrialSeals">
+                          <RefreshCw :size="14" aria-hidden="true" /> 重观 · 1悟机
+                        </button>
+                      </div>
+                      <button v-for="seal in activeDaoTrialRun.sealOffer" :key="seal.id" type="button" :disabled="isActionPending('/api/dao-trial/advance')" @click="chooseDaoTrialSeal(seal.id)">
+                        <span>{{ seal.school }}</span><strong>{{ seal.name }}</strong><small>{{ seal.text }}</small>
+                      </button>
+                    </div>
+
+                    <div v-else-if="activeDaoTrialRun.currentNode?.type === 'battle'" class="dao-trial-strategies">
+                      <span>选择本战策略</span>
+                      <button v-for="strategy in activeDaoTrialRun.battleStrategies" :key="strategy.id" type="button" :disabled="isActionPending('/api/dao-trial/advance')" @click="fightDaoTrial(strategy.id)">
+                        <Play :size="15" aria-hidden="true" />
+                        <strong>{{ strategy.label }}</strong>
+                        <small>{{ battleStrategyHint(strategy.id) }}</small>
+                      </button>
+                    </div>
+
+                    <div v-else class="dao-trial-event-options">
+                      <span>此处如何取舍</span>
+                      <button v-for="option in activeDaoTrialRun.eventOptions" :key="option.id" type="button" :disabled="isActionPending('/api/dao-trial/advance')" @click="chooseDaoTrialEvent(option.id)">
+                        <strong>{{ option.label }}</strong><small>{{ option.hint }}</small>
+                      </button>
+                    </div>
+                  </section>
+
+                  <aside class="dao-trial-seal-rack">
+                    <strong>本轮道印</strong>
+                  <span v-for="seal in activeDaoTrialRun.seals" :key="seal.id" :title="seal.text"><b>{{ seal.name }}</b><small>{{ seal.school }}</small></span>
+                    <p v-if="!activeDaoTrialRun.seals.length">首战得胜后可选择第一道道印。</p>
+                  </aside>
+                </div>
+              </div>
+            </template>
+
+            <template v-else>
+              <div class="dao-trial-route-grid">
+                <button
+                  v-for="route in daoTrialState.routes"
+                  :key="route.id"
+                  type="button"
+                  :class="['panel', `route-${route.accent}`, { active: selectedDaoTrialRoute?.id === route.id }]"
+                  @click="selectedDaoTrialRouteId = route.id"
+                >
+                  <span class="dao-route-root"><img :src="rootIconPath(route.rootKey)" alt=""></span>
+                  <span><small>七节点 · 路线精通 {{ daoTrialState.routeMastery?.[route.id]?.level || 0 }} 级</small><strong>{{ route.name }}</strong><em>{{ route.subtitle }}</em><small>通关 {{ daoTrialState.routeMastery?.[route.id]?.clears || 0 }} 次 · 最佳 {{ daoTrialState.routeMastery?.[route.id]?.bestScore || 0 }} 分</small></span>
+                  <i>{{ route.nodes.map(node => node.boss ? "心" : node.elite ? "精" : node.type === "battle" ? "战" : node.type === "rest" ? "息" : "缘").join(" · ") }}</i>
+                </button>
+              </div>
+
+              <div class="panel dao-trial-prepare">
+                <div class="section-head compact">
+                  <div><h3>选择同行者</h3><p>同行者只在本轮提供一次有上限的支援；无同行者也可独自问道。</p></div>
+                  <button class="primary" type="button" :disabled="!selectedDaoTrialRoute || isActionPending('/api/dao-trial/start')" @click="startSelectedDaoTrial">
+                    <Compass :size="16" aria-hidden="true" />
+                    {{ daoTrialState.attemptsRemaining > 0 ? `踏入${selectedDaoTrialRoute?.name || '秘境'}` : "开始无奖励演练" }}
+                  </button>
+                </div>
+                <div class="dao-trial-companion-list">
+                  <button type="button" :class="{ active: !selectedDaoTrialCompanionId }" @click="selectedDaoTrialCompanionId = ''">
+                    <span class="dao-companion-none">独</span><span><strong>独自问道</strong><small>不获得同行支援</small></span>
+                  </button>
+                  <button v-for="entry in daoTrialState.companions" :key="entry.person.id" type="button" :class="{ active: selectedDaoTrialCompanionId === entry.person.id }" @click="selectedDaoTrialCompanionId = entry.person.id">
+                    <CharacterPortrait :person="entry.person" size="sm" />
+                    <span><strong>{{ entry.person.name }}</strong><small>{{ entry.neutral ? "临时同道" : entry.relationship }} · {{ entry.support.text }}</small></span>
+                  </button>
+                </div>
+                <div v-if="selectedDaoTrialRoute" class="dao-trial-route-detail">
+                  <div><strong>{{ selectedDaoTrialRoute.name }} · 本期节点预览</strong><small>路线池 {{ selectedDaoTrialRoute.nodePoolCount || 14 }} 个节点，本期固定抽取 7 个；精通进度 {{ selectedDaoTrialMastery.progressScore || 0 }} / {{ selectedDaoTrialMastery.nextLevelAt || 3 }}</small></div>
+                  <span v-for="(node, index) in selectedDaoTrialRoute.nodes" :key="`${node.name}-${index}`" :class="{ elite: node.elite, boss: node.boss }">{{ index + 1 }} · {{ node.name }}</span>
+                </div>
+              </div>
+
+              <section class="panel dao-trial-year-goals">
+                <div class="section-head compact"><div><h3>年度问道志</h3><p>每年 52 期；只记录正式挑战，演练不会推进年度进度。</p></div><span class="tag">第 {{ daoTrialState.yearGoals?.year || 1 }} 年</span></div>
+                <div class="dao-trial-goal-grid">
+                  <div v-for="goal in daoTrialState.yearGoals?.goals || []" :key="goal.id" :class="{ complete: goal.completed }">
+                    <span><b>{{ goal.label }}</b><small>{{ Math.min(goal.current, goal.target) }} / {{ goal.target }}</small></span>
+                    <i><em :style="{ width: `${Math.min(100, (goal.current / Math.max(1, goal.target)) * 100)}%` }"></em></i>
+                  </div>
+                </div>
+              </section>
+
+              <div class="grid dao-trial-lower-grid">
+                <section class="panel dao-trial-seal-catalog">
+                  <div class="section-head compact"><div><h3>道印图鉴</h3><p>四十八道印只在当轮生效，不叠加到主世界；凑齐组合可激活协同。</p></div><span class="tag">{{ daoTrialState.sealCatalog?.length || 0 }} 道</span></div>
+                  <div><span v-for="seal in daoTrialState.sealCatalog" :key="seal.id" :title="seal.text"><b>{{ seal.name }}</b><small>{{ seal.school }}</small></span></div>
+                </section>
+                <section class="panel dao-trial-history">
+                  <div class="section-head compact"><div><h3>问道记录</h3><p>本期与往期最近十二次结果。</p></div><button class="secondary compact-button" type="button" @click="toggleDaoTrialArchive"><BookOpen :size="14" aria-hidden="true" /> {{ daoTrialArchiveOpen ? "收起档案" : `完整档案 · ${daoTrialArchive.total || daoTrialState.history?.length || 0}` }}</button></div>
+                  <div class="timeline detail-scroll">
+                    <button v-for="record in daoTrialState.history" :key="record.id" class="event event-button" :class="{ gold: record.success, bad: !record.success, replayable: record.lastReplayId }" type="button" :disabled="!record.lastReplayId" @click="openEncounterReplay({ replayId: record.lastReplayId })">
+                      <strong>第 {{ record.cycle }} 期 · {{ record.routeName }} · {{ record.result }}</strong>
+                      <span>{{ record.nodesCleared }} / 7 节点 · {{ record.score }} 分 · {{ record.sealIds?.length || 0 }} 道印</span>
+                      <small>{{ record.practice ? "无奖励演练" : `正式第 ${record.attempt} 次` }}</small>
+                    </button>
+                    <div v-if="!daoTrialState.history?.length" class="empty">尚未留下问道记录。</div>
+                  </div>
+                  <div v-if="daoTrialArchiveOpen" class="dao-trial-archive">
+                    <div class="dao-trial-archive-toolbar">
+                      <select v-model="daoTrialArchiveFilter.routeId" aria-label="按问道路线筛选" @change="loadDaoTrialArchive(true)"><option value="">全部路线</option><option v-for="route in daoTrialState.routes" :key="route.id" :value="route.id">{{ route.name }}</option></select>
+                      <span>已载入 {{ daoTrialArchive.items.length }} / {{ daoTrialArchive.total }}</span>
+                    </div>
+                    <div class="dao-trial-archive-list">
+                      <button v-for="record in daoTrialArchive.items" :key="record.id" type="button" :disabled="!record.lastReplayId" @click="openEncounterReplay(record)"><span><b>第 {{ record.cycle }} 期 · {{ record.routeName }}</b><small>{{ record.affixName }} · {{ record.practice ? "演练" : `正式第 ${record.attempt} 次` }}</small></span><em>{{ record.result }} · {{ record.score }} 分</em></button>
+                      <div v-if="!daoTrialArchive.items.length && !daoTrialArchiveLoading" class="empty">暂无更多问道记录。</div>
+                    </div>
+                    <button v-if="daoTrialArchive.hasMore" class="secondary" type="button" :disabled="daoTrialArchiveLoading" @click="loadDaoTrialArchive(false)">{{ daoTrialArchiveLoading ? "翻阅中..." : "继续翻阅" }}</button>
+                  </div>
+                </section>
+              </div>
+            </template>
+          </div>
+
+          <div v-else-if="selectedDungeonDay && activeDungeonRecordTab === 'blood'" class="panel dungeon-record-panel">
             <div class="section-head compact">
               <div>
                 <h3>血色禁地</h3>
@@ -3527,6 +3849,50 @@
                   </div>
                 </div>
               </div>
+              <div class="panel flat dossier-encounter-panel">
+                <div class="dossier-encounter-head">
+                  <h3>{{ selectedPerson.id === "player" ? "因缘总览" : "与你的因缘" }}</h3>
+                  <button
+                    v-if="selectedPerson.id !== 'player'"
+                    class="secondary compact-button"
+                    type="button"
+                    :disabled="isActionPending('/api/encounters/focus')"
+                    @click="toggleEncounterFocus(selectedPerson)"
+                  >
+                    <Handshake :size="14" aria-hidden="true" />
+                    {{ selectedPersonRelationship?.focused ? "取消关注" : "关注此人" }}
+                  </button>
+                </div>
+                <div v-if="selectedPersonRelationship" class="relationship-gauges">
+                  <div>
+                    <span><b>{{ selectedPersonRelationship.title }}</b><small>{{ selectedPersonRelationship.interactions || 0 }} 次往来</small></span>
+                  </div>
+                  <label>
+                    <span>交情 <b>{{ selectedPersonRelationship.affinity }}</b></span>
+                    <i><em :style="{ width: `${Math.max(0, Math.min(100, (selectedPersonRelationship.affinity + 100) / 2))}%` }"></em></i>
+                  </label>
+                  <label>
+                    <span>敬意 <b>{{ selectedPersonRelationship.respect }}</b></span>
+                    <i><em :style="{ width: `${Math.max(0, Math.min(100, selectedPersonRelationship.respect))}%` }"></em></i>
+                  </label>
+                </div>
+                <div class="timeline detail-scroll encounter-detail-scroll">
+                  <button
+                    v-for="record in selectedPersonEncounterHistory"
+                    :key="`${record.id}-${record.resolvedDay}`"
+                    class="event event-button"
+                    :class="{ replayable: record.replayId, gold: record.rarity === 'rare' || record.rarity === 'fated' }"
+                    type="button"
+                    :disabled="!record.replayId"
+                    @click="openEncounterReplay(record)"
+                  >
+                    <strong>{{ record.title }} · {{ record.choiceLabel }}</strong>
+                    <span>{{ record.outcome }}</span>
+                    <small>第 {{ record.resolvedDay }} 天 · {{ record.relationTitle || record.categoryLabel }}</small>
+                  </button>
+                  <div v-if="!selectedPersonEncounterHistory.length" class="empty">暂无因缘纪事。</div>
+                </div>
+              </div>
               <div class="panel flat">
                 <h3>每日成长</h3>
                 <div class="timeline detail-scroll">
@@ -4127,11 +4493,13 @@ import {
   ChevronRight,
   CircleUserRound,
   Cloud,
+  Compass,
   Coins,
   Dna,
   Dumbbell,
   Flame,
   Gem,
+  Handshake,
   ImagePlus,
   Landmark,
   Leaf,
@@ -4139,9 +4507,11 @@ import {
   Mountain,
   Orbit,
   Package,
+  Play,
   Plus,
   ShoppingBag,
   Route,
+  RefreshCw,
   Search,
   ScrollText,
   Settings,
@@ -4154,10 +4524,11 @@ import {
   Trophy,
   Waves,
   WandSparkles,
+  X,
   Zap
 } from "lucide-vue-next";
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from "vue";
-import { clearCachedState, getBattleReplay, getCachedState, getCultivatorDetail, getCurrentUser, getDuelReplay, getState, login, logout, postAction, register, saveCachedState } from "./api";
+import { clearCachedState, getBattleReplay, getCachedState, getCultivatorDetail, getCurrentUser, getDaoTrialHistory, getDuelReplay, getEncounterHistory, getState, login, logout, postAction, register, saveCachedState } from "./api";
 import CharacterPortrait from "./components/CharacterPortrait.vue";
 import EquipmentIcon from "./components/EquipmentIcon.vue";
 import Meter from "./components/Meter.vue";
@@ -4352,6 +4723,17 @@ const equipmentSortMode = ref("tier");
 const equipmentSortDirection = ref("desc");
 const dungeonDayIndexes = reactive({ blood: 0, void: 0, sea: 0 });
 const activeDungeonRecordTab = ref("blood");
+const selectedEncounterId = ref("");
+const encounterArchiveOpen = ref(false);
+const encounterArchiveLoading = ref(false);
+const encounterArchive = reactive({ items: [], total: 0, offset: 0, hasMore: false });
+const encounterArchiveFilter = reactive({ category: "", status: "" });
+const selectedDaoTrialRouteId = ref("golden-pass");
+const selectedDaoTrialCompanionId = ref("");
+const daoTrialArchiveOpen = ref(false);
+const daoTrialArchiveLoading = ref(false);
+const daoTrialArchive = reactive({ items: [], total: 0, offset: 0, hasMore: false });
+const daoTrialArchiveFilter = reactive({ routeId: "" });
 const showDungeonLoot = ref(false);
 const showDungeonBestiary = ref(false);
 const selectedStarSeaCycle = ref(null);
@@ -4838,6 +5220,17 @@ const taskProgressState = computed(() => {
   return progress.entries ? progress : { entries: progress, baseXp: 0, fullXpBudget: 360, reducedMultiplier: 0.4 };
 });
 const todayPlan = computed(() => derived.value.todayPlan || {});
+const encounterState = computed(() => gameState.value.encounters || { pending: [], history: [], relationships: [], focusedNpcIds: [], activeChains: [], definitionCount: 240, baseChance: 0.5, emptyDays: 0, collection: { discovered: 0, total: 240 } });
+const pendingEncounters = computed(() => encounterState.value.pending || []);
+const activeEncounter = computed(() => pendingEncounters.value.find((event) => event.id === selectedEncounterId.value) || pendingEncounters.value[0] || null);
+const encounterHistory = computed(() => encounterState.value.history || []);
+const daoTrialState = computed(() => gameState.value.daoTrial || { routes: [], companions: [], history: [], attemptsRemaining: 0, officialAttempts: 3, activeRun: null });
+const activeDaoTrialRun = computed(() => daoTrialState.value.activeRun || null);
+const selectedDaoTrialRoute = computed(() => daoTrialState.value.routes?.find((route) => route.id === selectedDaoTrialRouteId.value) || daoTrialState.value.routes?.[0] || null);
+const selectedDaoTrialCompanion = computed(() => daoTrialState.value.companions?.find((entry) => entry.person?.id === selectedDaoTrialCompanionId.value) || null);
+const encounterSeasonLabel = computed(() => ({ spring: "春序", summer: "夏序", autumn: "秋序", winter: "冬序" })[encounterState.value.season] || "四时");
+const encounterCollection = computed(() => encounterState.value.collection || { discovered: 0, total: encounterState.value.definitionCount || 240, completedChains: 0, endedChains: 0 });
+const selectedDaoTrialMastery = computed(() => daoTrialState.value.routeMastery?.[selectedDaoTrialRoute.value?.id] || { level: 0, clears: 0, bestScore: 0, progressScore: 0, nextLevelAt: 3 });
 const taskSelectableDayCount = 3;
 const frontTaskCategories = computed(() => {
   const categories = [];
@@ -5252,7 +5645,8 @@ const adminWikiArticle = computed(() => filteredAdminWikiArticles.value.find((ar
 const dungeonRecordTabs = [
   { id: "blood", label: "血色禁地" },
   { id: "void", label: "虚天殿" },
-  { id: "sea", label: "乱星海猎妖" }
+  { id: "sea", label: "乱星海猎妖" },
+  { id: "trial", label: "问道秘境" }
 ];
 const dungeonMonsterStages = monsterStageNames.map((stageName, stage) => ({
   stage,
@@ -5291,6 +5685,119 @@ function switchDungeonRecordTab(tabId) {
   activeDungeonRecordTab.value = tabId;
   selectedVoidHallSect.value = "";
   clearBattleReplay();
+}
+
+function encounterRarityLabel(rarity) {
+  return ({ common: "寻常", uncommon: "少见", rare: "稀有", fated: "奇缘" })[rarity] || "因缘";
+}
+
+function selectEncounter(eventId) {
+  if (pendingEncounters.value.some((event) => event.id === eventId)) selectedEncounterId.value = eventId;
+}
+
+async function loadEncounterArchive(reset = false) {
+  if (encounterArchiveLoading.value) return;
+  encounterArchiveLoading.value = true;
+  try {
+    const offset = reset ? 0 : encounterArchive.items.length;
+    const result = await getEncounterHistory({ offset, limit: 24, ...encounterArchiveFilter });
+    encounterArchive.items = reset ? (result.items || []) : [...encounterArchive.items, ...(result.items || [])];
+    encounterArchive.total = Number(result.total) || 0;
+    encounterArchive.offset = Number(result.offset) || 0;
+    encounterArchive.hasMore = Boolean(result.hasMore);
+  } catch (archiveError) {
+    error.value = archiveError.message;
+  } finally {
+    encounterArchiveLoading.value = false;
+  }
+}
+
+async function toggleEncounterArchive() {
+  encounterArchiveOpen.value = !encounterArchiveOpen.value;
+  if (encounterArchiveOpen.value && !encounterArchive.items.length) await loadEncounterArchive(true);
+}
+
+async function loadDaoTrialArchive(reset = false) {
+  if (daoTrialArchiveLoading.value) return;
+  daoTrialArchiveLoading.value = true;
+  try {
+    const offset = reset ? 0 : daoTrialArchive.items.length;
+    const result = await getDaoTrialHistory({ offset, limit: 24, routeId: daoTrialArchiveFilter.routeId });
+    daoTrialArchive.items = reset ? (result.items || []) : [...daoTrialArchive.items, ...(result.items || [])];
+    daoTrialArchive.total = Number(result.total) || 0;
+    daoTrialArchive.offset = Number(result.offset) || 0;
+    daoTrialArchive.hasMore = Boolean(result.hasMore);
+  } catch (archiveError) {
+    error.value = archiveError.message;
+  } finally {
+    daoTrialArchiveLoading.value = false;
+  }
+}
+
+async function toggleDaoTrialArchive() {
+  daoTrialArchiveOpen.value = !daoTrialArchiveOpen.value;
+  if (daoTrialArchiveOpen.value && !daoTrialArchive.items.length) await loadDaoTrialArchive(true);
+}
+
+async function chooseEncounter(choice) {
+  const event = activeEncounter.value;
+  if (!event || !choice?.canChoose) return;
+  const target = captureBattleReturn();
+  const result = await act("/api/encounters/choose", { eventId: event.id, choiceId: choice.id }, { scope: "lite", markStale: true });
+  selectedEncounterId.value = pendingEncounters.value[0]?.id || "";
+  if (result?.replay) {
+    activeTab.value = "dungeon";
+    activeDungeonRecordTab.value = "trial";
+    openBattleReplay(result.replay, target);
+  }
+}
+
+async function toggleEncounterFocus(person = selectedPerson.value) {
+  if (!person?.id || person.id === "player") return;
+  const relationship = selectedPersonRelationship.value;
+  const result = await act("/api/encounters/focus", { npcId: person.id, focused: !relationship?.focused }, { scope: "lite", markStale: true });
+  if (result) await ensurePersonDetail(person.id, true);
+}
+
+async function startSelectedDaoTrial() {
+  const route = selectedDaoTrialRoute.value;
+  if (!route) return;
+  await act("/api/dao-trial/start", {
+    routeId: route.id,
+    companionId: selectedDaoTrialCompanionId.value || ""
+  }, { scope: "full" });
+}
+
+async function chooseDaoTrialSeal(sealId) {
+  await act("/api/dao-trial/advance", { action: "seal", sealId }, { scope: "full" });
+}
+
+async function rerollDaoTrialSeals() {
+  await act("/api/dao-trial/advance", { action: "reroll" }, { scope: "full" });
+}
+
+async function useDaoTrialCompanionSupport() {
+  await act("/api/dao-trial/advance", { action: "companion" }, { scope: "full" });
+}
+
+async function chooseDaoTrialEvent(optionId) {
+  await act("/api/dao-trial/advance", { optionId }, { scope: "full" });
+}
+
+async function fightDaoTrial(strategy) {
+  const target = captureBattleReturn();
+  const result = await act("/api/dao-trial/advance", { strategy }, { scope: "full" });
+  if (result?.replay) openBattleReplay(result.replay, target);
+}
+
+async function abandonCurrentDaoTrial() {
+  if (!confirm("确定离开本轮问道秘境？本次正式机会不会返还。")) return;
+  await act("/api/dao-trial/abandon", {}, { scope: "full" });
+}
+
+async function openEncounterReplay(record) {
+  if (!record?.replayId) return;
+  await openReplay(record, null, captureBattleReturn());
 }
 const voidHallSuccessCount = computed(() => (selectedDungeonDay.value?.sects || []).filter((record) => record.success).length);
 const voidHallStageOptions = computed(() => {
@@ -8118,6 +8625,19 @@ const selectedPerson = computed(() => {
   const detail = personDetails.value[selectedPersonId.value];
   return detailedPerson(base || detail?.person);
 });
+const selectedPersonRelationship = computed(() => {
+  const id = selectedPerson.value?.id;
+  if (!id || id === "player") return null;
+  return personDetails.value[id]?.relationship
+    || encounterState.value.relationships?.find((relationship) => relationship.npcId === id)
+    || { npcId: id, affinity: 0, respect: 0, interactions: 0, title: "陌路", focused: encounterState.value.focusedNpcIds?.includes(id) };
+});
+const selectedPersonEncounterHistory = computed(() => {
+  const id = selectedPerson.value?.id;
+  if (!id) return [];
+  return personDetails.value[id]?.encounterHistory
+    || encounterHistory.value.filter((event) => id === "player" || event.actorId === id).slice(0, 30);
+});
 const selectedSect = computed(() => sectSummaries.value.find((sect) => sect.name === selectedSectName.value));
 const detailBackLabel = computed(() => {
   const last = detailReturnStack.value[detailReturnStack.value.length - 1];
@@ -9402,6 +9922,7 @@ function returnFromDetail() {
 function captureBattleReturn() {
   return {
     activeTab: activeTab.value,
+    activeDungeonRecordTab: activeDungeonRecordTab.value,
     activeSectSubTab: activeSectSubTab.value,
     detailView: detailView.value,
     selectedPersonId: selectedPersonId.value,
@@ -9537,6 +10058,7 @@ function returnFromBattle() {
   closeBattleReplay();
   if (!target) return;
   activeTab.value = target.activeTab;
+  activeDungeonRecordTab.value = target.activeDungeonRecordTab || activeDungeonRecordTab.value;
   activeSectSubTab.value = target.activeSectSubTab;
   detailView.value = target.detailView;
   selectedPersonId.value = target.selectedPersonId;
@@ -10662,8 +11184,14 @@ function mergeCultivatorDetail(detail) {
   };
 }
 
-async function ensurePersonDetail(id) {
-  if (!id || personDetails.value[id] || personDetailLoading.value.has(id)) return;
+async function ensurePersonDetail(id, force = false) {
+  if (!id || personDetailLoading.value.has(id)) return;
+  if (!force && personDetails.value[id]) return;
+  if (force && personDetails.value[id]) {
+    const nextDetails = { ...personDetails.value };
+    delete nextDetails[id];
+    personDetails.value = nextDetails;
+  }
   const nextLoading = new Set(personDetailLoading.value);
   nextLoading.add(id);
   personDetailLoading.value = nextLoading;
@@ -11479,4 +12007,17 @@ watch(dungeonDays, () => {
 watch([activeDungeonRecordTab, activeDungeonDayIndex], () => {
   selectedVoidHallSect.value = "";
 });
+
+watch(pendingEncounters, (events) => {
+  if (!events.some((event) => event.id === selectedEncounterId.value)) selectedEncounterId.value = events[0]?.id || "";
+}, { immediate: true });
+
+watch(daoTrialState, (trial) => {
+  if (!trial.routes?.some((route) => route.id === selectedDaoTrialRouteId.value)) {
+    selectedDaoTrialRouteId.value = trial.routes?.[0]?.id || "golden-pass";
+  }
+  if (selectedDaoTrialCompanionId.value && !trial.companions?.some((entry) => entry.person?.id === selectedDaoTrialCompanionId.value)) {
+    selectedDaoTrialCompanionId.value = "";
+  }
+}, { immediate: true });
 </script>

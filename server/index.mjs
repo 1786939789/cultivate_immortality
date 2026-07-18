@@ -4,7 +4,9 @@ import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   addTask,
+  advanceDaoTrial,
   attemptBreakthrough,
+  abandonDaoTrial,
   buyItem,
   changePlayerPortrait,
   createTaskDefinition,
@@ -12,19 +14,24 @@ import {
   deleteTaskDefinition,
   getDuelReplay,
   getDuelReplayId,
+  getDaoTrialHistoryPage,
+  getEncounterHistoryPage,
   getCultivatorPortrait,
   getPublicCultivatorDetail,
   getPublicReplay,
   assertReplayDayAllowed,
   replayDayFromId,
   rest,
+  resolveEncounter,
   runDailyDuels,
   runDungeon,
   sectMission,
   sectWar,
   sellItem,
+  startDaoTrial,
   toggleTaskDefinition,
   updateCultivatorProfile,
+  updateEncounterFocus,
   updateTaskDefinition,
   updatePlayerSectPlan,
   updatePlayerBattleStrategy,
@@ -51,6 +58,8 @@ const rootDir = fileURLToPath(new URL("../", import.meta.url));
 const distDir = join(rootDir, "dist");
 const liteActionRoutes = new Set([
   "/api/tasks",
+  "/api/encounters/choose",
+  "/api/encounters/focus",
   "/api/breakthrough",
   "/api/task-definitions",
   "/api/task-definitions/update",
@@ -222,6 +231,29 @@ async function handleApi(req, res, url) {
     return;
   }
 
+  if (req.method === "GET" && url.pathname === "/api/encounters/history") {
+    const state = await readState(saveId);
+    sendJson(res, 200, getEncounterHistoryPage(state, {
+      offset: url.searchParams.get("offset"),
+      limit: url.searchParams.get("limit"),
+      category: url.searchParams.get("category"),
+      actorId: url.searchParams.get("actorId"),
+      status: url.searchParams.get("status")
+    }));
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/dao-trial/history") {
+    const state = await readState(saveId);
+    sendJson(res, 200, getDaoTrialHistoryPage(state, {
+      offset: url.searchParams.get("offset"),
+      limit: url.searchParams.get("limit"),
+      routeId: url.searchParams.get("routeId"),
+      cycle: url.searchParams.get("cycle")
+    }));
+    return;
+  }
+
   if (req.method === "GET" && url.pathname === "/api/cultivators/portrait") {
     const id = url.searchParams.get("id");
     if (!id) throw new Error("缺少人物 ID");
@@ -278,6 +310,8 @@ async function handleApi(req, res, url) {
   const body = await readJson(req);
   const routes = {
     "/api/tasks": (state) => addTask(state, body),
+    "/api/encounters/choose": (state) => resolveEncounter(state, body),
+    "/api/encounters/focus": (state) => updateEncounterFocus(state, body),
     "/api/breakthrough": (state) => attemptBreakthrough(state),
     "/api/task-definitions": (state) => createTaskDefinition(state, body),
     "/api/task-definitions/update": (state) => updateTaskDefinition(state, body),
@@ -288,6 +322,9 @@ async function handleApi(req, res, url) {
     "/api/rest": (state) => rest(state),
     "/api/day/advance": (state) => dailySettlement(state, { manual: true }),
     "/api/dungeons/run": (state) => runDungeon(state, body.id),
+    "/api/dao-trial/start": (state) => startDaoTrial(state, body),
+    "/api/dao-trial/advance": (state) => advanceDaoTrial(state, body),
+    "/api/dao-trial/abandon": (state) => abandonDaoTrial(state),
     "/api/sect/mission": (state) => sectMission(state),
     "/api/sect/war": (state) => sectWar(state),
     "/api/sect/plan": (state) => updatePlayerSectPlan(state, body),

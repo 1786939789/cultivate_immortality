@@ -88,6 +88,22 @@ export function getBattleReplay(replayId) {
   return request(`/api/battles/replay?${params.toString()}`);
 }
 
+export function getEncounterHistory(options = {}) {
+  const params = new URLSearchParams({ _: String(Date.now()) });
+  for (const [key, value] of Object.entries(options)) {
+    if (value !== undefined && value !== null && value !== "") params.set(key, String(value));
+  }
+  return request(`/api/encounters/history?${params.toString()}`);
+}
+
+export function getDaoTrialHistory(options = {}) {
+  const params = new URLSearchParams({ _: String(Date.now()) });
+  for (const [key, value] of Object.entries(options)) {
+    if (value !== undefined && value !== null && value !== "") params.set(key, String(value));
+  }
+  return request(`/api/dao-trial/history?${params.toString()}`);
+}
+
 export function postAction(path, body = {}, options = {}) {
   return request(path, { method: "POST", body: { ...body, ...options } });
 }

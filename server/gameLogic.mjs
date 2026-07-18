@@ -1,4 +1,6 @@
 import { canonicalPotentialRealms, combatSkills, dungeons, duelLossScore, duelRankForScore, duelRanks, duelSeasonDay, duelSeasonLength, duelSeasonMaxScore, duelSeasonOfDay, duelWinScore, equipmentCatalog, equipmentSlots, equipmentTiers, itemCatalog, npcGenders, npcNames, provinceVersion, provinces, realms, realmStages, rootCycle, specialRoots, spiritPearls, roots, rosterVersion, sectRoster, sects, taskTemplates } from "./gameData.mjs";
+import { encounterCategoryLabels, encounterDefinitionCount, encounterDefinitionMap, encounterDefinitions } from "./encounterData.mjs";
+import { daoTrialCycleAffixes, daoTrialCycleLength, daoTrialEventOptions, daoTrialNodeVariants, daoTrialOfficialAttempts, daoTrialRouteMap, daoTrialRoutes, daoTrialSealMap, daoTrialSeals, daoTrialSealSynergies } from "./daoTrialData.mjs";
 
 export function dateKey(date = new Date()) {
   const year = date.getFullYear();
@@ -530,7 +532,24 @@ function effectiveSkill(skill, rank = 1) {
 
 function effectiveSkillForEntity(entity) {
   const skill = findSkill(entity?.skillId);
-  return effectiveSkill(skill, skillRankOf(entity, skill.id));
+  const upgraded = effectiveSkill(skill, skillRankOf(entity, skill.id));
+  const buffs = entity?.trialBuffs || {};
+  if (!Object.keys(buffs).length) return upgraded;
+  const result = { ...upgraded };
+  const skillPower = Math.max(-0.5, Number(buffs.skillPower) || 0);
+  const statusPower = Math.max(-0.5, Number(buffs.statusPower) || 0);
+  const healing = Math.max(-0.5, Number(buffs.healing) || 0);
+  if (typeof result.power === "number") result.power = roundSkillValue("power", result.power * (1 + skillPower));
+  if (typeof result.percent === "number") {
+    const multiplier = result.type === "heal" ? 1 + healing : 1 + statusPower;
+    result.percent = roundSkillValue("percent", result.percent * multiplier);
+  }
+  if (typeof result.reduce === "number") result.reduce = roundSkillValue("reduce", result.reduce * (1 + skillPower * 0.5));
+  if (typeof result.leech === "number") result.leech = roundSkillValue("leech", result.leech * (1 + healing));
+  result.cost = Math.max(1, Math.ceil(result.cost * (1 + (Number(buffs.manaCost) || 0))));
+  result.cooldown = Math.max(1, Math.round((result.cooldown || 1) + (Number(buffs.cooldown) || 0)));
+  result.text = skillEffectText(result);
+  return result;
 }
 
 function skillEffectText(skill) {
@@ -708,7 +727,7 @@ function autoUpgradeNpcSkill(state, npc) {
 }
 
 function combatSnapshot(entity, state) {
-  return {
+  const snapshot = {
     attack: effectiveAttack(entity, state),
     defense: effectiveDefense(entity, state),
     maxHp: effectiveMaxHp(entity, state),
@@ -716,6 +735,22 @@ function combatSnapshot(entity, state) {
     divineSense: effectiveDivineSense(entity, state),
     maxMana: effectiveMaxMana(entity, state),
     mana: Math.max(0, Math.min(entity.mana ?? effectiveMaxMana(entity, state), effectiveMaxMana(entity, state)))
+  };
+  const buffs = entity?.trialBuffs || {};
+  const isLowHp = snapshot.hp <= snapshot.maxHp * 0.5;
+  const lowHpAttack = isLowHp ? Number(buffs.lowHpAttack) || 0 : 0;
+  const lowHpSense = isLowHp ? Number(buffs.lowHpSense) || 0 : 0;
+  const scale = (key, bonus) => Math.max(key === "defense" ? 0 : 1, Math.floor(snapshot[key] * (1 + bonus)));
+  const maxHp = scale("maxHp", Number(buffs.maxHp) || 0);
+  const maxMana = scale("maxMana", Number(buffs.maxMana) || 0);
+  return {
+    attack: scale("attack", (Number(buffs.attack) || 0) + lowHpAttack),
+    defense: scale("defense", Number(buffs.defense) || 0),
+    maxHp,
+    hp: clamp(Math.floor(snapshot.hp * (maxHp / Math.max(1, snapshot.maxHp))), 0, maxHp),
+    divineSense: scale("divineSense", (Number(buffs.divineSense) || 0) + lowHpSense),
+    maxMana,
+    mana: clamp(Math.floor(snapshot.mana * (maxMana / Math.max(1, snapshot.maxMana))), 0, maxMana)
   };
 }
 
@@ -772,8 +807,8 @@ function applyBattleRootPenalty(snapshot, penalty) {
 
 function runTurnBattle(left, right, options = {}) {
   const random = options.random || (options.seed ? seededBattleRandom(options.seed) : Math.random);
-  const leftPenalty = rootCounterPenalty(right, left);
-  const rightPenalty = rootCounterPenalty(left, right);
+  const leftPenalty = rootCounterPenalty(right, left) * (1 - clamp(Number(left?.trialBuffs?.rootResist) || 0, 0, 0.9));
+  const rightPenalty = rootCounterPenalty(left, right) * (1 - clamp(Number(right?.trialBuffs?.rootResist) || 0, 0, 0.9));
   const a = applyBattleRootPenalty(applyBattleStrategy(combatSnapshot(left, options.state), left), leftPenalty);
   const b = applyBattleRootPenalty(applyBattleStrategy(combatSnapshot(right, options.state), right), rightPenalty);
   const order = a.divineSense === b.divineSense
@@ -2281,7 +2316,7 @@ function fightMonster(state, entity, monster, maxRounds = 18, start = {}) {
     hp: clamp(start.monsterHp ?? monster.hp ?? monster.maxHp, 0, monster.maxHp),
     mana: clamp(start.monsterMana ?? monster.mana ?? monster.maxMana, 0, monster.maxMana)
   };
-  return runTurnBattle(left, right, { maxRounds, state });
+  return runTurnBattle(left, right, { maxRounds, state, seed: start.seed });
 }
 
 function ensureDungeonState(state) {
@@ -6455,6 +6490,1271 @@ function ensureTaskSystem(state) {
   return changed;
 }
 
+const encounterStateVersion = 1;
+const encounterPendingLimit = 3;
+const encounterHistoryLimit = 720;
+const encounterPublicHistoryLimit = 24;
+const encounterBaseChance = 0.5;
+const encounterPityDays = 3;
+const encounterActiveChainLimit = 2;
+const encounterFamilyCooldownDays = 30;
+const daoTrialStateVersion = 1;
+const daoTrialHistoryLimit = 104;
+
+function deterministicUnit(seed) {
+  return seededBattleRandom(String(seed || "seed"))();
+}
+
+function deterministicPick(list, seed) {
+  if (!list?.length) return null;
+  return list[Math.floor(deterministicUnit(seed) * list.length) % list.length];
+}
+
+function encounterCycleOfDay(day) {
+  return Math.floor((Math.max(1, Number(day) || 1) - 1) / 360) + 1;
+}
+
+function encounterSeasonOfDay(day) {
+  const month = Math.floor((Math.max(1, Number(day) || 1) - 1) % 360 / 30) + 1;
+  if (month <= 3) return "spring";
+  if (month <= 6) return "summer";
+  if (month <= 9) return "autumn";
+  return "winter";
+}
+
+function ensureEncounterState(state) {
+  let changed = false;
+  if (!state.encounters || state.encounters.version !== encounterStateVersion) {
+    const previous = state.encounters || {};
+    state.encounters = {
+      version: encounterStateVersion,
+      lastGenerationDay: Number(previous.lastGenerationDay || state.day - 1),
+      emptyDays: Number(previous.emptyDays || 0),
+      pending: Array.isArray(previous.pending) ? previous.pending : [],
+      history: Array.isArray(previous.history) ? previous.history : [],
+      seen: previous.seen && typeof previous.seen === "object" ? previous.seen : {},
+      chains: previous.chains && typeof previous.chains === "object" ? previous.chains : {},
+      focusedNpcIds: Array.isArray(previous.focusedNpcIds) ? previous.focusedNpcIds : [],
+      memories: previous.memories && typeof previous.memories === "object" ? previous.memories : {},
+      promises: Array.isArray(previous.promises) ? previous.promises : [],
+      statistics: previous.statistics && typeof previous.statistics === "object" ? previous.statistics : {}
+    };
+    changed = true;
+  }
+  if (!state.relationships || typeof state.relationships !== "object" || Array.isArray(state.relationships)) {
+    state.relationships = {};
+    changed = true;
+  }
+  const encounters = state.encounters;
+  encounters.pending = (encounters.pending || []).filter((event) => event?.id && encounterDefinitionMap[event.definitionId]).slice(0, encounterPendingLimit);
+  encounters.history = (encounters.history || []).filter(Boolean).slice(0, encounterHistoryLimit);
+  encounters.focusedNpcIds = [...new Set((encounters.focusedNpcIds || []).filter((id) => state.npcs?.some((npc) => npc.id === id)))].slice(0, 3);
+  encounters.seen ??= {};
+  encounters.chains ??= {};
+  encounters.memories ??= {};
+  encounters.promises = (encounters.promises || []).filter((promise) => promise?.id).slice(0, 120);
+  encounters.statistics ??= {};
+  encounters.statistics.seenCount = Number(encounters.statistics.seenCount) || 0;
+  encounters.statistics.resolvedCount = Number(encounters.statistics.resolvedCount) || 0;
+  encounters.statistics.seasonCounts ??= {};
+  encounters.emptyDays = Math.max(0, Math.floor(Number(encounters.emptyDays) || 0));
+  encounters.lastGenerationDay = Math.min(state.day, Math.floor(Number(encounters.lastGenerationDay) || state.day - 1));
+  return changed;
+}
+
+function relationshipEntry(state, npcId) {
+  if (!npcId || npcId === "player") return null;
+  state.relationships ??= {};
+  state.relationships[npcId] ??= {
+    npcId,
+    affinity: 0,
+    respect: 0,
+    interactions: 0,
+    lastDay: 0,
+    invitedUntilCycle: 0
+  };
+  return state.relationships[npcId];
+}
+
+function relationshipTitle(relationship = {}) {
+  const affinity = Number(relationship.affinity) || 0;
+  const respect = Number(relationship.respect) || 0;
+  if (affinity >= 70 && respect >= 65) return "知己";
+  if (affinity >= 45 && respect >= 45) return "同道";
+  if (affinity <= -35 && respect >= 55) return "宿敌";
+  if (affinity >= 40) return "故交";
+  if (respect >= 55) return "惺惺相惜";
+  if (affinity <= -45) return "仇怨";
+  if (affinity >= 15 || respect >= 20) return "相识";
+  return "陌路";
+}
+
+function relationshipStageInfo(relationship = {}) {
+  const score = Math.max(0, Number(relationship.affinity) || 0) + Math.max(0, Number(relationship.respect) || 0);
+  const stages = [
+    { id: "stranger", name: "陌路", threshold: 0 },
+    { id: "acquaintance", name: "相识", threshold: 25 },
+    { id: "familiar", name: "故交", threshold: 70 },
+    { id: "companion", name: "同道", threshold: 105 },
+    { id: "confidant", name: "知己", threshold: 145 }
+  ];
+  const currentIndex = Math.max(0, stages.findLastIndex((stage) => score >= stage.threshold));
+  const current = stages[currentIndex];
+  const next = stages[currentIndex + 1] || null;
+  return {
+    id: current.id,
+    name: relationshipTitle(relationship) || current.name,
+    score,
+    nextName: next?.name || "圆满",
+    nextThreshold: next?.threshold || score,
+    progress: next ? clamp((score - current.threshold) / Math.max(1, next.threshold - current.threshold), 0, 1) : 1
+  };
+}
+
+function publicRelationship(state, npcId) {
+  const npc = state.npcs?.find((item) => item.id === npcId);
+  if (!npc) return null;
+  const relation = state.relationships?.[npcId] || { npcId, affinity: 0, respect: 0, interactions: 0, lastDay: 0 };
+  const stage = relationshipStageInfo(relation);
+  return {
+    npcId,
+    name: npc.name,
+    sect: npc.sect,
+    affinity: relation.affinity,
+    respect: relation.respect,
+    interactions: relation.interactions,
+    lastDay: relation.lastDay,
+    title: relationshipTitle(relation),
+    stage,
+    focused: state.encounters?.focusedNpcIds?.includes(npcId) || false
+  };
+}
+
+function encounterActorCandidates(state, rule) {
+  const npcs = state.npcs || [];
+  const player = state.player;
+  if (!npcs.length) return [];
+  if (rule === "recentOpponent") {
+    const ids = (player.duelHistory || []).slice(0, 12).map((record) => record.opponentId).filter(Boolean);
+    const matches = ids.map((id) => npcs.find((npc) => npc.id === id)).filter(Boolean);
+    if (matches.length) return matches;
+  }
+  if (rule === "sectMate") {
+    const matches = npcs.filter((npc) => npc.sect === state.sect?.name);
+    if (matches.length) return matches;
+  }
+  if (rule === "rivalSect") {
+    const matches = npcs.filter((npc) => npc.sect !== state.sect?.name);
+    if (matches.length) return matches;
+  }
+  if (rule === "sameRoot") {
+    const key = primaryRoot(player).key;
+    const matches = npcs.filter((npc) => primaryRoot(npc).key === key);
+    if (matches.length) return matches;
+  }
+  if (rule === "sameSkill") {
+    const matches = npcs.filter((npc) => npc.skillId === player.skillId);
+    if (matches.length) return matches;
+  }
+  if (rule === "dungeonPeer") {
+    const recentIds = new Set((state.dungeonDays?.[0]?.solo || []).map((entry) => entry.id));
+    const matches = npcs.filter((npc) => recentIds.has(npc.id));
+    if (matches.length) return matches;
+  }
+  return npcs;
+}
+
+function encounterActorFor(state, definition, actorId = "") {
+  if (actorId) return state.npcs?.find((npc) => npc.id === actorId) || null;
+  const candidates = encounterActorCandidates(state, definition.actorRule);
+  const focused = candidates.filter((npc) => state.encounters.focusedNpcIds.includes(npc.id));
+  const pool = focused.length && deterministicUnit(`focus|${state.rebirth}|${state.day}|${definition.id}`) < 0.42 ? focused : candidates;
+  return deterministicPick(pool, `actor|${state.rebirth}|${state.day}|${definition.id}`);
+}
+
+function encounterContext(state, actor) {
+  const territory = deterministicPick(
+    (state.provinces || []).filter((province) => province.owner === state.sect?.name),
+    `province|${state.day}|${actor?.id || "none"}`
+  );
+  const task = state.taskCompletions?.find((record) => record.day >= state.day - 1);
+  const dungeon = state.player?.dungeonHistory?.find((record) => record.day >= state.day - 1);
+  return {
+    actor: actor?.name || "一名陌生修士",
+    player: state.player?.name || "你",
+    sect: state.sect?.name || "本宗",
+    province: provinceById(territory?.id)?.name || "边城",
+    task: task?.name || "尘世事务",
+    dungeon: dungeon?.name || "秘境"
+  };
+}
+
+function fillEncounterText(text, context) {
+  return String(text || "").replace(/\{(actor|player|sect|province|task|dungeon)\}/g, (_, key) => context[key] || "");
+}
+
+function materializeEncounter(state, definition, actorId = "") {
+  const actor = encounterActorFor(state, definition, actorId);
+  if (!actor) return null;
+  const context = encounterContext(state, actor);
+  const instanceId = makeId("encounter");
+  return {
+    id: instanceId,
+    definitionId: definition.id,
+    title: definition.title,
+    text: fillEncounterText(definition.text, context),
+    category: definition.category,
+    categoryLabel: definition.categoryLabel || encounterCategoryLabels[definition.category] || "因缘",
+    rarity: definition.rarity,
+    familyId: definition.familyId || definition.id,
+    season: definition.season || "all",
+    seasonal: Boolean(definition.seasonal),
+    actor: compactCultivatorRef(publicCultivator(actor, state, { kind: "npc", compact: true })),
+    actorId: actor.id,
+    chainId: definition.chainId || "",
+    chainTitle: definition.chainTitle || "",
+    chainStep: definition.chainStep || 0,
+    chainLength: definition.chainLength || 0,
+    createdDay: state.day,
+    createdDate: stateDateForDay(state),
+    expiresDay: state.day + 3,
+    choices: definition.choices.map((choice) => ({
+      id: choice.id,
+      label: choice.label,
+      hint: choice.hint,
+      tone: choice.tone,
+      memoryTag: choice.memoryTag || "",
+      deferred: choice.deferred || null
+    }))
+  };
+}
+
+function activeEncounterChainCount(state) {
+  return Object.values(state.encounters.chains || {}).filter((chain) => chain.status === "active").length;
+}
+
+function expireEncounters(state) {
+  const kept = [];
+  for (const event of state.encounters.pending || []) {
+    if (Number(event.expiresDay) >= state.day) {
+      kept.push(event);
+      continue;
+    }
+    state.encounters.history.unshift({
+      ...event,
+      resolvedDay: state.day,
+      resolvedDate: stateDateForDay(state),
+      choiceId: "expired",
+      choiceLabel: "未及赴约",
+      outcome: "此事随时日淡去，没有造成额外损失。",
+      expired: true,
+      choices: undefined
+    });
+    if (event.chainId && state.encounters.chains[event.chainId]?.status === "active") {
+      state.encounters.chains[event.chainId].status = "ended";
+      state.encounters.chains[event.chainId].endedDay = state.day;
+    }
+  }
+  state.encounters.pending = kept;
+  state.encounters.history = state.encounters.history.slice(0, encounterHistoryLimit);
+}
+
+function settleEncounterPromises(state) {
+  ensureEncounterState(state);
+  const kept = [];
+  for (const promise of state.encounters.promises || []) {
+    if (promise.status === "resolved" || Number(promise.dueDay) > state.day) {
+      kept.push(promise);
+      continue;
+    }
+    const relation = relationshipEntry(state, promise.actorId);
+    if (relation) {
+      relation.respect = clamp(relation.respect + 1, 0, 100);
+      relation.lastDay = state.day;
+    }
+    if (promise.kind === "market" || promise.kind === "dungeon") state.player.spirit += 3;
+    if (promise.kind === "cultivation") state.player.xp += 2;
+    promise.status = "resolved";
+    promise.resolvedDay = state.day;
+    promise.outcome = "旧约如期有了回响，曾经的选择没有被忘记。";
+    kept.push(promise);
+    log(state, `因缘回响：「${promise.title}」兑现了旧约。`, "gold");
+  }
+  state.encounters.promises = kept.slice(-120);
+}
+
+function dueChainDefinition(state) {
+  return Object.values(state.encounters.chains || {})
+    .filter((chain) => chain.status === "active" && chain.nextEventId && Number(chain.dueDay) <= state.day)
+    .sort((a, b) => a.dueDay - b.dueDay || a.startedDay - b.startedDay)
+    .map((chain) => ({ chain, definition: encounterDefinitionMap[chain.nextEventId] }))
+    .find((entry) => entry.definition) || null;
+}
+
+function encounterCandidates(state) {
+  const season = encounterSeasonOfDay(state.day);
+  const cycle = encounterCycleOfDay(state.day);
+  const recentCategories = [...state.encounters.pending, ...state.encounters.history].slice(0, 2).map((event) => event.category);
+  const recentFamilies = [...state.encounters.pending, ...state.encounters.history]
+    .filter((event) => event.familyId && Number(event.resolvedDay || event.createdDay || 0) >= state.day - encounterFamilyCooldownDays)
+    .map((event) => event.familyId);
+  return encounterDefinitions.filter((definition) => {
+    if (definition.chainId && !definition.eligibleAsStart) return false;
+    if (!definition.weight) return false;
+    const seen = state.encounters.seen[definition.id];
+    if (definition.oncePerSave && seen?.count) return false;
+    if (definition.oncePerCycle && seen?.lastCycle === cycle) return false;
+    if (seen?.lastDay && state.day - seen.lastDay < definition.cooldownDays) return false;
+    if (definition.season && definition.season !== "all" && definition.season !== season) return false;
+    if (definition.familyId && recentFamilies.includes(definition.familyId)) return false;
+    if (definition.chainId && activeEncounterChainCount(state) >= encounterActiveChainLimit) return false;
+    if (definition.chainId && state.encounters.chains[definition.chainId]) return false;
+    if (recentCategories.length >= 2 && recentCategories.every((category) => category === definition.category)) return false;
+    return encounterActorCandidates(state, definition.actorRule).length > 0;
+  });
+}
+
+function chooseEncounterDefinition(state) {
+  const candidates = encounterCandidates(state);
+  if (!candidates.length) return null;
+  const weighted = candidates.map((definition) => {
+    const seenCount = Number(state.encounters.seen[definition.id]?.count || 0);
+    const categoryNovelty = [...state.encounters.pending, ...state.encounters.history].slice(0, 6)
+      .filter((event) => event.category === definition.category).length;
+    const weight = Math.max(0.05, Number(definition.weight || 1) / (1 + seenCount * 1.8) / (1 + categoryNovelty * 0.35));
+    return { definition, weight };
+  });
+  const total = weighted.reduce((sum, item) => sum + item.weight, 0);
+  let roll = deterministicUnit(`encounter-choice|${state.rebirth}|${state.day}|${state.encounters.history.length}`) * total;
+  for (const item of weighted) {
+    roll -= item.weight;
+    if (roll <= 0) return item.definition;
+  }
+  return weighted.at(-1)?.definition || null;
+}
+
+function recordEncounterSeen(state, definition) {
+  const seen = state.encounters.seen[definition.id] || { count: 0, lastDay: 0 };
+  seen.count += 1;
+  seen.lastDay = state.day;
+  seen.lastCycle = encounterCycleOfDay(state.day);
+  state.encounters.seen[definition.id] = seen;
+  state.encounters.statistics.seenCount += 1;
+  state.encounters.statistics.seasonCounts[encounterSeasonOfDay(state.day)] = (state.encounters.statistics.seasonCounts[encounterSeasonOfDay(state.day)] || 0) + 1;
+}
+
+export function generateDailyEncounter(state) {
+  ensureEncounterState(state);
+  settleEncounterPromises(state);
+  if (state.encounters.lastGenerationDay >= state.day) return null;
+  expireEncounters(state);
+  state.encounters.lastGenerationDay = state.day;
+  if (state.encounters.pending.length >= encounterPendingLimit) return null;
+
+  const due = dueChainDefinition(state);
+  if (due) {
+    const event = materializeEncounter(state, due.definition, due.chain.actorId);
+    if (!event) return null;
+    state.encounters.pending.push(event);
+    due.chain.nextEventId = "";
+    recordEncounterSeen(state, due.definition);
+    log(state, `因缘再续：「${event.title}」已有新的进展。`, "gold");
+    return event;
+  }
+
+  const guaranteed = state.encounters.emptyDays >= encounterPityDays;
+  const rolled = deterministicUnit(`encounter-roll|${state.rebirth}|${state.day}`) < encounterBaseChance;
+  if (!guaranteed && !rolled) {
+    state.encounters.emptyDays += 1;
+    return null;
+  }
+  const definition = chooseEncounterDefinition(state);
+  if (!definition) {
+    state.encounters.emptyDays += 1;
+    return null;
+  }
+  const event = materializeEncounter(state, definition);
+  if (!event) return null;
+  state.encounters.pending.push(event);
+  state.encounters.emptyDays = 0;
+  recordEncounterSeen(state, definition);
+  log(state, `因缘奇遇：「${event.title}」等待你的抉择。`, definition.rarity === "fated" ? "gold" : "");
+  return event;
+}
+
+function encounterChoiceAvailability(state, choice) {
+  const spiritCost = Math.max(0, -(Number(choice.effects?.spirit) || 0));
+  if (spiritCost > state.player.spirit) return { canChoose: false, reason: `需要 ${spiritCost} 灵石` };
+  return { canChoose: true, reason: "" };
+}
+
+function publicEncounterEvent(state, event) {
+  const definition = encounterDefinitionMap[event.definitionId];
+  return {
+    ...event,
+    choices: (definition?.choices || []).map((choice) => ({
+      id: choice.id,
+      label: choice.label,
+      hint: choice.hint,
+      tone: choice.tone,
+      memoryTag: choice.memoryTag || "",
+      deferred: choice.deferred || null,
+      ...encounterChoiceAvailability(state, choice)
+    }))
+  };
+}
+
+function publicEncounters(state) {
+  ensureEncounterState(state);
+  const relations = Object.keys(state.relationships || {})
+    .map((npcId) => publicRelationship(state, npcId))
+    .filter(Boolean)
+    .sort((a, b) => (b.affinity + b.respect) - (a.affinity + a.respect));
+  const discoveredDefinitions = Object.entries(state.encounters.seen || {})
+    .filter(([, record]) => Number(record?.count) > 0)
+    .map(([id]) => encounterDefinitionMap[id])
+    .filter(Boolean);
+  const discoveredByCategory = Object.fromEntries(Object.keys(encounterCategoryLabels).map((category) => [
+    category,
+    discoveredDefinitions.filter((definition) => definition.category === category).length
+  ]));
+  const totalByCategory = Object.fromEntries(Object.keys(encounterCategoryLabels).map((category) => [
+    category,
+    encounterDefinitions.filter((definition) => definition.category === category).length
+  ]));
+  return {
+    definitionCount: encounterDefinitionCount,
+    baseChance: encounterBaseChance,
+    pityDays: encounterPityDays,
+    emptyDays: state.encounters.emptyDays,
+    season: encounterSeasonOfDay(state.day),
+    cycle: encounterCycleOfDay(state.day),
+    archiveCount: state.encounters.history.length,
+    statistics: state.encounters.statistics,
+    promises: state.encounters.promises.filter((promise) => promise.status !== "resolved").slice(-12),
+    memoryCount: Object.keys(state.encounters.memories || {}).length,
+    collection: {
+      discovered: discoveredDefinitions.length,
+      total: encounterDefinitionCount,
+      discoveredByCategory,
+      totalByCategory,
+      completedChains: Object.values(state.encounters.chains || {}).filter((chain) => chain.status === "completed").length,
+      endedChains: Object.values(state.encounters.chains || {}).filter((chain) => chain.status === "ended").length
+    },
+    pending: state.encounters.pending.map((event) => publicEncounterEvent(state, event)),
+    history: state.encounters.history.slice(0, encounterPublicHistoryLimit),
+    relationships: relations.slice(0, 20),
+    focusedNpcIds: state.encounters.focusedNpcIds,
+    activeChains: Object.values(state.encounters.chains || {}).filter((chain) => chain.status === "active").map((chain) => ({
+      id: chain.id,
+      title: chain.title,
+      actorId: chain.actorId,
+      step: chain.step,
+      length: chain.length,
+      dueDay: chain.dueDay
+    }))
+  };
+}
+
+export function getEncounterHistoryPage(state, options = {}) {
+  ensureEncounterState(state);
+  const offset = Math.max(0, Math.floor(Number(options.offset) || 0));
+  const limit = clamp(Math.floor(Number(options.limit) || 24), 1, 60);
+  const category = String(options.category || "");
+  const actorId = String(options.actorId || "");
+  const status = String(options.status || "");
+  const items = state.encounters.history.filter((record) => {
+    if (category && record.category !== category) return false;
+    if (actorId && record.actorId !== actorId) return false;
+    if (status === "chain" && !record.chainId) return false;
+    if (status === "seasonal" && !record.seasonal) return false;
+    return true;
+  });
+  return {
+    offset,
+    limit,
+    total: items.length,
+    hasMore: offset + limit < items.length,
+    items: items.slice(offset, offset + limit).map((record) => ({ ...record, choices: undefined }))
+  };
+}
+
+export function updateEncounterFocus(state, payload = {}) {
+  ensureEncounterState(state);
+  const npcId = String(payload.npcId || "");
+  if (!state.npcs.some((npc) => npc.id === npcId)) throw new Error("未找到该修士");
+  const focused = new Set(state.encounters.focusedNpcIds);
+  if (payload.focused === false || focused.has(npcId)) focused.delete(npcId);
+  else {
+    if (focused.size >= 3) throw new Error("最多关注三名修士");
+    focused.add(npcId);
+  }
+  state.encounters.focusedNpcIds = [...focused];
+  return { npcId, focused: focused.has(npcId) };
+}
+
+export function resolveEncounter(state, payload = {}) {
+  ensureEncounterState(state);
+  const event = state.encounters.pending.find((item) => item.id === payload.eventId);
+  if (!event) throw new Error("该因缘事件已经结束");
+  const definition = encounterDefinitionMap[event.definitionId];
+  const choice = definition?.choices.find((item) => item.id === payload.choiceId);
+  if (!choice) throw new Error("未知的因缘选择");
+  const availability = encounterChoiceAvailability(state, choice);
+  if (!availability.canChoose) throw new Error(availability.reason);
+  const actor = state.npcs.find((npc) => npc.id === event.actorId);
+  const relation = relationshipEntry(state, event.actorId);
+  const effects = choice.effects || {};
+  relation.affinity = clamp(relation.affinity + (Number(effects.affinity) || 0), -100, 100);
+  relation.respect = clamp(relation.respect + (Number(effects.respect) || 0), 0, 100);
+  relation.interactions += 1;
+  relation.lastDay = state.day;
+  state.player.spirit = Math.max(0, state.player.spirit + (Number(effects.spirit) || 0));
+  if (effects.dust > 0) addSpiritDust(state, effects.dust, `因缘事件「${event.title}」`, state.player);
+  if (effects.invite) relation.invitedUntilCycle = daoTrialCycleOfDay(state.day) + 1;
+
+  const memoryKey = `${event.familyId || definition.familyId || definition.id}:${choice.memoryTag || choice.id}`;
+  const memory = state.encounters.memories[memoryKey] || {
+    key: memoryKey,
+    familyId: event.familyId || definition.familyId || definition.id,
+    tag: choice.memoryTag || choice.id,
+    count: 0,
+    firstDay: state.day
+  };
+  memory.count += 1;
+  memory.lastDay = state.day;
+  memory.lastChoiceId = choice.id;
+  memory.actorId = event.actorId;
+  state.encounters.memories[memoryKey] = memory;
+  if (choice.deferred?.days) {
+    state.encounters.promises.push({
+      id: makeId("encounter-promise"),
+      title: event.title,
+      actorId: event.actorId,
+      familyId: event.familyId || definition.familyId || definition.id,
+      kind: choice.deferred.kind || definition.category,
+      dueDay: state.day + Math.max(1, Number(choice.deferred.days) || 1),
+      createdDay: state.day,
+      status: "pending",
+      memoryKey
+    });
+    state.encounters.promises = state.encounters.promises.slice(-120);
+  }
+
+  let replay = null;
+  let battleResult = "";
+  if (effects.battle && actor) {
+    const seed = `encounter-battle|${state.rebirth}|${state.day}|${event.definitionId}|${actor.id}`;
+    const battle = runTurnBattle({ ...state.player }, { ...actor }, { state, seed, maxRounds: 18 });
+    const won = battle.winner === "left";
+    battleResult = won ? "切磋得胜" : "切磋落败";
+    relation.respect = clamp(relation.respect + (won ? 3 : 2), 0, 100);
+    replay = buildReplay({ ...state.player }, { ...actor }, battle, won ? "胜" : "负", timestampKey(), state);
+    replay.kind = "encounter";
+    replay.day = state.day;
+    replay.replayId = makeReplayId("encounter", state.day, event.id, actor.id);
+    queueBattleReplay(state, replay, event.id);
+  }
+
+  if (definition.chainId) {
+    const chain = state.encounters.chains[definition.chainId] || {
+      id: definition.chainId,
+      title: definition.chainTitle,
+      actorId: event.actorId,
+      startedDay: state.day,
+      step: definition.chainStep,
+      length: definition.chainLength,
+      status: "active"
+    };
+    chain.step = definition.chainStep;
+    chain.lastChoiceId = choice.id;
+    if (effects.endChain) {
+      chain.status = "ended";
+      chain.endedDay = state.day;
+    } else if (effects.completeChain || !effects.nextEventId) {
+      chain.status = "completed";
+      chain.endedDay = state.day;
+    } else {
+      chain.status = "active";
+      chain.nextEventId = effects.nextEventId;
+      chain.dueDay = state.day + Math.max(1, Number(effects.nextDelay) || 1);
+      chain.step = definition.chainStep;
+    }
+    state.encounters.chains[definition.chainId] = chain;
+  }
+
+  const history = {
+    ...event,
+    resolvedDay: state.day,
+    resolvedDate: stateDateForDay(state),
+    choiceId: choice.id,
+    choiceLabel: choice.label,
+    outcome: `${choice.outcome}${battleResult ? ` ${battleResult}。` : ""}`,
+    relationTitle: relationshipTitle(relation),
+    affinity: relation.affinity,
+    respect: relation.respect,
+    memoryKey,
+    deferred: choice.deferred || null,
+    replayId: replay?.replayId || "",
+    choices: undefined
+  };
+  state.encounters.pending = state.encounters.pending.filter((item) => item.id !== event.id);
+  state.encounters.history.unshift(history);
+  state.encounters.history = state.encounters.history.slice(0, encounterHistoryLimit);
+  state.encounters.statistics.resolvedCount += 1;
+  log(state, `因缘抉择：${event.title} · ${choice.label}。`, effects.endChain ? "bad" : "gold");
+  return { history, replay: replay ? publicReplay(replay) : null };
+}
+
+function daoTrialCycleOfDay(day) {
+  return Math.floor((Math.max(1, Number(day) || 1) - 1) / daoTrialCycleLength) + 1;
+}
+
+function daoTrialAffixForCycle(cycle) {
+  return daoTrialCycleAffixes[(Math.max(1, Number(cycle) || 1) - 1) % daoTrialCycleAffixes.length] || daoTrialCycleAffixes[0];
+}
+
+function daoTrialNodesForCycle(routeId, cycle) {
+  const route = daoTrialRouteMap[routeId];
+  if (!route) return [];
+  const variants = daoTrialNodeVariants[routeId] || [];
+  return route.nodes.map((node, index) => {
+    const base = { ...node, slot: node.slot ?? index };
+    const options = [base, ...variants.filter((variant) => Number(variant.slot) === index)];
+    const selected = options[stableHash(`dao-node|${cycle}|${routeId}|${index}`) % options.length];
+    return { ...selected, slot: index };
+  });
+}
+
+function createDaoTrialState(day = 1) {
+  const cycle = daoTrialCycleOfDay(day);
+  const year = Math.floor((cycle - 1) / 52) + 1;
+  return {
+    version: daoTrialStateVersion,
+    cycle,
+    cycleStartDay: (cycle - 1) * daoTrialCycleLength + 1,
+    cycleEndDay: cycle * daoTrialCycleLength,
+    attemptsUsed: 0,
+    claimedMilestones: [],
+    bestScore: 0,
+    bestResult: null,
+    activeRun: null,
+    history: [],
+    yearHistory: [],
+    routeMastery: Object.fromEntries(daoTrialRoutes.map((route) => [route.id, { runs: 0, clears: 0, eliteClears: 0, bossClears: 0, bestScore: 0 }])),
+    yearGoals: { year, completedCycles: 0, cyclesPlayed: [], routeClears: 0, perfectRuns: 0, affixesSeen: [], claimed: [] }
+  };
+}
+
+function ensureDaoTrialState(state) {
+  let changed = false;
+  if (!state.daoTrial || state.daoTrial.version !== daoTrialStateVersion) {
+    const previousHistory = Array.isArray(state.daoTrial?.history) ? state.daoTrial.history : [];
+    state.daoTrial = {
+      ...createDaoTrialState(state.day),
+      history: previousHistory,
+      routeMastery: state.daoTrial?.routeMastery,
+      yearGoals: state.daoTrial?.yearGoals,
+      yearHistory: state.daoTrial?.yearHistory
+    };
+    changed = true;
+  }
+  const expectedCycle = daoTrialCycleOfDay(state.day);
+  if (state.daoTrial.cycle !== expectedCycle) {
+    if (state.daoTrial.activeRun) {
+      state.daoTrial.history.unshift({
+        ...trialRunSummary(state, state.daoTrial.activeRun),
+        result: "周期结束",
+        success: false,
+        endedDay: state.day
+      });
+    }
+    const history = state.daoTrial.history.slice(0, daoTrialHistoryLimit);
+    const routeMastery = state.daoTrial.routeMastery;
+    let yearGoals = state.daoTrial.yearGoals;
+    const yearHistory = state.daoTrial.yearHistory || [];
+    const expectedYear = Math.floor((expectedCycle - 1) / 52) + 1;
+    if (yearGoals && Number(yearGoals.year || 1) !== expectedYear) {
+      yearHistory.unshift({ ...yearGoals, endedCycle: expectedCycle - 1 });
+      yearGoals = { ...createDaoTrialState(state.day).yearGoals, year: expectedYear };
+    }
+    state.daoTrial = { ...createDaoTrialState(state.day), history, routeMastery, yearGoals, yearHistory: yearHistory.slice(0, 8) };
+    changed = true;
+  }
+  state.daoTrial.claimedMilestones = [...new Set(state.daoTrial.claimedMilestones || [])];
+  state.daoTrial.history = (state.daoTrial.history || []).slice(0, daoTrialHistoryLimit);
+  state.daoTrial.routeMastery ??= createDaoTrialState(state.day).routeMastery;
+  state.daoTrial.yearGoals ??= createDaoTrialState(state.day).yearGoals;
+  state.daoTrial.yearHistory = (state.daoTrial.yearHistory || []).slice(0, 8);
+  state.daoTrial.yearGoals.year = Number(state.daoTrial.yearGoals.year) || Math.floor((state.daoTrial.cycle - 1) / 52) + 1;
+  for (const route of daoTrialRoutes) {
+    state.daoTrial.routeMastery[route.id] ??= { runs: 0, clears: 0, eliteClears: 0, bossClears: 0, bestScore: 0 };
+    const mastery = state.daoTrial.routeMastery[route.id];
+    mastery.runs = Number(mastery.runs) || 0;
+    mastery.clears = Number(mastery.clears) || 0;
+    mastery.eliteClears = Number(mastery.eliteClears) || 0;
+    mastery.bossClears = Number(mastery.bossClears) || 0;
+    mastery.bestScore = Number(mastery.bestScore) || 0;
+  }
+  const legacyCompletedCycles = Math.max(0, Math.floor(Number(state.daoTrial.yearGoals.completedCycles) || 0));
+  state.daoTrial.yearGoals.cyclesPlayed = [...new Set((state.daoTrial.yearGoals.cyclesPlayed || []).map(Number).filter((cycle) => Number.isInteger(cycle) && cycle > 0))].slice(-52);
+  if (!state.daoTrial.yearGoals.cyclesPlayed.length && legacyCompletedCycles) {
+    state.daoTrial.yearGoals.cyclesPlayed = Array.from({ length: Math.min(52, legacyCompletedCycles) }, (_, index) => index + 1);
+  }
+  state.daoTrial.yearGoals.completedCycles = state.daoTrial.yearGoals.cyclesPlayed.length;
+  state.daoTrial.yearGoals.routeClears = Number(state.daoTrial.yearGoals.routeClears) || 0;
+  state.daoTrial.yearGoals.perfectRuns = Number(state.daoTrial.yearGoals.perfectRuns) || 0;
+  state.daoTrial.yearGoals.affixesSeen ??= [];
+  state.daoTrial.yearGoals.claimed ??= [];
+  const activeRun = state.daoTrial.activeRun;
+  if (activeRun) {
+    const route = daoTrialRouteMap[activeRun.routeId];
+    if (!route) {
+      state.daoTrial.activeRun = null;
+      changed = true;
+    } else {
+      activeRun.nodes = Array.isArray(activeRun.nodes) && activeRun.nodes.length === 7
+        ? activeRun.nodes
+        : daoTrialNodesForCycle(route.id, activeRun.cycle || state.daoTrial.cycle);
+      activeRun.affixId ||= daoTrialAffixForCycle(activeRun.cycle || state.daoTrial.cycle).id;
+      activeRun.sealIds = [...new Set(activeRun.sealIds || [])].filter((id) => daoTrialSealMap[id]);
+      activeRun.pendingSealIds = [...new Set(activeRun.pendingSealIds || [])].filter((id) => daoTrialSealMap[id]);
+      activeRun.nodeIndex = clamp(Math.floor(Number(activeRun.nodeIndex) || 0), 0, activeRun.nodes.length - 1);
+      activeRun.nodesCleared = clamp(Math.floor(Number(activeRun.nodesCleared) || 0), 0, activeRun.nodes.length);
+      activeRun.insight = Math.max(0, Math.floor(Number(activeRun.insight) || 0));
+      if (activeRun.companion) activeRun.companion.supportUsed = Boolean(activeRun.companion.supportUsed);
+    }
+  }
+  return changed;
+}
+
+function trialCompanionSupport(state, npc, relationship = null) {
+  const relation = relationship || relationshipEntry(state, npc.id);
+  const score = Math.max(0, relation.affinity) + relation.respect;
+  const potency = clamp(0.03 + score / 2500, 0.03, 0.09);
+  const supportType = relation.respect > Math.max(20, relation.affinity) ? "assault" : "sustain";
+  const skillVariant = stableHash(`companion-skill|${npc.id}`) % 3;
+  const skills = supportType === "assault"
+    ? [
+      { id: "break-array", name: "破阵一击", text: "本轮后续战斗攻击、神识临时提高。" },
+      { id: "read-opening", name: "窥隙指点", text: "获得 2 点悟机，并让下一战神识提高。" },
+      { id: "shared-strike", name: "同道合击", text: "恢复少量法力，并提高后续攻击。" }
+    ]
+    : [
+      { id: "restore-veins", name: "回元护脉", text: "立即恢复血量与法力。" },
+      { id: "guard-heart", name: "守心同行", text: "立即恢复血量，并提高后续防御。" },
+      { id: "quiet-counsel", name: "静言点拨", text: "获得悟机并恢复较多法力。" }
+    ];
+  const active = skills[skillVariant];
+  return {
+    type: supportType,
+    potency,
+    text: supportType === "assault"
+      ? `每场战斗攻击、神识提高 ${Math.round(potency * 100)}%`
+      : `每场战斗血量、防御提高 ${Math.round(potency * 100)}%`,
+    active
+  };
+}
+
+function availableDaoTrialCompanions(state) {
+  const related = Object.keys(state.relationships || {})
+    .map((npcId) => ({ npc: state.npcs.find((item) => item.id === npcId), relation: state.relationships[npcId] }))
+    .filter((item) => item.npc && (item.relation.interactions > 0 || item.relation.invitedUntilCycle >= state.daoTrial.cycle))
+    .sort((a, b) => (b.relation.affinity + b.relation.respect) - (a.relation.affinity + a.relation.respect))
+    .slice(0, 6);
+  const selectedIds = new Set(related.map((item) => item.npc.id));
+  const neutral = [...(state.npcs || [])]
+    .filter((npc) => !selectedIds.has(npc.id))
+    .sort((a, b) => Math.abs(a.realm - state.player.realm) - Math.abs(b.realm - state.player.realm) || a.name.localeCompare(b.name, "zh-Hans-CN"))
+    .slice(0, 3)
+    .map((npc) => ({ npc, relation: state.relationships?.[npc.id] || { npcId: npc.id, affinity: 0, respect: 0, interactions: 0, lastDay: 0 }, neutral: true }));
+  return [...related, ...neutral].map(({ npc, relation, neutral }) => ({
+    person: compactCultivatorRef(publicCultivator(npc, state, { kind: "npc", compact: true })),
+    relationship: relationshipTitle(relation),
+    affinity: relation.affinity,
+    respect: relation.respect,
+    neutral: Boolean(neutral),
+    support: trialCompanionSupport(state, npc, relation)
+  }));
+}
+
+function createTrialCombatant(state) {
+  const stats = effectiveStats(state.player, state);
+  const rootsSnapshot = normalizeRootSet(state.player);
+  const rootsWithoutBonuses = rootsSnapshot.roots.map((root) => ({ ...root, bonus: 0 }));
+  return {
+    id: `trial-${state.player.id}`,
+    name: state.player.name,
+    gender: state.player.gender,
+    realm: state.player.realm,
+    root: { ...rootsWithoutBonuses[0] },
+    roots: rootsWithoutBonuses,
+    primaryRootKey: rootsSnapshot.primaryRootKey,
+    maxHp: stats.maxHp,
+    hp: stats.maxHp,
+    attack: stats.attack,
+    defense: stats.defense,
+    divineSense: stats.divineSense,
+    maxMana: stats.maxMana,
+    mana: stats.maxMana,
+    skillId: state.player.skillId,
+    skillRanks: { ...(state.player.skillRanks || {}) },
+    battleStrategy: state.player.battleStrategy,
+    trialBuffs: {}
+  };
+}
+
+function sealOfferForRun(run, route, nonce = 0) {
+  const owned = new Set(run.sealIds || []);
+  const affix = daoTrialCycleAffixes.find((item) => item.id === run.affixId);
+  const preferredTag = affix?.effects?.sealTag || "";
+  const suppressedRouteTag = affix?.effects?.noRouteBonus || "";
+  const candidates = daoTrialSeals
+    .filter((seal) => !owned.has(seal.id))
+    .map((seal) => ({
+      seal,
+      score: stableHash(`${run.seed}|seal|${run.nodeIndex}|${nonce}|${seal.id}`)
+        + (seal.tags || []).filter((tag) => route.sealTags.includes(tag) && tag !== suppressedRouteTag).length * 1_000_000
+        + (preferredTag && seal.tags?.includes(preferredTag) ? 600_000 : 0)
+    }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3)
+    .map((item) => item.seal.id);
+  return candidates;
+}
+
+function combinedTrialBuffs(run) {
+  const buffs = {};
+  for (const sealId of run.sealIds || []) {
+    const effects = daoTrialSealMap[sealId]?.effects || {};
+    for (const [key, value] of Object.entries(effects)) buffs[key] = (buffs[key] || 0) + Number(value || 0);
+  }
+  for (const synergy of daoTrialSealSynergies) {
+    if (synergy.seals.every((id) => run.sealIds?.includes(id))) {
+      for (const [key, value] of Object.entries(synergy.effects || {})) buffs[key] = (buffs[key] || 0) + Number(value || 0);
+    }
+  }
+  const affixEffects = daoTrialCycleAffixes.find((item) => item.id === run.affixId)?.effects || {};
+  for (const key of ["attack", "defense", "maxHp", "maxMana", "divineSense", "manaCost", "healing"]) {
+    if (Number(affixEffects[key])) buffs[key] = (buffs[key] || 0) + Number(affixEffects[key]);
+  }
+  const support = run.companion?.support;
+  const companionMultiplier = Math.max(0.5, 1 + (Number(buffs.companion) || 0) - Number(affixEffects.companionPenalty || 0));
+  if (support?.type === "assault") {
+    buffs.attack = (buffs.attack || 0) + support.potency * companionMultiplier;
+    buffs.divineSense = (buffs.divineSense || 0) + support.potency * companionMultiplier;
+  } else if (support?.type === "sustain") {
+    buffs.maxHp = (buffs.maxHp || 0) + support.potency * companionMultiplier;
+    buffs.defense = (buffs.defense || 0) + support.potency * companionMultiplier;
+  } else if (!run.companion) {
+    buffs.maxHp = (buffs.maxHp || 0) + (Number(buffs.maxHpWithoutCompanion) || 0);
+    buffs.maxHp = (buffs.maxHp || 0) + Number(affixEffects.soloHp || 0);
+  }
+  if (run.companion) buffs.maxMana = (buffs.maxMana || 0) + (Number(buffs.companionMana) || 0);
+  buffs.divineSense = (buffs.divineSense || 0) + (Number(run.tempSense) || 0);
+  buffs.attack = (buffs.attack || 0) + (Number(run.tempAttack) || 0);
+  buffs.defense = (buffs.defense || 0) + (Number(run.tempDefense) || 0);
+  return buffs;
+}
+
+function activeTrialSynergies(run) {
+  return daoTrialSealSynergies.filter((synergy) => synergy.seals.every((id) => run?.sealIds?.includes(id)));
+}
+
+function trialWorldBaselinePower(state) {
+  const nearby = (state.npcs || [])
+    .filter((npc) => Math.abs((npc.realm || 0) - state.player.realm) <= 1)
+    .map((npc) => powerOf(npc, state))
+    .sort((a, b) => a - b);
+  return nearby.length ? nearby[Math.floor(nearby.length / 2)] : powerOf(state.player, state);
+}
+
+function trialMonsterFor(state, run, node, route) {
+  const rootKey = roots.some((root) => root.key === route.rootKey) ? route.rootKey : "metal";
+  const monster = makeMonster(`${route.name}·${node.monster}`, state.player.realm, rootKey, 0.9 + run.nodeIndex * 0.04);
+  const baseline = trialWorldBaselinePower(state);
+  const playerPower = powerOf(state.player, state);
+  const affix = daoTrialCycleAffixes.find((item) => item.id === run.affixId);
+  const firstEase = run.nodeIndex === 0 ? Number(affix?.effects?.firstBattleEase || 0) : 0;
+  const scaling = Math.max(0, Number(affix?.effects?.scalingEnemy || 0)) * run.nodeIndex;
+  const enemyPower = Number(affix?.effects?.enemyPower || 0);
+  const targetPower = Math.max(48, (baseline * 0.7 + playerPower * 0.3) * node.difficulty * (1 + enemyPower + scaling) * (1 - firstEase));
+  const currentPower = Math.max(1, powerOf(monster, state));
+  const ratio = clamp(targetPower / currentPower, 0.55, 1.8);
+  for (const key of ["attack", "defense", "maxHp", "maxMana", "divineSense"]) {
+    monster[key] = Math.max(key === "defense" ? 0 : 1, Math.floor(monster[key] * ratio));
+  }
+  monster.hp = monster.maxHp;
+  monster.mana = monster.maxMana;
+  monster.id = `dao-trial-${run.cycle}-${run.attempt}-${route.id}-${node.id}`;
+  return monster;
+}
+
+function trialMilestoneReward(state, run, node) {
+  if (run.practice) return null;
+  const key = `${run.cycle}:${run.nodeIndex}`;
+  if (state.daoTrial.claimedMilestones.includes(key)) return null;
+  const stage = Math.floor(state.player.realm / 10);
+  let reward = null;
+  if (run.nodeIndex === 0) reward = { spirit: 10 + stage * 4, dust: 0, label: "入境" };
+  if (node.elite) reward = { spirit: 0, dust: 2 + stage, label: "精英" };
+  if (node.boss) reward = { spirit: 35 + stage * 10, dust: 3 + stage, label: "问心" };
+  if (!reward) return null;
+  state.daoTrial.claimedMilestones.push(key);
+  if (reward.spirit) state.player.spirit += reward.spirit;
+  if (reward.dust) addSpiritDust(state, reward.dust, `问道秘境·${reward.label}`, state.player);
+  return reward;
+}
+
+function trialRunScore(state, run, success = false) {
+  const hpRate = run.combatant.maxHp ? run.combatant.hp / run.combatant.maxHp : 0;
+  const affix = daoTrialCycleAffixes.find((item) => item.id === run.affixId);
+  const base = run.nodesCleared * 100 + hpRate * 40 + run.sealIds.length * 7 + (Number(run.bonusScore) || 0) + (success ? 180 : 0);
+  const bossBonus = success ? Number(affix?.effects?.bossScore || 0) : 0;
+  const failureBonus = success ? 0 : Math.max(Number(affix?.effects?.failScore) || 0, Number(combinedTrialBuffs(run).failScore) || 0);
+  return Math.max(0, Math.round(base * (Number(affix?.effects?.scoreMultiplier) || 1) * (1 + bossBonus) * (1 + failureBonus)));
+}
+
+function trialRunSummary(state, run) {
+  const route = daoTrialRouteMap[run.routeId];
+  return {
+    id: run.id,
+    cycle: run.cycle,
+    attempt: run.attempt,
+    practice: run.practice,
+    routeId: run.routeId,
+    routeName: route?.name || run.routeId,
+    affixId: run.affixId || "",
+    affixName: daoTrialCycleAffixes.find((item) => item.id === run.affixId)?.name || "",
+    companion: run.companion?.person || null,
+    nodesCleared: run.nodesCleared,
+    sealIds: [...(run.sealIds || [])],
+    synergyIds: activeTrialSynergies(run).map((synergy) => synergy.id),
+    lastReplayId: run.lastReplayId || "",
+    score: trialRunScore(state, run, run.success),
+    startedDay: run.startedDay,
+    endedDay: run.endedDay || state.day
+  };
+}
+
+function finishDaoTrialRun(state, run, success, result) {
+  run.success = success;
+  run.result = result;
+  run.endedDay = state.day;
+  const summary = { ...trialRunSummary(state, run), success, result };
+  state.daoTrial.history.unshift(summary);
+  state.daoTrial.history = state.daoTrial.history.slice(0, daoTrialHistoryLimit);
+  if (!run.practice && summary.score > state.daoTrial.bestScore) {
+    state.daoTrial.bestScore = summary.score;
+    state.daoTrial.bestResult = summary;
+  }
+  if (!run.practice) {
+    const mastery = state.daoTrial.routeMastery[run.routeId] || { runs: 0, clears: 0, eliteClears: 0, bossClears: 0, bestScore: 0 };
+    mastery.runs += 1;
+    if (success) mastery.clears += 1;
+    if (run.eliteCleared) mastery.eliteClears += 1;
+    if (run.bossCleared) mastery.bossClears += 1;
+    mastery.bestScore = Math.max(Number(mastery.bestScore) || 0, summary.score);
+    state.daoTrial.routeMastery[run.routeId] = mastery;
+    const relativeCycle = ((state.daoTrial.cycle - 1) % 52) + 1;
+    if (!state.daoTrial.yearGoals.cyclesPlayed.includes(relativeCycle)) state.daoTrial.yearGoals.cyclesPlayed.push(relativeCycle);
+    state.daoTrial.yearGoals.completedCycles = state.daoTrial.yearGoals.cyclesPlayed.length;
+    if (success) state.daoTrial.yearGoals.routeClears += 1;
+    if (success && run.combatant.hp / Math.max(1, run.combatant.maxHp) >= 0.8) state.daoTrial.yearGoals.perfectRuns += 1;
+    if (run.affixId && !state.daoTrial.yearGoals.affixesSeen.includes(run.affixId)) state.daoTrial.yearGoals.affixesSeen.push(run.affixId);
+  }
+  state.daoTrial.activeRun = null;
+  log(state, `问道秘境：${summary.routeName}${success ? "问心成功" : result}，本次得分 ${summary.score}。`, success ? "gold" : "bad");
+  return summary;
+}
+
+function publicTrialRun(state, run) {
+  if (!run) return null;
+  const route = daoTrialRouteMap[run.routeId];
+  const nodes = run.nodes?.length ? run.nodes : (route?.nodes || []);
+  const node = nodes[run.nodeIndex] || null;
+  const fighter = { ...run.combatant, trialBuffs: combinedTrialBuffs(run) };
+  const stats = combatSnapshot(fighter, state);
+  return {
+    id: run.id,
+    cycle: run.cycle,
+    attempt: run.attempt,
+    practice: run.practice,
+    affix: daoTrialCycleAffixes.find((item) => item.id === run.affixId) || null,
+    route: route ? { id: route.id, name: route.name, subtitle: route.subtitle, accent: route.accent, rootKey: route.rootKey } : null,
+    nodes: nodes.map((item, index) => ({ id: item.id, name: item.name, type: item.type, elite: Boolean(item.elite), boss: Boolean(item.boss), index, state: index < run.nodeIndex ? "cleared" : index === run.nodeIndex ? "current" : "locked" })),
+    nodeIndex: run.nodeIndex,
+    currentNode: node ? { id: node.id, name: node.name, type: node.type, elite: Boolean(node.elite), boss: Boolean(node.boss) } : null,
+    combat: { hp: stats.hp, maxHp: stats.maxHp, mana: stats.mana, maxMana: stats.maxMana },
+    companion: run.companion,
+    seals: run.sealIds.map((id) => daoTrialSealMap[id]).filter(Boolean),
+    synergies: activeTrialSynergies(run),
+    sealOffer: (run.pendingSealIds || []).map((id) => daoTrialSealMap[id]).filter(Boolean),
+    insight: run.insight,
+    canReroll: Boolean(run.pendingSealIds?.length && run.insight > 0),
+    eventOptions: node && ["event", "rest"].includes(node.type) ? (daoTrialEventOptions[node.event] || []) : [],
+    battleStrategies: battleStrategies.map((id) => ({ id, label: battleStrategyLabel(id) })),
+    nodesCleared: run.nodesCleared,
+    score: trialRunScore(state, run)
+  };
+}
+
+function publicDaoTrial(state) {
+  ensureDaoTrialState(state);
+  const mastery = Object.fromEntries(daoTrialRoutes.map((route) => {
+    const record = state.daoTrial.routeMastery[route.id] || {};
+    const progressScore = (Number(record.clears) || 0) * 3 + (Number(record.eliteClears) || 0) + Math.floor((Number(record.runs) || 0) / 3);
+    return [route.id, { ...record, level: clamp(Math.floor(progressScore / 3), 0, 10), nextLevelAt: Math.min(30, (clamp(Math.floor(progressScore / 3), 0, 9) + 1) * 3), progressScore }];
+  }));
+  const goalState = state.daoTrial.yearGoals;
+  const annualGoals = [
+    { id: "cycles-12", label: "十二期问道", current: goalState.completedCycles, target: 12 },
+    { id: "cycles-36", label: "三十六期问道", current: goalState.completedCycles, target: 36 },
+    { id: "cycles-52", label: "一岁不辍", current: goalState.completedCycles, target: 52 },
+    { id: "clears-12", label: "十二次问心", current: goalState.routeClears, target: 12 },
+    { id: "perfect-6", label: "六次从容问心", current: goalState.perfectRuns, target: 6 },
+    { id: "affixes-16", label: "遍历十六异象", current: goalState.affixesSeen.length, target: daoTrialCycleAffixes.length }
+  ].map((goal) => ({ ...goal, completed: goal.current >= goal.target }));
+  return {
+    cycle: state.daoTrial.cycle,
+    cycleStartDay: state.daoTrial.cycleStartDay,
+    cycleEndDay: state.daoTrial.cycleEndDay,
+    attemptsUsed: state.daoTrial.attemptsUsed,
+    officialAttempts: daoTrialOfficialAttempts,
+    attemptsRemaining: Math.max(0, daoTrialOfficialAttempts - state.daoTrial.attemptsUsed),
+    claimedMilestones: [...state.daoTrial.claimedMilestones],
+    bestScore: state.daoTrial.bestScore,
+    bestResult: state.daoTrial.bestResult,
+    affix: daoTrialAffixForCycle(state.daoTrial.cycle),
+    cycleAffixes: daoTrialCycleAffixes,
+    routeMastery: mastery,
+    yearGoals: { ...state.daoTrial.yearGoals, goals: annualGoals },
+    yearHistory: state.daoTrial.yearHistory,
+    activeRun: publicTrialRun(state, state.daoTrial.activeRun),
+    history: state.daoTrial.history.slice(0, 12),
+    routes: daoTrialRoutes.map((route) => ({
+      id: route.id,
+      name: route.name,
+      subtitle: route.subtitle,
+      rootKey: route.rootKey,
+      accent: route.accent,
+      nodeCount: route.nodes.length,
+      nodePoolCount: route.nodes.length + (daoTrialNodeVariants[route.id] || []).length,
+      nodes: daoTrialNodesForCycle(route.id, state.daoTrial.cycle).map((node) => ({ name: node.name, type: node.type, elite: Boolean(node.elite), boss: Boolean(node.boss) }))
+    })),
+    companions: availableDaoTrialCompanions(state),
+    sealCatalog: daoTrialSeals
+  };
+}
+
+export function getDaoTrialHistoryPage(state, options = {}) {
+  ensureDaoTrialState(state);
+  const offset = Math.max(0, Math.floor(Number(options.offset) || 0));
+  const limit = clamp(Math.floor(Number(options.limit) || 24), 1, 60);
+  const routeId = String(options.routeId || "");
+  const cycle = Math.max(0, Math.floor(Number(options.cycle) || 0));
+  const items = state.daoTrial.history.filter((record) => {
+    if (routeId && record.routeId !== routeId) return false;
+    if (cycle && Number(record.cycle) !== cycle) return false;
+    return true;
+  });
+  return { offset, limit, total: items.length, hasMore: offset + limit < items.length, items: items.slice(offset, offset + limit) };
+}
+
+export function startDaoTrial(state, payload = {}) {
+  ensureDaoTrialState(state);
+  if (state.daoTrial.activeRun) throw new Error("已有一轮问道正在进行");
+  const route = daoTrialRouteMap[payload.routeId];
+  if (!route) throw new Error("未知的问道路线");
+  const companions = availableDaoTrialCompanions(state);
+  const companion = payload.companionId ? companions.find((entry) => entry.person.id === payload.companionId) : null;
+  if (payload.companionId && !companion) throw new Error("该修士当前无法同行");
+  const practice = state.daoTrial.attemptsUsed >= daoTrialOfficialAttempts;
+  if (!practice) state.daoTrial.attemptsUsed += 1;
+  const attempt = practice ? state.daoTrial.attemptsUsed + state.daoTrial.history.filter((entry) => entry.cycle === state.daoTrial.cycle && entry.practice).length + 1 : state.daoTrial.attemptsUsed;
+  const combatant = createTrialCombatant(state);
+  const affix = daoTrialAffixForCycle(state.daoTrial.cycle);
+  const run = {
+    id: makeId("dao-trial"),
+    cycle: state.daoTrial.cycle,
+    attempt,
+    practice,
+    routeId: route.id,
+    affixId: affix.id,
+    nodes: daoTrialNodesForCycle(route.id, state.daoTrial.cycle),
+    seed: `dao-trial|${state.rebirth}|${state.daoTrial.cycle}|${attempt}|${route.id}`,
+    startedDay: state.day,
+    nodeIndex: 0,
+    nodesCleared: 0,
+    sealIds: [],
+    pendingSealIds: [],
+    sealNonce: 0,
+    insight: 1 + Math.max(0, Math.floor(Number(affix.effects?.initialInsight) || 0)),
+    eliteCleared: false,
+    bossCleared: false,
+    tempSense: 0,
+    companion: companion ? { ...companion, supportUsed: false } : null,
+    combatant
+  };
+  state.daoTrial.activeRun = run;
+  log(state, `踏入问道秘境「${route.name}」，${practice ? "本次为无奖励演练" : `消耗第 ${attempt} 次正式机会`}。`, "gold");
+  return { run: publicTrialRun(state, run), practice };
+}
+
+function applyTrialEventEffects(state, run, node, effects = {}) {
+  const baseHp = run.combatant.maxHp;
+  const baseMana = run.combatant.maxMana;
+  const affix = daoTrialCycleAffixes.find((item) => item.id === run.affixId);
+  const buffs = combinedTrialBuffs(run);
+  const companionBonus = effects.companionBoost && run.companion ? 1.5 : 1;
+  const hpEffect = Number(effects.hp) || 0;
+  const manaEffect = Number(effects.mana) || 0;
+  const eventLoss = hpEffect < 0
+    ? Math.max(0.25, 1 + Number(affix?.effects?.eventLoss || 0) - Number(buffs.eventLossResist || 0))
+    : 1;
+  const isRest = node?.type === "rest";
+  const recovery = hpEffect > 0
+    ? 1 + (isRest ? Number(affix?.effects?.restBonus || 0) + Number(buffs.restHp || 0) : 0) + Number(affix?.effects?.healing || 0)
+    : eventLoss;
+  run.combatant.hp = clamp(run.combatant.hp + Math.floor(baseHp * hpEffect * recovery * companionBonus), 1, baseHp);
+  const manaRecovery = manaEffect > 0 ? recovery + (isRest ? Number(affix?.effects?.restMana || 0) : 0) + Number(buffs.eventMana || 0) : 1;
+  run.combatant.mana = clamp(run.combatant.mana + Math.floor(baseMana * manaEffect * manaRecovery * companionBonus), 0, baseMana);
+  run.insight = Math.max(0, run.insight + Math.floor(Number(effects.insight) || 0) + Math.floor(Number(affix?.effects?.insight) || 0) + (!run.companion ? Math.floor(Number(buffs.insightSolo) || 0) : 0));
+  if (node?.type === "event") run.bonusScore = (Number(run.bonusScore) || 0) + Number(affix?.effects?.eventScore || 0);
+  run.tempSense = Math.max(0, (Number(run.tempSense) || 0) + (Number(effects.tempSense) || 0));
+  if (effects.grantSeal) {
+    run.pendingSealIds = sealOfferForRun(run, daoTrialRouteMap[run.routeId], run.sealNonce);
+    run.advanceAfterSeal = true;
+  }
+}
+
+function chooseTrialSeal(state, run, sealId) {
+  if (!run.pendingSealIds.includes(sealId)) throw new Error("该道印不在本次选择中");
+  if (!run.sealIds.includes(sealId)) run.sealIds.push(sealId);
+  run.pendingSealIds = [];
+  if (run.advanceAfterSeal) {
+    run.advanceAfterSeal = false;
+    run.nodeIndex += 1;
+  }
+  return { seal: daoTrialSealMap[sealId] };
+}
+
+function rerollTrialSeals(run) {
+  if (!run.pendingSealIds.length) throw new Error("当前没有可重观的道印");
+  if (run.insight <= 0) throw new Error("悟机不足");
+  run.insight -= 1;
+  run.sealNonce += 1;
+  run.pendingSealIds = sealOfferForRun(run, daoTrialRouteMap[run.routeId], run.sealNonce);
+  return { sealOffer: run.pendingSealIds.map((id) => daoTrialSealMap[id]) };
+}
+
+function useTrialCompanionSupport(run) {
+  if (!run.companion) throw new Error("本轮没有同行者");
+  if (run.companion.supportUsed) throw new Error("本轮同行支援已经使用");
+  const active = run.companion.support?.active;
+  const companionBuff = Number(combinedTrialBuffs(run).companion) || 0;
+  const affixPenalty = Number(daoTrialCycleAffixes.find((item) => item.id === run.affixId)?.effects?.companionPenalty || 0);
+  const potency = (Number(run.companion.support?.potency) || 0.03) * Math.max(0.5, 1 + companionBuff - affixPenalty);
+  const baseHp = run.combatant.maxHp;
+  const baseMana = run.combatant.maxMana;
+  if (active?.id === "break-array") {
+    run.tempAttack = (Number(run.tempAttack) || 0) + potency * 1.5;
+    run.tempSense = (Number(run.tempSense) || 0) + potency;
+  } else if (active?.id === "read-opening") {
+    run.insight += 2;
+    run.tempSense = (Number(run.tempSense) || 0) + potency * 1.5;
+  } else if (active?.id === "shared-strike") {
+    run.combatant.mana = clamp(run.combatant.mana + Math.floor(baseMana * 0.18), 0, baseMana);
+    run.tempAttack = (Number(run.tempAttack) || 0) + potency;
+  } else if (active?.id === "guard-heart") {
+    run.combatant.hp = clamp(run.combatant.hp + Math.floor(baseHp * 0.2), 1, baseHp);
+    run.tempDefense = (Number(run.tempDefense) || 0) + potency;
+  } else if (active?.id === "quiet-counsel") {
+    run.insight += 1;
+    run.combatant.mana = clamp(run.combatant.mana + Math.floor(baseMana * 0.28), 0, baseMana);
+  } else {
+    run.combatant.hp = clamp(run.combatant.hp + Math.floor(baseHp * 0.2), 1, baseHp);
+    run.combatant.mana = clamp(run.combatant.mana + Math.floor(baseMana * 0.15), 0, baseMana);
+  }
+  run.companion.supportUsed = true;
+  return { support: active || { name: "同行支援" }, run };
+}
+
+function resolveTrialBattle(state, run, node, strategy) {
+  if (!battleStrategies.includes(strategy)) throw new Error("未知斗法策略");
+  const route = daoTrialRouteMap[run.routeId];
+  const fighter = { ...run.combatant, battleStrategy: strategy, trialBuffs: combinedTrialBuffs(run) };
+  const beforeStats = combatSnapshot(fighter, state);
+  const monster = trialMonsterFor(state, run, node, route);
+  const seed = `${run.seed}|node|${run.nodeIndex}|${strategy}|${run.sealIds.join(",")}`;
+  const battle = fightMonster(state, fighter, monster, node.rounds, { hp: beforeStats.hp, mana: beforeStats.mana, seed });
+  const won = battle.winner === "left";
+  const replay = buildReplay({ ...fighter, hp: beforeStats.hp, mana: beforeStats.mana }, monster, battle, won ? "胜" : "负", timestampKey(), state);
+  replay.kind = "dao-trial";
+  replay.day = state.day;
+  replay.replayId = makeReplayId("dao-trial", run.cycle, run.attempt, route.id, node.id);
+  queueBattleReplay(state, replay, run.id);
+  const baseHp = run.combatant.maxHp;
+  const baseMana = run.combatant.maxMana;
+  run.combatant.hp = clamp(Math.floor(battle.leftHp / Math.max(1, beforeStats.maxHp) * baseHp), 1, baseHp);
+  run.combatant.mana = clamp(Math.floor(battle.leftMana / Math.max(1, beforeStats.maxMana) * baseMana), 0, baseMana);
+  run.lastReplayId = replay.replayId;
+  run.lastBattle = { nodeId: node.id, won, replayId: replay.replayId, monster: publicMonster(monster) };
+  if (!won) {
+    const failureSpirit = Number(daoTrialCycleAffixes.find((item) => item.id === run.affixId)?.effects?.failureSpirit || 0);
+    if (failureSpirit) state.player.spirit = Math.max(0, state.player.spirit - failureSpirit);
+    const summary = finishDaoTrialRun(state, run, false, `止步${node.name}`);
+    return { replay: publicReplay(replay), completed: true, summary };
+  }
+  run.nodesCleared += 1;
+  if (node.elite) run.eliteCleared = true;
+  if (node.boss) run.bossCleared = true;
+  const reward = trialMilestoneReward(state, run, node);
+  if (node.elite) {
+    const eliteScore = Number(daoTrialCycleAffixes.find((item) => item.id === run.affixId)?.effects?.eliteScore || 0);
+    run.bonusScore = (Number(run.bonusScore) || 0) + Math.round(100 * eliteScore);
+  }
+  const buffs = combinedTrialBuffs(run);
+  run.combatant.hp = clamp(run.combatant.hp + Math.floor(baseHp * (Number(buffs.postBattleHeal) || 0)), 1, baseHp);
+  run.combatant.mana = clamp(run.combatant.mana + Math.floor(baseMana * (Number(buffs.postBattleMana) || 0)), 0, baseMana);
+  run.tempSense = 0;
+  if (node.boss) {
+    const summary = finishDaoTrialRun(state, run, true, "问心成功");
+    return { replay: publicReplay(replay), completed: true, summary, reward };
+  }
+  run.pendingSealIds = sealOfferForRun(run, route, run.sealNonce);
+  run.advanceAfterSeal = true;
+  return { replay: publicReplay(replay), completed: false, reward };
+}
+
+export function advanceDaoTrial(state, payload = {}) {
+  ensureDaoTrialState(state);
+  const run = state.daoTrial.activeRun;
+  if (!run) throw new Error("当前没有进行中的问道秘境");
+  if (payload.action === "abandon") {
+    return { completed: true, summary: finishDaoTrialRun(state, run, false, "主动离境") };
+  }
+  if (payload.action === "reroll") return rerollTrialSeals(run);
+  if (payload.action === "companion") return useTrialCompanionSupport(run);
+  if (run.pendingSealIds.length) {
+    if (payload.action !== "seal") throw new Error("请先选择一道道印");
+    return chooseTrialSeal(state, run, payload.sealId);
+  }
+  const route = daoTrialRouteMap[run.routeId];
+  const node = (run.nodes?.length ? run.nodes : route?.nodes)?.[run.nodeIndex];
+  if (!node) throw new Error("问道路线状态异常");
+  if (node.type === "battle") return resolveTrialBattle(state, run, node, String(payload.strategy || state.player.battleStrategy || "balanced"));
+  const option = (daoTrialEventOptions[node.event] || []).find((item) => item.id === payload.optionId);
+  if (!option) throw new Error("未知的问道选择");
+  applyTrialEventEffects(state, run, node, option.effects);
+  if (!run.pendingSealIds.length) run.nodeIndex += 1;
+  return { option, run: publicTrialRun(state, run) };
+}
+
+export function abandonDaoTrial(state) {
+  return advanceDaoTrial(state, { action: "abandon" });
+}
+
 export function createDefaultState() {
   const rootSet = randomRootSet();
   const root = rootSet.primaryRoot;
@@ -6533,6 +7833,18 @@ export function createDefaultState() {
     taskCompletions: [],
     taskProgress: {},
     taskMultiplierRecords: [{ day: 1, date: openingDate, elixirMultiplier: 1, totalMultiplier: 1 }],
+    encounters: {
+      version: encounterStateVersion,
+      lastGenerationDay: 0,
+      emptyDays: 0,
+      pending: [],
+      history: [],
+      seen: {},
+      chains: {},
+      focusedNpcIds: []
+    },
+    relationships: {},
+    daoTrial: createDaoTrialState(1),
     npcs: npcNames.map((name, index) => makeNpc(name, index)),
     sectNameMap: {},
     sect: {
@@ -6596,6 +7908,18 @@ export function clearProgressHistory(state) {
   state.taskDefinitions = defaultRealityTasks();
   state.taskCompletions = [];
   state.taskMultiplierRecords = [taskMultiplierSnapshot(state, state.day)];
+  state.encounters = {
+    version: encounterStateVersion,
+    lastGenerationDay: state.day - 1,
+    emptyDays: 0,
+    pending: [],
+    history: [],
+    seen: {},
+    chains: {},
+    focusedNpcIds: []
+  };
+  state.relationships = {};
+  state.daoTrial = createDaoTrialState(state.day);
   state.player.sect = state.sect?.name || "落云宗";
   state.sect.warWins = 0;
   state.sect.warLosses = 0;
@@ -7154,6 +8478,8 @@ export function ensureStateShape(state) {
     changed = true;
   }
   changed = ensureProvinceState(state) || changed;
+  changed = ensureEncounterState(state) || changed;
+  changed = ensureDaoTrialState(state) || changed;
   return changed;
 }
 
@@ -7195,6 +8521,11 @@ export function compactStateForStorage(state, options = {}) {
   state.tasks = (state.tasks || []).slice(0, 16);
   state.taskCompletions = (state.taskCompletions || []).slice(0, taskCompletionLimit);
   state.taskDefinitions = (state.taskDefinitions || []).slice(0, taskDefinitionLimit);
+  if (state.encounters) {
+    state.encounters.pending = (state.encounters.pending || []).slice(0, encounterPendingLimit);
+    state.encounters.history = (state.encounters.history || []).slice(0, encounterHistoryLimit);
+  }
+  if (state.daoTrial) state.daoTrial.history = (state.daoTrial.history || []).slice(0, daoTrialHistoryLimit);
   normalizeTaskMultiplierRecords(state);
   return state;
 }
@@ -7330,6 +8661,8 @@ export function getPublicState(state, options = {}) {
       taskCompletions: state.taskCompletions,
       taskProgress: publicTaskProgress(state),
       taskMultiplierRecords: state.taskMultiplierRecords,
+      encounters: publicEncounters(state),
+      daoTrial: publicDaoTrial(state),
       log: state.log,
       logDays: publicLogDays(state),
       bag: state.bag,
@@ -7346,10 +8679,12 @@ export function getPublicState(state, options = {}) {
     };
   }
 
-  const { adminProfiles, ...publicState } = state;
+  const { adminProfiles, encounters: _encounterState, relationships: _relationshipState, daoTrial: _daoTrialState, ...publicState } = state;
   return {
     ...publicState,
     taskProgress: publicTaskProgress(state),
+    encounters: publicEncounters(state),
+    daoTrial: publicDaoTrial(state),
     player: publicCultivator(state.player, state, { includeRecentReplays: true, kind: "player" }),
     npcs: state.npcs.map((npc) => publicCultivator(npc, state, { kind: "npc", compact: true })),
     equipment: state.equipment.map((item) => publicEquipment(item, state)),
@@ -7385,7 +8720,11 @@ export function getPublicCultivatorDetail(state, id) {
     equippedItems: equippedItemsFor(state, match.entity).map((item) => publicEquipment(item, state)),
     spiritPearls: publicSpiritPearls(state, match.entity),
     duelRank: duelRankSnapshot(match.entity),
-    power: powerOf(match.entity, state)
+    power: powerOf(match.entity, state),
+    relationship: match.kind === "npc" ? publicRelationship(state, match.entity.id) : null,
+    encounterHistory: match.kind === "npc"
+      ? state.encounters.history.filter((event) => event.actorId === match.entity.id).slice(0, 30)
+      : state.encounters.history.slice(0, 30)
   };
 }
 
@@ -7405,6 +8744,8 @@ function getHomeState(state) {
     taskCompletions: state.taskCompletions,
     taskProgress: publicTaskProgress(state),
     taskMultiplierRecords: state.taskMultiplierRecords,
+    encounters: publicEncounters(state),
+    daoTrial: publicDaoTrial(state),
     log: state.log,
     logDays: publicLogDays(state),
     duelDays: publicDuelDays(state.duelDays || [], state.day, people),
@@ -8680,6 +10021,8 @@ export function dailySettlement(state, options = {}) {
   state.player.dailyRecords = trimRecordsByDay(state.player.dailyRecords, state.day, growthRecordDays, growthRecordLimit);
   settleDailySpiritPearlAssets(state);
   runDailyDuels(state);
+  ensureDaoTrialState(state);
+  generateDailyEncounter(state);
   state.lastSettlementDate = dateKey();
 
   if (options.auto) log(state, "子时已过，天地灵机一转，今日自动结算完成。", "gold");
