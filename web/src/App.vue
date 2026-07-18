@@ -667,7 +667,7 @@
                 <small>{{ featuredDungeonForecast }}</small>
               </div>
               <div class="plan-home-grid">
-                <div><span>有效任务修为</span><strong>{{ todayPlan.effectiveTaskXp || 0 }} / {{ todayPlan.fullTaskXpBudget || 360 }}</strong></div>
+                <div><span>有效任务修为</span><strong>{{ todayPlan.effectiveTaskXp || 0 }} / {{ todayPlan.fullTaskXpBudget || 500 }}</strong></div>
                 <div><span>追赶助益</span><strong>x{{ Number(todayPlan.catchup?.multiplier || 1).toFixed(2) }}</strong></div>
                 <div><span>推荐行动</span><strong>{{ todayPlan.suggestedTask?.name || "今日任务已完成" }}</strong></div>
               </div>
@@ -747,35 +747,30 @@
                     <div v-if="selectedTaskDefinition.type === 'measurable'" class="task-amount-panel">
                       <div class="task-amount-head">
                         <span>任务量</span>
-                        <strong>{{ formatTaskAmount(taskForm.completedAmount) }} {{ selectedTaskDefinition.unitName }}</strong>
                       </div>
                       <div class="task-amount-controls">
-                        <button class="icon-button" type="button" aria-label="减少完成量" @click="adjustTaskAmount(-taskAmountStep)">
-                          <Minus :size="16" :stroke-width="2.5" aria-hidden="true" />
-                        </button>
-                        <span class="task-amount-value">{{ formatTaskAmount(taskForm.completedAmount) }}</span>
-                        <input
-                          v-model.number="taskForm.completedAmount"
-                          type="range"
-                          min="0"
-                          :max="taskAmountMax"
-                          :step="taskAmountStep"
-                          aria-label="完成量"
-                        >
-                        <button class="icon-button" type="button" aria-label="增加完成量" @click="adjustTaskAmount(taskAmountStep)">
-                          <Plus :size="16" :stroke-width="2.5" aria-hidden="true" />
-                        </button>
-                        <span class="amount-unit">{{ selectedTaskDefinition.unitName }}</span>
+                        <div class="task-range-stack">
+                          <input
+                            v-model.number="taskForm.completedAmount"
+                            type="range"
+                            min="0"
+                            :max="taskAmountMax"
+                            :step="taskAmountStep"
+                            :style="{ '--task-range-progress': `${taskAmountProgress}%` }"
+                            aria-label="完成量"
+                          >
+                          <div class="task-range-marks" aria-hidden="true">
+                            <span
+                              v-for="mark in taskAmountMarks"
+                              :key="mark.value"
+                              :class="{ start: mark.percent === 0, end: mark.percent === 100 }"
+                              :style="{ left: `${mark.percent}%` }"
+                            >{{ mark.label }}</span>
+                          </div>
+                        </div>
+                        <input class="task-amount-input" v-model.number="taskForm.completedAmount" type="number" min="0" :max="taskAmountMax" :step="taskAmountStep" :placeholder="`标准 ${selectedTaskDefinition.targetAmount}`" aria-label="手动完成量">
+                        <em class="task-amount-unit">{{ selectedTaskDefinition.unitName }}</em>
                       </div>
-                      <div class="task-progress-track" aria-hidden="true">
-                        <span :style="{ width: `${taskAmountProgress}%` }"></span>
-                      </div>
-                      <div class="task-range-marks" aria-hidden="true">
-                        <span v-for="mark in taskAmountMarks" :key="mark">{{ mark }}</span>
-                      </div>
-                      <label class="task-amount-input">手动输入
-                        <input v-model.number="taskForm.completedAmount" type="number" min="0" :max="taskAmountMax" :step="taskAmountStep" :placeholder="`标准 ${selectedTaskDefinition.targetAmount}`">
-                      </label>
                     </div>
 
                     <div v-else class="task-complete-panel">
@@ -813,7 +808,7 @@
 
                     <div class="task-detail-footer">
                       <button class="primary task-complete-button" :disabled="isActionPending('/api/tasks') || !taskCanSettle">
-                        {{ isActionPending("/api/tasks") ? "结算中..." : taskCompleteButtonText }}
+                        {{ isActionPending("/api/tasks") ? "结算中..." : "结算" }}
                       </button>
                     </div>
                   </form>
@@ -866,9 +861,25 @@
                             <small v-else>1 次</small>
                           </div>
                           <span class="task-rewards" aria-label="任务收益">
-                            <span class="task-reward xp">+经验 {{ task.xp }}</span>
+                            <span
+                              class="task-reward xp task-reward-has-tip"
+                              tabindex="0"
+                              :aria-label="`经验 ${task.xp}。${taskCompletionFormulaText(task)}`"
+                            >
+                              +经验 {{ task.xp }}
+                              <small class="task-reward-tip" role="tooltip">{{ taskCompletionFormulaText(task) }}</small>
+                            </span>
                             <span class="task-reward spirit">+灵石 {{ task.spirit || 0 }}</span>
                           </span>
+                          <button
+                            v-if="day.isToday"
+                            class="task-record-revert"
+                            type="button"
+                            :disabled="isActionPending('/api/tasks/delete')"
+                            @click="deleteTaskCompletion(task)"
+                          >
+                            {{ isActionPending("/api/tasks/delete") ? "撤回中..." : "撤回并扣除收益" }}
+                          </button>
                         </div>
                       </article>
                     </div>
@@ -2972,7 +2983,7 @@
                   <span v-else>未开赛</span>
                 </div>
 
-                <div class="match-list" v-if="selectedDuelRecord">
+                <div class="match-list" v-if="selectedDuelRecord && !duelMatchPageLoading">
                   <button
                     class="match-card duel-match-card"
                     :class="{ bye: match.type === 'bye', replayable: match.hasReplay || match.replay }"
@@ -3041,8 +3052,15 @@
                   <div v-if="!filteredDuelMatches.length" class="empty duel-empty">没有匹配“{{ duelSearch }}”的人物或宗门。</div>
                 </div>
 
-                <div class="empty duel-empty" v-else-if="selectedDuelDay === state.day">{{ currentDate }} 尚未开赛。</div>
-                <div class="empty duel-empty" v-else>没有找到 {{ selectedDuelDate }} 的切磋记录。</div>
+                <div v-if="selectedDuelRecord && duelMatchPageLoading" class="empty duel-empty">正在载入本页对阵...</div>
+                <div v-if="selectedDuelRecord && duelMatchPage.totalPages > 0" class="duel-match-pager" aria-label="今日对阵分页">
+                  <button class="secondary" type="button" :disabled="duelMatchPage.page <= 1 || duelMatchPageLoading" @click="changeDuelMatchPage(-1)">上一页</button>
+                  <span>第 {{ duelMatchPage.page }} / {{ duelMatchPage.totalPages }} 页 · 共 {{ duelMatchPage.total }} 场</span>
+                  <button class="secondary" type="button" :disabled="duelMatchPage.page >= duelMatchPage.totalPages || duelMatchPageLoading" @click="changeDuelMatchPage(1)">下一页</button>
+                </div>
+
+                <div v-if="!selectedDuelRecord && selectedDuelDay === state.day" class="empty duel-empty">{{ currentDate }} 尚未开赛。</div>
+                <div v-else-if="!selectedDuelRecord" class="empty duel-empty">没有找到 {{ selectedDuelDate }} 的切磋记录。</div>
               </section>
 
               <section class="duel-replay-panel" :class="{ live: lastBattle }">
@@ -4095,7 +4113,7 @@
                 <p>角色、头像与宗门资料会保存到本地存档。</p>
               </div>
               <div class="admin-head-actions">
-                <label class="admin-search">
+                <label v-if="adminMode !== 'settings'" class="admin-search">
                   <span>搜索</span>
                   <input v-model.trim="adminSearch" :placeholder="adminMode === 'cultivators' ? '人物名或宗门名' : adminMode === 'sects' ? '宗门名' : adminMode === 'tasks' ? '任务名或分类' : '搜索指导书'">
                 </label>
@@ -4103,6 +4121,7 @@
                   <button class="segment" :class="{ active: adminMode === 'cultivators' }" type="button" @click="adminMode = 'cultivators'">角色</button>
                   <button class="segment" :class="{ active: adminMode === 'sects' }" type="button" @click="adminMode = 'sects'">宗门</button>
                   <button class="segment" :class="{ active: adminMode === 'tasks' }" type="button" @click="adminMode = 'tasks'">现实任务</button>
+                  <button class="segment" :class="{ active: adminMode === 'settings' }" type="button" @click="adminMode = 'settings'">游戏设置</button>
                   <button class="segment" :class="{ active: adminMode === 'wiki' }" type="button" @click="adminMode = 'wiki'">游戏指导书</button>
                 </div>
               </div>
@@ -4412,6 +4431,26 @@
               </form>
             </div>
 
+            <form v-else-if="adminMode === 'settings'" class="admin-editor admin-game-settings" @submit.prevent="saveGameSettings">
+              <div class="admin-editor-head">
+                <div>
+                  <strong>任务修行设置</strong>
+                  <small>调整后会立即应用到后续任务的有效修为结算与任务页显示。</small>
+                </div>
+              </div>
+              <div class="admin-editor-section">
+                <div class="admin-section-title">每日有效任务修为</div>
+                <label>
+                  <span>满额额度</span>
+                  <input v-model.number="adminGameSettingsDraft.taskDailyFullXpBudget" type="number" min="0" max="100000" step="1">
+                  <small>当天累计基础修为超过此额度后，超出部分按既有衰减规则结算。</small>
+                </label>
+              </div>
+              <div class="admin-actions">
+                <button class="primary" type="submit" :disabled="isActionPending('/api/admin/settings')">{{ isActionPending("/api/admin/settings") ? "保存中..." : "保存设置" }}</button>
+              </div>
+            </form>
+
             <div v-else class="admin-wiki-layout">
               <aside class="admin-wiki-toc" aria-label="游戏指导书目录">
                 <div class="admin-wiki-toc-head">
@@ -4477,6 +4516,37 @@
     </div>
     </template>
 
+    <teleport to="body">
+      <transition name="breakthrough-effect">
+        <section
+          v-if="breakthroughEffect"
+          class="breakthrough-effect-layer"
+          :class="breakthroughEffect.success ? 'success' : 'failure'"
+          role="dialog"
+          aria-modal="true"
+          :aria-label="breakthroughEffect.success ? '突破成功' : '突破失败'"
+          @click.self="dismissBreakthroughEffect"
+        >
+          <div class="breakthrough-effect-aura" aria-hidden="true">
+            <i v-for="ray in 18" :key="ray" :style="{ '--ray': ray }"></i>
+          </div>
+          <div class="breakthrough-effect-sigil" aria-hidden="true">
+            <span class="breakthrough-effect-ring ring-one"></span>
+            <span class="breakthrough-effect-ring ring-two"></span>
+            <span class="breakthrough-effect-core">{{ breakthroughEffect.success ? '破' : '裂' }}</span>
+          </div>
+          <div class="breakthrough-effect-copy">
+            <h2>{{ breakthroughEffect.success ? `恭喜突破到 ${breakthroughEffect.to}` : '突破失败' }}</h2>
+            <p>{{ breakthroughEffect.success ? `${breakthroughEffect.from} → ${breakthroughEffect.to}` : '灵力逆冲经脉，今日不可再次突破。' }}</p>
+            <small>本次突破成功率 {{ formatPercent(breakthroughEffect.chance) }}</small>
+          </div>
+          <button class="breakthrough-effect-dismiss" type="button" @click="dismissBreakthroughEffect">
+            {{ breakthroughEffect.success ? '收下这份机缘' : '调息再来' }}
+          </button>
+        </section>
+      </transition>
+    </teleport>
+
     <div v-if="error" class="toast">{{ error }}</div>
   </div>
 </template>
@@ -4503,12 +4573,10 @@ import {
   ImagePlus,
   Landmark,
   Leaf,
-  Minus,
   Mountain,
   Orbit,
   Package,
   Play,
-  Plus,
   ShoppingBag,
   Route,
   RefreshCw,
@@ -4528,7 +4596,7 @@ import {
   Zap
 } from "lucide-vue-next";
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from "vue";
-import { clearCachedState, getBattleReplay, getCachedState, getCultivatorDetail, getCurrentUser, getDaoTrialHistory, getDuelReplay, getEncounterHistory, getState, login, logout, postAction, register, saveCachedState } from "./api";
+import { clearCachedState, getBattleReplay, getCachedState, getCultivatorDetail, getCurrentUser, getDaoTrialHistory, getDuelDayPage, getDuelReplay, getEncounterHistory, getState, login, logout, postAction, register, saveCachedState } from "./api";
 import CharacterPortrait from "./components/CharacterPortrait.vue";
 import EquipmentIcon from "./components/EquipmentIcon.vue";
 import Meter from "./components/Meter.vue";
@@ -4618,6 +4686,7 @@ const emptyState = {
   sect: { reputation: 0 },
   npcs: [],
   tasks: [],
+  gameSettings: { taskDailyFullXpBudget: 500 },
   taskDefinitions: [],
   taskCompletions: [],
   taskMultiplierRecords: [],
@@ -4695,6 +4764,8 @@ const authForm = reactive({
 });
 const loading = ref(true);
 const error = ref("");
+const breakthroughEffect = ref(null);
+let breakthroughEffectTimer = null;
 const pendingActions = ref(new Set());
 const fullStateRefreshing = ref(false);
 const homeStateRefreshing = ref(false);
@@ -4751,6 +4822,10 @@ const detailReturnStack = ref([]);
 const selectedRealmStage = ref("");
 const selectedDuelDay = ref(null);
 const duelSearch = ref("");
+const duelMatchPage = ref({ day: null, matches: [], page: 1, pageSize: 10, total: 0, totalPages: 0 });
+const duelMatchPageLoading = ref(false);
+let duelSearchTimer = null;
+let duelMatchPageRequestId = 0;
 const selectedProvinceWarDay = ref(null);
 const selectedHomeLogDay = ref(null);
 const selectedProvinceWarId = ref("");
@@ -4782,6 +4857,7 @@ const adminSelectedCultivatorId = ref("player");
 const adminSelectedSectName = ref("");
 const adminSelectedTaskId = ref("");
 const adminWikiArticleId = ref("getting-started");
+const adminGameSettingsDraft = reactive({ taskDailyFullXpBudget: 500 });
 const sectMemberPanelEl = ref(null);
 const sectWarPanelEl = ref(null);
 const sectWarPanelHeight = ref(0);
@@ -4836,7 +4912,7 @@ const adminWikiArticles = [
           "每日副本、攻守城和全员切磋均在推进一天时自动结算。",
           "手动推进不会改变现实日期，只推进游戏内日期；自动结算在服务器跨日时触发。",
           "气血、法力、装备与灵珠的有效属性会共同影响当日战斗结果。",
-          "当天先处理攻守城和领地灵石，再让 NPC 获得日常修为并尝试突破；玩家获得每日修为、自动突破与三类副本，最后处理灵珠和全员切磋。",
+          "当天先处理攻守城和领地灵石，再让 NPC 获得日常修为并尝试突破；玩家获得每日修为与三类副本，突破需在修行页手动发起，最后处理灵珠和全员切磋。",
           "玩家、NPC 的每日成长、突破、切磋、副本与灵珠流水都会写进人物详情；近期记录有保留窗口，不应把历史面板当成永久档案。"
         ],
         tip: "推进前可先使用丹药、安排明日战略；推进后查看日志、战报与人物记录复盘。"
@@ -4907,7 +4983,7 @@ const adminWikiArticles = [
         bullets: [
           "任务定义停用后不能提交，但历史完成记录保留。",
           "服用更弱的修为丹不会覆盖现有更强效果；同级或更强效果会延长有效天数。",
-          "完成任务后若经验达到门槛，系统会自动尝试一次突破。",
+          "完成任务后若经验达到门槛，可前往修行页手动尝试突破。",
           "量化倍率 = 完成量 ÷ 标准数量，再限制到 0 至最高倍数；基础修为与灵石奖励都会先向下取整。",
           "任务定义最多保留 80 项，完成记录最多保留 120 条；补记日期不能早于当前日往前第 2 日，也不能是未来日期。"
         ]
@@ -5214,10 +5290,9 @@ const currentDate = computed(() => dateForDay(gameState.value.day));
 const currentDateLabel = computed(() => formatDateLabel(currentDate.value));
 const taskDefinitions = computed(() => gameState.value.taskDefinitions || []);
 const enabledTaskDefinitions = computed(() => taskDefinitions.value.filter((task) => task.enabled !== false));
-const taskDailyGoal = computed(() => Math.max(6, enabledTaskDefinitions.value.length || 0));
 const taskProgressState = computed(() => {
   const progress = gameState.value.taskProgress || {};
-  return progress.entries ? progress : { entries: progress, baseXp: 0, fullXpBudget: 360, reducedMultiplier: 0.4 };
+  return progress.entries ? progress : { entries: progress, baseXp: 0, fullXpBudget: 500, reducedMultiplier: 0.4 };
 });
 const todayPlan = computed(() => derived.value.todayPlan || {});
 const encounterState = computed(() => gameState.value.encounters || { pending: [], history: [], relationships: [], focusedNpcIds: [], activeChains: [], definitionCount: 240, baseChance: 0.5, emptyDays: 0, collection: { discovered: 0, total: 240 } });
@@ -5347,7 +5422,6 @@ const taskCanSettle = computed(() => {
   const requested = Math.min(taskAmountMax.value, Math.max(0, Number(taskForm.completedAmount) || 0));
   return requested / target > Number(progress.awardedMultiplier || 0) + 0.000001;
 });
-const taskCompleteButtonText = computed(() => taskCanSettle.value ? "结算新增进度" : "进度已全部结算");
 const taskCategoryCounts = computed(() => enabledTaskDefinitions.value.reduce((counts, task) => {
   const category = normalizedTaskCategory(task.category);
   counts[category] = (counts[category] || 0) + 1;
@@ -5402,7 +5476,7 @@ const taskRewardPreview = computed(() => {
   const rawXp = Number(task.xpReward) || 0;
   const requestedBaseXp = Math.floor(rawXp * multiplier);
   const usedBaseXp = Math.max(0, Number(taskProgressState.value.baseXp) || 0);
-  const fullBudget = Math.max(0, Number(taskProgressState.value.fullXpBudget) || 360);
+  const fullBudget = Math.max(0, Number(taskProgressState.value.fullXpBudget) || 500);
   const full = Math.min(requestedBaseXp, Math.max(0, fullBudget - usedBaseXp));
   const reduced = Math.max(0, requestedBaseXp - full);
   const baseXp = Math.floor(full + reduced * Number(taskProgressState.value.reducedMultiplier || 0.4));
@@ -5459,14 +5533,15 @@ const taskAmountMarks = computed(() => {
   const task = selectedTaskDefinition.value;
   if (!task || task.type !== "measurable") return [];
   const max = Math.max(1, Number(taskAmountMax.value) || 1);
-  const target = Math.max(0.01, Number(task.targetAmount) || 1);
-  const step = max <= 6 ? Math.max(taskAmountStep.value, 1) : Math.max(1, Math.round(max / 5));
-  const marks = new Set([0, target, max]);
-  for (let value = step; value < max; value += step) marks.add(Number(value.toFixed(2)));
-  return [...marks]
-    .sort((a, b) => a - b)
-    .slice(0, 7)
-    .map(formatTaskAmount);
+  const divisions = max <= 6 && Number.isInteger(max) ? max : 4;
+  return Array.from({ length: divisions + 1 }, (_, index) => {
+    const value = Number((max * index / divisions).toFixed(2));
+    return {
+      value,
+      label: formatTaskAmount(value),
+      percent: Math.round((value / max) * 10000) / 100
+    };
+  });
 });
 const taskStatusCards = computed(() => {
   const effects = shopDerived.value.activeEffects || {};
@@ -5474,7 +5549,7 @@ const taskStatusCards = computed(() => {
   const daysLeft = selectedTaskDay.value === gameState.value.day ? Math.max(0, Number(effects.cultivationMultiplierDaysLeft) || 0) : 0;
   const dayLabel = selectedTaskDayMeta.value?.label || "所选日";
   return [
-    { label: `${dayLabel}完成`, value: `${selectedTaskSummary.value.count}/${taskDailyGoal.value}`, note: "现实任务", icon: CheckCircle2, asset: "/assets/tasks/icon-scroll.svg", tone: "count" },
+    { label: `${dayLabel}完成`, value: selectedTaskSummary.value.count, note: "现实任务", icon: CheckCircle2, asset: "/assets/tasks/icon-scroll.svg", tone: "count" },
     { label: `${dayLabel}修为`, value: `+${selectedTaskSummary.value.xp}`, note: "经验入账", icon: Sprout, asset: "/assets/tasks/icon-life.svg", tone: "xp" },
     { label: `${dayLabel}灵石`, value: `+${selectedTaskSummary.value.spirit}`, note: "可用于坊市", icon: Gem, asset: "/assets/tasks/icon-crystal.svg", tone: "spirit" },
     {
@@ -6652,12 +6727,8 @@ const selectedDuelDate = computed(() => selectedDuelRecord.value?.date || dateFo
 const todaysDuelRecord = computed(() => duelRecords.value.find((record) => record.day === gameState.value.day));
 const normalizedDuelSearch = computed(() => duelSearch.value.trim().toLowerCase());
 const filteredDuelMatches = computed(() => {
-  const matches = selectedDuelRecord.value?.matches || [];
-  const keyword = normalizedDuelSearch.value;
-  const filtered = keyword
-    ? matches.filter((match) => duelMatchSearchText(match).includes(keyword))
-    : matches;
-  return sortDuelMatchesByRank(filtered);
+  if (Number(duelMatchPage.value.day) !== Number(selectedDuelDay.value)) return [];
+  return duelMatchPage.value.matches || [];
 });
 const duelPreviewIndex = computed(() => filteredDuelMatches.value.findIndex((match) => match.type === "battle" && (match.hasReplay || match.replay)));
 const duelPreviewMatch = computed(() => {
@@ -7041,11 +7112,6 @@ function selectTaskDefinition(id) {
   taskForm.completedAmount = task.type === "measurable"
     ? Math.max(Number(task.targetAmount) || 1, Number(progress?.amount) || 0)
     : 1;
-}
-
-function adjustTaskAmount(delta) {
-  const next = Math.max(0, Math.min(taskAmountMax.value, (Number(taskForm.completedAmount) || 0) + Number(delta || 0)));
-  taskForm.completedAmount = Number(next.toFixed(2));
 }
 
 function formatTaskAmount(value) {
@@ -7442,16 +7508,11 @@ function playerActionHomeLogs(day) {
   return (gameState.value.log || [])
     .filter((entry) => Number(entry.day) === Number(day))
     .filter((entry) => isPlayerHomeActionLog(entry?.text || ""))
-    .filter((entry) => !isDuplicateAutoBreakthroughSuccessLog(entry?.text || ""))
     .map((entry, index) => ({
       ...entry,
       category: playerHomeActionCategory(entry?.text || ""),
       order: 3000 + index
     }));
-}
-
-function isDuplicateAutoBreakthroughSuccessLog(text = "") {
-  return String(text || "").includes("自动突破至");
 }
 
 function isPlayerHomeActionLog(text = "") {
@@ -9417,7 +9478,7 @@ function shouldShowHomeLog(entry) {
   if (text.startsWith("在坊市购得")) return true;
   if (text.startsWith("完成「")) return true;
   if (/^完成.+任务，获得/.test(text)) return true;
-  if (text.includes("自动突破至") || text.includes("自动冲击境界失败")) return true;
+  if (text.startsWith("突破成功") || text.startsWith("突破失败")) return true;
   if (text.includes("服下「") || text.includes("炼化「")) return true;
   if (text.includes("通关") || text.includes("险象环生")) return true;
   if (text.includes("击退") || text.includes("攻势凌厉")) return true;
@@ -9452,6 +9513,18 @@ function formatMultiplier(value) {
 function formatFormulaMultiplier(value) {
   const number = Math.max(0, Number(value) || 0);
   return number.toFixed(2).replace(/\.?0+$/, "");
+}
+
+function taskCompletionFormulaText(task) {
+  const requestedBaseXp = Math.max(0, Number(task?.requestedBaseXp ?? task?.baseXp) || 0);
+  const baseXp = Math.max(0, Number(task?.baseXp) || 0);
+  const elixirMultiplier = Math.max(1, Number(task?.elixirMultiplier) || 1);
+  const talentMultiplier = Math.max(1, Number(task?.talentMultiplier) || 1);
+  const catchupMultiplier = Math.max(1, Number(task?.catchupMultiplier) || 1);
+  const baseText = requestedBaseXp !== baseXp
+    ? `基础 ${requestedBaseXp} → 额度结算 ${baseXp}`
+    : `有效修为 ${baseXp}`;
+  return `修为公式：${baseText} × 丹药 x${formatFormulaMultiplier(elixirMultiplier)} × 天赋 x${formatFormulaMultiplier(talentMultiplier)} × 追赶 x${formatFormulaMultiplier(catchupMultiplier)} = +${Math.max(0, Number(task?.xp) || 0)}（阶段取整）`;
 }
 
 function formatTaskBonusPercent(value) {
@@ -10233,6 +10306,11 @@ function syncAdminTaskDraft(task = adminTaskDefinition.value || filteredAdminTas
   });
 }
 
+function syncAdminGameSettingsDraft() {
+  const value = Number(gameState.value.gameSettings?.taskDailyFullXpBudget);
+  adminGameSettingsDraft.taskDailyFullXpBudget = Number.isFinite(value) ? value : 500;
+}
+
 function selectAdminTask(id) {
   const task = taskDefinitions.value.find((item) => item.id === id);
   if (!task) return;
@@ -10285,6 +10363,12 @@ async function saveTaskDefinition() {
   const path = adminTaskDraft.id ? "/api/task-definitions/update" : "/api/task-definitions";
   const saved = await act(path, { ...adminTaskDraft }, { scope: "lite", markStale: true });
   if (saved?.id) syncAdminTaskDraft(saved);
+}
+
+async function saveGameSettings() {
+  const value = Math.max(0, Math.min(100000, Math.floor(adminNumber(adminGameSettingsDraft.taskDailyFullXpBudget, 500))));
+  const saved = await act("/api/admin/settings", { taskDailyFullXpBudget: value }, { scope: "lite", markStale: true });
+  if (saved) syncAdminGameSettingsDraft();
 }
 
 async function toggleAdminTask(task = adminTaskDefinition.value) {
@@ -11449,7 +11533,7 @@ async function act(path, body = {}, options = {}) {
 }
 
 function shouldMarkFullStateStale(path) {
-  return ["/api/day/advance", "/api/tasks", "/api/breakthrough", "/api/sect/plan"].includes(path);
+  return ["/api/day/advance", "/api/tasks", "/api/tasks/delete", "/api/breakthrough", "/api/sect/plan"].includes(path);
 }
 
 function shouldRefreshHomeState(path) {
@@ -11457,6 +11541,7 @@ function shouldRefreshHomeState(path) {
     "/api/reset",
     "/api/day/advance",
     "/api/tasks",
+    "/api/tasks/delete",
     "/api/breakthrough",
     "/api/skills/upgrade",
     "/api/rest",
@@ -11470,7 +11555,8 @@ function shouldRefreshHomeState(path) {
     "/api/items/sell",
     "/api/player/portrait",
     "/api/admin/cultivator",
-    "/api/admin/sect"
+    "/api/admin/sect",
+    "/api/admin/settings"
   ].includes(path);
 }
 
@@ -11573,8 +11659,35 @@ function clampDay(day) {
   return Math.max(1, Math.min(gameState.value.day, Number(day) || gameState.value.day));
 }
 
+async function loadDuelMatchPage(page = 1) {
+  const record = selectedDuelRecord.value;
+  const day = Number(selectedDuelDay.value);
+  if (!record || !day) {
+    duelMatchPage.value = { day: null, matches: [], page: 1, pageSize: 10, total: 0, totalPages: 0 };
+    return;
+  }
+  const requestId = ++duelMatchPageRequestId;
+  duelMatchPageLoading.value = true;
+  try {
+    const result = await getDuelDayPage({ day, page, pageSize: 10, search: normalizedDuelSearch.value });
+    if (requestId !== duelMatchPageRequestId || Number(selectedDuelDay.value) !== day) return;
+    duelMatchPage.value = result;
+    error.value = "";
+  } catch (err) {
+    if (requestId === duelMatchPageRequestId) error.value = err.message;
+  } finally {
+    if (requestId === duelMatchPageRequestId) duelMatchPageLoading.value = false;
+  }
+}
+
+function changeDuelMatchPage(offset) {
+  const nextPage = Math.max(1, Math.min(duelMatchPage.value.totalPages || 1, duelMatchPage.value.page + offset));
+  if (nextPage !== duelMatchPage.value.page) loadDuelMatchPage(nextPage);
+}
+
 function changeDuelDay(offset) {
   selectedDuelDay.value = clampDay(selectedDuelDay.value + offset);
+  duelMatchPage.value = { day: null, matches: [], page: 1, pageSize: 10, total: 0, totalPages: 0 };
   clearBattleReplay();
 }
 
@@ -11589,13 +11702,21 @@ async function startDailyDuels() {
   if (!result) return;
   upsertDuelDayRecord(result);
   selectedDuelDay.value = result.day;
+  await loadDuelMatchPage(1);
   clearBattleReplay();
 }
 
 function upsertDuelDayRecord(record) {
   if (!record || !state.value) return;
+  const summary = {
+    day: record.day,
+    date: record.date,
+    createdAt: record.createdAt,
+    matchCount: record.matchCount ?? record.matches?.length ?? 0,
+    battleCount: record.battleCount ?? (record.matches || []).filter((match) => match.type === "battle").length
+  };
   const current = gameState.value.duelDays || [];
-  const next = [record, ...current.filter((item) => item.day !== record.day)]
+  const next = [summary, ...current.filter((item) => item.day !== summary.day)]
     .sort((a, b) => (Number(b.day) || 0) - (Number(a.day) || 0));
   state.value = {
     ...state.value,
@@ -11617,9 +11738,35 @@ async function submitTask() {
   taskForm.completedAmount = task.type === "measurable" ? task.targetAmount : 1;
 }
 
+async function deleteTaskCompletion(task) {
+  if (!task?.id) return;
+  if (!confirm(`确定撤回「${task.name}」？将扣除 ${task.xp} 经验与 ${task.spirit || 0} 灵石。`)) return;
+  await act("/api/tasks/delete", { id: task.id });
+}
+
 async function submitBreakthrough() {
   if (!canBreakthroughNow.value) return;
-  await act("/api/breakthrough");
+  const result = await act("/api/breakthrough");
+  if (!result) return;
+  const latest = (player.value.breakthroughs || []).find((record) => Number(record.day) === Number(gameState.value.day));
+  if (!latest) return;
+  showBreakthroughEffect(latest);
+}
+
+function showBreakthroughEffect(record) {
+  clearTimeout(breakthroughEffectTimer);
+  breakthroughEffect.value = {
+    success: record.success !== false,
+    from: record.from || realmName(player.value.realm),
+    to: record.to || realmName(player.value.realm),
+    chance: Number(record.chance) || 0
+  };
+}
+
+function dismissBreakthroughEffect() {
+  clearTimeout(breakthroughEffectTimer);
+  breakthroughEffectTimer = null;
+  breakthroughEffect.value = null;
 }
 
 async function advanceDay() {
@@ -11839,6 +11986,8 @@ onMounted(async () => {
 onUnmounted(() => {
   clearInterval(timer);
   clearInterval(battleTimer);
+  clearTimeout(duelSearchTimer);
+  clearTimeout(breakthroughEffectTimer);
   sectMemberPanelObserver?.disconnect();
   window.removeEventListener("resize", resizeChinaMap);
   window.removeEventListener("keydown", handleMapFullscreenKey);
@@ -11875,10 +12024,23 @@ watch(activeTab, () => {
     if (adminMode.value === "cultivators") syncAdminCultivatorDraft(adminCultivatorPerson.value);
     if (adminMode.value === "sects") syncAdminSectDraft(adminSelectedSectName.value);
     if (adminMode.value === "tasks") syncAdminTaskDraft(adminTaskDefinition.value || filteredAdminTasks.value[0]);
+    if (adminMode.value === "settings") syncAdminGameSettingsDraft();
     if (adminMode.value === "wiki" && !filteredAdminWikiArticles.value.some((article) => article.id === adminWikiArticleId.value)) {
       adminWikiArticleId.value = filteredAdminWikiArticles.value[0]?.id || "";
     }
   }
+});
+
+watch([activeTab, selectedDuelDay, () => selectedDuelRecord.value?.day], () => {
+  if (activeTab.value !== "arena" || !selectedDuelRecord.value) return;
+  loadDuelMatchPage(1);
+});
+
+watch(duelSearch, () => {
+  clearTimeout(duelSearchTimer);
+  duelSearchTimer = setTimeout(() => {
+    if (activeTab.value === "arena" && selectedDuelRecord.value) loadDuelMatchPage(1);
+  }, 180);
 });
 
 watch([activeTab, activeRankBoard, () => state.value?.npcs?.length || 0], () => {
@@ -11904,6 +12066,7 @@ watch([adminSearch, adminMode], () => {
   }
   else if (adminMode.value === "sects") syncAdminSectDraft(adminSelectedSectName.value);
   else if (adminMode.value === "tasks") syncAdminTaskDraft(adminTaskDefinition.value || filteredAdminTasks.value[0]);
+  else if (adminMode.value === "settings") syncAdminGameSettingsDraft();
   else if (!filteredAdminWikiArticles.value.some((article) => article.id === adminWikiArticleId.value)) {
     adminWikiArticleId.value = filteredAdminWikiArticles.value[0]?.id || "";
   }

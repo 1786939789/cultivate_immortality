@@ -54,7 +54,8 @@ const taskDefinitionLimit = 80;
 const taskCompletionLimit = 120;
 const taskMultiplierRecordDays = 3;
 const taskProgressRecordDays = 15;
-const taskDailyFullXpBudget = 360;
+const defaultTaskDailyFullXpBudget = 500;
+const maxTaskDailyFullXpBudget = 100000;
 const taskDailyReducedXpMultiplier = 0.4;
 const permanentStatSoftCap = 36;
 const battleStrategies = ["balanced", "burst", "guard", "focus"];
@@ -6373,6 +6374,12 @@ function taskBaseXpForDay(state, day) {
     .reduce((sum, record) => sum + Math.max(0, Number(record.baseXp) || 0), 0);
 }
 
+function taskDailyFullXpBudget(state) {
+  const value = Number(state.gameSettings?.taskDailyFullXpBudget);
+  if (!Number.isFinite(value)) return defaultTaskDailyFullXpBudget;
+  return clamp(Math.floor(value), 0, maxTaskDailyFullXpBudget);
+}
+
 function formatTaskProgressAmount(amount, definition) {
   const rounded = Math.round((Number(amount) || 0) * 100) / 100;
   return `${rounded}${definition?.unitName ? ` ${definition.unitName}` : ""}`;
@@ -6381,7 +6388,7 @@ function formatTaskProgressAmount(amount, definition) {
 function taskEfficiencyForDay(state, day, requestedBaseXp) {
   const prior = taskBaseXpForDay(state, day);
   const requested = Math.max(0, Number(requestedBaseXp) || 0);
-  const full = Math.max(0, Math.min(requested, taskDailyFullXpBudget - prior));
+  const full = Math.max(0, Math.min(requested, taskDailyFullXpBudget(state) - prior));
   const reduced = Math.max(0, requested - full);
   const effectiveBaseXp = Math.floor(full + reduced * taskDailyReducedXpMultiplier);
   return {
@@ -6415,7 +6422,7 @@ function publicTaskProgress(state, day = state.day) {
     day: safeDay,
     entries: state.taskProgress[safeDay] || {},
     baseXp: taskBaseXpForDay(state, safeDay),
-    fullXpBudget: taskDailyFullXpBudget,
+    fullXpBudget: taskDailyFullXpBudget(state),
     reducedMultiplier: taskDailyReducedXpMultiplier
   };
 }
@@ -7832,6 +7839,7 @@ export function createDefaultState() {
     taskDefinitions: defaultRealityTasks(),
     taskCompletions: [],
     taskProgress: {},
+    gameSettings: { taskDailyFullXpBudget: defaultTaskDailyFullXpBudget },
     taskMultiplierRecords: [{ day: 1, date: openingDate, elixirMultiplier: 1, totalMultiplier: 1 }],
     encounters: {
       version: encounterStateVersion,
@@ -8204,6 +8212,11 @@ export function ensureStateShape(state) {
     for (const task of state.tasks) changed = ensureDatedRecord(task) || changed;
   }
   changed = ensureTaskSystem(state) || changed;
+  const gameSettingsBefore = JSON.stringify(state.gameSettings || {});
+  state.gameSettings = {
+    taskDailyFullXpBudget: taskDailyFullXpBudget(state)
+  };
+  changed = changed || gameSettingsBefore !== JSON.stringify(state.gameSettings);
   if (Array.isArray(state.taskCompletions)) {
     for (const task of state.taskCompletions) changed = ensureDatedRecord(task) || changed;
   }
@@ -8660,6 +8673,7 @@ export function getPublicState(state, options = {}) {
       taskDefinitions: state.taskDefinitions,
       taskCompletions: state.taskCompletions,
       taskProgress: publicTaskProgress(state),
+      gameSettings: state.gameSettings,
       taskMultiplierRecords: state.taskMultiplierRecords,
       encounters: publicEncounters(state),
       daoTrial: publicDaoTrial(state),
@@ -9180,22 +9194,91 @@ function publicCultivatorRefMap(state) {
   return new Map(allCultivators(state).map(({ entity }) => [entity.id, entity]));
 }
 
-function publicDuelDays(records, currentDay = 1, people = null) {
-  const refPeople = mergeRefMaps(people, cultivatorMapFromRefs(records));
-  return trimRecordsByDay(records, currentDay, publicBattleRecordDays, publicDuelDayLimit).map((record, recordIndex) => ({
-    ...record,
-    matches: (record.matches || []).map((match, matchIndex) => ({
-      ...match,
-      order: match.order || matchIndex + 1,
-      left: publicEntityRef(match.left, refPeople),
-      right: publicEntityRef(match.right, refPeople),
-      winner: publicEntityRef(match.winner, refPeople),
-      loser: publicEntityRef(match.loser, refPeople),
-      replayId: match.replayId || "",
-      hasReplay: Boolean(match.replay || match.replayId) && isReplayWithinDays(record, currentDay),
-      replay: null
-    }))
+function publicDuelDays(records, currentDay = 1) {
+  return trimRecordsByDay(records, currentDay, publicBattleRecordDays, publicDuelDayLimit).map((record) => ({
+    day: record.day,
+    date: record.date,
+    createdAt: record.createdAt,
+    matchCount: (record.matches || []).length,
+    battleCount: (record.matches || []).filter((match) => match.type === "battle").length
   }));
+}
+
+function duelMatchSearchText(match) {
+  return [
+    match?.left?.name,
+    match?.left?.sect,
+    match?.left?.realm,
+    match?.right?.name,
+    match?.right?.sect,
+    match?.right?.realm,
+    match?.winner?.name,
+    match?.winner?.sect,
+    match?.summary
+  ].filter(Boolean).join(" ").toLowerCase();
+}
+
+function duelMatchSortSnapshot(match, index) {
+  const people = [match?.left, match?.right, match?.winner].filter(Boolean);
+  return people.reduce((best, person) => {
+    const score = Number(person.duelSeason?.score || 0);
+    const rank = duelRankForScore(score);
+    return {
+      rankMin: Math.max(best.rankMin, Number(rank?.min || 0)),
+      score: Math.max(best.score, score),
+      power: Math.max(best.power, Number(person.power || 0))
+    };
+  }, { rankMin: 0, score: 0, power: 0, order: Number(match?.order || index + 1) });
+}
+
+function publicDuelMatch(match, index, record, currentDay, people) {
+  return {
+    ...match,
+    order: match.order || index + 1,
+    left: publicEntityRef(match.left, people),
+    right: publicEntityRef(match.right, people),
+    winner: publicEntityRef(match.winner, people),
+    loser: publicEntityRef(match.loser, people),
+    replayId: match.replayId || "",
+    hasReplay: Boolean(match.replay || match.replayId) && isReplayWithinDays(record, currentDay),
+    replay: null
+  };
+}
+
+export function getDuelDayPage(state, options = {}) {
+  ensureStateShape(state);
+  const day = Number(options.day || state.day);
+  const record = (state.duelDays || []).find((item) => Number(item.day) === day);
+  const pageSize = clamp(Math.floor(Number(options.pageSize) || 10), 1, 50);
+  const requestedPage = Math.max(1, Math.floor(Number(options.page) || 1));
+  const keyword = String(options.search || "").trim().toLowerCase();
+  if (!record) {
+    return { day, date: stateDateForDay(state), createdAt: "", page: 1, pageSize, total: 0, totalPages: 0, matches: [] };
+  }
+  const sorted = (record.matches || [])
+    .map((match, index) => ({ match, index, stats: duelMatchSortSnapshot(match, index) }))
+    .filter(({ match }) => !keyword || duelMatchSearchText(match).includes(keyword))
+    .sort((left, right) => (
+      right.stats.rankMin - left.stats.rankMin
+      || right.stats.score - left.stats.score
+      || right.stats.power - left.stats.power
+      || left.stats.order - right.stats.order
+    ));
+  const total = sorted.length;
+  const totalPages = total ? Math.ceil(total / pageSize) : 0;
+  const page = totalPages ? Math.min(requestedPage, totalPages) : 1;
+  const start = (page - 1) * pageSize;
+  const people = mergeRefMaps(publicCultivatorRefMap(state), cultivatorMapFromRefs([record]));
+  return {
+    day: record.day,
+    date: record.date,
+    createdAt: record.createdAt,
+    page,
+    pageSize,
+    total,
+    totalPages,
+    matches: sorted.slice(start, start + pageSize).map(({ match, index }) => publicDuelMatch(match, index, record, state.day, people))
+  };
 }
 
 function publicDungeonDays(records, currentDay = 1, people = null) {
@@ -9984,7 +10067,6 @@ export function dailySettlement(state, options = {}) {
   const playerCatchup = playerCatchupProfile(state);
   const playerPassiveXp = Math.floor((playerDailyBaseXp + playerProvinceXp) * playerTalentXpMultiplier * playerCatchup.multiplier);
   state.player.xp += playerPassiveXp;
-  autoAttemptPlayerBreakthrough(state);
   runDailyDungeons(state, settlementDate);
   const playerDungeonEntries = (state.player.dungeonHistory || []).filter((record) => record.day === state.day);
   const playerSoloDungeon = playerDungeonEntries.find((record) => record.type === "solo");
@@ -10104,6 +10186,7 @@ export function addTask(state, payload) {
     completedMultiplier: nextMultiplier,
     xp: xpGain,
     baseXp: baseXpGain,
+    beforeTalentXp,
     requestedBaseXp,
     taskEfficiencyMultiplier: efficiency.multiplier,
     taskBudgetReducedXp: efficiency.reducedBaseXp,
@@ -10133,7 +10216,68 @@ export function addTask(state, payload) {
   const bonusText = xpGain > baseXpGain ? `（加成 +${xpGain - baseXpGain}）` : "";
   const reducedText = efficiency.reducedBaseXp ? "，超出今日有效修行预算的部分按 40% 结算" : "";
   log(state, `完成「${definition.name}」，获得 ${xpGain} 经验${bonusText}与 ${spiritGain} 灵石${reducedText}。`, "gold");
-  autoAttemptPlayerBreakthrough(state);
+}
+
+function removeTaskContributionFromDailyRecord(state, completion) {
+  const player = state.player;
+  const day = Math.max(1, Math.floor(Number(completion.day) || state.day || 1));
+  const record = player.dailyRecords?.find((item) => Number(item.day) === day);
+  if (!record) return;
+
+  const xpGain = Math.max(0, Number(completion.xp) || 0);
+  const baseXpGain = Math.max(0, Number(completion.baseXp) || 0);
+  const beforeTalentXp = Math.max(0, Number(completion.beforeTalentXp)
+    || Math.floor(baseXpGain * Math.max(1, Number(completion.elixirMultiplier) || 1)));
+  const bonusXp = Math.max(0, xpGain - baseXpGain);
+  const spiritGain = Math.max(0, Number(completion.spirit) || 0);
+  const subtract = (value, amount) => Math.max(0, (Number(value) || 0) - amount);
+
+  record.xp = subtract(record.xp, xpGain);
+  record.baseXp = subtract(record.baseXp, baseXpGain);
+  record.bonusXp = subtract(record.bonusXp, bonusXp);
+  record.spirit = subtract(record.spirit, spiritGain);
+  record.taskXp = subtract(record.taskXp, xpGain);
+  record.taskBaseXp = subtract(record.taskBaseXp, baseXpGain);
+  record.taskBeforeTalentXp = subtract(record.taskBeforeTalentXp, beforeTalentXp);
+  record.taskBonusXp = subtract(record.taskBonusXp, bonusXp);
+  record.taskSpirit = subtract(record.taskSpirit, spiritGain);
+
+  const remaining = (state.taskCompletions || []).filter((item) => Number(item.day) === day);
+  record.taskCount = remaining.length;
+  record.taskNames = remaining.map((item) => item.name).filter(Boolean).slice(0, 5);
+  record.taskTypes = Array.from(new Set(remaining.map((item) => item.category).filter(Boolean))).slice(0, 5);
+  record.taskTalentMultiplier = remaining[0]?.talentMultiplier || 1;
+}
+
+export function deleteTaskCompletion(state, payload = {}) {
+  ensureTaskSystem(state);
+  const id = String(payload.id || "");
+  const index = state.taskCompletions.findIndex((item) => item.id === id);
+  if (index < 0) throw new Error("未找到这条任务记录");
+
+  const completion = state.taskCompletions[index];
+  if (Number(completion.day) !== Number(state.day)) {
+    throw new Error("仅能撤回当日完成的任务");
+  }
+
+  const xpGain = Math.max(0, Number(completion.xp) || 0);
+  const spiritGain = Math.max(0, Number(completion.spirit) || 0);
+  if (state.player.xp < xpGain || state.player.spirit < spiritGain) {
+    throw new Error("该任务收益已被消耗，无法安全撤回");
+  }
+
+  state.player.xp -= xpGain;
+  state.player.spirit -= spiritGain;
+  state.taskCompletions.splice(index, 1);
+  state.tasks = (state.tasks || []).filter((item) => item.id !== completion.id);
+  const day = Math.max(1, Math.floor(Number(completion.day) || state.day || 1));
+  if (state.taskProgress?.[day]) {
+    delete state.taskProgress[day][completion.taskId];
+    if (!Object.keys(state.taskProgress[day]).length) delete state.taskProgress[day];
+  }
+  normalizeTaskProgress(state);
+  removeTaskContributionFromDailyRecord(state, completion);
+  log(state, `撤回「${completion.name}」，扣除 ${xpGain} 经验与 ${spiritGain} 灵石。`, "bad");
 }
 
 function addTaskXpToDailyRecord(state, { xpGain, baseXpGain, beforeTalentXp = xpGain, talentMultiplier = 1, taskName, taskType, spiritGain = 0, day = state.day, date }) {
@@ -10193,6 +10337,15 @@ export function createTaskDefinition(state, payload = {}) {
   state.taskDefinitions = state.taskDefinitions.slice(0, taskDefinitionLimit);
   log(state, `后台新增现实任务「${definition.name}」。`, "gold");
   return definition;
+}
+
+export function updateGameSettings(state, payload = {}) {
+  ensureStateShape(state);
+  const requestedBudget = Number(payload.taskDailyFullXpBudget);
+  if (!Number.isFinite(requestedBudget)) throw new Error("有效任务修为额度必须是数字");
+  state.gameSettings.taskDailyFullXpBudget = clamp(Math.floor(requestedBudget), 0, maxTaskDailyFullXpBudget);
+  log(state, `后台将每日有效任务修为额度调整为 ${state.gameSettings.taskDailyFullXpBudget}。`, "gold");
+  return { ...state.gameSettings };
 }
 
 export function updateTaskDefinition(state, payload = {}) {
@@ -10454,7 +10607,7 @@ export function updateSectProfile(state, payload = {}) {
   log(state, `后台已更新宗门「${newName}」。`, "gold");
 }
 
-function autoAttemptPlayerBreakthrough(state) {
+function resolvePlayerBreakthrough(state) {
   const p = state.player;
   const need = xpNeed(p.realm);
   if (p.realm >= realms.length - 1) {
@@ -10481,13 +10634,13 @@ function autoAttemptPlayerBreakthrough(state) {
     p.reputation += 6 + p.realm;
     p.breakthroughs.unshift({ day: state.day, date: stateDateForDay(state), time: timestampKey(), from: realms[p.realm - 1], to: realms[p.realm], success: true, chance, growth });
     p.breakthroughs = trimRecordsByDay(p.breakthroughs, state.day, growthRecordDays, growthRecordLimit);
-    log(state, `经验圆满，灵气自发贯通周天，你自动突破至「${realms[p.realm]}」。`, "gold");
+    log(state, `突破成功，${realms[fromRealm]} → ${realms[p.realm]}。`, "gold");
   } else {
     p.hp = clamp(p.hp - 26, 1, effectiveMaxHp(p, state));
     p.mana = clamp((p.mana || 0) - 18, 0, effectiveMaxMana(p, state));
     p.breakthroughs.unshift({ day: state.day, date: stateDateForDay(state), time: timestampKey(), from: realms[p.realm], to: realms[p.realm + 1] || "未知境界", success: false, chance });
     p.breakthroughs = trimRecordsByDay(p.breakthroughs, state.day, growthRecordDays, growthRecordLimit);
-    log(state, "经验圆满后自动冲击境界失败，灵力逆冲经脉。今日不可再次突破。", "bad");
+    log(state, "突破失败，灵力逆冲经脉。今日不可再次突破。", "bad");
   }
   return true;
 }
@@ -10510,7 +10663,7 @@ export function attemptBreakthrough(state) {
   if (player.realm >= realms.length - 1) throw new Error("已至当前境界尽头。 ");
   if (player.xp < xpNeed(player.realm)) throw new Error("修为尚未圆满。 ");
   if (breakthroughAttemptInfo(state).remaining <= 0) throw new Error("今日突破次数已用尽。 ");
-  return autoAttemptPlayerBreakthrough(state);
+  return resolvePlayerBreakthrough(state);
 }
 
 export function updatePlayerBattleStrategy(state, payload = {}) {

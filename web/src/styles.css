@@ -3059,6 +3059,23 @@ button {
   font-size: 11px;
 }
 
+.duel-match-pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.duel-match-pager .secondary {
+  min-height: 30px;
+  padding: 5px 10px;
+  font-size: 11px;
+}
+
 .star-sea-rank-copy {
   min-width: 0;
   display: grid;
@@ -4271,6 +4288,33 @@ label {
   color: #0f766e;
 }
 
+.task-reward.task-reward-has-tip {
+  position: relative;
+}
+
+.task-record-revert {
+  margin-top: 7px;
+  border: 0;
+  border-bottom: 1px dashed rgba(143, 57, 37, .58);
+  background: transparent;
+  color: #9d442d;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 0 0 2px;
+}
+
+.task-record-revert:hover:not(:disabled),
+.task-record-revert:focus-visible {
+  color: #6f2518;
+}
+
+.task-record-revert:disabled {
+  cursor: wait;
+  opacity: .56;
+}
+
 .task-reward.spirit {
   color: #a16207;
 }
@@ -4859,25 +4903,25 @@ label {
   position: relative;
   overflow: hidden;
   display: grid;
-  gap: 12px;
-  padding: 12px 12px 14px 38px;
+  gap: 8px;
+  padding: 12px 12px 14px 30px;
   border: 2px solid rgba(23, 69, 66, .9);
   border-radius: 3px;
   background:
-    linear-gradient(90deg, rgba(18, 69, 67, .98) 0 32px, transparent 32px),
+    linear-gradient(90deg, rgba(18, 69, 67, .98) 0 24px, transparent 24px),
     linear-gradient(90deg, rgba(249, 242, 222, .98), rgba(252, 245, 226, .94) 76%, rgba(238, 221, 180, .78)),
     url("/assets/tasks/task-bg-mountains.svg") right bottom / auto 92% no-repeat,
     url("/assets/tasks/task-bg-parchment.svg") center / cover no-repeat;
   box-shadow:
     inset 0 0 0 3px rgba(204, 166, 86, .34),
-    inset 34px 0 0 rgba(7, 42, 42, .26),
+    inset 26px 0 0 rgba(7, 42, 42, .26),
     0 20px 46px rgba(6, 18, 18, .24);
 }
 
 .quest-surface .task-command-panel::after {
   content: "勤修不辍";
   position: absolute;
-  left: 8px;
+  left: 5px;
   bottom: 86px;
   writing-mode: vertical-rl;
   color: rgba(244, 226, 178, .34);
@@ -4888,8 +4932,8 @@ label {
 .quest-surface .task-page-head {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(230px, .82fr) minmax(620px, 1.7fr) minmax(178px, .58fr);
-  gap: 10px;
+  grid-template-columns: minmax(180px, .62fr) minmax(0, 1.7fr) minmax(160px, .54fr);
+  gap: 8px;
   align-items: center;
   min-height: 104px;
   margin: 0;
@@ -4898,7 +4942,7 @@ label {
   background:
     linear-gradient(180deg, rgba(255, 250, 235, .92), rgba(239, 225, 193, .84)),
     url("/assets/tasks/task-bg-parchment.svg") center / cover no-repeat;
-  padding: 14px 12px 14px 24px;
+  padding: 12px 10px 12px 14px;
   box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .34);
 }
 
@@ -4934,17 +4978,17 @@ label {
 
 .quest-surface .task-status-card {
   display: grid;
-  grid-template-columns: 44px 1fr;
+  grid-template-columns: 38px 1fr;
   grid-template-rows: auto auto;
   align-items: center;
-  min-height: 72px;
+  min-height: 64px;
   min-width: 0;
   border: 0;
   border-right: 1px solid rgba(126, 94, 47, .22);
   border-radius: 0;
   background: transparent;
   box-shadow: none;
-  padding: 8px 14px;
+  padding: 7px 10px;
 }
 
 .quest-surface .task-status-card:last-child {
@@ -4953,8 +4997,8 @@ label {
 
 .quest-surface .task-ai-small-icon {
   grid-row: 1 / span 2;
-  width: 40px;
-  height: 40px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   object-fit: cover;
   box-shadow: 0 0 0 1px rgba(126, 94, 47, .22), 0 2px 6px rgba(76, 52, 24, .12);
@@ -5422,10 +5466,19 @@ label {
 
 .quest-surface .task-amount-controls {
   display: grid;
-  grid-template-columns: 40px minmax(76px, 130px) minmax(0, 1fr) 40px auto;
-  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) 84px auto;
+  gap: 10px;
   align-items: center;
   margin-top: 10px;
+}
+
+/* Keep the three primary task panels visually grouped without doubled grid/margin gaps. */
+.quest-surface .task-cultivation-plan {
+  margin: 0;
+}
+
+.quest-surface .task-command-panel .task-page-head {
+  margin-bottom: 0;
 }
 
 .quest-surface .task-amount-controls .icon-button {
@@ -5448,8 +5501,54 @@ label {
   font-weight: 900;
 }
 
-.quest-surface .task-amount-controls > input[type="range"] {
+.quest-surface .task-range-stack {
+  min-width: 0;
+}
+
+.quest-surface .task-range-stack > input[type="range"] {
+  display: block;
+  appearance: none;
+  box-sizing: border-box;
   width: 100%;
+  min-height: 0;
+  height: 3px !important;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #27746d 0 var(--task-range-progress), rgba(126, 94, 47, .26) var(--task-range-progress) 100%);
+  cursor: pointer;
+}
+
+.quest-surface .task-range-stack > input[type="range"]::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: inherit;
+  background: transparent;
+}
+
+.quest-surface .task-range-stack > input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  margin-top: -4.5px;
+  border: 2px solid #fff7db;
+  border-radius: 50%;
+  background: #27746d;
+  box-shadow: 0 1px 3px rgba(42, 30, 14, .38);
+}
+
+.quest-surface .task-range-stack > input[type="range"]::-moz-range-track {
+  height: 3px;
+  border-radius: inherit;
+  background: transparent;
+}
+
+.quest-surface .task-range-stack > input[type="range"]::-moz-range-thumb {
+  width: 8px;
+  height: 8px;
+  border: 2px solid #fff7db;
+  border-radius: 50%;
+  background: #27746d;
+  box-shadow: 0 1px 3px rgba(42, 30, 14, .38);
 }
 
 .quest-surface .task-progress-track {
@@ -5468,31 +5567,47 @@ label {
 }
 
 .quest-surface .task-range-marks {
-  display: flex;
-  justify-content: space-between;
-  margin: 6px 2px 0 88px;
+  position: relative;
+  height: 13px;
+  margin: 8px 0 0;
   color: #8b744f;
-  font-size: 12px;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
 
+.quest-surface .task-range-marks span {
+  position: absolute;
+  transform: translateX(-50%);
+}
+
+.quest-surface .task-range-marks span.start {
+  transform: none;
+}
+
+.quest-surface .task-range-marks span.end {
+  transform: translateX(-100%);
+}
+
 .quest-surface .task-amount-input {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: fit-content;
+  width: 84px;
+  margin: 0;
   color: #6f5b3b;
   font-size: 13px;
   font-weight: 800;
 }
 
-.quest-surface .task-amount-input input {
-  width: 120px;
+.quest-surface input.task-amount-input {
   border-color: rgba(126, 94, 47, .32);
   background: rgba(255, 249, 232, .86);
   color: #352716;
   font-size: 16px;
   text-align: center;
+}
+
+.quest-surface .task-amount-unit {
+  color: #7c6542;
+  font-size: 13px;
+  font-style: normal;
 }
 
 .quest-surface .task-complete-panel {
@@ -5589,13 +5704,13 @@ label {
 }
 
 .quest-surface .task-complete-button {
-  justify-self: end;
+  justify-self: stretch;
   align-self: center;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 230px;
-  width: 230px;
+  min-width: 0;
+  width: 100%;
   min-height: 52px;
   height: 52px;
   padding: 0 18px;
@@ -13387,6 +13502,188 @@ button.defender-chip.person:focus-visible .character-portrait {
 .sect-avatar.xl {
   width: 76px;
   height: 76px;
+}
+
+.breakthrough-effect-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 160;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 22px;
+  overflow: hidden;
+  padding: 28px;
+  color: #fff8d8;
+  isolation: isolate;
+  background: rgba(5, 15, 16, .78);
+  backdrop-filter: blur(5px);
+}
+
+.breakthrough-effect-layer::before,
+.breakthrough-effect-layer::after {
+  position: absolute;
+  content: "";
+  pointer-events: none;
+}
+
+.breakthrough-effect-layer::before {
+  inset: 0;
+  z-index: -3;
+  background: radial-gradient(circle at center, rgba(255, 215, 115, .18), transparent 37%);
+}
+
+.breakthrough-effect-layer::after {
+  z-index: -1;
+  width: min(76vw, 760px);
+  aspect-ratio: 1;
+  border: 1px solid rgba(255, 232, 156, .26);
+  border-radius: 50%;
+  box-shadow: 0 0 0 44px rgba(255, 212, 104, .035), 0 0 120px rgba(255, 194, 66, .24);
+  animation: breakthrough-pulse 1.65s ease-out infinite;
+}
+
+.breakthrough-effect-aura {
+  position: absolute;
+  z-index: -2;
+  width: min(82vw, 820px);
+  aspect-ratio: 1;
+  animation: breakthrough-spin 18s linear infinite;
+}
+
+.breakthrough-effect-aura i {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: block;
+  width: 2px;
+  height: 46%;
+  transform-origin: 50% 0;
+  transform: rotate(calc(var(--ray) * 20deg));
+  background: linear-gradient(180deg, rgba(255, 242, 184, .82), rgba(255, 202, 70, .05) 70%, transparent);
+  box-shadow: 0 0 12px rgba(255, 207, 87, .68);
+}
+
+.breakthrough-effect-sigil {
+  position: relative;
+  display: grid;
+  width: min(32vw, 236px);
+  min-width: 178px;
+  aspect-ratio: 1;
+  place-items: center;
+  border: 1px solid rgba(255, 232, 154, .82);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 239, 178, .94) 0 7%, rgba(204, 139, 35, .52) 25%, rgba(34, 77, 66, .34) 47%, transparent 68%);
+  box-shadow: 0 0 0 12px rgba(255, 224, 137, .07), 0 0 64px rgba(248, 194, 66, .72), inset 0 0 38px rgba(255, 245, 198, .58);
+  animation: breakthrough-sigil-in .7s cubic-bezier(.15, .85, .25, 1.2) both;
+}
+
+.breakthrough-effect-ring {
+  position: absolute;
+  inset: 12%;
+  border: 1px solid rgba(255, 246, 205, .8);
+  border-radius: 46% 54% 52% 48%;
+}
+
+.breakthrough-effect-ring.ring-one { animation: breakthrough-spin 8s linear infinite; }
+.breakthrough-effect-ring.ring-two { inset: 23%; border-style: dashed; animation: breakthrough-spin 5s linear infinite reverse; }
+
+.breakthrough-effect-core {
+  display: grid;
+  width: 34%;
+  aspect-ratio: 1;
+  place-items: center;
+  border: 1px solid rgba(255, 252, 221, .95);
+  border-radius: 50%;
+  background: #b6781e;
+  box-shadow: 0 0 28px rgba(255, 232, 140, .96);
+  color: #fff9df;
+  font-family: KaiTi, STKaiti, serif;
+  font-size: clamp(34px, 5vw, 58px);
+  font-weight: 900;
+  text-shadow: 0 2px 0 rgba(90, 47, 8, .52);
+}
+
+.breakthrough-effect-copy {
+  position: relative;
+  text-align: center;
+  text-shadow: 0 3px 20px rgba(0, 0, 0, .86);
+  animation: breakthrough-copy-in .56s .18s both;
+}
+
+.breakthrough-effect-copy h2 {
+  margin: 0;
+  color: #fff4bb;
+  font-family: KaiTi, STKaiti, serif;
+  font-size: clamp(30px, 5vw, 58px);
+  letter-spacing: .08em;
+}
+
+.breakthrough-effect-copy p {
+  margin: 10px 0 5px;
+  color: #fff7dc;
+  font-size: clamp(16px, 2vw, 22px);
+  font-weight: 800;
+}
+
+.breakthrough-effect-copy small {
+  color: rgba(255, 240, 189, .82);
+  font-size: 13px;
+}
+
+.breakthrough-effect-dismiss {
+  position: relative;
+  min-width: 188px;
+  border: 1px solid rgba(255, 224, 133, .88);
+  border-radius: 2px;
+  background: linear-gradient(135deg, #e5bd62, #8d5720);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, .34);
+  color: #fff9de;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 900;
+  padding: 11px 18px;
+  text-shadow: 0 1px 0 rgba(66, 35, 8, .58);
+}
+
+.breakthrough-effect-layer.failure::before {
+  background: radial-gradient(circle at center, rgba(184, 45, 35, .32), transparent 42%);
+}
+
+.breakthrough-effect-layer.failure::after {
+  border-color: rgba(239, 101, 75, .36);
+  box-shadow: 0 0 0 44px rgba(192, 54, 39, .04), 0 0 130px rgba(183, 48, 35, .28);
+}
+
+.breakthrough-effect-layer.failure .breakthrough-effect-aura { animation: breakthrough-failure-shake .44s ease-in-out 2; }
+.breakthrough-effect-layer.failure .breakthrough-effect-aura i { background: linear-gradient(180deg, rgba(255, 154, 117, .72), rgba(190, 48, 39, .03) 70%, transparent); box-shadow: 0 0 12px rgba(224, 75, 54, .62); }
+.breakthrough-effect-layer.failure .breakthrough-effect-sigil { border-color: rgba(255, 146, 110, .8); background: radial-gradient(circle, rgba(255, 204, 175, .72) 0 7%, rgba(158, 41, 34, .58) 25%, rgba(77, 20, 22, .36) 49%, transparent 68%); box-shadow: 0 0 0 12px rgba(216, 64, 44, .07), 0 0 64px rgba(208, 52, 38, .65), inset 0 0 38px rgba(255, 190, 157, .28); }
+.breakthrough-effect-layer.failure .breakthrough-effect-core { background: #8f2f2b; box-shadow: 0 0 28px rgba(248, 109, 75, .86); }
+.breakthrough-effect-layer.failure .breakthrough-effect-copy h2 { color: #ffd1bd; }
+.breakthrough-effect-layer.failure .breakthrough-effect-dismiss { border-color: rgba(255, 158, 121, .78); background: linear-gradient(135deg, #b24836, #61231f); }
+
+.breakthrough-effect-enter-active,
+.breakthrough-effect-leave-active { transition: opacity .24s ease; }
+.breakthrough-effect-enter-from,
+.breakthrough-effect-leave-to { opacity: 0; }
+
+@keyframes breakthrough-sigil-in {
+  from { opacity: 0; transform: scale(.42) rotate(-24deg); }
+  to { opacity: 1; transform: scale(1) rotate(0); }
+}
+
+@keyframes breakthrough-copy-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes breakthrough-spin { to { transform: rotate(360deg); } }
+@keyframes breakthrough-pulse { 0% { opacity: .9; transform: scale(.78); } 100% { opacity: 0; transform: scale(1.13); } }
+@keyframes breakthrough-failure-shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-9px) rotate(-2deg); } 75% { transform: translateX(9px) rotate(2deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .breakthrough-effect-layer *,
+  .breakthrough-effect-layer::after { animation: none !important; }
 }
 
 .modal-backdrop {

@@ -83,6 +83,14 @@ export function getDuelReplay(day, matchId) {
   return request(`/api/duels/replay?${params.toString()}`);
 }
 
+export function getDuelDayPage(options = {}) {
+  const params = new URLSearchParams({ _: String(Date.now()) });
+  for (const [key, value] of Object.entries(options)) {
+    if (value !== undefined && value !== null && value !== "") params.set(key, String(value));
+  }
+  return request(`/api/duels/day?${params.toString()}`);
+}
+
 export function getBattleReplay(replayId) {
   const params = new URLSearchParams({ id: replayId });
   return request(`/api/battles/replay?${params.toString()}`);

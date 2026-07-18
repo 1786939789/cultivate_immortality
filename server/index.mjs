@@ -11,9 +11,11 @@ import {
   changePlayerPortrait,
   createTaskDefinition,
   dailySettlement,
+  deleteTaskCompletion,
   deleteTaskDefinition,
   getDuelReplay,
   getDuelReplayId,
+  getDuelDayPage,
   getDaoTrialHistoryPage,
   getEncounterHistoryPage,
   getCultivatorPortrait,
@@ -32,6 +34,7 @@ import {
   toggleTaskDefinition,
   updateCultivatorProfile,
   updateEncounterFocus,
+  updateGameSettings,
   updateTaskDefinition,
   updatePlayerSectPlan,
   updatePlayerBattleStrategy,
@@ -58,6 +61,7 @@ const rootDir = fileURLToPath(new URL("../", import.meta.url));
 const distDir = join(rootDir, "dist");
 const liteActionRoutes = new Set([
   "/api/tasks",
+  "/api/tasks/delete",
   "/api/encounters/choose",
   "/api/encounters/focus",
   "/api/breakthrough",
@@ -66,6 +70,7 @@ const liteActionRoutes = new Set([
   "/api/task-definitions/delete",
   "/api/task-definitions/toggle",
   "/api/player/portrait",
+  "/api/admin/settings",
   "/api/skills/upgrade",
   "/api/rest",
   "/api/day/advance",
@@ -285,6 +290,17 @@ async function handleApi(req, res, url) {
     return;
   }
 
+  if (req.method === "GET" && url.pathname === "/api/duels/day") {
+    const state = await readState(saveId);
+    sendJson(res, 200, getDuelDayPage(state, {
+      day: url.searchParams.get("day"),
+      page: url.searchParams.get("page"),
+      pageSize: url.searchParams.get("pageSize"),
+      search: url.searchParams.get("search")
+    }));
+    return;
+  }
+
   if (req.method === "GET" && url.pathname === "/api/battles/replay") {
     const replayId = url.searchParams.get("id");
     if (!replayId) throw new Error("缺少战斗回放 ID");
@@ -310,6 +326,7 @@ async function handleApi(req, res, url) {
   const body = await readJson(req);
   const routes = {
     "/api/tasks": (state) => addTask(state, body),
+    "/api/tasks/delete": (state) => deleteTaskCompletion(state, body),
     "/api/encounters/choose": (state) => resolveEncounter(state, body),
     "/api/encounters/focus": (state) => updateEncounterFocus(state, body),
     "/api/breakthrough": (state) => attemptBreakthrough(state),
@@ -334,7 +351,8 @@ async function handleApi(req, res, url) {
     "/api/items/use": (state) => useItem(state, body.kind),
     "/api/items/sell": (state) => sellItem(state, body.kind),
     "/api/admin/cultivator": (state) => updateCultivatorProfile(state, body),
-    "/api/admin/sect": (state) => updateSectProfile(state, body)
+    "/api/admin/sect": (state) => updateSectProfile(state, body),
+    "/api/admin/settings": (state) => updateGameSettings(state, body)
   };
 
   const mutator = routes[url.pathname];
