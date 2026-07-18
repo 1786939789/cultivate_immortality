@@ -70,7 +70,7 @@ export const canonicalPotentialRealms = {
   "螟虫之母": 89
 };
 
-export { duelLossScore, duelRanks, duelSeasonLength, duelSeasonMaxScore, duelSeasonOfDay, duelSeasonDay, duelWinScore, duelRankForScore } from "../shared/duelSeasonData.mjs";
+export { duelLadderDays, duelLossScore, duelRanks, duelSeasonLength, duelSeasonMaxScore, duelSeasonOfDay, duelSeasonDay, duelTournamentBracketSize, duelTournamentDays, duelWinScore, duelRankForScore } from "../shared/duelSeasonData.mjs";
 
 export const sectRoster = [
   { region: "天南", name: "黄枫谷", members: ["韩立", "陈巧倩", "钟卫娘", "刘靖", "吴风", "李化元", "雷万鹤", "红拂", "令狐老祖", "马师伯"] },

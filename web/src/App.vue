@@ -2929,11 +2929,102 @@
               <div class="duel-season-strip" aria-label="切磋赛季状态">
                 <span><i class="duel-mini-icon season" aria-hidden="true"></i>第 {{ duelSeasonInfo.season }} 赛季</span>
                 <span>第 {{ duelSeasonInfo.seasonDay }} / {{ duelSeasonInfo.length }} 天</span>
-                <span class="duel-gain">胜利 +{{ duelSeasonInfo.winScore }} 分</span>
-                <span class="duel-loss">失败 {{ duelSeasonInfo.lossScore }} 分</span>
-                <span>积分 0-{{ duelSeasonInfo.maxScore }}</span>
+                <span class="duel-phase-chip" :class="duelSeasonInfo.phase">{{ duelPhaseText }}</span>
+                <template v-if="duelSeasonInfo.phase === 'ladder'">
+                  <span class="duel-gain">胜利 +{{ duelSeasonInfo.winScore }} 分</span>
+                  <span class="duel-loss">失败 {{ duelSeasonInfo.lossScore }} 分</span>
+                  <span>积分 0-{{ duelSeasonInfo.maxScore }}</span>
+                </template>
+                <span v-else>淘汰赛不增减段位积分</span>
               </div>
             </div>
+
+            <section class="tournament-ceremony" :class="{ active: duelSeasonInfo.phase === 'tournament', complete: duelTournament?.status === 'completed' }">
+              <div class="tournament-ceremony-main">
+                <span class="tournament-mark" aria-hidden="true">冠</span>
+                <div>
+                  <strong>{{ duelSeasonInfo.phase === 'tournament' ? (duelTournamentRound?.name || '天骄淘汰赛') : '天骄淘汰赛将在第 53 天开启' }}</strong>
+                  <p v-if="duelSeasonInfo.phase === 'ladder'">前 {{ duelSeasonInfo.ladderDays }} 天每日积分演武。积分决定种子，前 56 名获得首轮轮空。</p>
+                  <p v-else-if="duelTournament?.status === 'completed'">{{ duelTournament.champion?.name }} 荣登魁首；冠军、亚军与四强奖励已结算。</p>
+                  <p v-else>第 {{ duelTournamentRound?.round || 1 }} 轮每日一战，满血入场，胜者晋级。</p>
+                </div>
+              </div>
+              <div class="tournament-reward-list">
+                <span><b>冠军</b> 350 灵石 + 修为圆满 + 道韵</span>
+                <span><b>亚军</b> 220 灵石</span>
+                <span><b>四强</b> 100 灵石</span>
+              </div>
+              <div v-if="championDaoRhyme" class="dao-rhyme-status">
+                <b>魁首道韵</b><span>下次突破 +10%，突破成功前持续</span>
+              </div>
+            </section>
+
+            <section v-if="duelTournament" class="tournament-bracket-panel">
+              <div class="tournament-bracket-head">
+                <div><strong>天骄签表</strong><span>积分种子已锁定，淘汰赛期间不再改动段位积分。</span></div>
+                <em v-if="playerTournamentEntry">你的种子：{{ playerTournamentEntry.seed }} 号</em>
+              </div>
+              <div class="tournament-bracket-scroll">
+                <div class="tournament-bracket-board" :style="{ '--tournament-stage-count': tournamentBracketWings.length }">
+                  <div class="tournament-bracket-wing left" aria-label="今日上半区赛程">
+                    <article v-for="stage in tournamentBracketWings" :key="`left-${stage.round}`" class="tournament-stage">
+                      <h4><span>R{{ stage.round }}</span>{{ stage.name }}</h4>
+                      <div class="tournament-match-stack">
+                        <div
+                          v-for="match in stage.leftMatches"
+                          :key="`left-${match.id}`"
+                          class="tournament-match"
+                          :class="{ player: isTournamentPlayerMatch(match), bye: match.type === 'bye', resolved: Boolean(match.winner) }"
+                        >
+                          <span :class="{ winner: match.winner?.id === match.left?.id }">
+                            <CharacterPortrait v-if="match.left" :person="matchPerson(match.left)" size="xs" />
+                            <i v-if="match.left?.seed">{{ match.left.seed }}</i>{{ match.left?.name || '待定' }}
+                          </span>
+                          <b>{{ match.type === 'bye' ? '轮空' : 'VS' }}</b>
+                          <span v-if="match.right" :class="{ winner: match.winner?.id === match.right?.id }">
+                            <CharacterPortrait v-if="match.right" :person="matchPerson(match.right)" size="xs" />
+                            <i v-if="match.right?.seed">{{ match.right.seed }}</i>{{ match.right.name }}
+                          </span>
+                        </div>
+                      </div>
+                    </article>
+                  </div>
+
+                  <div class="tournament-crown-core" :class="{ complete: duelTournament.status === 'completed' }">
+                    <span class="tournament-crown-rays" aria-hidden="true"></span>
+                    <div class="tournament-crown-seal" aria-hidden="true"><i>冠</i></div>
+                    <small>{{ duelTournament.status === 'completed' ? '本届魁首' : '最终决战' }}</small>
+                    <strong>{{ duelTournament.champion?.name || '斗法魁首' }}</strong>
+                    <em v-if="duelTournament.runnerUp">亚军 · {{ duelTournament.runnerUp.name }}</em>
+                    <em v-else>八日演武 · 胜者问鼎</em>
+                  </div>
+
+                  <div class="tournament-bracket-wing right" aria-label="今日下半区赛程">
+                    <article v-for="stage in [...tournamentBracketWings].reverse()" :key="`right-${stage.round}`" class="tournament-stage">
+                      <h4><span>R{{ stage.round }}</span>{{ stage.name }}</h4>
+                      <div class="tournament-match-stack">
+                        <div
+                          v-for="match in stage.rightMatches"
+                          :key="`right-${match.id}`"
+                          class="tournament-match"
+                          :class="{ player: isTournamentPlayerMatch(match), bye: match.type === 'bye', resolved: Boolean(match.winner) }"
+                        >
+                          <span :class="{ winner: match.winner?.id === match.left?.id }">
+                            <CharacterPortrait v-if="match.left" :person="matchPerson(match.left)" size="xs" />
+                            <i v-if="match.left?.seed">{{ match.left.seed }}</i>{{ match.left?.name || '待定' }}
+                          </span>
+                          <b>{{ match.type === 'bye' ? '轮空' : 'VS' }}</b>
+                          <span v-if="match.right" :class="{ winner: match.winner?.id === match.right?.id }">
+                            <CharacterPortrait v-if="match.right" :person="matchPerson(match.right)" size="xs" />
+                            <i v-if="match.right?.seed">{{ match.right.seed }}</i>{{ match.right.name }}
+                          </span>
+                        </div>
+                      </div>
+                    </article>
+                  </div>
+                </div>
+              </div>
+            </section>
 
             <div class="duel-reward-rail" aria-label="赛季段位奖励">
               <div class="duel-reward-title">
@@ -2972,13 +3063,13 @@
                 </span>
               </label>
               <button class="secondary duel-nav-button" type="button" :disabled="selectedDuelDay >= state.day" @click="changeDuelDay(1)">后一天</button>
-              <button class="primary duel-start-button" type="button" @click="startDailyDuels">{{ todaysDuelRecord ? "查看今日切磋" : "开始切磋" }}</button>
+              <button class="primary duel-start-button" type="button" @click="startDailyDuels">{{ duelSeasonInfo.phase === 'tournament' ? (duelTournamentRound?.day === state.day ? '查看今日赛程' : '推进淘汰赛') : (todaysDuelRecord ? '查看今日切磋' : '开始切磋') }}</button>
             </div>
 
             <div class="duel-system-grid">
               <section class="duel-match-board">
                 <div class="duel-board-title">
-                  <h3>今日对阵</h3>
+                  <h3>{{ selectedDuelRecord?.tournament ? `${selectedDuelRecord.tournamentName} · 今日对阵` : '今日对阵' }}</h3>
                   <span v-if="selectedDuelRecord">{{ selectedDuelRecord.createdAt }}</span>
                   <span v-else>未开赛</span>
                 </div>
@@ -4604,7 +4695,7 @@ import MonsterEmblem from "./components/MonsterEmblem.vue";
 import StatIcon, { statIconComponent } from "./components/StatIcon.vue";
 import { monsterArchetype, monsterImageEntries, monsterStageNames } from "./monsterImages";
 import { equipmentCatalog as fallbackEquipmentCatalog, equipmentSlots as fallbackEquipmentSlots, equipmentTiers as fallbackEquipmentTiers } from "../../shared/equipmentData.mjs";
-import { duelLossScore, duelRanks, duelRankForScore, duelSeasonDay, duelSeasonLength, duelSeasonMaxScore, duelSeasonOfDay, duelWinScore } from "../../shared/duelSeasonData.mjs";
+import { duelLadderDays, duelLossScore, duelRanks, duelRankForScore, duelSeasonDay, duelSeasonLength, duelSeasonMaxScore, duelSeasonOfDay, duelTournamentDays, duelWinScore } from "../../shared/duelSeasonData.mjs";
 
 const tabs = [
   { id: "practice", label: "首页", icon: Sprout },
@@ -5254,10 +5345,33 @@ const duelSeasonInfo = computed(() => derived.value.duelSeason || {
   season: duelSeasonOfDay(gameState.value.day),
   seasonDay: duelSeasonDay(gameState.value.day),
   length: duelSeasonLength,
+  ladderDays: duelLadderDays,
+  tournamentDays: duelTournamentDays,
+  phase: duelSeasonDay(gameState.value.day) <= duelLadderDays ? "ladder" : "tournament",
   maxScore: duelSeasonMaxScore,
   winScore: duelWinScore,
   lossScore: duelLossScore
 });
+const duelTournament = computed(() => gameState.value.duelTournament || derived.value.duelTournament || null);
+const duelTournamentRound = computed(() => duelTournament.value?.rounds?.at(-1) || null);
+const playerTournamentEntry = computed(() => duelTournament.value?.entrants?.find((entry) => entry.id === player.value?.id) || null);
+const championDaoRhyme = computed(() => player.value?.championDaoRhyme || null);
+const duelPhaseText = computed(() => duelSeasonInfo.value.phase === "tournament" ? "天骄淘汰赛" : "积分演武");
+const tournamentBracketWings = computed(() => {
+  const round = duelTournamentRound.value;
+  if (!round) return [];
+  const matches = round.matches || [];
+  const midpoint = Math.ceil(matches.length / 2);
+  return [{
+    round: round.round,
+    name: round.name,
+    leftMatches: matches.slice(0, midpoint),
+    rightMatches: matches.slice(midpoint)
+  }];
+});
+function isTournamentPlayerMatch(match) {
+  return Boolean(match?.left?.id === player.value?.id || match?.right?.id === player.value?.id);
+}
 const fallbackDuelRankMap = computed(() => {
   const people = [gameState.value.player, ...(gameState.value.npcs || [])].filter(Boolean);
   const map = Object.fromEntries(people.map((person) => [person.id, {
@@ -6706,9 +6820,24 @@ watch(homeLogDayRecords, (records, previousRecords) => {
   }
 }, { immediate: true });
 const duelRecords = computed(() => gameState.value.duelDays || []);
+const tournamentDuelRecords = computed(() => (duelTournament.value?.rounds || []).map((round) => ({
+  day: round.day,
+  date: round.date,
+  createdAt: round.createdAt || `${round.date || ''} · ${round.name || '淘汰赛'}`,
+  matchCount: (round.matches || []).length,
+  battleCount: (round.matches || []).filter((match) => match.type === 'battle').length,
+  tournament: true,
+  tournamentName: round.name || '天骄淘汰赛',
+  matches: round.matches || []
+})));
 const duelDayOptions = computed(() => {
   if (activeTab.value !== "arena") return [];
-  const days = new Set([gameState.value.day, selectedDuelDay.value, ...duelRecords.value.map((record) => record.day)]);
+  const days = new Set([
+    gameState.value.day,
+    selectedDuelDay.value,
+    ...duelRecords.value.map((record) => record.day),
+    ...tournamentDuelRecords.value.map((record) => record.day)
+  ]);
   return [...days].filter((day) => day >= 1 && day <= gameState.value.day).sort((a, b) => b - a);
 });
 const duelDateMin = computed(() => dateForDay(1));
@@ -6722,11 +6851,31 @@ const selectedDuelCalendarDate = computed({
     clearBattleReplay();
   }
 });
-const selectedDuelRecord = computed(() => duelRecords.value.find((record) => record.day === selectedDuelDay.value));
+const selectedDuelRecord = computed(() => (
+  tournamentDuelRecords.value.find((record) => Number(record.day) === Number(selectedDuelDay.value))
+  || duelRecords.value.find((record) => Number(record.day) === Number(selectedDuelDay.value))
+));
 const selectedDuelDate = computed(() => selectedDuelRecord.value?.date || dateForDay(selectedDuelDay.value));
-const todaysDuelRecord = computed(() => duelRecords.value.find((record) => record.day === gameState.value.day));
+const todaysDuelRecord = computed(() => selectedDuelRecord.value?.day === gameState.value.day
+  ? selectedDuelRecord.value
+  : tournamentDuelRecords.value.find((record) => Number(record.day) === Number(gameState.value.day))
+    || duelRecords.value.find((record) => Number(record.day) === Number(gameState.value.day)));
 const normalizedDuelSearch = computed(() => duelSearch.value.trim().toLowerCase());
 const filteredDuelMatches = computed(() => {
+  if (selectedDuelRecord.value?.tournament) {
+    const keyword = normalizedDuelSearch.value;
+    return (selectedDuelRecord.value.matches || [])
+      .map((match, index) => ({ match, index }))
+      .filter(({ match }) => !keyword || [
+        match.left?.name,
+        match.left?.sect,
+        match.right?.name,
+        match.right?.sect,
+        match.winner?.name
+      ].filter(Boolean).join(' ').toLowerCase().includes(keyword))
+      .sort((left, right) => (left.match.type === 'bye') - (right.match.type === 'bye') || left.index - right.index)
+      .map(({ match }) => match);
+  }
   if (Number(duelMatchPage.value.day) !== Number(selectedDuelDay.value)) return [];
   return duelMatchPage.value.matches || [];
 });
@@ -11666,6 +11815,11 @@ async function loadDuelMatchPage(page = 1) {
     duelMatchPage.value = { day: null, matches: [], page: 1, pageSize: 10, total: 0, totalPages: 0 };
     return;
   }
+  if (record.tournament) {
+    duelMatchPageLoading.value = false;
+    duelMatchPage.value = { day, matches: record.matches || [], page: 1, pageSize: (record.matches || []).length, total: (record.matches || []).length, totalPages: 1 };
+    return;
+  }
   const requestId = ++duelMatchPageRequestId;
   duelMatchPageLoading.value = true;
   try {
@@ -11700,6 +11854,13 @@ function changeProvinceWarDay(offset) {
 async function startDailyDuels() {
   const result = await act("/api/duels/day", {}, { scope: "lite", markStale: true, deferFullRefresh: true });
   if (!result) return;
+  if (duelSeasonInfo.value.phase === "tournament") {
+    await refresh();
+    selectedDuelDay.value = result.day;
+    await loadDuelMatchPage(1);
+    clearBattleReplay();
+    return;
+  }
   upsertDuelDayRecord(result);
   selectedDuelDay.value = result.day;
   await loadDuelMatchPage(1);

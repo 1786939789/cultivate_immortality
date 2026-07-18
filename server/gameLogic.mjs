@@ -1,4 +1,4 @@
-import { canonicalPotentialRealms, combatSkills, dungeons, duelLossScore, duelRankForScore, duelRanks, duelSeasonDay, duelSeasonLength, duelSeasonMaxScore, duelSeasonOfDay, duelWinScore, equipmentCatalog, equipmentSlots, equipmentTiers, itemCatalog, npcGenders, npcNames, provinceVersion, provinces, realms, realmStages, rootCycle, specialRoots, spiritPearls, roots, rosterVersion, sectRoster, sects, taskTemplates } from "./gameData.mjs";
+import { canonicalPotentialRealms, combatSkills, dungeons, duelLadderDays, duelLossScore, duelRankForScore, duelRanks, duelSeasonDay, duelSeasonLength, duelSeasonMaxScore, duelSeasonOfDay, duelTournamentBracketSize, duelTournamentDays, duelWinScore, equipmentCatalog, equipmentSlots, equipmentTiers, itemCatalog, npcGenders, npcNames, provinceVersion, provinces, realms, realmStages, rootCycle, specialRoots, spiritPearls, roots, rosterVersion, sectRoster, sects, taskTemplates } from "./gameData.mjs";
 import { encounterCategoryLabels, encounterDefinitionCount, encounterDefinitionMap, encounterDefinitions } from "./encounterData.mjs";
 import { daoTrialCycleAffixes, daoTrialCycleLength, daoTrialEventOptions, daoTrialNodeVariants, daoTrialOfficialAttempts, daoTrialRouteMap, daoTrialRoutes, daoTrialSealMap, daoTrialSeals, daoTrialSealSynergies } from "./daoTrialData.mjs";
 
@@ -5000,8 +5000,11 @@ function breakthroughChanceFor(state, entity) {
   const potionBonus = entity.id === "player" ? activeBreakthroughBonus(state) : 0;
   const pearlBonus = spiritPearlBonusFor(state, entity, "breakthrough");
   const beforePotion = breakthroughChance(entity) * (1 + sectBreakthroughBonus(state, sectName, entity)) + pearlBonus;
+  const championBonus = entity.id === "player" && entity.championDaoRhyme?.active && entity.championDaoRhyme.realm === entity.realm
+    ? Number(entity.championDaoRhyme.bonus || 0)
+    : 0;
   return clamp(
-    beforePotion + potionBonus,
+    beforePotion + potionBonus + championBonus,
     minimumBreakthroughChance(entity.realm || 0),
     entity.id === "player" ? 0.95 : 0.82
   );
@@ -5021,6 +5024,9 @@ function breakthroughChanceParts(state, entity) {
   const sectMultiplier = 1 + bonus;
   const potionBonus = entity.id === "player" ? activeBreakthroughBonus(state) : 0;
   const pearlBonus = spiritPearlBonusFor(state, entity, "breakthrough");
+  const championBonus = entity.id === "player" && entity.championDaoRhyme?.active && entity.championDaoRhyme.realm === entity.realm
+    ? Number(entity.championDaoRhyme.bonus || 0)
+    : 0;
   const beforePotion = base * sectMultiplier + pearlBonus;
   return {
     realmBase,
@@ -5030,8 +5036,9 @@ function breakthroughChanceParts(state, entity) {
     base,
     bonus,
     potionBonus,
+    championBonus,
     spiritPearlBonus: pearlBonus,
-    total: clamp(beforePotion + potionBonus, minimumBreakthroughChance(entity.realm || 0), entity.id === "player" ? 0.95 : 0.82)
+    total: clamp(beforePotion + potionBonus + championBonus, minimumBreakthroughChance(entity.realm || 0), entity.id === "player" ? 0.95 : 0.82)
   };
 }
 
@@ -5941,6 +5948,136 @@ function shuffle(list) {
     [result[index], result[swapIndex]] = [result[swapIndex], result[index]];
   }
   return result;
+}
+
+function duelPhaseForDay(day) {
+  return duelSeasonDay(day) <= duelLadderDays ? "ladder" : "tournament";
+}
+
+function tournamentRoundName(entrantCount) {
+  return ({ 256: "首轮", 128: "百二十八强", 64: "六十四强", 32: "三十二强", 16: "十六强", 8: "八强赛", 4: "半决赛", 2: "总决赛" })[entrantCount] || `第 ${entrantCount} 轮`;
+}
+
+function tournamentEntrants(state) {
+  return allCultivators(state)
+    .map(({ entity, kind }) => ({ entity, kind, score: Number(entity.duelSeason?.score || 0), wins: Number(entity.duelSeason?.wins || 0), power: powerOf(entity, state) }))
+    .sort((left, right) => right.score - left.score || right.wins - left.wins || right.power - left.power || left.entity.id.localeCompare(right.entity.id));
+}
+
+function seedTournament(state) {
+  const season = duelSeasonOfDay(state.day);
+  if (state.duelTournament?.season === season) return state.duelTournament;
+  if (state.duelTournament?.season) {
+    state.duelTournamentHistory ??= [];
+    state.duelTournamentHistory.unshift(state.duelTournament);
+    state.duelTournamentHistory = state.duelTournamentHistory.slice(0, 4);
+  }
+  const entrants = tournamentEntrants(state).map((entry, index) => ({
+    id: entry.entity.id, kind: entry.kind, seed: index + 1, name: entry.entity.name, sect: entry.entity.sect,
+    realm: entry.entity.realm, score: entry.score, wins: entry.wins, power: entry.power
+  }));
+  for (const { entity } of allCultivators(state)) {
+    const record = duelSeasonRecordFrom(entity, entity.duelSeason);
+    if (entity.duelSeasonHistory?.some((item) => item.season === season)) continue;
+    entity.spirit = Math.max(0, Number(entity.spirit) || 0) + record.spiritReward;
+    record.rewardGranted = true;
+    record.rewardDate = stateDateForDay(state);
+    entity.duelSeasonHistory ??= [];
+    entity.duelSeasonHistory.unshift(record);
+  }
+  state.duelTournament = {
+    season, status: "active", bracketSize: duelTournamentBracketSize, seededAtDay: state.day, seededAt: timestampKey(),
+    entrants, rounds: [], championId: "", runnerUpId: "", semifinalistIds: [], rewards: []
+  };
+  log(state, `第 ${season} 届天骄淘汰赛签表已定：前 ${Math.max(0, duelTournamentBracketSize - entrants.length)} 名种子首轮轮空。`, "gold");
+  return state.duelTournament;
+}
+
+function tournamentEntryRef(tournament, id) {
+  return tournament.entrants.find((entry) => entry.id === id) || null;
+}
+
+function tournamentRoundParticipants(tournament) {
+  if (!tournament.rounds.length) return tournament.entrants.map((entry) => entry.id);
+  return tournament.rounds[tournament.rounds.length - 1].matches.map((match) => match.winner?.id).filter(Boolean);
+}
+
+function tournamentPairings(tournament) {
+  const bySeed = (id) => tournamentEntryRef(tournament, id)?.seed || Number.MAX_SAFE_INTEGER;
+  const sorted = tournamentRoundParticipants(tournament).sort((left, right) => bySeed(left) - bySeed(right));
+  if (!tournament.rounds.length) {
+    const byeCount = Math.max(0, duelTournamentBracketSize - sorted.length);
+    const pairs = sorted.slice(0, byeCount).map((id) => [id, null]);
+    const contenders = sorted.slice(byeCount);
+    for (let index = 0; index < contenders.length / 2; index += 1) pairs.push([contenders[index], contenders[contenders.length - 1 - index]]);
+    return pairs;
+  }
+  const pairs = [];
+  for (let index = 0; index < sorted.length / 2; index += 1) pairs.push([sorted[index], sorted[sorted.length - 1 - index]]);
+  return pairs;
+}
+
+function grantTournamentRewards(state, tournament, finalRound) {
+  const championId = finalRound.matches[0]?.winner?.id;
+  const runnerUpId = finalRound.matches[0]?.loser?.id;
+  if (!championId || !runnerUpId || tournament.rewards?.length) return;
+  const semifinalRound = tournament.rounds[tournament.rounds.length - 2];
+  const semifinalistIds = (semifinalRound?.matches || []).map((match) => match.loser?.id).filter(Boolean);
+  const rewards = [{ id: championId, place: "冠军", spirit: 350 }, { id: runnerUpId, place: "亚军", spirit: 220 }, ...semifinalistIds.map((id) => ({ id, place: "四强", spirit: 100 }))];
+  for (const reward of rewards) {
+    const entity = cultivatorById(state, reward.id);
+    if (entity) entity.spirit = Math.max(0, Number(entity.spirit) || 0) + reward.spirit;
+  }
+  if (championId === state.player.id && state.player.realm < realms.length - 1) {
+    state.player.xp = Math.max(state.player.xp, xpNeed(state.player.realm));
+    state.player.championDaoRhyme = { season: tournament.season, realm: state.player.realm, bonus: 0.1, grantedAtDay: state.day, active: true };
+    rewards[0].daoRhyme = true;
+  }
+  tournament.status = "completed";
+  tournament.championId = championId;
+  tournament.runnerUpId = runnerUpId;
+  tournament.semifinalistIds = semifinalistIds;
+  tournament.rewards = rewards;
+  log(state, `${tournamentEntryRef(tournament, championId)?.name || "冠军"}夺得第 ${tournament.season} 届斗法魁首，冠军、亚军与四强奖励已发放。`, "gold");
+}
+
+function runDailyTournament(state) {
+  const tournament = seedTournament(state);
+  const existing = tournament.rounds.find((round) => round.day === state.day);
+  if (existing) return existing;
+  const entrantCount = tournamentRoundParticipants(tournament).length;
+  const bracketRoundSize = tournament.rounds.length ? entrantCount : duelTournamentBracketSize;
+  const round = {
+    round: tournament.rounds.length + 1,
+    name: tournamentRoundName(bracketRoundSize),
+    day: state.day,
+    date: stateDateForDay(state),
+    createdAt: timestampKey(),
+    matches: []
+  };
+  for (const [leftId, rightId] of tournamentPairings(tournament)) {
+    const left = cultivatorById(state, leftId);
+    const right = rightId ? cultivatorById(state, rightId) : null;
+    const leftEntry = tournamentEntryRef(tournament, leftId);
+    const rightEntry = rightId ? tournamentEntryRef(tournament, rightId) : null;
+    if (!left) continue;
+    if (!right) {
+      const leftRef = { ...entityRef(left, left.id === "player" ? "player" : "npc"), seed: leftEntry?.seed || 0 };
+      round.matches.push({ id: `tournament-${tournament.season}-${round.round}-bye-${left.id}`, type: "bye", left: leftRef, right: null, winner: leftRef, summary: `${left.name}以 ${leftEntry?.seed || "-"} 号种子身份首轮轮空。` });
+      continue;
+    }
+    const matchId = `tournament-${tournament.season}-${round.round}-${left.id}-${right.id}`;
+    const result = runDuelMatch(state, left, right, { matchId, scored: false, tournament: { round: round.round, name: round.name } });
+    const leftRef = { ...result.replay.left, seed: leftEntry?.seed || 0 };
+    const rightRef = { ...result.replay.right, seed: rightEntry?.seed || 0 };
+    const winnerRef = result.replay.winner === "left" ? leftRef : rightRef;
+    const loserRef = result.replay.winner === "left" ? rightRef : leftRef;
+    round.matches.push({ id: matchId, type: "battle", left: leftRef, right: rightRef, winner: winnerRef, loser: loserRef, replayId: result.replay.replayId, summary: `${result.winner.name}晋级${tournamentRoundName(Math.max(2, bracketRoundSize / 2))}。` });
+  }
+  tournament.rounds.push(round);
+  if (tournamentRoundParticipants(tournament).length === 1) grantTournamentRewards(state, tournament, round);
+  log(state, `${round.date} 天骄淘汰赛 ${round.name} 完成。`, "gold");
+  return round;
 }
 
 function defaultDuelSeason(day = 1) {
@@ -7815,6 +7952,7 @@ export function createDefaultState() {
       duelLosses: 0,
       duelSeason: defaultDuelSeason(),
       duelSeasonHistory: [],
+      championDaoRhyme: null,
       dungeonClears: 0,
       bestDungeonPower: 0,
       bestDungeonName: "未入秘境",
@@ -7873,6 +8011,8 @@ export function createDefaultState() {
     provinceWars: [],
     provinceIncomeLog: [],
     duelDays: [],
+    duelTournament: null,
+    duelTournamentHistory: [],
     calendarStartDate: openingDate,
     lastSettlementDate: openingDate,
     log: [openingEntry],
@@ -7886,6 +8026,7 @@ export function clearProgressHistory(state) {
     person.duelLosses = 0;
     person.duelSeason = defaultDuelSeason(state.day);
     person.duelSeasonHistory = [];
+    person.championDaoRhyme = null;
     person.duelHistory = [];
     person.dungeonClears = 0;
     person.bestDungeonPower = 0;
@@ -7901,6 +8042,8 @@ export function clearProgressHistory(state) {
   state.spiritPearls = state.player.spiritPearls;
   for (const npc of state.npcs || []) resetPerson(npc);
   state.duelDays = [];
+  state.duelTournament = null;
+  state.duelTournamentHistory = [];
   state.provinces = createNeutralProvinceState();
   state.provinceVersion = provinceVersion;
   state.provinceWars = [];
@@ -8348,6 +8491,18 @@ export function ensureStateShape(state) {
   }
   state.duelDays ??= [];
   state.duelDays = trimDuelDays(state.duelDays, state.day);
+  if (!state.duelTournament || typeof state.duelTournament !== "object") {
+    state.duelTournament = null;
+    changed = true;
+  }
+  if (!Array.isArray(state.duelTournamentHistory)) {
+    state.duelTournamentHistory = [];
+    changed = true;
+  }
+  if (!state.player.championDaoRhyme || state.player.championDaoRhyme.realm !== state.player.realm) {
+    if (state.player.championDaoRhyme) changed = true;
+    state.player.championDaoRhyme = null;
+  }
   state.sectNameMap ??= {};
   state.sectRivals ??= {};
   for (const [index, name] of sects.entries()) {
@@ -8642,6 +8797,9 @@ export function getPublicState(state, options = {}) {
       season: duelSeasonOfDay(state.day),
       seasonDay: duelSeasonDay(state.day),
       length: duelSeasonLength,
+      ladderDays: duelLadderDays,
+      tournamentDays: duelTournamentDays,
+      phase: duelPhaseForDay(state.day),
       maxScore: duelSeasonMaxScore,
       winScore: duelWinScore,
       lossScore: duelLossScore
@@ -8704,6 +8862,7 @@ export function getPublicState(state, options = {}) {
     equipment: state.equipment.map((item) => publicEquipment(item, state)),
     spiritPearls: publicSpiritPearls(state, state.player),
     duelDays: publicDuelDays(state.duelDays || [], state.day, publicCultivatorRefMap(state)),
+    duelTournament: publicDuelTournament(state),
     provinceWars: publicProvinceWars(state.provinceWars || [], state.day, publicCultivatorRefMap(state)),
     dungeonDays: publicDungeonDays(state.dungeonDays || [], state.day, publicCultivatorRefMap(state)),
     starSeaCycleHistory: publicStarSeaCycleHistory(state.starSeaCycleHistory || [], publicCultivatorRefMap(state)),
@@ -8715,6 +8874,7 @@ export function getPublicState(state, options = {}) {
       personInsights: { [state.player.id]: personInsight(state, state.player) },
       equippedItems: { [state.player.id]: equippedItemsFor(state, state.player).map((item) => publicEquipment(item, state)) },
       duelRanks: Object.fromEntries(allCultivators(state).map(({ entity }) => [entity.id, duelRankSnapshot(entity)])),
+      duelTournament: publicDuelTournament(state),
       npcPowers: Object.fromEntries(state.npcs.map((npc) => [npc.id, powerOf(npc, state)])),
     }
   };
@@ -8777,6 +8937,9 @@ function getHomeState(state) {
         season: duelSeasonOfDay(state.day),
         seasonDay: duelSeasonDay(state.day),
         length: duelSeasonLength,
+        ladderDays: duelLadderDays,
+        tournamentDays: duelTournamentDays,
+        phase: duelPhaseForDay(state.day),
         maxScore: duelSeasonMaxScore,
         winScore: duelWinScore,
         lossScore: duelLossScore
@@ -9147,6 +9310,7 @@ function publicCultivator(entity, state, options = {}) {
       duelLosses: entity.duelLosses || 0,
       duelSeason: entity.duelSeason || null,
       duelSeasonHistory: entity.duelSeasonHistory || [],
+      championDaoRhyme: entity.id === "player" ? entity.championDaoRhyme || null : null,
       dungeonClears: entity.dungeonClears || 0,
       bestDungeonPower: entity.bestDungeonPower || 0,
       bestDungeonName: entity.bestDungeonName || "",
@@ -9204,6 +9368,22 @@ function publicDuelDays(records, currentDay = 1) {
   }));
 }
 
+function publicDuelTournament(state) {
+  const tournament = state.duelTournament;
+  if (!tournament || tournament.season !== duelSeasonOfDay(state.day)) return null;
+  const people = publicCultivatorRefMap(state);
+  return {
+    ...tournament,
+    entrants: (tournament.entrants || []).map((entry) => ({ ...entry, person: publicEntityRef(entry, people) })),
+    rounds: (tournament.rounds || []).map((round) => ({
+      ...round,
+      matches: (round.matches || []).map((match) => publicDuelMatch(match, 0, round, state.day, people))
+    })),
+    champion: publicEntityRef(tournamentEntryRef(tournament, tournament.championId), people),
+    runnerUp: publicEntityRef(tournamentEntryRef(tournament, tournament.runnerUpId), people)
+  };
+}
+
 function duelMatchSearchText(match) {
   return [
     match?.left?.name,
@@ -9248,7 +9428,13 @@ function publicDuelMatch(match, index, record, currentDay, people) {
 export function getDuelDayPage(state, options = {}) {
   ensureStateShape(state);
   const day = Number(options.day || state.day);
-  const record = (state.duelDays || []).find((item) => Number(item.day) === day);
+  const ladderRecord = (state.duelDays || []).find((item) => Number(item.day) === day);
+  const tournamentRound = (state.duelTournament?.rounds || []).find((round) => Number(round.day) === day);
+  const record = tournamentRound ? {
+    ...tournamentRound,
+    tournament: true,
+    tournamentName: tournamentRound.name || "天骄淘汰赛"
+  } : ladderRecord;
   const pageSize = clamp(Math.floor(Number(options.pageSize) || 10), 1, 50);
   const requestedPage = Math.max(1, Math.floor(Number(options.page) || 1));
   const keyword = String(options.search || "").trim().toLowerCase();
@@ -9259,7 +9445,8 @@ export function getDuelDayPage(state, options = {}) {
     .map((match, index) => ({ match, index, stats: duelMatchSortSnapshot(match, index) }))
     .filter(({ match }) => !keyword || duelMatchSearchText(match).includes(keyword))
     .sort((left, right) => (
-      right.stats.rankMin - left.stats.rankMin
+      (left.match.type === "bye") - (right.match.type === "bye")
+      || right.stats.rankMin - left.stats.rankMin
       || right.stats.score - left.stats.score
       || right.stats.power - left.stats.power
       || left.stats.order - right.stats.order
@@ -10632,6 +10819,7 @@ function resolvePlayerBreakthrough(state) {
     p.hp = effectiveMaxHp(p, state);
     p.mana = effectiveMaxMana(p, state);
     p.reputation += 6 + p.realm;
+    if (p.championDaoRhyme?.active) p.championDaoRhyme = null;
     p.breakthroughs.unshift({ day: state.day, date: stateDateForDay(state), time: timestampKey(), from: realms[p.realm - 1], to: realms[p.realm], success: true, chance, growth });
     p.breakthroughs = trimRecordsByDay(p.breakthroughs, state.day, growthRecordDays, growthRecordLimit);
     log(state, `突破成功，${realms[fromRealm]} → ${realms[p.realm]}。`, "gold");
@@ -10866,10 +11054,11 @@ function runDuelMatch(state, left, right, options = {}) {
 
   winner.duelWins += 1;
   loser.duelLosses += 1;
+  const scored = options.scored !== false;
   const winnerScoreBefore = winner.duelSeason?.score || 0;
   const loserScoreBefore = loser.duelSeason?.score || 0;
-  const winnerScoreDelta = applyDuelScore(winner, true, state.day, loser);
-  const loserScoreDelta = applyDuelScore(loser, false, state.day, winner);
+  const winnerScoreDelta = scored ? applyDuelScore(winner, true, state.day, loser) : 0;
+  const loserScoreDelta = scored ? applyDuelScore(loser, false, state.day, winner) : 0;
   const winnerScoreAfter = winner.duelSeason?.score || 0;
   const loserScoreAfter = loser.duelSeason?.score || 0;
   const leftScoreDelta = leftWon ? winnerScoreDelta : loserScoreDelta;
@@ -10880,6 +11069,8 @@ function runDuelMatch(state, left, right, options = {}) {
   right.mana = effectiveMaxMana(right, state);
 
   const replay = buildReplay(leftBefore, rightBefore, battle, result, foughtAt, state);
+  replay.kind = options.tournament ? "duel-tournament" : "duel";
+  replay.tournament = options.tournament || null;
   replay.seed = battleSeed;
   replay.left.strategy = battleStrategyProfile(leftBefore).strategy;
   replay.right.strategy = battleStrategyProfile(rightBefore).strategy;
@@ -10899,6 +11090,7 @@ function runDuelMatch(state, left, right, options = {}) {
     scoreDelta: leftScoreDelta,
     scoreBefore: leftWon ? winnerScoreBefore : loserScoreBefore,
     scoreAfter: left.duelSeason?.score || 0,
+    tournamentRound: options.tournament?.name || "",
     replayId
   });
   right.duelHistory.unshift({
@@ -10913,6 +11105,7 @@ function runDuelMatch(state, left, right, options = {}) {
     scoreDelta: rightScoreDelta,
     scoreBefore: leftWon ? loserScoreBefore : winnerScoreBefore,
     scoreAfter: right.duelSeason?.score || 0,
+    tournamentRound: options.tournament?.name || "",
     replayId
   });
   left.duelHistory = mergeDuelHistory(left.duelHistory, state.day, detailRecordLimit);
@@ -11061,6 +11254,7 @@ function findDuelOpponentIndex(state, queue, current) {
 }
 
 export function runDailyDuels(state) {
+  if (duelPhaseForDay(state.day) === "tournament") return runDailyTournament(state);
   state.duelDays ??= [];
   const existing = state.duelDays.find((record) => record.day === state.day);
   if (existing) {

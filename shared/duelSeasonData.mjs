@@ -1,4 +1,7 @@
 export const duelSeasonLength = 60;
+export const duelLadderDays = 52;
+export const duelTournamentDays = 8;
+export const duelTournamentBracketSize = 256;
 export const duelSeasonMaxScore = 120;
 export const duelWinScore = 2;
 export const duelLossScore = -1;
