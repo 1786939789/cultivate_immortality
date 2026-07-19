@@ -2961,67 +2961,79 @@
 
             <section v-if="duelTournament" class="tournament-bracket-panel">
               <div class="tournament-bracket-head">
-                <div><strong>天骄签表</strong><span>积分种子已锁定，淘汰赛期间不再改动段位积分。</span></div>
-                <em v-if="playerTournamentEntry">你的种子：{{ playerTournamentEntry.seed }} 号</em>
+                <div><strong>天骄签表</strong><span>种子与晋级路径已锁定，未到赛日保留空位。</span></div>
+                <div class="tournament-bracket-tools">
+                  <em v-if="playerTournamentEntry">你的种子：{{ playerTournamentEntry.seed }} 号</em>
+                  <div class="tournament-zoom-controls" aria-label="签表缩放控制">
+                    <button type="button" title="缩小签表" aria-label="缩小签表" @click="adjustTournamentZoom(-0.1)"><ZoomOut :size="15" /></button>
+                    <span>{{ Math.round(tournamentBracketZoom * 100) }}%</span>
+                    <button type="button" title="放大签表" aria-label="放大签表" @click="adjustTournamentZoom(0.1)"><ZoomIn :size="15" /></button>
+                    <button type="button" title="复位签表视图" aria-label="复位签表视图" @click="resetTournamentBracketView"><LocateFixed :size="15" /></button>
+                  </div>
+                </div>
               </div>
-              <div class="tournament-bracket-scroll">
-                <div class="tournament-bracket-board" :style="{ '--tournament-stage-count': tournamentBracketWings.length }">
-                  <div class="tournament-bracket-wing left" aria-label="今日上半区赛程">
-                    <article v-for="stage in tournamentBracketWings" :key="`left-${stage.round}`" class="tournament-stage">
-                      <h4><span>R{{ stage.round }}</span>{{ stage.name }}</h4>
-                      <div class="tournament-match-stack">
-                        <div
-                          v-for="match in stage.leftMatches"
-                          :key="`left-${match.id}`"
-                          class="tournament-match"
-                          :class="{ player: isTournamentPlayerMatch(match), bye: match.type === 'bye', resolved: Boolean(match.winner) }"
-                        >
-                          <span :class="{ winner: match.winner?.id === match.left?.id }">
-                            <CharacterPortrait v-if="match.left" :person="matchPerson(match.left)" size="xs" />
-                            <i v-if="match.left?.seed">{{ match.left.seed }}</i>{{ match.left?.name || '待定' }}
-                          </span>
-                          <b>{{ match.type === 'bye' ? '轮空' : 'VS' }}</b>
-                          <span v-if="match.right" :class="{ winner: match.winner?.id === match.right?.id }">
-                            <CharacterPortrait v-if="match.right" :person="matchPerson(match.right)" size="xs" />
-                            <i v-if="match.right?.seed">{{ match.right.seed }}</i>{{ match.right.name }}
-                          </span>
-                        </div>
+              <div
+                ref="tournamentBracketViewport"
+                class="tournament-bracket-viewport"
+                aria-label="天骄淘汰赛完整对阵图"
+                @wheel.prevent="onTournamentBracketWheel"
+                @pointerdown="startTournamentBracketPan"
+                @pointermove="moveTournamentBracketPan"
+                @pointerup="endTournamentBracketPan"
+                @pointercancel="endTournamentBracketPan"
+              >
+                <div class="tournament-bracket-canvas" :style="tournamentBracketCanvasStyle">
+                  <svg
+                    class="tournament-bracket-links"
+                    width="2312"
+                    height="13500"
+                    viewBox="0 0 2312 13500"
+                    aria-hidden="true"
+                  >
+                    <path v-for="connector in tournamentBracketConnectors" :key="connector.id" :d="connector.path" />
+                  </svg>
+                  <section
+                    v-for="(round, roundIndex) in tournamentBracketRounds"
+                    :key="`round-${round.round}`"
+                    class="tournament-bracket-round"
+                    :class="{ collapsed: isTournamentRoundCollapsed(round) }"
+                    :style="tournamentRoundStyle(roundIndex)"
+                    :aria-label="round.name"
+                  >
+                    <h4>
+                      <span>第 {{ round.day }} 日</span>
+                      <strong>{{ round.name }}</strong>
+                      <button
+                        v-if="canToggleTournamentRound(round, roundIndex)"
+                        type="button"
+                        :title="isTournamentRoundCollapsed(round) ? '显示本日记录' : '隐藏本日记录'"
+                        :aria-label="isTournamentRoundCollapsed(round) ? `显示第${round.day}日记录` : `隐藏第${round.day}日记录`"
+                        @click.stop="toggleTournamentRound(round)"
+                      >
+                        <component :is="isTournamentRoundCollapsed(round) ? Eye : EyeOff" :size="14" />
+                      </button>
+                    </h4>
+                    <template v-for="(match, matchIndex) in round.matches" :key="match.id">
+                      <article
+                        v-if="!isTournamentRoundCollapsed(round)"
+                        class="tournament-canvas-match"
+                        :class="{ player: isTournamentPlayerMatch(match), bye: match.type === 'bye', resolved: Boolean(match.winner), pending: !match.left && !match.right }"
+                        :style="tournamentMatchPosition(roundIndex, matchIndex)"
+                      >
+                      <header><em>{{ tournamentMatchStatus(match) }}</em></header>
+                      <div class="tournament-canvas-combatant" :class="{ winner: match.winner?.id === match.left?.id, empty: !match.left }">
+                        <CharacterPortrait v-if="match.left" :person="matchPerson(match.left)" size="xs" />
+                        <i v-if="match.left?.seed">{{ match.left.seed }}</i>
+                        <b>{{ tournamentCombatantLabel(match.left, tournamentSlotLabel(match, 'left')) }}</b>
                       </div>
-                    </article>
-                  </div>
-
-                  <div class="tournament-crown-core" :class="{ complete: duelTournament.status === 'completed' }">
-                    <span class="tournament-crown-rays" aria-hidden="true"></span>
-                    <div class="tournament-crown-seal" aria-hidden="true"><i>冠</i></div>
-                    <small>{{ duelTournament.status === 'completed' ? '本届魁首' : '最终决战' }}</small>
-                    <strong>{{ duelTournament.champion?.name || '斗法魁首' }}</strong>
-                    <em v-if="duelTournament.runnerUp">亚军 · {{ duelTournament.runnerUp.name }}</em>
-                    <em v-else>八日演武 · 胜者问鼎</em>
-                  </div>
-
-                  <div class="tournament-bracket-wing right" aria-label="今日下半区赛程">
-                    <article v-for="stage in [...tournamentBracketWings].reverse()" :key="`right-${stage.round}`" class="tournament-stage">
-                      <h4><span>R{{ stage.round }}</span>{{ stage.name }}</h4>
-                      <div class="tournament-match-stack">
-                        <div
-                          v-for="match in stage.rightMatches"
-                          :key="`right-${match.id}`"
-                          class="tournament-match"
-                          :class="{ player: isTournamentPlayerMatch(match), bye: match.type === 'bye', resolved: Boolean(match.winner) }"
-                        >
-                          <span :class="{ winner: match.winner?.id === match.left?.id }">
-                            <CharacterPortrait v-if="match.left" :person="matchPerson(match.left)" size="xs" />
-                            <i v-if="match.left?.seed">{{ match.left.seed }}</i>{{ match.left?.name || '待定' }}
-                          </span>
-                          <b>{{ match.type === 'bye' ? '轮空' : 'VS' }}</b>
-                          <span v-if="match.right" :class="{ winner: match.winner?.id === match.right?.id }">
-                            <CharacterPortrait v-if="match.right" :person="matchPerson(match.right)" size="xs" />
-                            <i v-if="match.right?.seed">{{ match.right.seed }}</i>{{ match.right.name }}
-                          </span>
-                        </div>
+                      <div class="tournament-canvas-combatant" :class="{ winner: match.winner?.id === match.right?.id, empty: !match.right }">
+                        <CharacterPortrait v-if="match.right" :person="matchPerson(match.right)" size="xs" />
+                        <i v-if="match.right?.seed">{{ match.right.seed }}</i>
+                        <b>{{ match.type === 'bye' ? '轮空晋级' : tournamentCombatantLabel(match.right, tournamentSlotLabel(match, 'right')) }}</b>
                       </div>
-                    </article>
-                  </div>
+                      </article>
+                    </template>
+                  </section>
                 </div>
               </div>
             </section>
@@ -4658,6 +4670,8 @@ import {
   Coins,
   Dna,
   Dumbbell,
+  Eye,
+  EyeOff,
   Flame,
   Gem,
   Handshake,
@@ -4684,7 +4698,10 @@ import {
   Waves,
   WandSparkles,
   X,
-  Zap
+  Zap,
+  ZoomIn,
+  ZoomOut,
+  LocateFixed
 } from "lucide-vue-next";
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from "vue";
 import { clearCachedState, getBattleReplay, getCachedState, getCultivatorDetail, getCurrentUser, getDaoTrialHistory, getDuelDayPage, getDuelReplay, getEncounterHistory, getState, login, logout, postAction, register, saveCachedState } from "./api";
@@ -4915,6 +4932,11 @@ const selectedDuelDay = ref(null);
 const duelSearch = ref("");
 const duelMatchPage = ref({ day: null, matches: [], page: 1, pageSize: 10, total: 0, totalPages: 0 });
 const duelMatchPageLoading = ref(false);
+const tournamentBracketViewport = ref(null);
+const tournamentBracketZoom = ref(0.72);
+const tournamentBracketPan = reactive({ x: 0, y: 0 });
+const tournamentBracketDrag = reactive({ active: false, pointerId: null, startX: 0, startY: 0, originX: 0, originY: 0 });
+const collapsedTournamentRounds = ref(new Set());
 let duelSearchTimer = null;
 let duelMatchPageRequestId = 0;
 const selectedProvinceWarDay = ref(null);
@@ -5357,18 +5379,219 @@ const duelTournamentRound = computed(() => duelTournament.value?.rounds?.at(-1) 
 const playerTournamentEntry = computed(() => duelTournament.value?.entrants?.find((entry) => entry.id === player.value?.id) || null);
 const championDaoRhyme = computed(() => player.value?.championDaoRhyme || null);
 const duelPhaseText = computed(() => duelSeasonInfo.value.phase === "tournament" ? "天骄淘汰赛" : "积分演武");
-const tournamentBracketWings = computed(() => {
-  const round = duelTournamentRound.value;
-  if (!round) return [];
-  const matches = round.matches || [];
-  const midpoint = Math.ceil(matches.length / 2);
-  return [{
-    round: round.round,
-    name: round.name,
-    leftMatches: matches.slice(0, midpoint),
-    rightMatches: matches.slice(midpoint)
-  }];
+const tournamentBracketLayout = { column: 284, card: 248, row: 90, groupGap: 24, cardHeight: 76, offsetX: 20, offsetY: 70 };
+const tournamentCollapsedColumnWidth = 92;
+const tournamentBracketRounds = computed(() => {
+  const tournament = duelTournament.value;
+  const plannedRounds = tournament?.bracket?.rounds || [];
+  if (!plannedRounds.length) return tournament?.rounds || [];
+  const resolvedMatches = new Map();
+  return plannedRounds.map((plannedRound) => {
+    const playedRound = tournament.rounds?.find((round) => Number(round.round) === Number(plannedRound.round));
+    const playedMatches = playedRound?.matches || [];
+    return {
+      ...plannedRound,
+      matches: plannedRound.matches.map((plannedMatch, matchIndex) => {
+        const left = plannedMatch.left || resolvedMatches.get(`tournament-${tournament.season}-r${plannedMatch.leftFrom?.round}-m${plannedMatch.leftFrom?.match}`)?.winner || null;
+        const right = plannedMatch.right || resolvedMatches.get(`tournament-${tournament.season}-r${plannedMatch.rightFrom?.round}-m${plannedMatch.rightFrom?.match}`)?.winner || null;
+        const visualMatch = { ...plannedMatch, left, right, day: plannedRound.day, date: plannedRound.date };
+        const playedMatch = plannedRound.round > 1
+          ? playedMatches.find((match) => match.planId === plannedMatch.id || match.id === plannedMatch.id) || playedMatches[matchIndex]
+          : playedMatches.find((match) => (
+            match.planId === plannedMatch.id || match.id === plannedMatch.id
+          ) && tournamentMatchParticipantsMatch(match, visualMatch))
+            || playedMatches.find((match) => tournamentMatchParticipantsMatch(match, visualMatch));
+        const mergedMatch = playedMatch ? { ...visualMatch, ...playedMatch } : visualMatch;
+        resolvedMatches.set(plannedMatch.id, mergedMatch);
+        return mergedMatch;
+      })
+    };
+  });
 });
+
+const tournamentBracketGeometry = computed(() => {
+  const firstVisibleRoundIndex = Math.min(
+    tournamentCollapsedPrefixLength.value,
+    Math.max(0, tournamentBracketRounds.value.length - 1)
+  );
+  const firstVisibleRoundMatches = tournamentBracketRounds.value[firstVisibleRoundIndex]?.matches?.length || 1;
+  return {
+    width: tournamentBracketRounds.value.reduce((width, round) => (
+      width + (isTournamentRoundCollapsed(round) ? tournamentCollapsedColumnWidth : tournamentBracketLayout.column)
+    ), tournamentBracketLayout.offsetX * 2),
+    height: Math.max(
+      380,
+      tournamentMatchCenter(firstVisibleRoundIndex, firstVisibleRoundMatches - 1)
+        + tournamentBracketLayout.cardHeight / 2
+        + 60
+    )
+  };
+});
+
+const tournamentBracketCanvasStyle = computed(() => {
+  return {
+    width: `${tournamentBracketGeometry.value.width}px`,
+    height: `${tournamentBracketGeometry.value.height}px`,
+    transform: `translate(${tournamentBracketPan.x}px, ${tournamentBracketPan.y}px) scale(${tournamentBracketZoom.value})`
+  };
+});
+
+const tournamentBracketConnectors = computed(() => {
+  const connectors = [];
+  for (let roundIndex = 0; roundIndex < tournamentBracketRounds.value.length - 1; roundIndex += 1) {
+    const currentRound = tournamentBracketRounds.value[roundIndex];
+    const nextRound = tournamentBracketRounds.value[roundIndex + 1];
+    if (isTournamentRoundCollapsed(currentRound) || isTournamentRoundCollapsed(nextRound)) continue;
+    for (let matchIndex = 0; matchIndex < (nextRound.matches || []).length; matchIndex += 1) {
+      const firstY = tournamentMatchCenter(roundIndex, matchIndex * 2);
+      const secondY = tournamentMatchCenter(roundIndex, matchIndex * 2 + 1);
+      const nextY = tournamentMatchCenter(roundIndex + 1, matchIndex);
+      const startX = tournamentRoundLeft(roundIndex) + tournamentBracketLayout.card;
+      const jointX = startX + 14;
+      const nextX = tournamentRoundLeft(roundIndex + 1);
+      connectors.push({
+        id: `connector-${roundIndex}-${matchIndex}`,
+        path: `M ${startX} ${firstY} H ${jointX} V ${secondY} M ${jointX} ${nextY} H ${nextX}`
+      });
+    }
+  }
+  return connectors;
+});
+
+function tournamentMatchPosition(roundIndex, matchIndex) {
+  return { top: `${tournamentMatchCenter(roundIndex, matchIndex) - tournamentBracketLayout.cardHeight / 2}px` };
+}
+
+function tournamentRoundStyle(roundIndex) {
+  const round = tournamentBracketRounds.value[roundIndex];
+  return {
+    left: `${tournamentRoundLeft(roundIndex)}px`,
+    width: `${isTournamentRoundCollapsed(round) ? tournamentCollapsedColumnWidth : tournamentBracketLayout.card}px`
+  };
+}
+
+function tournamentRoundLeft(roundIndex) {
+  let left = tournamentBracketLayout.offsetX;
+  for (let index = 0; index < roundIndex; index += 1) {
+    left += isTournamentRoundCollapsed(tournamentBracketRounds.value[index])
+      ? tournamentCollapsedColumnWidth
+      : tournamentBracketLayout.column;
+  }
+  return left;
+}
+
+function tournamentRoundKey(round) {
+  return `${duelTournament.value?.season || 0}-${round?.round || 0}`;
+}
+
+const tournamentCollapsedPrefixLength = computed(() => {
+  let count = 0;
+  for (const round of tournamentBracketRounds.value) {
+    if (!collapsedTournamentRounds.value.has(tournamentRoundKey(round))) break;
+    count += 1;
+  }
+  return count;
+});
+
+function isTournamentRoundCollapsed(round) {
+  const roundIndex = tournamentBracketRounds.value.indexOf(round);
+  return roundIndex >= 0 && roundIndex < tournamentCollapsedPrefixLength.value;
+}
+
+function canToggleTournamentRound(round, roundIndex) {
+  const collapsedCount = tournamentCollapsedPrefixLength.value;
+  if (isTournamentRoundCollapsed(round)) return roundIndex === collapsedCount - 1;
+  return roundIndex === collapsedCount && roundIndex < tournamentBracketRounds.value.length - 1;
+}
+
+function toggleTournamentRound(round) {
+  const rounds = tournamentBracketRounds.value;
+  const roundIndex = rounds.indexOf(round);
+  const collapsedCount = tournamentCollapsedPrefixLength.value;
+  if (!canToggleTournamentRound(round, roundIndex)) return;
+  const nextCount = roundIndex < collapsedCount ? collapsedCount - 1 : collapsedCount + 1;
+  collapsedTournamentRounds.value = new Set(rounds.slice(0, nextCount).map(tournamentRoundKey));
+}
+
+function tournamentMatchCenter(roundIndex, matchIndex) {
+  const visibleRoundIndex = Math.max(0, roundIndex - tournamentCollapsedPrefixLength.value);
+  return tournamentMatchCenterAtDepth(visibleRoundIndex, matchIndex);
+}
+
+function tournamentMatchCenterAtDepth(roundDepth, matchIndex) {
+  if (roundDepth <= 0) {
+    return tournamentBracketLayout.offsetY
+      + matchIndex * tournamentBracketLayout.row
+      + Math.floor(matchIndex / 2) * tournamentBracketLayout.groupGap
+      + tournamentBracketLayout.cardHeight / 2;
+  }
+  return (
+    tournamentMatchCenterAtDepth(roundDepth - 1, matchIndex * 2)
+    + tournamentMatchCenterAtDepth(roundDepth - 1, matchIndex * 2 + 1)
+  ) / 2;
+}
+
+function tournamentMatchParticipantsMatch(actual, planned) {
+  const actualIds = [actual?.left?.id, actual?.right?.id].filter(Boolean).sort();
+  const plannedIds = [planned?.left?.id, planned?.right?.id].filter(Boolean).sort();
+  return actualIds.length === plannedIds.length && actualIds.every((id, index) => id === plannedIds[index]);
+}
+
+function tournamentSlotLabel(match, side) {
+  if (match?.[`${side}From`]) return "胜者待定";
+  return side === "right" && match?.type === "bye" ? "轮空晋级" : "待定";
+}
+
+function tournamentCombatantLabel(person, fallback) {
+  if (!person) return fallback;
+  const rank = person.rankName || person.duelSeason?.rankName || duelRankText(matchPerson(person));
+  return rank ? `${person.name} · ${rank}` : person.name;
+}
+
+function tournamentMatchStatus(match) {
+  if (match?.winner) return "已结束";
+  if (Number(match?.day) === Number(gameState.value.day)) return "今日待战";
+  return Number(match?.day) > Number(gameState.value.day) ? "待开赛" : "待补赛";
+}
+
+function adjustTournamentZoom(delta) {
+  tournamentBracketZoom.value = Math.min(1.15, Math.max(0.38, Number((tournamentBracketZoom.value + delta).toFixed(2))));
+}
+
+function resetTournamentBracketView() {
+  tournamentBracketZoom.value = 0.72;
+  tournamentBracketPan.x = 0;
+  tournamentBracketPan.y = 0;
+}
+
+function onTournamentBracketWheel(event) {
+  adjustTournamentZoom(event.deltaY < 0 ? 0.08 : -0.08);
+}
+
+function startTournamentBracketPan(event) {
+  if (event.button !== 0 || event.target?.closest?.("button")) return;
+  tournamentBracketDrag.active = true;
+  tournamentBracketDrag.pointerId = event.pointerId;
+  tournamentBracketDrag.startX = event.clientX;
+  tournamentBracketDrag.startY = event.clientY;
+  tournamentBracketDrag.originX = tournamentBracketPan.x;
+  tournamentBracketDrag.originY = tournamentBracketPan.y;
+  tournamentBracketViewport.value?.setPointerCapture?.(event.pointerId);
+}
+
+function moveTournamentBracketPan(event) {
+  if (!tournamentBracketDrag.active || event.pointerId !== tournamentBracketDrag.pointerId) return;
+  tournamentBracketPan.x = tournamentBracketDrag.originX + event.clientX - tournamentBracketDrag.startX;
+  tournamentBracketPan.y = tournamentBracketDrag.originY + event.clientY - tournamentBracketDrag.startY;
+}
+
+function endTournamentBracketPan(event) {
+  if (event.pointerId !== tournamentBracketDrag.pointerId) return;
+  tournamentBracketDrag.active = false;
+  tournamentBracketDrag.pointerId = null;
+  tournamentBracketViewport.value?.releasePointerCapture?.(event.pointerId);
+}
+
 function isTournamentPlayerMatch(match) {
   return Boolean(match?.left?.id === player.value?.id || match?.right?.id === player.value?.id);
 }

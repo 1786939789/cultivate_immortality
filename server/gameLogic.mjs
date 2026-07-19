@@ -5964,6 +5964,94 @@ function tournamentEntrants(state) {
     .sort((left, right) => right.score - left.score || right.wins - left.wins || right.power - left.power || left.entity.id.localeCompare(right.entity.id));
 }
 
+function tournamentSeedRef(tournament, id) {
+  const entry = tournamentEntryRef(tournament, id);
+  if (!entry) return null;
+  const rank = duelRankForScore(entry.score || 0);
+  return {
+    id: entry.id,
+    kind: entry.kind,
+    name: entry.name,
+    sect: entry.sect,
+    realm: entry.realm,
+    seed: entry.seed,
+    rankId: rank.id,
+    rankName: rank.name,
+    rankColor: rank.color
+  };
+}
+
+function buildTournamentBracket(state, tournament) {
+  const bracketSize = Math.max(2, Number(tournament.bracketSize) || duelTournamentBracketSize);
+  const roundCount = Math.max(1, Math.ceil(Math.log2(bracketSize)));
+  const entrants = [...(tournament.entrants || [])].sort((left, right) => left.seed - right.seed);
+  const firstRoundMatchCount = bracketSize / 2;
+  const byeCount = Math.max(0, bracketSize - entrants.length);
+  const contenders = entrants.slice(byeCount);
+  const contenderPairings = [];
+  for (let index = 0; index < contenders.length / 2; index += 1) {
+    contenderPairings.push([contenders[index]?.id || null, contenders[contenders.length - 1 - index]?.id || null]);
+  }
+  const firstPairings = [];
+  let contenderIndex = 0;
+  for (let groupIndex = 0; groupIndex < firstRoundMatchCount / 2; groupIndex += 1) {
+    if (groupIndex < byeCount) firstPairings.push([entrants[groupIndex]?.id || null, null]);
+    if (contenderPairings[contenderIndex]) firstPairings.push(contenderPairings[contenderIndex++]);
+    else firstPairings.push([null, null]);
+  }
+  while (contenderIndex < contenderPairings.length && firstPairings.length < firstRoundMatchCount) {
+    firstPairings.push(contenderPairings[contenderIndex++]);
+  }
+  while (firstPairings.length < firstRoundMatchCount) firstPairings.push([null, null]);
+
+  const rounds = [];
+  for (let roundIndex = 0; roundIndex < roundCount; roundIndex += 1) {
+    const round = roundIndex + 1;
+    const matchCount = bracketSize / (2 ** round);
+    rounds.push({
+      round,
+      name: tournamentRoundName(bracketSize / (2 ** roundIndex)),
+      day: tournament.seededAtDay + roundIndex,
+      date: stateDateForDay(tournament.seededAtDay + roundIndex),
+      matches: Array.from({ length: matchCount }, (_, index) => {
+        const [leftId, rightId] = round === 1 ? firstPairings[index] : [null, null];
+        return {
+          id: `tournament-${tournament.season}-r${round}-m${index + 1}`,
+          order: index + 1,
+          type: round === 1 && leftId && !rightId ? "bye" : "battle",
+          left: leftId ? tournamentSeedRef(tournament, leftId) : null,
+          right: rightId ? tournamentSeedRef(tournament, rightId) : null,
+          leftFrom: round > 1 ? { round: round - 1, match: index * 2 + 1 } : null,
+          rightFrom: round > 1 ? { round: round - 1, match: index * 2 + 2 } : null
+        };
+      })
+    });
+  }
+  return { version: 2, bracketSize, roundCount, rounds };
+}
+
+function ensureTournamentBracket(state, tournament) {
+  if (!tournament?.bracket?.rounds?.length || tournament.bracket.version !== 2) tournament.bracket = buildTournamentBracket(state, tournament);
+  for (const playedRound of tournament.rounds || []) {
+    const plannedRound = tournament.bracket.rounds.find((round) => Number(round.round) === Number(playedRound.round));
+    if (!plannedRound) continue;
+    for (const [index, match] of (playedRound.matches || []).entries()) {
+      if (!match.planId && plannedRound.matches[index]) match.planId = plannedRound.matches[index].id;
+    }
+  }
+  return tournament.bracket;
+}
+
+function tournamentPlanParticipant(tournament, planMatch, side) {
+  const direct = planMatch?.[side];
+  if (direct?.id) return direct.id;
+  const source = planMatch?.[`${side}From`];
+  if (!source) return "";
+  const priorRound = (tournament.rounds || []).find((round) => Number(round.round) === Number(source.round));
+  const priorMatch = priorRound?.matches?.find((match) => match.planId === `tournament-${tournament.season}-r${source.round}-m${source.match}`);
+  return priorMatch?.winner?.id || "";
+}
+
 function seedTournament(state) {
   const season = duelSeasonOfDay(state.day);
   if (state.duelTournament?.season === season) return state.duelTournament;
@@ -5989,32 +6077,13 @@ function seedTournament(state) {
     season, status: "active", bracketSize: duelTournamentBracketSize, seededAtDay: state.day, seededAt: timestampKey(),
     entrants, rounds: [], championId: "", runnerUpId: "", semifinalistIds: [], rewards: []
   };
+  ensureTournamentBracket(state, state.duelTournament);
   log(state, `第 ${season} 届天骄淘汰赛签表已定：前 ${Math.max(0, duelTournamentBracketSize - entrants.length)} 名种子首轮轮空。`, "gold");
   return state.duelTournament;
 }
 
 function tournamentEntryRef(tournament, id) {
   return tournament.entrants.find((entry) => entry.id === id) || null;
-}
-
-function tournamentRoundParticipants(tournament) {
-  if (!tournament.rounds.length) return tournament.entrants.map((entry) => entry.id);
-  return tournament.rounds[tournament.rounds.length - 1].matches.map((match) => match.winner?.id).filter(Boolean);
-}
-
-function tournamentPairings(tournament) {
-  const bySeed = (id) => tournamentEntryRef(tournament, id)?.seed || Number.MAX_SAFE_INTEGER;
-  const sorted = tournamentRoundParticipants(tournament).sort((left, right) => bySeed(left) - bySeed(right));
-  if (!tournament.rounds.length) {
-    const byeCount = Math.max(0, duelTournamentBracketSize - sorted.length);
-    const pairs = sorted.slice(0, byeCount).map((id) => [id, null]);
-    const contenders = sorted.slice(byeCount);
-    for (let index = 0; index < contenders.length / 2; index += 1) pairs.push([contenders[index], contenders[contenders.length - 1 - index]]);
-    return pairs;
-  }
-  const pairs = [];
-  for (let index = 0; index < sorted.length / 2; index += 1) pairs.push([sorted[index], sorted[sorted.length - 1 - index]]);
-  return pairs;
 }
 
 function grantTournamentRewards(state, tournament, finalRound) {
@@ -6045,17 +6114,20 @@ function runDailyTournament(state) {
   const tournament = seedTournament(state);
   const existing = tournament.rounds.find((round) => round.day === state.day);
   if (existing) return existing;
-  const entrantCount = tournamentRoundParticipants(tournament).length;
-  const bracketRoundSize = tournament.rounds.length ? entrantCount : duelTournamentBracketSize;
+  const bracket = ensureTournamentBracket(state, tournament);
+  const planRound = bracket.rounds.find((round) => Number(round.round) === tournament.rounds.length + 1);
+  if (!planRound) return null;
   const round = {
-    round: tournament.rounds.length + 1,
-    name: tournamentRoundName(bracketRoundSize),
-    day: state.day,
-    date: stateDateForDay(state),
+    round: planRound.round,
+    name: planRound.name,
+    day: planRound.day,
+    date: planRound.date,
     createdAt: timestampKey(),
     matches: []
   };
-  for (const [leftId, rightId] of tournamentPairings(tournament)) {
+  for (const planMatch of planRound.matches) {
+    const leftId = tournamentPlanParticipant(tournament, planMatch, "left");
+    const rightId = tournamentPlanParticipant(tournament, planMatch, "right");
     const left = cultivatorById(state, leftId);
     const right = rightId ? cultivatorById(state, rightId) : null;
     const leftEntry = tournamentEntryRef(tournament, leftId);
@@ -6063,19 +6135,19 @@ function runDailyTournament(state) {
     if (!left) continue;
     if (!right) {
       const leftRef = { ...entityRef(left, left.id === "player" ? "player" : "npc"), seed: leftEntry?.seed || 0 };
-      round.matches.push({ id: `tournament-${tournament.season}-${round.round}-bye-${left.id}`, type: "bye", left: leftRef, right: null, winner: leftRef, summary: `${left.name}以 ${leftEntry?.seed || "-"} 号种子身份首轮轮空。` });
+      round.matches.push({ id: planMatch.id, planId: planMatch.id, type: "bye", left: leftRef, right: null, winner: leftRef, summary: `${left.name}以 ${leftEntry?.seed || "-"} 号种子身份轮空晋级。` });
       continue;
     }
-    const matchId = `tournament-${tournament.season}-${round.round}-${left.id}-${right.id}`;
+    const matchId = planMatch.id;
     const result = runDuelMatch(state, left, right, { matchId, scored: false, tournament: { round: round.round, name: round.name } });
     const leftRef = { ...result.replay.left, seed: leftEntry?.seed || 0 };
     const rightRef = { ...result.replay.right, seed: rightEntry?.seed || 0 };
     const winnerRef = result.replay.winner === "left" ? leftRef : rightRef;
     const loserRef = result.replay.winner === "left" ? rightRef : leftRef;
-    round.matches.push({ id: matchId, type: "battle", left: leftRef, right: rightRef, winner: winnerRef, loser: loserRef, replayId: result.replay.replayId, summary: `${result.winner.name}晋级${tournamentRoundName(Math.max(2, bracketRoundSize / 2))}。` });
+    round.matches.push({ id: matchId, planId: planMatch.id, type: "battle", left: leftRef, right: rightRef, winner: winnerRef, loser: loserRef, replayId: result.replay.replayId, summary: `${result.winner.name}晋级${tournamentRoundName(Math.max(2, bracket.bracketSize / (2 ** round.round)))}。` });
   }
   tournament.rounds.push(round);
-  if (tournamentRoundParticipants(tournament).length === 1) grantTournamentRewards(state, tournament, round);
+  if (round.round === bracket.roundCount) grantTournamentRewards(state, tournament, round);
   log(state, `${round.date} 天骄淘汰赛 ${round.name} 完成。`, "gold");
   return round;
 }
@@ -9372,9 +9444,21 @@ function publicDuelTournament(state) {
   const tournament = state.duelTournament;
   if (!tournament || tournament.season !== duelSeasonOfDay(state.day)) return null;
   const people = publicCultivatorRefMap(state);
+  const bracket = ensureTournamentBracket(state, tournament);
   return {
     ...tournament,
     entrants: (tournament.entrants || []).map((entry) => ({ ...entry, person: publicEntityRef(entry, people) })),
+    bracket: {
+      ...bracket,
+      rounds: (bracket.rounds || []).map((round) => ({
+        ...round,
+        matches: (round.matches || []).map((match) => ({
+          ...match,
+          left: publicEntityRef(match.left, people),
+          right: publicEntityRef(match.right, people)
+        }))
+      }))
+    },
     rounds: (tournament.rounds || []).map((round) => ({
       ...round,
       matches: (round.matches || []).map((match) => publicDuelMatch(match, 0, round, state.day, people))
@@ -9975,6 +10059,7 @@ function publicEntityRef(ref, people = null) {
     sect: ref.sect,
     portraitUrl: compactPortraitUrl(portraitSource, ref.id),
     rankId: ref.rankId || ref.duelSeason?.rankId || rank?.id || "",
+    rankName: ref.rankName || ref.duelSeason?.rankName || rank?.name || "",
     rankColor: ref.rankColor || ref.duelSeason?.rankColor || rank?.color || "",
     duelSeason: ref.duelSeason ? {
       season: ref.duelSeason.season,
