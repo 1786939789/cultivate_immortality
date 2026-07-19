@@ -893,30 +893,6 @@
         </section>
 
         <section v-if="activeTab === 'cultivation' && cultivationSubTab === 'skills'" class="view active cultivation-surface skills-surface">
-          <div class="panel battle-strategy-panel">
-            <div class="section-head compact">
-              <div>
-                <h3>斗法策略</h3>
-                <p>策略会在切磋、副本与攻守城中改变五维倾向，回放会记录本次选择。</p>
-              </div>
-              <span class="tag">当前：{{ battleStrategyLabel(player.battleStrategy) }}</span>
-            </div>
-            <div class="battle-strategy-options" role="group" aria-label="斗法策略">
-              <button
-                v-for="strategy in battleStrategies"
-                :key="strategy.id"
-                class="secondary"
-                :class="{ active: player.battleStrategy === strategy.id }"
-                type="button"
-                :disabled="isActionPending('/api/player/battle-strategy')"
-                @click="setBattleStrategy(strategy.id)"
-              >
-                <strong>{{ strategy.label }}</strong>
-                <small>{{ battleStrategyHint(strategy.id) }}</small>
-              </button>
-            </div>
-          </div>
-
           <div class="panel">
             <div class="section-head">
               <div>
@@ -1300,12 +1276,10 @@
                       </button>
                     </div>
 
-                    <div v-else-if="activeDaoTrialRun.currentNode?.type === 'battle'" class="dao-trial-strategies">
-                      <span>选择本战策略</span>
-                      <button v-for="strategy in activeDaoTrialRun.battleStrategies" :key="strategy.id" type="button" :disabled="isActionPending('/api/dao-trial/advance')" @click="fightDaoTrial(strategy.id)">
+                    <div v-else-if="activeDaoTrialRun.currentNode?.type === 'battle'" class="dao-trial-battle-action">
+                      <button class="primary" type="button" :disabled="isActionPending('/api/dao-trial/advance')" @click="fightDaoTrial">
                         <Play :size="15" aria-hidden="true" />
-                        <strong>{{ strategy.label }}</strong>
-                        <small>{{ battleStrategyHint(strategy.id) }}</small>
+                        <strong>开始战斗</strong>
                       </button>
                     </div>
 
@@ -5980,12 +5954,6 @@ const playerPortraitPerson = computed(() => ({
   portraitUrl: playerPortraitUrl.value
 }));
 const combatSkills = computed(() => catalog.value.combatSkills?.length ? catalog.value.combatSkills : [fallbackSkill]);
-const battleStrategies = computed(() => catalog.value.battleStrategies || [
-  { id: "balanced", label: "均衡" },
-  { id: "burst", label: "爆发" },
-  { id: "guard", label: "守势" },
-  { id: "focus", label: "凝神" }
-]);
 const homeSummary = computed(() => gameState.value.home || {});
 const skillUpgrade = computed(() => derived.value.skillUpgrade || {});
 const skillUpgradePlan = computed(() => derived.value.skillUpgradePlan || []);
@@ -6263,9 +6231,9 @@ async function chooseDaoTrialEvent(optionId) {
   await act("/api/dao-trial/advance", { optionId }, { scope: "full" });
 }
 
-async function fightDaoTrial(strategy) {
+async function fightDaoTrial() {
   const target = captureBattleReturn();
-  const result = await act("/api/dao-trial/advance", { strategy }, { scope: "full" });
+  const result = await act("/api/dao-trial/advance", { action: "battle" }, { scope: "full" });
   if (result?.replay) openBattleReplay(result.replay, target);
 }
 
@@ -12268,24 +12236,6 @@ async function advanceDay() {
 
 async function upgradeSkill() {
   await act("/api/skills/upgrade", {}, { scope: "lite" });
-}
-
-function battleStrategyLabel(strategy) {
-  return battleStrategies.value.find((item) => item.id === strategy)?.label || "均衡";
-}
-
-function battleStrategyHint(strategy) {
-  return ({
-    balanced: "五维不变，适合未知对手。",
-    burst: "攻击 +8%，防御 -6%。",
-    guard: "防御 +10%，攻击 -6%，法力 +5%。",
-    focus: "神识 +10%，防御 -2%，法力 +8%。"
-  })[strategy] || "均衡应对。";
-}
-
-async function setBattleStrategy(strategy) {
-  if (strategy === player.value.battleStrategy) return;
-  await act("/api/player/battle-strategy", { strategy }, { scope: "lite" });
 }
 
 async function buyMarketItem(id) {

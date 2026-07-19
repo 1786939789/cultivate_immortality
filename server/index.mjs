@@ -37,7 +37,6 @@ import {
   updateGameSettings,
   updateTaskDefinition,
   updatePlayerSectPlan,
-  updatePlayerBattleStrategy,
   updateSectProfile,
   upgradePlayerSkill,
   useItem
@@ -76,7 +75,6 @@ const liteActionRoutes = new Set([
   "/api/day/advance",
   "/api/sect/mission",
   "/api/sect/plan",
-  "/api/player/battle-strategy",
   "/api/duels/day",
   "/api/items/buy",
   "/api/items/use",
@@ -345,7 +343,6 @@ async function handleApi(req, res, url) {
     "/api/sect/mission": (state) => sectMission(state),
     "/api/sect/war": (state) => sectWar(state),
     "/api/sect/plan": (state) => updatePlayerSectPlan(state, body),
-    "/api/player/battle-strategy": (state) => updatePlayerBattleStrategy(state, body),
     "/api/duels/day": (state) => runDailyDuels(state),
     "/api/items/buy": (state) => buyItem(state, body.kind),
     "/api/items/use": (state) => useItem(state, body.kind),

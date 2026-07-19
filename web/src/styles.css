@@ -1448,16 +1448,8 @@ button {
 .strategy-forecast-card { min-width: 128px; }
 .strategy-forecast-card strong { color: #1d5e52; font-size: 18px; }
 
-.battle-strategy-panel { margin-bottom: 14px; }
-.battle-strategy-options { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-.battle-strategy-options button { min-height: 62px; text-align: left; }
-.battle-strategy-options button.active { border-color: #1d5e52; background: rgba(220, 238, 224, .7); }
-.battle-strategy-options strong,
-.battle-strategy-options small { display: block; }
-.battle-strategy-options small { margin-top: 4px; color: #6d5a44; line-height: 1.35; }
-
 @media (max-width: 720px) {
-  .plan-home-grid, .battle-strategy-options { grid-template-columns: 1fr 1fr; }
+  .plan-home-grid { grid-template-columns: 1fr 1fr; }
   .task-cultivation-plan { margin: 0 14px 14px; }
   .task-cultivation-plan-head { align-items: flex-start; flex-direction: column; }
 }

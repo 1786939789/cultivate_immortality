@@ -3,8 +3,7 @@ import {
   addTask,
   createDefaultState,
   dailySettlement,
-  getPublicState,
-  updatePlayerBattleStrategy
+  getPublicState
 } from "../server/gameLogic.mjs";
 
 function mustThrow(action, message) {
@@ -26,9 +25,6 @@ addTask(state, { taskId: "task-work-hour", completedAmount: 1 });
 mustThrow(() => addTask(state, { taskId: "task-work-hour", completedAmount: 1 }), "计量任务不应重复结算相同进度");
 addTask(state, { taskId: "task-work-hour", completedAmount: 4 });
 mustThrow(() => addTask(state, { taskId: "task-work-hour", completedAmount: 4 }), "计量任务达到上限后不应继续结算");
-
-updatePlayerBattleStrategy(state, { strategy: "guard" });
-assert.equal(state.player.battleStrategy, "guard", "斗法策略应写入玩家存档");
 
 dailySettlement(state, { manual: true });
 const publicState = getPublicState(state);

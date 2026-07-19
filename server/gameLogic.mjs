@@ -64,7 +64,6 @@ const minDailyTickerSpeed = 0.5;
 const maxDailyTickerSpeed = 4;
 const taskDailyReducedXpMultiplier = 0.4;
 const permanentStatSoftCap = 36;
-const battleStrategies = ["balanced", "burst", "guard", "focus"];
 const taskCategories = ["生活", "学习", "工作", "运动"];
 const defaultTaskDefinitions = [
   { id: "task-work-hour", name: "加班", detail: "按实际投入时间记录额外工作。", type: "measurable", category: "工作", unitName: "小时", targetAmount: 1, xpReward: 100, spiritReward: 10, maxMultiplier: 4, enabled: true },
@@ -761,31 +760,6 @@ function combatSnapshot(entity, state) {
   };
 }
 
-function battleStrategyProfile(entity) {
-  const strategy = battleStrategies.includes(entity?.battleStrategy) ? entity.battleStrategy : "balanced";
-  if (strategy === "burst") return { strategy, attack: 1.08, defense: 0.94, divineSense: 1, mana: 1 };
-  if (strategy === "guard") return { strategy, attack: 0.94, defense: 1.1, divineSense: 1, mana: 1.05 };
-  if (strategy === "focus") return { strategy, attack: 1, defense: 0.98, divineSense: 1.1, mana: 1.08 };
-  return { strategy: "balanced", attack: 1, defense: 1, divineSense: 1, mana: 1 };
-}
-
-function battleStrategyLabel(strategy) {
-  return ({ balanced: "均衡", burst: "爆发", guard: "守势", focus: "凝神" })[strategy] || "均衡";
-}
-
-function applyBattleStrategy(snapshot, entity) {
-  const profile = battleStrategyProfile(entity);
-  return {
-    ...snapshot,
-    attack: Math.max(1, Math.floor(snapshot.attack * profile.attack)),
-    defense: Math.max(0, Math.floor(snapshot.defense * profile.defense)),
-    divineSense: Math.max(0, Math.floor(snapshot.divineSense * profile.divineSense)),
-    maxMana: Math.max(1, Math.floor(snapshot.maxMana * profile.mana)),
-    mana: Math.max(0, Math.floor(snapshot.mana * profile.mana)),
-    strategy: profile.strategy
-  };
-}
-
 function seededBattleRandom(seed = "") {
   let value = 2166136261;
   for (const char of String(seed)) {
@@ -816,8 +790,8 @@ function runTurnBattle(left, right, options = {}) {
   const random = options.random || (options.seed ? seededBattleRandom(options.seed) : Math.random);
   const leftPenalty = rootCounterPenalty(right, left) * (1 - clamp(Number(left?.trialBuffs?.rootResist) || 0, 0, 0.9));
   const rightPenalty = rootCounterPenalty(left, right) * (1 - clamp(Number(right?.trialBuffs?.rootResist) || 0, 0, 0.9));
-  const a = applyBattleRootPenalty(applyBattleStrategy(combatSnapshot(left, options.state), left), leftPenalty);
-  const b = applyBattleRootPenalty(applyBattleStrategy(combatSnapshot(right, options.state), right), rightPenalty);
+  const a = applyBattleRootPenalty(combatSnapshot(left, options.state), leftPenalty);
+  const b = applyBattleRootPenalty(combatSnapshot(right, options.state), rightPenalty);
   const order = a.divineSense === b.divineSense
     ? (random() < 0.5 ? ["left", "right"] : ["right", "left"])
     : (a.divineSense > b.divineSense ? ["left", "right"] : ["right", "left"]);
@@ -838,9 +812,6 @@ function runTurnBattle(left, right, options = {}) {
 
   if (leftPenalty) pushEvent("root", `${right.name}主灵根克制${left.name}，${left.name}攻击、防御、神识降低 ${Math.round(leftPenalty * 1000) / 10}%`, { side: "left", penalty: leftPenalty });
   if (rightPenalty) pushEvent("root", `${left.name}主灵根克制${right.name}，${right.name}攻击、防御、神识降低 ${Math.round(rightPenalty * 1000) / 10}%`, { side: "right", penalty: rightPenalty });
-  if (a.strategy !== "balanced") pushEvent("strategy", `${left.name}采用${battleStrategyLabel(a.strategy)}策略`, { side: "left", strategy: a.strategy });
-  if (b.strategy !== "balanced") pushEvent("strategy", `${right.name}采用${battleStrategyLabel(b.strategy)}策略`, { side: "right", strategy: b.strategy });
-
   const sideState = (side) => side === "left"
     ? { actor: a, target: b, actorName: left.name, targetName: right.name, hp: leftHp, targetHp: rightHp, mana: leftMana, targetMana: rightMana }
     : { actor: b, target: a, actorName: right.name, targetName: left.name, hp: rightHp, targetHp: leftHp, mana: rightMana, targetMana: leftMana };
@@ -5267,7 +5238,6 @@ function staticCatalog() {
     equipmentTiers,
     equipmentCatalog,
     duelRanks,
-    battleStrategies: battleStrategies.map((id) => ({ id, label: battleStrategyLabel(id) }))
   };
   return cachedStaticCatalog;
 }
@@ -6535,7 +6505,6 @@ function makeNpc(name, index) {
     maxMana: stats.maxMana,
     skillId,
     skillRanks: { [skillId]: 1 },
-    battleStrategy: pick(battleStrategies),
     lastSkillUpgradeDay: 0,
     spiritPearls: createSpiritPearlState(),
     spirit: 0,
@@ -6846,8 +6815,7 @@ function publicTodayPlan(state) {
     fullTaskXpBudget: progress.fullXpBudget,
     catchup,
     suggestedTask: suggestedTask ? { id: suggestedTask.id, name: suggestedTask.name, xpReward: suggestedTask.xpReward } : null,
-    dungeonForecasts: publicDungeonForecasts(state),
-    battleStrategy: battleStrategyProfile(state.player).strategy
+    dungeonForecasts: publicDungeonForecasts(state)
   };
 }
 
@@ -7689,7 +7657,6 @@ function createTrialCombatant(state) {
     mana: stats.maxMana,
     skillId: state.player.skillId,
     skillRanks: { ...(state.player.skillRanks || {}) },
-    battleStrategy: state.player.battleStrategy,
     trialBuffs: {}
   };
 }
@@ -7883,7 +7850,6 @@ function publicTrialRun(state, run) {
     insight: run.insight,
     canReroll: Boolean(run.pendingSealIds?.length && run.insight > 0),
     eventOptions: node && ["event", "rest"].includes(node.type) ? (daoTrialEventOptions[node.event] || []) : [],
-    battleStrategies: battleStrategies.map((id) => ({ id, label: battleStrategyLabel(id) })),
     nodesCleared: run.nodesCleared,
     score: trialRunScore(state, run)
   };
@@ -8070,13 +8036,12 @@ function useTrialCompanionSupport(run) {
   return { support: active || { name: "同行支援" }, run };
 }
 
-function resolveTrialBattle(state, run, node, strategy) {
-  if (!battleStrategies.includes(strategy)) throw new Error("未知斗法策略");
+function resolveTrialBattle(state, run, node) {
   const route = daoTrialRouteMap[run.routeId];
-  const fighter = { ...run.combatant, battleStrategy: strategy, trialBuffs: combinedTrialBuffs(run) };
+  const fighter = { ...run.combatant, trialBuffs: combinedTrialBuffs(run) };
   const beforeStats = combatSnapshot(fighter, state);
   const monster = trialMonsterFor(state, run, node, route);
-  const seed = `${run.seed}|node|${run.nodeIndex}|${strategy}|${run.sealIds.join(",")}`;
+  const seed = `${run.seed}|node|${run.nodeIndex}|${run.sealIds.join(",")}`;
   const battle = fightMonster(state, fighter, monster, node.rounds, { hp: beforeStats.hp, mana: beforeStats.mana, seed });
   const won = battle.winner === "left";
   const replay = buildReplay({ ...fighter, hp: beforeStats.hp, mana: beforeStats.mana }, monster, battle, won ? "胜" : "负", timestampKey(), state);
@@ -8133,7 +8098,7 @@ export function advanceDaoTrial(state, payload = {}) {
   const route = daoTrialRouteMap[run.routeId];
   const node = (run.nodes?.length ? run.nodes : route?.nodes)?.[run.nodeIndex];
   if (!node) throw new Error("问道路线状态异常");
-  if (node.type === "battle") return resolveTrialBattle(state, run, node, String(payload.strategy || state.player.battleStrategy || "balanced"));
+  if (node.type === "battle") return resolveTrialBattle(state, run, node);
   const option = (daoTrialEventOptions[node.event] || []).find((item) => item.id === payload.optionId);
   if (!option) throw new Error("未知的问道选择");
   applyTrialEventEffects(state, run, node, option.effects);
@@ -8179,7 +8144,6 @@ export function createDefaultState() {
       maxMana: stats.maxMana,
       skillId,
       skillRanks: { [skillId]: 1 },
-      battleStrategy: "balanced",
       lastSkillUpgradeDay: 0,
       spiritPearls: createSpiritPearlState(),
       breakthroughAttemptsToday: 0,
@@ -8636,10 +8600,6 @@ export function ensureStateShape(state) {
   state.player.id ??= "player";
   changed = ensureField(state.player, "name", "李昕纾") || changed;
   changed = ensureField(state.player, "gender", "female") || changed;
-  if (!battleStrategies.includes(state.player.battleStrategy)) {
-    state.player.battleStrategy = "balanced";
-    changed = true;
-  }
   changed = ensureTalent(state.player, { rebirth: state.rebirth }) || changed;
   state.sect ??= {
     name: state.player.sect || "落云宗",
@@ -8811,10 +8771,6 @@ export function ensureStateShape(state) {
     changed = ensureField(full, "sect", sectForNpcIndex(index)) || changed;
     changed = ensureField(full, "root", () => normalizeRoot(pick(roots))) || changed;
     changed = ensureField(full, "realm", () => Math.floor(Math.random() * 4)) || changed;
-    if (!battleStrategies.includes(full.battleStrategy)) {
-      full.battleStrategy = pick(battleStrategies);
-      changed = true;
-    }
     changed = ensureTalent(full, { rebirth: state.rebirth }) || changed;
     changed = ensureField(full, "xp", () => Math.floor(Math.random() * 90)) || changed;
     let npcBirthStats;
@@ -9830,7 +9786,6 @@ function publicCultivator(entity, state, options = {}) {
       skillId: entity.skillId,
       skillRanks: entity.skillRanks || {},
       skillRank: skillRankOf(entity, entity.skillId),
-      battleStrategy: battleStrategyProfile(entity).strategy,
       portraitUrl: compactPortraitUrl(entity.portraitUrl, entity.id, entity.portraitVariant),
       duelWins: entity.duelWins || 0,
       duelLosses: entity.duelLosses || 0,
@@ -11404,15 +11359,6 @@ export function attemptBreakthrough(state) {
   return resolvePlayerBreakthrough(state);
 }
 
-export function updatePlayerBattleStrategy(state, payload = {}) {
-  ensureStateShape(state);
-  const strategy = String(payload.strategy || "");
-  if (!battleStrategies.includes(strategy)) throw new Error("未知斗法策略。 ");
-  state.player.battleStrategy = strategy;
-  log(state, `你已将斗法策略调整为「${battleStrategyLabel(strategy)}」。`, "gold");
-  return { strategy };
-}
-
 export function runDungeon(state, id) {
   const dungeon = dungeons.find((item) => item.id === id);
   if (!dungeon) throw new Error("未知副本");
@@ -11622,8 +11568,6 @@ function runDuelMatch(state, left, right, options = {}) {
   replay.kind = options.tournament ? "duel-tournament" : "duel";
   replay.tournament = options.tournament || null;
   replay.seed = battleSeed;
-  replay.left.strategy = battleStrategyProfile(leftBefore).strategy;
-  replay.right.strategy = battleStrategyProfile(rightBefore).strategy;
   const replayId = `duel-${state.day}-${left.id}-${right.id}-${foughtAt}`;
   replay.replayId = replayId;
   queueBattleReplay(state, replay, options.matchId || "");

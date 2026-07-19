@@ -113,7 +113,7 @@ for (const route of daoTrialRoutes) {
         const refreshed = getPublicState(routeState).daoTrial.activeRun;
         advanceDaoTrial(routeState, { action: "seal", sealId: refreshed.sealOffer[0].id });
       } else if (run.currentNode.type === "battle") {
-        advanceDaoTrial(routeState, { strategy: run.battleStrategies[attempt % run.battleStrategies.length].id });
+        advanceDaoTrial(routeState, {});
       } else {
         advanceDaoTrial(routeState, { optionId: run.eventOptions[attempt % run.eventOptions.length].id });
       }
