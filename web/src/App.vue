@@ -82,7 +82,7 @@
           <section class="loot-ticker" v-if="dailyTickerItems.length" aria-label="今日修行播报">
             <span class="loot-ticker-label">今日播报</span>
             <div class="loot-ticker-track">
-              <div class="loot-ticker-content">
+              <div class="loot-ticker-content" :style="dailyTickerStyle">
                 <span v-for="item in dailyTickerItems" :key="item.key">
                   <em class="loot-source">{{ item.label }}</em>
                   <strong>{{ item.name }}</strong>
@@ -4543,8 +4543,8 @@
             <form v-else-if="adminMode === 'settings'" class="admin-editor admin-game-settings" @submit.prevent="saveGameSettings">
               <div class="admin-editor-head">
                 <div>
-                  <strong>任务修行设置</strong>
-                  <small>调整后会立即应用到后续任务的有效修为结算与任务页显示。</small>
+                  <strong>任务、战斗与播报设置</strong>
+                  <small>调整后会立即应用到后续任务结算、战斗回放和顶部今日播报。</small>
                 </div>
               </div>
               <div class="admin-editor-section">
@@ -4553,6 +4553,26 @@
                   <span>满额额度</span>
                   <input v-model.number="adminGameSettingsDraft.taskDailyFullXpBudget" type="number" min="0" max="100000" step="1">
                   <small>当天累计基础修为超过此额度后，超出部分按既有衰减规则结算。</small>
+                </label>
+              </div>
+              <div class="admin-editor-section">
+                <div class="admin-section-title">战斗回放速度</div>
+                <label>
+                  <span>播放倍率</span>
+                  <select v-model.number="adminGameSettingsDraft.battleReplaySpeed">
+                    <option v-for="option in battleReplaySpeedOptions" :key="`replay-speed-${option.value}`" :value="option.value">{{ option.label }}</option>
+                  </select>
+                  <small>倍率越高，战斗事件切换越快；仅影响前端回放播放，不改变战斗结算结果。</small>
+                </label>
+              </div>
+              <div class="admin-editor-section">
+                <div class="admin-section-title">今日播报速度</div>
+                <label>
+                  <span>滚动倍率</span>
+                  <select v-model.number="adminGameSettingsDraft.dailyTickerSpeed">
+                    <option v-for="option in dailyTickerSpeedOptions" :key="`ticker-speed-${option.value}`" :value="option.value">{{ option.label }}</option>
+                  </select>
+                  <small>倍率越高，顶部“今日播报”滚动越快；不影响播报内容。</small>
                 </label>
               </div>
               <div class="admin-actions">
@@ -4802,7 +4822,7 @@ const emptyState = {
   sect: { reputation: 0 },
   npcs: [],
   tasks: [],
-  gameSettings: { taskDailyFullXpBudget: 500 },
+  gameSettings: { taskDailyFullXpBudget: 500, battleReplaySpeed: 1, dailyTickerSpeed: 1 },
   taskDefinitions: [],
   taskCompletions: [],
   taskMultiplierRecords: [],
@@ -4981,7 +5001,27 @@ const adminSelectedCultivatorId = ref("player");
 const adminSelectedSectName = ref("");
 const adminSelectedTaskId = ref("");
 const adminWikiArticleId = ref("getting-started");
-const adminGameSettingsDraft = reactive({ taskDailyFullXpBudget: 500 });
+const adminGameSettingsDraft = reactive({ taskDailyFullXpBudget: 500, battleReplaySpeed: 1, dailyTickerSpeed: 1 });
+const battleReplaySpeedOptions = [
+  { value: 0.5, label: "0.5x · 慢速" },
+  { value: 0.75, label: "0.75x" },
+  { value: 1, label: "1x · 标准" },
+  { value: 1.25, label: "1.25x" },
+  { value: 1.5, label: "1.5x" },
+  { value: 2, label: "2x · 快速" },
+  { value: 3, label: "3x" },
+  { value: 4, label: "4x · 极速" }
+];
+const dailyTickerSpeedOptions = [
+  { value: 0.5, label: "0.5x · 慢速" },
+  { value: 0.75, label: "0.75x" },
+  { value: 1, label: "1x · 标准" },
+  { value: 1.25, label: "1.25x" },
+  { value: 1.5, label: "1.5x" },
+  { value: 2, label: "2x · 快速" },
+  { value: 3, label: "3x" },
+  { value: 4, label: "4x · 极速" }
+];
 const sectMemberPanelEl = ref(null);
 const sectWarPanelEl = ref(null);
 const sectWarPanelHeight = ref(0);
@@ -6727,6 +6767,11 @@ const dailyTickerItems = computed(() => {
     });
   }
   return items;
+});
+const dailyTickerStyle = computed(() => {
+  const speed = Number(gameState.value.gameSettings?.dailyTickerSpeed);
+  const normalizedSpeed = Number.isFinite(speed) && speed > 0 ? speed : 1;
+  return { animationDuration: `${Math.round(52000 / normalizedSpeed)}ms` };
 });
 const equipmentList = computed(() => {
   const catalogSource = catalog.value.equipmentCatalog?.length ? catalog.value.equipmentCatalog : fallbackEquipmentCatalog;
@@ -10480,7 +10525,13 @@ async function openReplay(record, fallbackRecord = null, target = captureBattleR
     openBattleReplay(source.replay, target);
     return;
   }
-  if (!source.replayId) return;
+  if (!source.replayId) {
+    if (source.fallbackReplay) {
+      openBattleReplay(source.fallbackReplay, target);
+      error.value = "";
+    }
+    return;
+  }
   openReplayLoading(target);
   setActionPending("/api/battles/replay", true);
   try {
@@ -10500,8 +10551,13 @@ async function openReplay(record, fallbackRecord = null, target = captureBattleR
     openBattleReplay(response.replay, target);
     error.value = "";
   } catch (err) {
-    cancelReplayLoading();
-    error.value = err.message;
+    if (source.fallbackReplay) {
+      openBattleReplay(source.fallbackReplay, target);
+      error.value = "";
+    } else {
+      cancelReplayLoading();
+      error.value = err.message;
+    }
   } finally {
     setActionPending("/api/battles/replay", false);
   }
@@ -10717,6 +10773,10 @@ function syncAdminTaskDraft(task = adminTaskDefinition.value || filteredAdminTas
 function syncAdminGameSettingsDraft() {
   const value = Number(gameState.value.gameSettings?.taskDailyFullXpBudget);
   adminGameSettingsDraft.taskDailyFullXpBudget = Number.isFinite(value) ? value : 500;
+  const speed = Number(gameState.value.gameSettings?.battleReplaySpeed);
+  adminGameSettingsDraft.battleReplaySpeed = Number.isFinite(speed) ? speed : 1;
+  const tickerSpeed = Number(gameState.value.gameSettings?.dailyTickerSpeed);
+  adminGameSettingsDraft.dailyTickerSpeed = Number.isFinite(tickerSpeed) ? tickerSpeed : 1;
 }
 
 function selectAdminTask(id) {
@@ -10775,7 +10835,9 @@ async function saveTaskDefinition() {
 
 async function saveGameSettings() {
   const value = Math.max(0, Math.min(100000, Math.floor(adminNumber(adminGameSettingsDraft.taskDailyFullXpBudget, 500))));
-  const saved = await act("/api/admin/settings", { taskDailyFullXpBudget: value }, { scope: "lite", markStale: true });
+  const speed = Math.max(0.5, Math.min(4, Math.round(adminNumber(adminGameSettingsDraft.battleReplaySpeed, 1) * 4) / 4));
+  const tickerSpeed = Math.max(0.5, Math.min(4, Math.round(adminNumber(adminGameSettingsDraft.dailyTickerSpeed, 1) * 4) / 4));
+  const saved = await act("/api/admin/settings", { taskDailyFullXpBudget: value, battleReplaySpeed: speed, dailyTickerSpeed: tickerSpeed }, { scope: "lite", markStale: true });
   if (saved) syncAdminGameSettingsDraft();
 }
 
@@ -11985,10 +12047,12 @@ function playBattle() {
   battleCursor.value = 0;
   const total = lastBattle.value?.events.length || 0;
   if (!total) return;
+  const speed = Number(gameState.value?.gameSettings?.battleReplaySpeed);
+  const replayInterval = Math.max(120, Math.round(680 / (Number.isFinite(speed) && speed > 0 ? speed : 1)));
   battleTimer = setInterval(() => {
     battleCursor.value += 1;
     if (battleCursor.value >= total) clearInterval(battleTimer);
-  }, 680);
+  }, replayInterval);
 }
 
 function replayBattle() {

@@ -56,6 +56,12 @@ const taskMultiplierRecordDays = 3;
 const taskProgressRecordDays = 15;
 const defaultTaskDailyFullXpBudget = 500;
 const maxTaskDailyFullXpBudget = 100000;
+const defaultBattleReplaySpeed = 1;
+const minBattleReplaySpeed = 0.5;
+const maxBattleReplaySpeed = 4;
+const defaultDailyTickerSpeed = 1;
+const minDailyTickerSpeed = 0.5;
+const maxDailyTickerSpeed = 4;
 const taskDailyReducedXpMultiplier = 0.4;
 const permanentStatSoftCap = 36;
 const battleStrategies = ["balanced", "burst", "guard", "focus"];
@@ -6745,6 +6751,18 @@ function taskDailyFullXpBudget(state) {
   return clamp(Math.floor(value), 0, maxTaskDailyFullXpBudget);
 }
 
+function battleReplaySpeed(state) {
+  const value = Number(state.gameSettings?.battleReplaySpeed);
+  if (!Number.isFinite(value)) return defaultBattleReplaySpeed;
+  return clamp(Math.round(value * 4) / 4, minBattleReplaySpeed, maxBattleReplaySpeed);
+}
+
+function dailyTickerSpeed(state) {
+  const value = Number(state.gameSettings?.dailyTickerSpeed);
+  if (!Number.isFinite(value)) return defaultDailyTickerSpeed;
+  return clamp(Math.round(value * 4) / 4, minDailyTickerSpeed, maxDailyTickerSpeed);
+}
+
 function formatTaskProgressAmount(amount, definition) {
   const rounded = Math.round((Number(amount) || 0) * 100) / 100;
   return `${rounded}${definition?.unitName ? ` ${definition.unitName}` : ""}`;
@@ -8207,7 +8225,11 @@ export function createDefaultState() {
     taskDefinitions: defaultRealityTasks(),
     taskCompletions: [],
     taskProgress: {},
-    gameSettings: { taskDailyFullXpBudget: defaultTaskDailyFullXpBudget },
+    gameSettings: {
+      taskDailyFullXpBudget: defaultTaskDailyFullXpBudget,
+      battleReplaySpeed: defaultBattleReplaySpeed,
+      dailyTickerSpeed: defaultDailyTickerSpeed
+    },
     taskMultiplierRecords: [{ day: 1, date: openingDate, elixirMultiplier: 1, totalMultiplier: 1 }],
     encounters: {
       version: encounterStateVersion,
@@ -8590,7 +8612,9 @@ export function ensureStateShape(state) {
   changed = ensureTaskSystem(state) || changed;
   const gameSettingsBefore = JSON.stringify(state.gameSettings || {});
   state.gameSettings = {
-    taskDailyFullXpBudget: taskDailyFullXpBudget(state)
+    taskDailyFullXpBudget: taskDailyFullXpBudget(state),
+    battleReplaySpeed: battleReplaySpeed(state),
+    dailyTickerSpeed: dailyTickerSpeed(state)
   };
   changed = changed || gameSettingsBefore !== JSON.stringify(state.gameSettings);
   if (Array.isArray(state.taskCompletions)) {
@@ -9415,6 +9439,7 @@ function getHomeState(state) {
     taskDefinitions: state.taskDefinitions,
     taskCompletions: state.taskCompletions,
     taskProgress: publicTaskProgress(state),
+    gameSettings: state.gameSettings,
     taskMultiplierRecords: state.taskMultiplierRecords,
     encounters: publicEncounters(state),
     daoTrial: publicDaoTrial(state),
@@ -11045,8 +11070,18 @@ export function updateGameSettings(state, payload = {}) {
   ensureStateShape(state);
   const requestedBudget = Number(payload.taskDailyFullXpBudget);
   if (!Number.isFinite(requestedBudget)) throw new Error("有效任务修为额度必须是数字");
+  const requestedSpeed = payload.battleReplaySpeed === undefined
+    ? state.gameSettings.battleReplaySpeed
+    : Number(payload.battleReplaySpeed);
+  if (!Number.isFinite(requestedSpeed)) throw new Error("战斗回放速度必须是数字");
+  const requestedTickerSpeed = payload.dailyTickerSpeed === undefined
+    ? state.gameSettings.dailyTickerSpeed
+    : Number(payload.dailyTickerSpeed);
+  if (!Number.isFinite(requestedTickerSpeed)) throw new Error("今日播报速度必须是数字");
   state.gameSettings.taskDailyFullXpBudget = clamp(Math.floor(requestedBudget), 0, maxTaskDailyFullXpBudget);
-  log(state, `后台将每日有效任务修为额度调整为 ${state.gameSettings.taskDailyFullXpBudget}。`, "gold");
+  state.gameSettings.battleReplaySpeed = battleReplaySpeed({ gameSettings: { battleReplaySpeed: requestedSpeed } });
+  state.gameSettings.dailyTickerSpeed = dailyTickerSpeed({ gameSettings: { dailyTickerSpeed: requestedTickerSpeed } });
+  log(state, `后台将每日有效任务修为额度调整为 ${state.gameSettings.taskDailyFullXpBudget}，战斗回放速度调整为 ${state.gameSettings.battleReplaySpeed}x，今日播报速度调整为 ${state.gameSettings.dailyTickerSpeed}x。`, "gold");
   return { ...state.gameSettings };
 }
 

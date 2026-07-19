@@ -8,6 +8,7 @@ import { clearProgressHistory, compactStateForStorage, createDefaultState, dateK
 const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const dataDir = join(rootDir, "data");
 const dbPath = process.env.GAME_DB_PATH || join(dataDir, "game.sqlite");
+const battleDbPath = process.env.BATTLE_DB_PATH || join(dirname(dbPath), "battle.sqlite");
 const wasmPath = join(rootDir, "node_modules", "sql.js", "dist", "sql-wasm.wasm");
 const defaultRegistrationCode = "Rushac";
 const sessionMaxAgeSeconds = 60 * 60 * 24 * 30;
@@ -15,11 +16,15 @@ const sessionMaxAgeSeconds = 60 * 60 * 24 * 30;
 mkdirSync(dataDir, { recursive: true });
 
 let dbPromise;
+let battleDbPromise;
+let battleStoragePromise;
 const stateCache = new Map();
 const stateValidationCache = new Map();
 const publicStateCache = new Map();
 let deferredPersistTimer = null;
 let deferredPersistDb = null;
+let deferredBattlePersistTimer = null;
+let deferredBattlePersistDb = null;
 
 async function openDb() {
   if (!dbPromise) {
@@ -33,18 +38,6 @@ async function openDb() {
           id TEXT PRIMARY KEY,
           state_json TEXT NOT NULL,
           updated_at TEXT NOT NULL
-        );
-      `);
-      db.run(`
-        CREATE TABLE IF NOT EXISTS battle_replays (
-          id TEXT PRIMARY KEY,
-          save_id TEXT NOT NULL,
-          kind TEXT NOT NULL,
-          day INTEGER,
-          match_id TEXT,
-          replay_json TEXT NOT NULL,
-          created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
       `);
       db.run(`
@@ -82,7 +75,6 @@ async function openDb() {
           expires_at TEXT NOT NULL
         );
       `);
-      db.run("CREATE INDEX IF NOT EXISTS idx_battle_replays_save ON battle_replays (save_id);");
       db.run("CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions (user_id);");
       seedRegistrationCode(db);
       persist(db);
@@ -90,6 +82,42 @@ async function openDb() {
     });
   }
   return dbPromise;
+}
+
+async function openBattleDb() {
+  if (!battleDbPromise) {
+    battleDbPromise = initSqlJs({ wasmBinary: readFileSync(wasmPath) }).then((SQL) => {
+      const db = existsSync(battleDbPath)
+        ? new SQL.Database(readFileSync(battleDbPath))
+        : new SQL.Database();
+      db.run(`
+        CREATE TABLE IF NOT EXISTS battle_replays (
+          id TEXT PRIMARY KEY,
+          save_id TEXT NOT NULL,
+          kind TEXT NOT NULL,
+          day INTEGER,
+          match_id TEXT,
+          replay_json TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+      db.run("CREATE INDEX IF NOT EXISTS idx_battle_replays_save_day ON battle_replays (save_id, day);");
+      persistBattleDb(db);
+      return db;
+    });
+  }
+  return battleDbPromise;
+}
+
+async function ensureBattleStorage(mainDb) {
+  if (!battleStoragePromise) {
+    battleStoragePromise = openBattleDb().then(async (battleDb) => {
+      await migrateLegacyBattleReplays(mainDb, battleDb);
+      return battleDb;
+    });
+  }
+  return battleStoragePromise;
 }
 
 function seedRegistrationCode(db) {
@@ -109,6 +137,56 @@ function persist(db) {
   writeFileSync(dbPath, Buffer.from(db.export()));
 }
 
+function persistBattleDb(db) {
+  writeFileSync(battleDbPath, Buffer.from(db.export()));
+}
+
+function migrateLegacyBattleReplays(mainDb, battleDb) {
+  const tableResult = mainDb.exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'battle_replays' LIMIT 1");
+  if (!tableResult.length || !tableResult[0].values.length) return false;
+
+  const rows = mainDb.exec(`
+    SELECT id, save_id, kind, day, match_id, replay_json, created_at, updated_at
+    FROM battle_replays
+  `);
+  const values = rows.length ? rows[0].values : [];
+  if (values.length) {
+    const statement = battleDb.prepare(`
+      INSERT INTO battle_replays (id, save_id, kind, day, match_id, replay_json, created_at, updated_at)
+      VALUES ($id, $saveId, $kind, $day, $matchId, $replay, COALESCE($createdAt, datetime('now')), COALESCE($updatedAt, datetime('now')))
+      ON CONFLICT(id) DO UPDATE SET
+        save_id = excluded.save_id,
+        kind = excluded.kind,
+        day = excluded.day,
+        match_id = excluded.match_id,
+        replay_json = excluded.replay_json,
+        updated_at = excluded.updated_at
+    `);
+    try {
+      for (const [id, saveId, kind, day, matchId, replay, createdAt, updatedAt] of values) {
+        statement.run({
+          $id: id,
+          $saveId: saveId,
+          $kind: kind || "battle",
+          $day: day === null ? null : Number(day) || null,
+          $matchId: matchId || "",
+          $replay: replay,
+          $createdAt: createdAt || null,
+          $updatedAt: updatedAt || null
+        });
+      }
+    } finally {
+      statement.free();
+    }
+    persistBattleDb(battleDb);
+  }
+
+  mainDb.run("DROP TABLE battle_replays");
+  mainDb.run("VACUUM");
+  persist(mainDb);
+  return values.length > 0;
+}
+
 function schedulePersist(db) {
   deferredPersistDb = db;
   if (deferredPersistTimer) return;
@@ -118,6 +196,18 @@ function schedulePersist(db) {
     deferredPersistDb = null;
     if (!targetDb) return;
     persist(targetDb);
+  }, 1200);
+}
+
+function scheduleBattlePersist(db) {
+  deferredBattlePersistDb = db;
+  if (deferredBattlePersistTimer) return;
+  deferredBattlePersistTimer = setTimeout(() => {
+    deferredBattlePersistTimer = null;
+    const targetDb = deferredBattlePersistDb;
+    deferredBattlePersistDb = null;
+    if (!targetDb) return;
+    persistBattleDb(targetDb);
   }, 1200);
 }
 
@@ -132,13 +222,27 @@ function flushDeferredPersist() {
   persist(targetDb);
 }
 
+function flushDeferredBattlePersist() {
+  if (deferredBattlePersistTimer) {
+    clearTimeout(deferredBattlePersistTimer);
+    deferredBattlePersistTimer = null;
+  }
+  if (!deferredBattlePersistDb) return;
+  const targetDb = deferredBattlePersistDb;
+  deferredBattlePersistDb = null;
+  persistBattleDb(targetDb);
+}
+
 process.once("beforeExit", flushDeferredPersist);
+process.once("beforeExit", flushDeferredBattlePersist);
 process.once("SIGINT", () => {
   flushDeferredPersist();
+  flushDeferredBattlePersist();
   process.exit(130);
 });
 process.once("SIGTERM", () => {
   flushDeferredPersist();
+  flushDeferredBattlePersist();
   process.exit(143);
 });
 
@@ -406,6 +510,7 @@ export async function readState(id = "default") {
   }
 
   const db = await openDb();
+  const battleDb = await ensureBattleStorage(db);
   const result = db.exec("SELECT state_json FROM saves WHERE id = $id", { $id: id });
 
   if (!result.length || !result[0].values.length) {
@@ -417,7 +522,8 @@ export async function readState(id = "default") {
   const state = JSON.parse(result[0].values[0][0]);
   stateCache.set(id, state);
   const needsReplayMigration = Number(state.storageCompactionVersion || 0) < 1;
-  const replaysMigrated = needsReplayMigration ? extractBattleReplays(db, state, id) : false;
+  const replaysMigrated = needsReplayMigration ? extractBattleReplays(battleDb, state, id) : false;
+  if (replaysMigrated) persistBattleDb(battleDb);
   const shapeChanged = ensureStateShape(state);
   const settled = settleIfNeeded(state);
   if (shapeChanged || settled || replaysMigrated) await writeState(state, id, { vacuum: needsReplayMigration });
@@ -427,9 +533,10 @@ export async function readState(id = "default") {
 
 export async function writeState(state, id = "default", options = {}) {
   const db = await openDb();
-  writePendingBattleReplays(db, state, id);
+  const battleDb = await ensureBattleStorage(db);
+  const replaysWritten = writePendingBattleReplays(battleDb, state, id);
   compactStateForStorage(state, { skipReplayCompaction: options.skipReplayExtraction });
-  pruneBattleReplays(db, state, id);
+  const replaysPruned = pruneBattleReplays(battleDb, state, id);
   const statement = db.prepare(`
     INSERT INTO saves (id, state_json, updated_at)
     VALUES ($id, $state, datetime('now'))
@@ -446,6 +553,10 @@ export async function writeState(state, id = "default", options = {}) {
   publicStateCache.delete(id);
   if (options.deferPersist) schedulePersist(db);
   else persist(db);
+  if (replaysWritten || replaysPruned) {
+    if (options.deferPersist) scheduleBattlePersist(battleDb);
+    else persistBattleDb(battleDb);
+  }
 }
 
 function pruneBattleReplays(db, state, saveId) {
@@ -453,6 +564,7 @@ function pruneBattleReplays(db, state, saveId) {
   const statement = db.prepare("DELETE FROM battle_replays WHERE save_id = $saveId AND day IS NOT NULL AND day < $minDay");
   try {
     statement.run({ $saveId: saveId, $minDay: minDay });
+    return db.getRowsModified() > 0;
   } finally {
     statement.free();
   }
@@ -555,7 +667,8 @@ function preserveReplaySummary(record, replay) {
 }
 
 export async function readBattleReplay(replayId, id = "default") {
-  const db = await openDb();
+  const mainDb = await openDb();
+  const db = await ensureBattleStorage(mainDb);
   const result = db.exec(
     "SELECT replay_json, day, kind FROM battle_replays WHERE id = $id AND save_id = $saveId LIMIT 1",
     { $id: replayId, $saveId: id }
@@ -594,11 +707,13 @@ export async function resetState(id = "default", options = {}) {
   }
 
   const db = await openDb();
+  const battleDb = await ensureBattleStorage(db);
   const statement = db.prepare("DELETE FROM saves WHERE id = $id");
   statement.run({ $id: id });
   statement.free();
-  const replayStatement = db.prepare("DELETE FROM battle_replays WHERE save_id = $id");
+  const replayStatement = battleDb.prepare("DELETE FROM battle_replays WHERE save_id = $id");
   replayStatement.run({ $id: id });
+  const replayRowsDeleted = battleDb.getRowsModified() > 0;
   replayStatement.free();
   const metaStatement = db.prepare("DELETE FROM save_meta WHERE id = $id");
   metaStatement.run({ $id: id });
@@ -607,6 +722,7 @@ export async function resetState(id = "default", options = {}) {
   stateValidationCache.delete(id);
   publicStateCache.delete(id);
   persist(db);
+  if (replayRowsDeleted) persistBattleDb(battleDb);
 
   const state = preserveProfilesForReset(clearProgressHistory(createDefaultState()), previousState);
   await writeState(state, id);
