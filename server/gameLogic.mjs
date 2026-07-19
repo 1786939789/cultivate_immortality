@@ -1281,6 +1281,7 @@ function ensureField(object, key, value) {
 
 const equipmentSlotMap = Object.fromEntries(equipmentSlots.map((slot) => [slot.id, slot]));
 const equipmentTierMap = Object.fromEntries(equipmentTiers.map((tier) => [tier.id, tier]));
+const equipmentCatalogMap = Object.fromEntries(equipmentCatalog.map((item) => [item.id, item]));
 const spiritPearlMap = Object.fromEntries(spiritPearls.map((pearl) => [pearl.id, pearl]));
 const equipmentVersion = 3;
 const dungeonRecordVersion = 4;
@@ -1290,6 +1291,7 @@ const starSeaTeamSize = 10;
 const starSeaCycleLength = 10;
 const starSeaCycleHistoryLimit = 10;
 const starSeaMaxRounds = 100;
+const replicaDropChanceMultiplier = 1.3;
 // Daily auctions stay uncommon so the 10-day finale remains the primary reward.
 const starSeaDailyDropChance = 0.03;
 const starSeaCycleDropChance = 0.5;
@@ -1513,19 +1515,24 @@ function equipmentSlot(item) {
 }
 
 function equipmentScore(item) {
-  return (item?.tier || 0) * 100 + Math.round((item?.bonus || 0) * 1000);
+  // Genuine equipment tiers already have non-overlapping bonus ranges. Once
+  // replicas exist, their half-strength bonuses can overlap lower genuine
+  // tiers, so the actual bonus must decide which item is automatically worn.
+  return Math.round((item?.bonus || 0) * 100000) + (item?.tier || 0);
 }
 
 function equipmentValue(item) {
-  const tier = clamp(Number(item?.tier || 1), 1, equipmentTiers.length);
+  const reference = item?.isReplica ? equipmentCatalogMap[item.sourceItemId] || item : item;
+  const tier = clamp(Number(reference?.tier || 1), 1, equipmentTiers.length);
   const baseByTier = [220, 320, 500, 800, 1350, 2700];
-  const tierData = equipmentTier(item);
+  const tierData = equipmentTier(reference);
   const minBonus = tierData.min || 0;
   const maxBonus = tierData.max || minBonus + 0.01;
-  const bonusRatio = clamp(((item?.bonus || minBonus) - minBonus) / Math.max(0.01, maxBonus - minBonus), 0, 1);
+  const bonusRatio = clamp(((reference?.bonus || minBonus) - minBonus) / Math.max(0.01, maxBonus - minBonus), 0, 1);
   const spread = [40, 80, 140, 240, 500, 500][tier - 1] || 80;
-  const slotPremium = item?.slot === "weapon" ? 40 : item?.slot === "trinket" ? 30 : item?.slot === "armor" ? 20 : 0;
-  return Math.max(200, Math.round(baseByTier[tier - 1] + spread * bonusRatio + slotPremium));
+  const slotPremium = reference?.slot === "weapon" ? 40 : reference?.slot === "trinket" ? 30 : reference?.slot === "armor" ? 20 : 0;
+  const value = Math.max(200, Math.round(baseByTier[tier - 1] + spread * bonusRatio + slotPremium));
+  return item?.isReplica ? Math.max(100, Math.round(value * 0.5)) : value;
 }
 
 function equipmentSellValue(item) {
@@ -1533,7 +1540,9 @@ function equipmentSellValue(item) {
 }
 
 function equipmentCompensation(item) {
-  return Math.max(8, Math.floor(14 + (item?.tier || 1) * 18 + (item?.bonus || 0) * 260));
+  const reference = item?.isReplica ? equipmentCatalogMap[item.sourceItemId] || item : item;
+  const compensation = Math.max(8, Math.floor(14 + (reference?.tier || 1) * 18 + (reference?.bonus || 0) * 260));
+  return item?.isReplica ? Math.max(4, Math.floor(compensation * 0.5)) : compensation;
 }
 
 function equipmentForOwner(state, ownerId) {
@@ -1890,9 +1899,11 @@ function dungeonLootBaseChance(item, depth = 1) {
 function dungeonLootChanceForItem(state, item, dungeonId, options = {}) {
   const depth = options.cave || options.depth || options.stage + 1 || 1;
   const day = options.day || state?.day || 1;
-  const seed = `${state?.calendarStartDate || ""}|${day}|${dungeonId}|${depth}|${item?.id}`;
+  const sourceItemId = item?.sourceItemId || item?.id;
+  const seed = `${state?.calendarStartDate || ""}|${day}|${dungeonId}|${depth}|${sourceItemId}`;
   const dailyMultiplier = 0.72 + stableUnit(seed) * 0.56;
-  return clamp(dungeonLootBaseChance(item, depth) * dailyMultiplier, 0.000001, 0.01);
+  const replicaMultiplier = item?.isReplica ? replicaDropChanceMultiplier : 1;
+  return clamp(dungeonLootBaseChance(item, depth) * dailyMultiplier * replicaMultiplier, 0.000001, 0.01);
 }
 
 function availableDungeonEquipmentPool(state, dungeonId, maxTier = equipmentTiers.length) {
@@ -1994,6 +2005,8 @@ function publicEquipment(item, state) {
   const owner = item.ownerId ? cultivatorMap(state).get(item.ownerId) : null;
   return {
     ...item,
+    isReplica: Boolean(item.isReplica),
+    sourceItemId: item.sourceItemId || item.id,
     slotName: equipmentSlot(item).name,
     stat: equipmentSlot(item).stat,
     statName: equipmentSlot(item).statName,
@@ -3490,7 +3503,7 @@ function pickWeightedStarSeaEquipment(items) {
   if (!items.length) return null;
   const weighted = items.map((item) => ({
     item,
-    weight: 1 / Math.pow(Math.max(1, item.tier || 1), 2.8)
+    weight: (item.isReplica ? replicaDropChanceMultiplier : 1) / Math.pow(Math.max(1, item.tier || 1), 2.8)
   }));
   const total = weighted.reduce((sum, entry) => sum + entry.weight, 0);
   let roll = Math.random() * total;
@@ -9176,7 +9189,9 @@ function equipmentTransferSource(drop) {
 }
 
 function formatPercentText(value) {
-  return typeof value === "number" ? `${Math.round(value * 100)}%` : "未记录";
+  if (typeof value !== "number") return "未记录";
+  const percent = value * 100;
+  return `${Number.isInteger(percent) ? percent : Number(percent.toFixed(1))}%`;
 }
 
 function skillRankText(rank) {

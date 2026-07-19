@@ -15,7 +15,7 @@ export const equipmentTiers = [
   { id: 6, name: "通天灵宝", min: 0.3, max: 0.4, stealChance: 0.0005 }
 ];
 
-export const equipmentCatalog = [
+const genuineEquipmentCatalog = [
   { id: "green_bamboo_cloud_sword", name: "青竹蜂云剑", slot: "weapon", tier: 4, bonus: 0.18 },
   { id: "gold_thunder_bamboo_sword", name: "金雷竹剑", slot: "weapon", tier: 5, bonus: 0.25 },
   { id: "blood_shadow_blade", name: "血影刃", slot: "weapon", tier: 3, bonus: 0.13 },
@@ -131,4 +131,20 @@ export const equipmentCatalog = [
   { id: "wide_cold_moon_crown", name: "月华仙冠", slot: "head", tier: 6, bonus: 0.34, setId: "wide_cold_immortal_relic", setName: "广寒界仙遗套" },
   { id: "wide_cold_frost_boots", name: "凌霜仙履", slot: "legs", tier: 6, bonus: 0.35, setId: "wide_cold_immortal_relic", setName: "广寒界仙遗套" },
   { id: "wide_cold_jade_bi", name: "广寒玉璧", slot: "trinket", tier: 6, bonus: 0.39, setId: "wide_cold_immortal_relic", setName: "广寒界仙遗套" }
+];
+
+// Each entry remains a globally unique piece of equipment. Replicas reuse the
+// original's slot, tier and source, but contribute exactly half its bonus.
+const makeReplica = (item) => ({
+  ...item,
+  id: `replica_${item.id}`,
+  name: `仿·${item.name}`,
+  bonus: item.bonus * 0.5,
+  isReplica: true,
+  sourceItemId: item.id
+});
+
+export const equipmentCatalog = [
+  ...genuineEquipmentCatalog,
+  ...genuineEquipmentCatalog.map(makeReplica)
 ];

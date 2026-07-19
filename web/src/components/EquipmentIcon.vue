@@ -24,7 +24,8 @@ const fallbackBySlot = {
 };
 
 const useFallback = ref(false);
-const iconUrl = computed(() => `/assets/equipment-icons/items/${props.id}.webp?v=6`);
+const visualId = computed(() => props.id.replace(/^replica_/, ""));
+const iconUrl = computed(() => `/assets/equipment-icons/items/${visualId.value}.webp?v=6`);
 const alt = computed(() => `${props.name}图标`);
 const fallbackText = computed(() => fallbackBySlot[props.slot] || fallbackBySlot.trinket);
 

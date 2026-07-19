@@ -402,7 +402,7 @@
                 <button class="link-button" type="button" @click="switchTab('equipment')">查看全部 ›</button>
               </div>
               <div class="equipment-showcase">
-                <div class="gear-slot" v-for="item in showcaseEquipment" :key="item.id" :class="`tier-${item.tier}`" :title="`${item.name} · ${item.statName} +${formatPercent(item.bonus)}`" :data-tooltip="`${item.name} · ${item.statName} +${formatPercent(item.bonus)}`" :aria-label="`${item.name}，${item.statName} +${formatPercent(item.bonus)}`">
+                <div class="gear-slot" v-for="item in showcaseEquipment" :key="item.id" :class="`tier-${item.tier}`" :title="`${item.name} · ${item.statName} +${formatEquipmentPercent(item.bonus)}`" :data-tooltip="`${item.name} · ${item.statName} +${formatEquipmentPercent(item.bonus)}`" :aria-label="`${item.name}，${item.statName} +${formatEquipmentPercent(item.bonus)}`">
                   <EquipmentIcon :id="item.id" :name="item.name" :slot="item.slot" :tier="item.tier" />
                   <span>+{{ Math.round((item.bonus || 0) * 100) }}</span>
                 </div>
@@ -1466,7 +1466,7 @@
                     <EquipmentIcon :id="item.id" :name="item.name" :slot="item.slot" :tier="item.tier" />
                     <span class="cave-loot-tip" role="tooltip">
                       <strong>{{ item.tierName }}「{{ item.name }}」</strong>
-                      <small>{{ item.slotName }} · {{ item.statName }} +{{ formatPercent(item.bonus) }}</small>
+                      <small>{{ item.slotName }} · {{ item.statName }} +{{ formatEquipmentPercent(item.bonus) }}</small>
                       <small>本关概率 {{ lootItemChanceText(item, cave.cave) }}</small>
                     </span>
                   </span>
@@ -1526,7 +1526,7 @@
                     <EquipmentIcon :id="item.id" :name="item.name" :slot="item.slot" :tier="item.tier" />
                     <span class="cave-loot-tip" role="tooltip">
                       <strong>{{ item.tierName }}「{{ item.name }}」</strong>
-                      <small>{{ item.tierName }} · {{ item.statName }} +{{ formatPercent(item.bonus) }}</small>
+                      <small>{{ item.tierName }} · {{ item.statName }} +{{ formatEquipmentPercent(item.bonus) }}</small>
                       <small v-for="line in voidHallItemChanceLines(item)" :key="`${item.id}-${line}`">{{ line }}</small>
                     </span>
                   </span>
@@ -1816,7 +1816,7 @@
                   <EquipmentIcon :id="item.id" :name="item.name" :slot="item.slot" :tier="item.tier" />
                   <span>
                     <b>{{ item.name }} <em>{{ item.tierName }}</em></b>
-                    <small>{{ item.statName }} +{{ formatPercent(item.bonus) }} · {{ item.value || 200 }} 灵石</small>
+                    <small>{{ item.statName }} +{{ formatEquipmentPercent(item.bonus) }} · {{ item.value || 200 }} 灵石</small>
                   </span>
                 </span>
               </div>
@@ -3501,7 +3501,7 @@
             <div class="section-head">
               <div>
                 <h3>装备图鉴</h3>
-                <p>唯一装备 · 自动穿戴最优同部位。</p>
+                <p>唯一装备 · 含真品与仿制品 · 自动穿戴最优同部位。</p>
               </div>
               <span class="tag">已获取 {{ equipmentCollectionCount.acquired }} / 总数 {{ equipmentCollectionCount.total }}</span>
             </div>
@@ -3543,7 +3543,7 @@
                 class="equipment-card"
                 v-for="item in filteredEquipment"
                 :key="item.id"
-                :class="[`tier-${item.tier}`, { owned: item.ownerName, equipped: item.equipped }]"
+                :class="[`tier-${item.tier}`, { owned: item.ownerName, equipped: item.equipped, replica: item.isReplica }]"
                 :aria-label="equipmentCardAria(item)"
                 tabindex="0"
               >
@@ -6656,7 +6656,7 @@ const dailyTickerItems = computed(() => {
       key: `equipment-${drop.winnerId || drop.winnerName}-${drop.itemId || drop.itemName}-${equipmentDropKind(drop)}`,
       label: "装备",
       name: drop.winnerName,
-      text: `在 ${equipmentDropSource(drop)} 获得${drop.tierName || "法器"}「${drop.itemName}」 · ${equipmentDropSlotName(drop)} · ${equipmentDropStatName(drop)} +${formatPercent(equipmentDropBonus(drop))}${equipmentDropKind(drop) === "steal" && drop.loserName ? ` · 来自 ${drop.loserName}` : ""}`
+      text: `在 ${equipmentDropSource(drop)} 获得${drop.tierName || "法器"}「${drop.itemName}」 · ${equipmentDropSlotName(drop)} · ${equipmentDropStatName(drop)} +${formatEquipmentPercent(equipmentDropBonus(drop))}${equipmentDropKind(drop) === "steal" && drop.loserName ? ` · 来自 ${drop.loserName}` : ""}`
     })));
     if (drops.length > 6) {
       items.push({
@@ -7859,7 +7859,7 @@ function playerEquipmentHomeLogs(day) {
       order: 760 + index,
       category: "equipment",
       type: "good",
-      text: `装备${kind === "steal" ? "流转" : "掉落"}，${owner}在 ${source} ${action}${drop.tierName || "法器"}「${drop.itemName}」 · ${equipmentDropSlotName(drop)} · ${equipmentDropStatName(drop)} +${formatPercent(equipmentDropBonus(drop))}${loser}。`
+      text: `装备${kind === "steal" ? "流转" : "掉落"}，${owner}在 ${source} ${action}${drop.tierName || "法器"}「${drop.itemName}」 · ${equipmentDropSlotName(drop)} · ${equipmentDropStatName(drop)} +${formatEquipmentPercent(equipmentDropBonus(drop))}${loser}。`
     };
   });
   if (drops.length > 6) {
@@ -9374,7 +9374,8 @@ function equipmentDropSourceLines(item) {
 
 function equipmentDetailRows(item) {
   return [
-    { label: "加成", value: `${item.statName} +${formatPercent(item.bonus)}` },
+    { label: "品相", value: item.isReplica ? "仿制品（属性为真品 50%）" : "真品" },
+    { label: "加成", value: `${item.statName} +${formatEquipmentPercent(item.bonus)}` },
     { label: "价值", value: `${equipmentDisplayValue(item)} 灵石` },
     { label: "品质", value: item.tierName || equipmentTierName(item.tier) },
     { label: "部位", value: item.slotName || equipmentSlotName(item.slot) },
@@ -9385,7 +9386,7 @@ function equipmentDetailRows(item) {
 }
 
 function equipmentCardAria(item) {
-  return `${item.name}，${item.tierName}，${item.statName} +${formatPercent(item.bonus)}，价值 ${equipmentDisplayValue(item)} 灵石，归属 ${item.ownerName || "无归属"}`;
+  return `${item.name}，${item.isReplica ? "仿制品" : "真品"}，${item.tierName}，${item.statName} +${formatEquipmentPercent(item.bonus)}，价值 ${equipmentDisplayValue(item)} 灵石，归属 ${item.ownerName || "无归属"}`;
 }
 
 function equippedFor(person) {
@@ -9400,7 +9401,7 @@ function equippedInSlot(person, slotId) {
 function equipmentSlotSummary(person, slot) {
   const item = equippedInSlot(person, slot.id);
   if (!item) return `${slot.statName || "属性"} +0%`;
-  return `${item.tierName} · ${item.statName} +${formatPercent(item.bonus)}`;
+  return `${item.tierName} · ${item.statName} +${formatEquipmentPercent(item.bonus)}`;
 }
 
 function equipmentSlotTooltip(person, slot) {
@@ -9408,7 +9409,7 @@ function equipmentSlotTooltip(person, slot) {
   if (!item) return `${slot.name}：空`;
   const tierName = item.tierName || equipmentTierName(item.tier);
   const statName = item.statName || slot.statName || "属性";
-  return `${item.name} · ${tierName} · ${statName} +${formatPercent(item.bonus)}`;
+  return `${item.name} · ${tierName} · ${statName} +${formatEquipmentPercent(item.bonus)}`;
 }
 
 function equipmentSlotCardClass(person, slot) {
@@ -9868,6 +9869,12 @@ function formatPercent(value) {
   const percent = value * 100;
   if (percent > 0 && percent < 1) return "1%";
   return `${Math.round(percent)}%`;
+}
+
+function formatEquipmentPercent(value) {
+  if (typeof value !== "number") return "未记录";
+  const percent = value * 100;
+  return `${Number.isInteger(percent) ? percent : Number(percent.toFixed(1))}%`;
 }
 
 function realmBaseBreakChanceText(realm) {
