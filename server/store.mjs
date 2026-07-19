@@ -12,6 +12,8 @@ const battleDbPath = process.env.BATTLE_DB_PATH || join(dirname(dbPath), "battle
 const wasmPath = join(rootDir, "node_modules", "sql.js", "dist", "sql-wasm.wasm");
 const defaultRegistrationCode = "Rushac";
 const sessionMaxAgeSeconds = 60 * 60 * 24 * 30;
+const bootstrapAdminUsername = process.env.ADMIN_USERNAME || "csj-admin";
+const bootstrapAdminPassword = process.env.ADMIN_PASSWORD || "CsjAdmin#2026!";
 
 mkdirSync(dataDir, { recursive: true });
 
@@ -46,10 +48,12 @@ async function openDb() {
           username TEXT NOT NULL UNIQUE COLLATE NOCASE,
           password_hash TEXT NOT NULL,
           password_salt TEXT NOT NULL,
+          role TEXT NOT NULL DEFAULT 'user',
           created_at TEXT NOT NULL DEFAULT (datetime('now')),
           last_login_at TEXT
         );
       `);
+      ensureAuthUserRoleColumn(db);
       db.run(`
         CREATE TABLE IF NOT EXISTS auth_registration_codes (
           code TEXT PRIMARY KEY,
@@ -70,6 +74,7 @@ async function openDb() {
       db.run("CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions (user_id);");
       db.run("DROP TABLE IF EXISTS save_meta;");
       seedRegistrationCode(db);
+      seedAdminUser(db);
       persist(db);
       return db;
     });
@@ -128,6 +133,35 @@ function seedRegistrationCode(db) {
 
 function persist(db) {
   writeFileSync(dbPath, Buffer.from(db.export()));
+}
+
+function ensureAuthUserRoleColumn(db) {
+  const columns = db.exec("PRAGMA table_info(auth_users)");
+  const hasRole = columns.length && columns[0].values.some((row) => row[1] === "role");
+  if (!hasRole) db.run("ALTER TABLE auth_users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'");
+}
+
+function seedAdminUser(db) {
+  const existing = readUserByName(db, bootstrapAdminUsername);
+  if (existing) {
+    if (existing[6] !== "admin") db.run("UPDATE auth_users SET role = 'admin' WHERE id = $id", { $id: existing[0] });
+    return;
+  }
+  const { hash, salt } = hashPassword(bootstrapAdminPassword);
+  const statement = db.prepare(`
+    INSERT INTO auth_users (id, username, password_hash, password_salt, role, last_login_at)
+    VALUES ($id, $username, $passwordHash, $passwordSalt, 'admin', NULL)
+  `);
+  try {
+    statement.run({
+      $id: `user-${randomUUID()}`,
+      $username: bootstrapAdminUsername,
+      $passwordHash: hash,
+      $passwordSalt: salt
+    });
+  } finally {
+    statement.free();
+  }
 }
 
 function persistBattleDb(db) {
@@ -274,19 +308,21 @@ function sessionExpiryDate() {
 
 function publicUser(row) {
   if (!row) return null;
-  const [id, username, createdAt, lastLoginAt] = row;
+  const [id, username, createdAt, lastLoginAt, role = "user"] = row;
   return {
     id,
     username,
     saveId: id,
     createdAt,
-    lastLoginAt: lastLoginAt || ""
+    lastLoginAt: lastLoginAt || "",
+    role,
+    isAdmin: role === "admin"
   };
 }
 
 function readUserByName(db, username) {
   const result = db.exec(
-    "SELECT id, username, password_hash, password_salt, created_at, last_login_at FROM auth_users WHERE username = $username COLLATE NOCASE LIMIT 1",
+    "SELECT id, username, password_hash, password_salt, created_at, last_login_at, role FROM auth_users WHERE username = $username COLLATE NOCASE LIMIT 1",
     { $username: username }
   );
   return result.length && result[0].values.length ? result[0].values[0] : null;
@@ -365,7 +401,7 @@ export async function getAuthSession(token) {
   const db = await openDb();
   const tokenHash = hashSessionToken(text);
   const result = db.exec(`
-    SELECT u.id, u.username, u.created_at, u.last_login_at, s.expires_at
+    SELECT u.id, u.username, u.created_at, u.last_login_at, u.role, s.expires_at
     FROM auth_sessions s
     JOIN auth_users u ON u.id = s.user_id
     WHERE s.token_hash = $tokenHash
@@ -373,12 +409,12 @@ export async function getAuthSession(token) {
   `, { $tokenHash: tokenHash });
   if (!result.length || !result[0].values.length) return null;
   const row = result[0].values[0];
-  const expiresAt = row[4] || "";
+  const expiresAt = row[5] || "";
   if (!expiresAt || Date.parse(expiresAt) <= Date.now()) {
     await logoutSession(text);
     return null;
   }
-  return { user: publicUser(row.slice(0, 4)), expiresAt };
+  return { user: publicUser(row.slice(0, 5)), expiresAt };
 }
 
 export async function registerUser({ username, password, registrationCode }) {
@@ -418,7 +454,7 @@ export async function registerUser({ username, password, registrationCode }) {
   }
 
   return {
-    user: { id, username: cleanUsername, saveId: id, createdAt: new Date().toISOString(), lastLoginAt: new Date().toISOString() },
+    user: { id, username: cleanUsername, saveId: id, createdAt: new Date().toISOString(), lastLoginAt: new Date().toISOString(), role: "user", isAdmin: false },
     session
   };
 }
@@ -435,7 +471,7 @@ export async function loginUser({ username, password }) {
   persist(db);
   await readState(row[0]);
   return {
-    user: { ...publicUser([row[0], row[1], row[4], new Date().toISOString()]) },
+    user: { ...publicUser([row[0], row[1], row[4], new Date().toISOString(), row[6]]) },
     session
   };
 }

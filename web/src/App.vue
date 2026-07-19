@@ -216,7 +216,7 @@
       <main class="main">
         <nav class="tabs">
           <button
-            v-for="tab in tabs"
+            v-for="tab in visibleTabs"
             :key="tab.id"
             class="tab"
             :class="{ active: activeTab === tab.id }"
@@ -622,7 +622,7 @@
                   <span>补记日期</span>
                   <input v-model="selectedTaskDate" type="date" :min="taskDateMin" :max="taskDateMax" aria-label="选择现实任务补记日期">
                 </label>
-                <button class="icon-button task-admin-button" type="button" title="管理现实任务" aria-label="管理现实任务" @click="openTaskAdmin">
+                <button v-if="authUser?.isAdmin" class="icon-button task-admin-button" type="button" title="管理现实任务" aria-label="管理现实任务" @click="openTaskAdmin">
                   <Settings :size="17" :stroke-width="2.4" aria-hidden="true" />
                 </button>
               </div>
@@ -788,7 +788,7 @@
                   <ScrollText :size="28" :stroke-width="2.2" aria-hidden="true" />
                   <strong>暂无可用现实任务</strong>
                   <span>可到后台添加任务定义，历史完成记录会继续保留。</span>
-                  <button class="secondary" type="button" @click="openTaskAdmin">去后台配置</button>
+                  <button v-if="authUser?.isAdmin" class="secondary" type="button" @click="openTaskAdmin">去后台配置</button>
                 </div>
               </section>
 
@@ -4184,6 +4184,10 @@
                 <p>角色、头像与宗门资料会保存到本地存档。</p>
               </div>
               <div class="admin-head-actions">
+                <div class="admin-day-badge" aria-label="当前游戏日">
+                  <span>当前游戏日</span>
+                  <strong>第 {{ state?.day || 1 }} 天</strong>
+                </div>
                 <label v-if="adminMode !== 'settings'" class="admin-search">
                   <span>搜索</span>
                   <input v-model.trim="adminSearch" :placeholder="adminMode === 'cultivators' ? '人物名或宗门名' : adminMode === 'sects' ? '宗门名' : adminMode === 'tasks' ? '任务名或分类' : '搜索指导书'">
@@ -4193,7 +4197,6 @@
                   <button class="segment" :class="{ active: adminMode === 'sects' }" type="button" @click="adminMode = 'sects'">宗门</button>
                   <button class="segment" :class="{ active: adminMode === 'tasks' }" type="button" @click="adminMode = 'tasks'">现实任务</button>
                   <button class="segment" :class="{ active: adminMode === 'settings' }" type="button" @click="adminMode = 'settings'">游戏设置</button>
-                  <button class="segment" :class="{ active: adminMode === 'wiki' }" type="button" @click="adminMode = 'wiki'">游戏指导书</button>
                 </div>
               </div>
             </div>
@@ -4542,7 +4545,7 @@
               </div>
             </form>
 
-            <div v-else class="admin-wiki-layout">
+            <div v-else-if="adminMode === 'wiki'" class="admin-wiki-layout">
               <aside class="admin-wiki-toc" aria-label="游戏指导书目录">
                 <div class="admin-wiki-toc-head">
                   <BookOpen :size="19" aria-hidden="true" />
@@ -4571,6 +4574,53 @@
                   <p>{{ adminWikiArticle.summary }}</p>
                 </header>
                 <section v-for="section in adminWikiArticle.sections" :key="section.title" class="admin-wiki-section">
+                  <h4>{{ section.title }}</h4>
+                  <p v-for="paragraph in section.paragraphs" :key="paragraph">{{ paragraph }}</p>
+                  <ul v-if="section.bullets?.length">
+                    <li v-for="bullet in section.bullets" :key="bullet">{{ bullet }}</li>
+                  </ul>
+                  <p v-if="section.tip" class="admin-wiki-tip"><b>提示</b>{{ section.tip }}</p>
+                </section>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section v-if="activeTab === 'guide'" class="view active cultivation-surface guide-surface">
+          <div class="panel">
+            <div class="section-head">
+              <div>
+                <h3>游戏指导书</h3>
+                <p>规则以当前版本实际结算逻辑为准。</p>
+              </div>
+              <span class="tag">第 {{ state?.day || 1 }} 天</span>
+            </div>
+            <div class="admin-wiki-layout">
+              <aside class="admin-wiki-toc" aria-label="游戏指导书目录">
+                <div class="admin-wiki-toc-head">
+                  <BookOpen :size="19" aria-hidden="true" />
+                  <span>修行目录</span>
+                </div>
+                <button
+                  v-for="article in adminWikiArticles"
+                  :key="`guide-${article.id}`"
+                  class="admin-wiki-toc-row"
+                  :class="{ active: guideArticleId === article.id }"
+                  type="button"
+                  @click="guideArticleId = article.id"
+                >
+                  <span>{{ article.order }}</span>
+                  <strong>{{ article.title }}</strong>
+                  <small>{{ article.summary }}</small>
+                </button>
+              </aside>
+              <article v-if="guideArticle" class="admin-wiki-reader">
+                <header>
+                  <span>{{ guideArticle.order }} · {{ guideArticle.category }}</span>
+                  <h3>{{ guideArticle.title }}</h3>
+                  <p>{{ guideArticle.summary }}</p>
+                </header>
+                <section v-for="section in guideArticle.sections" :key="section.title" class="admin-wiki-section">
                   <h4>{{ section.title }}</h4>
                   <p v-for="paragraph in section.paragraphs" :key="paragraph">{{ paragraph }}</p>
                   <ul v-if="section.bullets?.length">
@@ -4715,8 +4765,13 @@ const tabs = [
   { id: "market", label: "坊市", icon: ShoppingBag },
   { id: "equipment", label: "装备", icon: Package },
   { id: "rank", label: "榜单", icon: Trophy },
+  { id: "guide", label: "指导", icon: BookOpen },
   { id: "admin", label: "后台", icon: Settings }
 ];
+
+const visibleTabs = computed(() => authUser.value?.isAdmin
+  ? tabs.filter((tab) => tab.id === "admin")
+  : tabs.filter((tab) => tab.id !== "admin"));
 
 const cultivationSubTabs = [
   { id: "attributes", label: "灵根", icon: BadgeCent },
@@ -4962,6 +5017,7 @@ const adminSelectedCultivatorId = ref("player");
 const adminSelectedSectName = ref("");
 const adminSelectedTaskId = ref("");
 const adminWikiArticleId = ref("getting-started");
+const guideArticleId = ref("getting-started");
 const adminGameSettingsDraft = reactive({ taskDailyFullXpBudget: 500, battleReplaySpeed: 1, dailyTickerSpeed: 1 });
 const battleReplaySpeedOptions = [
   { value: 0.5, label: "0.5x · 慢速" },
@@ -6074,6 +6130,9 @@ const filteredAdminWikiArticles = computed(() => {
 });
 const adminWikiArticle = computed(() => filteredAdminWikiArticles.value.find((article) => article.id === adminWikiArticleId.value)
   || filteredAdminWikiArticles.value[0]
+  || null);
+const guideArticle = computed(() => adminWikiArticles.find((article) => article.id === guideArticleId.value)
+  || adminWikiArticles[0]
   || null);
 const dungeonRecordTabs = [
   { id: "blood", label: "血色禁地" },
@@ -7508,6 +7567,7 @@ function formatTaskAmount(value) {
 }
 
 function openTaskAdmin() {
+  if (!authUser.value?.isAdmin) return;
   activeTab.value = "admin";
   adminMode.value = "tasks";
   syncAdminTaskDraft(adminTaskDefinition.value || filteredAdminTasks.value[0] || null);
@@ -10594,6 +10654,8 @@ function resetTabHome(tabId) {
 }
 
 function switchTab(tabId) {
+  if (authUser.value?.isAdmin && tabId !== "admin") return;
+  if (!authUser.value?.isAdmin && tabId === "admin") return;
   closeBattleReplay();
   if (cultivationSubTabs.some((tab) => tab.id === tabId)) {
     cultivationSubTab.value = tabId;
@@ -11847,8 +11909,8 @@ async function loadGameAfterAuth(user) {
   loading.value = true;
   resetClientStateForAuth();
   authUser.value = user;
-  await refresh("home");
-  if (needsHeavyState(activeTab.value)) ensureFullState();
+  activeTab.value = user?.isAdmin ? "admin" : "practice";
+  await refresh(user?.isAdmin ? "full" : "home");
 }
 
 async function initializeAuth() {
@@ -12391,7 +12453,7 @@ async function resetGame() {
   await saveActiveAdminDraftBeforeReset();
   const result = await act("/api/reset", {}, { scope: "lite", replace: true, markStale: true, deferFullRefresh: true });
   if (result === null) return;
-  activeTab.value = "practice";
+  activeTab.value = authUser.value?.isAdmin ? "admin" : "practice";
   activeRankBoard.value = "power";
   detailView.value = "rank";
   detailReturnStack.value = [];

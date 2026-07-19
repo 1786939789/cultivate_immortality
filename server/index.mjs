@@ -216,6 +216,20 @@ async function handleApi(req, res, url) {
     sendJson(res, 401, { error: "请先登录" });
     return;
   }
+  if (url.pathname.startsWith("/api/admin/") && !session.user.isAdmin) {
+    sendJson(res, 403, { error: "仅管理员可访问后台" });
+    return;
+  }
+  if (session.user.isAdmin && !url.pathname.startsWith("/api/admin/") && ![
+    "/api/state",
+    "/api/cultivators/detail",
+    "/api/cultivators/portrait",
+    "/api/day/advance",
+    "/api/reset"
+  ].includes(url.pathname)) {
+    sendJson(res, 403, { error: "管理员账号仅可进行后台管理" });
+    return;
+  }
   const saveId = session.user.saveId;
 
   if (req.method === "GET" && url.pathname === "/api/state") {
