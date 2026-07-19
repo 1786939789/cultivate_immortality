@@ -11239,6 +11239,7 @@ button.defender-chip.person:focus-visible .character-portrait {
 
 .duel-rank-cell,
 .duel-season-badge,
+.duel-tournament-badge,
 .rank-tag {
   --rank-color: #5b6470;
   display: inline-flex;
@@ -11253,6 +11254,17 @@ button.defender-chip.person:focus-visible .character-portrait {
   font-weight: 800;
   line-height: 1;
   padding: 6px 9px;
+}
+
+.duel-tournament-badge {
+  --tournament-color: #b7791f;
+  border-color: color-mix(in srgb, var(--tournament-color) 58%, #fff7ed);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--tournament-color) 22%, #fff7ed), rgba(255, 255, 255, .72));
+  color: color-mix(in srgb, var(--tournament-color) 84%, #2f2418);
+}
+
+.duel-tournament-badge.champion {
+  --tournament-color: #b33b2e;
 }
 
 .duel-rank-cell {

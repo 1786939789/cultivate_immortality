@@ -2903,7 +2903,7 @@
             <div class="duel-console-head">
               <h2>斗法场 · 赛季演武台</h2>
               <p class="battle-retention-note">完整切磋战报保留最近 10 天；更早记录每 10 天归档为摘要并清理详情<span v-if="latestBattleArchive">，已归档 {{ battleArchives.length }} 个周期</span>。</p>
-              <div class="duel-season-strip" aria-label="切磋赛季状态">
+              <div class="duel-season-strip" :class="duelSeasonInfo.phase" aria-label="切磋赛季状态">
                 <span><i class="duel-mini-icon season" aria-hidden="true"></i>第 {{ duelSeasonInfo.season }} 赛季</span>
                 <span>第 {{ duelSeasonInfo.seasonDay }} / {{ duelSeasonInfo.length }} 天</span>
                 <span class="duel-phase-chip" :class="duelSeasonInfo.phase">{{ duelPhaseText }}</span>
@@ -2916,21 +2916,75 @@
               </div>
             </div>
 
-            <section class="tournament-ceremony" :class="{ active: duelSeasonInfo.phase === 'tournament', complete: duelTournament?.status === 'completed' }">
-              <div class="tournament-ceremony-main">
-                <span class="tournament-mark" aria-hidden="true">冠</span>
-                <div>
-                  <strong>{{ duelSeasonInfo.phase === 'tournament' ? (duelTournamentRound?.name || '天骄淘汰赛') : '天骄淘汰赛将在第 53 天开启' }}</strong>
-                  <p v-if="duelSeasonInfo.phase === 'ladder'">前 {{ duelSeasonInfo.ladderDays }} 天每日积分演武。积分决定种子，前 56 名获得首轮轮空。</p>
-                  <p v-else-if="duelTournament?.status === 'completed'">{{ duelTournament.champion?.name }} 荣登魁首；冠军、亚军与四强奖励已结算。</p>
-                  <p v-else>第 {{ duelTournamentRound?.round || 1 }} 轮每日一战，满血入场，胜者晋级。</p>
+            <section class="tournament-ceremony" :class="{ active: duelSeasonInfo.phase === 'tournament' || duelLatestCompletedTournament, complete: Boolean(duelLatestCompletedTournament) }">
+              <template v-if="duelLatestCompletedTournament">
+                <div class="champion-coronation">
+                  <div class="champion-celestial-effect" aria-hidden="true">
+                    <i v-for="spark in 12" :key="spark"></i>
+                  </div>
+                  <button
+                    class="champion-portrait-stage"
+                    type="button"
+                    :title="`查看${duelLatestCompletedTournament.champion?.name || '冠军'}人物详情`"
+                    :aria-label="`查看冠军${duelLatestCompletedTournament.champion?.name || ''}人物详情`"
+                    @click="openDuelChampion(duelLatestCompletedTournament.champion)"
+                  >
+                    <Crown class="champion-crown" :size="34" :stroke-width="1.6" aria-hidden="true" />
+                    <span class="champion-portrait-frame">
+                      <CharacterPortrait :person="withDuelRank(duelLatestCompletedTournament.champion)" size="xl" />
+                    </span>
+                  </button>
+
+                  <div class="champion-coronation-copy">
+                    <span class="champion-season-title">第 {{ duelLatestCompletedTournament.season }} 届天骄淘汰赛</span>
+                    <div class="champion-name-lockup">
+                      <small>天南魁首</small>
+                      <strong>{{ duelLatestCompletedTournament.champion?.name || '未知修士' }}</strong>
+                    </div>
+                    <p>踏尽群雄，问鼎演武台。此名将高悬于斗法场，直至下一位魁首诞生。</p>
+                    <div class="champion-origin">
+                      <span>{{ duelLatestCompletedTournament.champion?.sect || '散修' }}</span>
+                      <span>{{ realmName(duelLatestCompletedTournament.champion?.realm || 0) }}</span>
+                    </div>
+                  </div>
+
+                  <div class="champion-reward-podium" aria-label="淘汰赛奖励">
+                    <div class="champion-grand-prize">
+                      <Trophy :size="28" :stroke-width="1.6" aria-hidden="true" />
+                      <span>
+                        <b>冠军封赏</b>
+                        <strong>350 灵石</strong>
+                        <small>修为圆满 · 魁首道韵</small>
+                      </span>
+                    </div>
+                    <div class="champion-secondary-prizes">
+                      <span>
+                        <b>亚军 · {{ duelAwardName(duelLatestCompletedTournament.runnerUp) }}</b>
+                        <strong>220 灵石</strong>
+                      </span>
+                      <span>
+                        <b>四强</b>
+                        <strong>{{ duelSemifinalistNames(duelLatestCompletedTournament) }} · 各 100 灵石</strong>
+                      </span>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div class="tournament-reward-list">
-                <span><b>冠军</b> 350 灵石 + 修为圆满 + 道韵</span>
-                <span><b>亚军</b> 220 灵石</span>
-                <span><b>四强</b> 100 灵石</span>
-              </div>
+              </template>
+              <template v-else>
+                <div class="tournament-ceremony-main">
+                  <span class="tournament-mark" aria-hidden="true">冠</span>
+                  <div>
+                    <strong>{{ duelSeasonInfo.phase === 'tournament' ? (duelTournamentRound?.name || '天骄淘汰赛') : '天骄淘汰赛将在第 53 天开启' }}</strong>
+                    <p v-if="duelSeasonInfo.phase === 'ladder'">前 {{ duelSeasonInfo.ladderDays }} 天每日积分演武。积分决定种子，前 56 名获得首轮轮空。</p>
+                    <p v-else>第 {{ duelTournamentRound?.round || 1 }} 轮每日一战，满血入场，胜者晋级。</p>
+                  </div>
+                </div>
+                <div class="tournament-reward-list">
+                  <span><b>冠军</b> 350 灵石 + 修为圆满 + 道韵</span>
+                  <span><b>亚军</b> 220 灵石</span>
+                  <span><b>四强</b> 100 灵石</span>
+                </div>
+              </template>
               <div v-if="championDaoRhyme" class="dao-rhyme-status">
                 <b>魁首道韵</b><span>下次突破 +10%，突破成功前持续</span>
               </div>
@@ -3085,19 +3139,19 @@
                           <small>{{ match.left.sect }}</small>
                         </div>
                       </div>
-                      <div class="duel-rank-stamp" :class="`duel-rank-${duelRankId(matchPerson(match.left))}`">
+                      <div class="duel-rank-stamp" :class="`duel-rank-${duelRankId(match.left)}`">
                         <i class="duel-rank-medal" aria-hidden="true"></i>
-                        <span>{{ duelRankName(matchPerson(match.left)) }}</span>
-                        <small>{{ duelRankScoreText(matchPerson(match.left)) }}</small>
+                        <span>{{ duelRankName(match.left) }}</span>
+                        <small>{{ duelRankScoreText(match.left) }}</small>
                       </div>
                       <div class="duel-match-vs">
                         <strong>VS</strong>
                         <span>第 {{ match.order || index + 1 }} 场</span>
                       </div>
-                      <div class="duel-rank-stamp" :class="`duel-rank-${duelRankId(matchPerson(match.right))}`">
+                      <div class="duel-rank-stamp" :class="`duel-rank-${duelRankId(match.right)}`">
                         <i class="duel-rank-medal" aria-hidden="true"></i>
-                        <span>{{ duelRankName(matchPerson(match.right)) }}</span>
-                        <small>{{ duelRankScoreText(matchPerson(match.right)) }}</small>
+                        <span>{{ duelRankName(match.right) }}</span>
+                        <small>{{ duelRankScoreText(match.right) }}</small>
                       </div>
                       <div class="match-person duel-combatant" :class="{ winner: match.winner.id === match.right.id }">
                         <CharacterPortrait :person="matchPerson(match.right)" size="sm" />
@@ -3119,10 +3173,10 @@
                           <small>{{ match.winner.sect }}</small>
                         </div>
                       </div>
-                      <div class="duel-rank-stamp" :class="`duel-rank-${duelRankId(matchPerson(match.winner))}`">
+                      <div class="duel-rank-stamp" :class="`duel-rank-${duelRankId(match.winner)}`">
                         <i class="duel-rank-medal" aria-hidden="true"></i>
-                        <span>{{ duelRankName(matchPerson(match.winner)) }}</span>
-                        <small>{{ duelRankScoreText(matchPerson(match.winner)) }}</small>
+                        <span>{{ duelRankName(match.winner) }}</span>
+                        <small>{{ duelRankScoreText(match.winner) }}</small>
                       </div>
                       <div class="duel-bye-mark">轮</div>
                       <div class="duel-match-vs bye-vs">
@@ -3142,7 +3196,8 @@
                   <button class="secondary" type="button" :disabled="duelMatchPage.page >= duelMatchPage.totalPages || duelMatchPageLoading" @click="changeDuelMatchPage(1)">下一页</button>
                 </div>
 
-                <div v-if="!selectedDuelRecord && selectedDuelDay === state.day" class="empty duel-empty">{{ currentDate }} 尚未开赛。</div>
+                <div v-if="!selectedDuelRecord && duelMatchPageLoading" class="empty duel-empty">正在读取本日切磋记录...</div>
+                <div v-else-if="!selectedDuelRecord && selectedDuelDay === state.day" class="empty duel-empty">{{ currentDate }} 尚未开赛。</div>
                 <div v-else-if="!selectedDuelRecord" class="empty duel-empty">没有找到 {{ selectedDuelDate }} 的切磋记录。</div>
               </section>
 
@@ -3556,48 +3611,6 @@
             </div>
             <div v-if="!filteredEquipment.length" class="empty">没有符合筛选条件的装备。</div>
           </div>
-          <div class="panel equipment-panel">
-            <div class="section-head">
-              <div>
-                <h3>灵珠</h3>
-                <p>副本碎片自动凝练；本命灵珠加成翻倍。</p>
-              </div>
-              <span class="tag">灵尘 {{ spiritPearlState.dust || 0 }} · 每 10 自动换随机灵珠碎片</span>
-            </div>
-            <div class="equipment-inventory-grid">
-              <article
-                class="equipment-card spirit-pearl-card"
-                v-for="pearl in spiritPearlState.pearls || []"
-                :key="pearl.id"
-                :class="{ owned: pearl.tier > 0, matched: pearl.tier > 0 && pearl.matchMultiplier > 1 }"
-                tabindex="0"
-              >
-                <div class="equipment-card-frame">
-                  <span class="spirit-pearl-orb" :class="`root-icon-${pearl.config?.rootKey || pearl.id}`" aria-hidden="true">
-                    <img :src="rootIconPath(pearl.config?.rootKey || pearl.id)" alt="">
-                  </span>
-                  <strong>{{ pearl.config?.name || pearl.name }}</strong>
-                  <small>{{ pearl.tier ? `${pearl.tier}阶${pearl.star}星` : "未凝成" }}</small>
-                </div>
-                <div class="equipment-tooltip-card" role="tooltip">
-                  <div class="equipment-tooltip-head">
-                    <strong>{{ pearl.config?.name || pearl.name }}</strong>
-                    <span>{{ pearl.matchMultiplier > 1 ? (pearl.tier ? `本命契合 x${pearl.matchMultiplier}` : `本命契合 · 凝成后 x${pearl.matchMultiplier}`) : "普通生效" }}</span>
-                  </div>
-                  <dl class="equipment-tooltip-stats">
-                    <div>
-                      <dt>当前效果</dt>
-                      <dd>{{ pearlEffectText(pearl) }}</dd>
-                    </div>
-                    <div>
-                      <dt>下次消耗</dt>
-                      <dd>{{ pearl.next?.fragmentTier || 1 }}阶碎片 {{ pearl.fragments?.[String(pearl.next?.fragmentTier || 1)] || 0 }} / {{ pearl.next?.cost || 0 }}</dd>
-                    </div>
-                  </dl>
-                </div>
-              </article>
-            </div>
-          </div>
         </section>
 
         <section v-if="activeTab === 'rank'" class="view active cultivation-surface rank-surface">
@@ -3789,6 +3802,7 @@
                   <span class="tag skill-detail-tag" :title="skillTip(selectedPerson)">本命神通：{{ skillNameForDisplay(selectedPerson) }}</span>
                   <span class="tag rank-tag" :class="`duel-rank-${duelRankId(selectedPerson)}`">斗法排名：{{ duelRankText(selectedPerson) }}</span>
                   <span class="tag" :title="talentHint(selectedPerson)">天赋：{{ talentInfo(selectedPerson).grade }} · {{ talentInfo(selectedPerson).score }}</span>
+                  <span v-if="selectedPerson.championDaoRhyme?.active && selectedPerson.championDaoRhyme.realm === selectedPerson.realm" class="tag dossier-champion-tag">魁首道韵 · 突破 +10%</span>
                   <span class="tag">{{ rootCounterText(selectedPerson) }}</span>
                   <span class="tag equipment-count-tag">装备：{{ equippedFor(selectedPerson).length }}/{{ equipmentSlots.length }}</span>
                 </div>
@@ -4059,6 +4073,11 @@
                 <div class="duel-history-strip" v-if="selectedPerson.duelSeasonHistory?.length">
                   <span v-for="record in selectedPerson.duelSeasonHistory" :key="`${selectedPerson.id}-season-${record.season}`" class="duel-season-badge" :class="`duel-rank-${record.rankId}`">
                     S{{ record.season }} {{ record.rankName }} {{ record.score }}分<span v-if="record.spiritReward"> · +{{ record.spiritReward }}灵石</span>
+                  </span>
+                </div>
+                <div class="duel-history-strip" v-if="selectedPerson.duelTournamentAwards?.length" aria-label="切磋淘汰赛奖励">
+                  <span v-for="award in selectedPerson.duelTournamentAwards" :key="`${selectedPerson.id}-tournament-${award.season}-${award.place}`" class="duel-tournament-badge" :class="{ champion: award.place === '冠军' }">
+                    S{{ award.season }} 淘汰赛·{{ award.place }} · +{{ award.spirit }}灵石
                   </span>
                 </div>
                 <div class="timeline detail-scroll">
@@ -4668,6 +4687,7 @@ import {
   Cloud,
   Compass,
   Coins,
+  Crown,
   Dna,
   Dumbbell,
   Eye,
@@ -5400,6 +5420,7 @@ const duelSeasonInfo = computed(() => derived.value.duelSeason || {
   lossScore: duelLossScore
 });
 const duelTournament = computed(() => gameState.value.duelTournament || derived.value.duelTournament || null);
+const duelLatestCompletedTournament = computed(() => derived.value.duelTournamentChampion || null);
 const duelTournamentRound = computed(() => duelTournament.value?.rounds?.at(-1) || null);
 const playerTournamentEntry = computed(() => duelTournament.value?.entrants?.find((entry) => entry.id === player.value?.id) || null);
 const championDaoRhyme = computed(() => player.value?.championDaoRhyme || null);
@@ -7119,6 +7140,9 @@ const selectedDuelCalendarDate = computed({
 const selectedDuelRecord = computed(() => (
   tournamentDuelRecords.value.find((record) => Number(record.day) === Number(selectedDuelDay.value))
   || duelRecords.value.find((record) => Number(record.day) === Number(selectedDuelDay.value))
+  || (Number(duelMatchPage.value.day) === Number(selectedDuelDay.value) && duelMatchPage.value.tournament
+    ? duelMatchPage.value
+    : null)
 ));
 const selectedDuelDate = computed(() => selectedDuelRecord.value?.date || dateForDay(selectedDuelDay.value));
 const todaysDuelRecord = computed(() => selectedDuelRecord.value?.day === gameState.value.day
@@ -10063,11 +10087,11 @@ function duelRankSortValue(person) {
 }
 
 function duelMatchSortStats(match) {
-  const people = [matchPerson(match.left), matchPerson(match.right), matchPerson(match.winner)].filter(Boolean);
-  return people.reduce((best, person) => {
-    const rank = duelRankSortValue(person);
-    const score = Number(person.duelSeason?.score || 0);
-    const power = Number(person.power || 0);
+  const refs = [match?.left, match?.right, match?.winner].filter(Boolean);
+  return refs.reduce((best, ref) => {
+    const rank = duelRankSortValue(ref);
+    const score = Number(ref.duelSeason?.score || 0);
+    const power = Number(ref.power || matchPerson(ref)?.power || 0);
     return {
       rank: Math.max(best.rank, rank),
       score: Math.max(best.score, score),
@@ -10842,6 +10866,24 @@ function openPracticeRankItem(item) {
   ensurePersonDetail(item.id);
 }
 
+function openDuelChampion(person) {
+  if (!person?.id) return;
+  closeBattleReplay();
+  openDetailFromCurrent("person");
+  selectedPersonId.value = person.id;
+  activeTab.value = "rank";
+  ensurePersonDetail(person.id);
+}
+
+function duelAwardName(person) {
+  return person?.name || "未知修士";
+}
+
+function duelSemifinalistNames(tournament) {
+  const names = (tournament?.semifinalists || []).map((person) => person?.name).filter(Boolean);
+  return names.length ? names.join("、") : "未知修士";
+}
+
 function rankSearchText(item) {
   return [
     item.name,
@@ -11421,7 +11463,8 @@ function breakthroughPartsText(person) {
   const parts = personInsight(person).breakthrough;
   const sectMultiplier = parts.sectMultiplier ?? (1 + (parts.bonus || 0));
   const potionText = Number(parts.potionBonus || 0) > 0 ? ` + 丹药 ${formatPercent(parts.potionBonus)}` : "";
-  return `境界基础 ${formatPercent(parts.realmBase)} × 灵根 ${formatPercent(parts.rootMultiplier)} × 天赋 ${formatPercent(parts.talentMultiplier ?? 1)} × 宗门 ${formatPercent(sectMultiplier)}${potionText} = ${formatPercent(parts.total)}`;
+  const championText = Number(parts.championBonus || 0) > 0 ? ` + 魁首道韵 ${formatPercent(parts.championBonus)}` : "";
+  return `境界基础 ${formatPercent(parts.realmBase)} × 灵根 ${formatPercent(parts.rootMultiplier)} × 天赋 ${formatPercent(parts.talentMultiplier ?? 1)} × 宗门 ${formatPercent(sectMultiplier)}${potionText}${championText} = ${formatPercent(parts.total)}`;
 }
 
 function statWithBonus(total, bonus = 0) {
@@ -12111,13 +12154,24 @@ function clampRecentBattleDay(day) {
 async function loadDuelMatchPage(page = 1) {
   const record = selectedDuelRecord.value;
   const day = Number(selectedDuelDay.value);
-  if (!record || !day) {
+  if (!day) {
     duelMatchPage.value = { day: null, matches: [], page: 1, pageSize: 10, total: 0, totalPages: 0 };
     return;
   }
-  if (record.tournament) {
+  if (record?.tournament) {
     duelMatchPageLoading.value = false;
-    duelMatchPage.value = { day, matches: record.matches || [], page: 1, pageSize: (record.matches || []).length, total: (record.matches || []).length, totalPages: 1 };
+    duelMatchPage.value = {
+      day,
+      date: record.date || "",
+      createdAt: record.createdAt || "",
+      tournament: true,
+      tournamentName: record.tournamentName || "天骄淘汰赛",
+      matches: record.matches || [],
+      page: 1,
+      pageSize: (record.matches || []).length,
+      total: (record.matches || []).length,
+      totalPages: 1
+    };
     return;
   }
   const requestId = ++duelMatchPageRequestId;
@@ -12477,7 +12531,7 @@ watch(activeTab, () => {
 });
 
 watch([activeTab, selectedDuelDay, () => selectedDuelRecord.value?.day], () => {
-  if (activeTab.value !== "arena" || !selectedDuelRecord.value) return;
+  if (activeTab.value !== "arena" || !selectedDuelDay.value) return;
   loadDuelMatchPage(1);
 });
 
