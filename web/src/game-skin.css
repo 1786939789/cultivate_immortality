@@ -12074,18 +12074,6 @@ body::before {
   font-size: 9px;
 }
 
-.rank-surface.view.active > .character-dossier .dossier-pearl-item .dossier-pearl-total {
-  max-width: 100%;
-  overflow: hidden;
-  color: #846f4d;
-  font-size: 8px;
-  font-style: normal;
-  font-weight: 800;
-  line-height: 1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* Spirit-pearl cabinet: make progress and material tiers readable at a glance. */
 .rank-surface.view.active > .character-dossier .dossier-pearl-strip {
   position: relative;
@@ -12263,11 +12251,6 @@ body::before {
 .rank-surface.view.active > .character-dossier .dossier-pearl-item.matched .dossier-pearl-progress i {
   background: linear-gradient(90deg, #147c6a, #77dbc1);
   box-shadow: 0 0 6px rgba(56, 179, 145, .64);
-}
-
-.rank-surface.view.active > .character-dossier .dossier-pearl-total {
-  position: relative;
-  color: #846f4d;
 }
 
 .rank-surface.view.active > .character-dossier .dossier-pearl-tooltip {

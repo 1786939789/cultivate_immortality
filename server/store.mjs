@@ -41,14 +41,6 @@ async function openDb() {
         );
       `);
       db.run(`
-        CREATE TABLE IF NOT EXISTS save_meta (
-          id TEXT PRIMARY KEY,
-          day INTEGER NOT NULL,
-          last_settlement_date TEXT,
-          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-      `);
-      db.run(`
         CREATE TABLE IF NOT EXISTS auth_users (
           id TEXT PRIMARY KEY,
           username TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -76,6 +68,7 @@ async function openDb() {
         );
       `);
       db.run("CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions (user_id);");
+      db.run("DROP TABLE IF EXISTS save_meta;");
       seedRegistrationCode(db);
       persist(db);
       return db;
@@ -245,43 +238,6 @@ process.once("SIGTERM", () => {
   flushDeferredBattlePersist();
   process.exit(143);
 });
-
-function readSaveMeta(db, id = "default") {
-  const metaResult = db.exec("SELECT day, last_settlement_date FROM save_meta WHERE id = $id LIMIT 1", { $id: id });
-  if (metaResult.length && metaResult[0].values.length) {
-    const [day, lastSettlementDate] = metaResult[0].values[0];
-    return { day: Number(day) || 1, lastSettlementDate: lastSettlementDate || "" };
-  }
-  const result = db.exec("SELECT state_json FROM saves WHERE id = $id", { $id: id });
-  if (!result.length || !result[0].values.length) return null;
-  const raw = String(result[0].values[0][0] || "");
-  const dayMatch = raw.match(/"day"\s*:\s*(\d+)/);
-  const lastSettlementMatch = raw.match(/"lastSettlementDate"\s*:\s*"([^"]*)"/);
-  return {
-    day: dayMatch ? Number(dayMatch[1]) || 1 : 1,
-    lastSettlementDate: lastSettlementMatch ? lastSettlementMatch[1] : ""
-  };
-}
-
-function writeSaveMeta(db, state, id = "default") {
-  const statement = db.prepare(`
-    INSERT INTO save_meta (id, day, last_settlement_date, updated_at)
-    VALUES ($id, $day, $lastSettlementDate, datetime('now'))
-    ON CONFLICT(id) DO UPDATE SET
-      day = excluded.day,
-      last_settlement_date = excluded.last_settlement_date,
-      updated_at = excluded.updated_at
-  `);
-  try {
-    statement.run({
-      $id: id,
-      $day: Number(state.day || 1) || 1,
-      $lastSettlementDate: state.lastSettlementDate || ""
-    });
-  } finally {
-    statement.free();
-  }
-}
 
 function normalizeUsername(value) {
   return String(value || "").trim();
@@ -546,7 +502,6 @@ export async function writeState(state, id = "default", options = {}) {
   `);
   statement.run({ $id: id, $state: JSON.stringify(state) });
   statement.free();
-  writeSaveMeta(db, state, id);
   if (options.vacuum) db.run("VACUUM");
   stateCache.set(id, state);
   stateValidationCache.set(id, dateKey());
@@ -682,13 +637,6 @@ export async function readBattleReplay(replayId, id = "default") {
   return replay;
 }
 
-export async function readReplayMeta(id = "default") {
-  const db = await openDb();
-  const meta = readSaveMeta(db, id);
-  if (!meta) return { day: 1, lastSettlementDate: "" };
-  return meta;
-}
-
 export async function mutateState(mutator, id = "default", options = {}) {
   const state = await readState(id);
   const result = mutator(state);
@@ -715,9 +663,6 @@ export async function resetState(id = "default", options = {}) {
   replayStatement.run({ $id: id });
   const replayRowsDeleted = battleDb.getRowsModified() > 0;
   replayStatement.free();
-  const metaStatement = db.prepare("DELETE FROM save_meta WHERE id = $id");
-  metaStatement.run({ $id: id });
-  metaStatement.free();
   stateCache.delete(id);
   stateValidationCache.delete(id);
   publicStateCache.delete(id);

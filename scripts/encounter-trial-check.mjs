@@ -57,7 +57,7 @@ for (let day = 2; day <= 140; day += 1) {
   }
 }
 
-assert.ok(generated >= 55 && generated <= 95, `140 天内事件数量异常：${generated}`);
+assert.ok(generated >= 35 && generated <= 70, `140 天内事件数量异常（2-4 天一场）：${generated}`);
 assert.ok(longestEmptyRun <= 3, `三日保底失效：连续 ${longestEmptyRun} 天无事件`);
 assert.ok(state.encounters.history.length > 50, "因缘历史应持续积累");
 assert.ok(Object.keys(state.relationships).length > 10, "事件应建立多名修士关系");

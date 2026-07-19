@@ -2929,8 +2929,8 @@
                     </div>
                     <div class="champion-secondary-prizes">
                       <span>
-                        <b>亚军 · {{ duelAwardName(duelLatestCompletedTournament.runnerUp) }}</b>
-                        <strong>220 灵石</strong>
+                        <b>亚军</b>
+                        <strong>{{ duelAwardName(duelLatestCompletedTournament.runnerUp) }} · 220 灵石</strong>
                       </span>
                       <span>
                         <b>四强</b>
@@ -3892,7 +3892,6 @@
                     <small>{{ pearl.config?.name || pearl.name }}</small>
                     <b>{{ personPearlStatusText(pearl) }}</b>
                     <span class="dossier-pearl-progress" aria-hidden="true"><i :style="{ width: `${personPearlProgressInfo(pearl).percent}%` }"></i></span>
-                    <em v-if="!pearl.tier && personPearlFragmentCount(pearl)" class="dossier-pearl-total">总 {{ personPearlFragmentCount(pearl) }}</em>
                     <span class="dossier-pearl-tooltip" role="tooltip">
                       <span class="dossier-pearl-tooltip-head">
                         <img :src="rootIconPath(pearl.config?.rootKey || pearl.id)" alt="">
@@ -3973,7 +3972,7 @@
                   >
                     <strong>{{ record.title }} · {{ record.choiceLabel }}</strong>
                     <span>{{ record.outcome }}</span>
-                    <small>第 {{ record.resolvedDay }} 天 · {{ record.relationTitle || record.categoryLabel }}</small>
+                    <small>对方：{{ encounterCounterpartName(record, selectedPerson) }} · 第 {{ record.resolvedDay }} 天 · {{ record.relationTitle || record.categoryLabel }}</small>
                   </button>
                   <div v-if="!selectedPersonEncounterHistory.length" class="empty">暂无因缘纪事。</div>
                 </div>
@@ -4754,7 +4753,9 @@ const powerSortOptions = [
   { id: "divineSense", label: "神识" },
   { id: "maxMana", label: "法力" },
   { id: "spirit", label: "灵石" },
-  { id: "talent", label: "天赋" }
+  { id: "talent", label: "天赋" },
+  { id: "equipmentCount", label: "装备" },
+  { id: "formedPearlCount", label: "灵珠" }
 ];
 
 const emptyState = {
@@ -9086,6 +9087,14 @@ const selectedPersonEncounterHistory = computed(() => {
   return personDetails.value[id]?.encounterHistory
     || encounterHistory.value.filter((event) => id === "player" || event.actorId === id).slice(0, 30);
 });
+
+function encounterCounterpartName(record, person) {
+  if (person?.id !== "player") return player.value.name || "你";
+  const counterpartId = record?.actorId;
+  if (!counterpartId) return "未知修士";
+  return cultivators.value.find((candidate) => candidate.id === counterpartId)?.name || "未知修士";
+}
+
 const selectedSect = computed(() => sectSummaries.value.find((sect) => sect.name === selectedSectName.value));
 const detailBackLabel = computed(() => {
   const last = detailReturnStack.value[detailReturnStack.value.length - 1];
@@ -9728,7 +9737,7 @@ const powerRanking = computed(() => cultivators.value
     value: item.power,
     sortValue: powerSortValue(item, effective),
     sortLabel: powerSortLabel(item, effective),
-    help: `战力 ${item.power}。境界：${realmName(item.realm)}；经验：${Math.floor(item.xp)}；灵根 ${rootLine(item)}；血量 ${effective.maxHp}，攻击 ${effective.attack}，防御 ${effective.defense}，神识 ${effective.divineSense}，法力 ${effective.maxMana}。`
+      help: `战力 ${item.power}。境界：${realmName(item.realm)}；经验：${Math.floor(item.xp)}；灵根 ${rootLine(item)}；血量 ${effective.maxHp}，攻击 ${effective.attack}，防御 ${effective.defense}，神识 ${effective.divineSense}，法力 ${effective.maxMana}；装备 ${item.equipmentCount || 0} 件；灵珠 ${item.formedPearlCount || 0} 颗。`
     };
   })
   .sort(comparePowerRankItems));
@@ -9821,6 +9830,8 @@ function powerSortValue(person, effective = personEffectiveStats(person)) {
   if (powerSortKey.value === "maxMana") return Number(effective.maxMana || 0);
   if (powerSortKey.value === "spirit") return Number(person.spirit || 0);
   if (powerSortKey.value === "talent") return Number(talentInfo(person).score || 0);
+  if (powerSortKey.value === "equipmentCount") return Number(person.equipmentCount || 0);
+  if (powerSortKey.value === "formedPearlCount") return Number(person.formedPearlCount || 0);
   return Number(person.power || 0);
 }
 

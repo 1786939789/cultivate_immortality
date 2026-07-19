@@ -443,12 +443,6 @@ export function xpGainMultiplier(entity, state = null) {
   return (1 + rootEffectBonus(entity, "xp") + spiritPearlBonusFor(state, entity, "xp")) * rootCultivationMultiplier(entity);
 }
 
-export function applyXpGain(entity, amount, extraMultiplier = 1) {
-  const gain = Math.floor(amount * xpGainMultiplier(entity) * talentSnapshot(entity).xpMultiplier * extraMultiplier);
-  entity.xp += gain;
-  return gain;
-}
-
 function applyDamage(entity, amount, state) {
   const damage = Math.max(1, Math.floor(amount));
   entity.hp = clamp((entity.hp || 0) - damage, 0, effectiveMaxHp(entity, state));
@@ -7445,29 +7439,6 @@ function publicEncounters(state) {
   };
 }
 
-export function getEncounterHistoryPage(state, options = {}) {
-  ensureEncounterState(state);
-  const offset = Math.max(0, Math.floor(Number(options.offset) || 0));
-  const limit = clamp(Math.floor(Number(options.limit) || 24), 1, 60);
-  const category = String(options.category || "");
-  const actorId = String(options.actorId || "");
-  const status = String(options.status || "");
-  const items = state.encounters.history.filter((record) => {
-    if (category && record.category !== category) return false;
-    if (actorId && record.actorId !== actorId) return false;
-    if (status === "chain" && !record.chainId) return false;
-    if (status === "seasonal" && !record.seasonal) return false;
-    return true;
-  });
-  return {
-    offset,
-    limit,
-    total: items.length,
-    hasMore: offset + limit < items.length,
-    items: items.slice(offset, offset + limit).map((record) => ({ ...record, choices: undefined }))
-  };
-}
-
 export function updateEncounterFocus(state, payload = {}) {
   ensureEncounterState(state);
   const npcId = String(payload.npcId || "");
@@ -9955,12 +9926,16 @@ function publicCultivator(entity, state, options = {}) {
       dungeonClears: entity.dungeonClears || 0,
       bestDungeonPower: entity.bestDungeonPower || 0,
       bestDungeonName: entity.bestDungeonName || "",
+      equipmentCount: equipmentForOwner(state, entity.id).length,
+      formedPearlCount: formedSpiritPearlCount(state, entity),
       power: powerOf(entity, state)
     };
   }
   const { spiritPearls: _spiritPearls, portraitUrl: _portraitUrl, ...publicEntity } = entity;
   return {
     ...publicEntity,
+    equipmentCount: equipmentForOwner(state, entity.id).length,
+    formedPearlCount: formedSpiritPearlCount(state, entity),
     portraitUrl: compactPortraitUrl(entity.portraitUrl, entity.id, entity.portraitVariant),
     dailyRecords: trimRecordsByDay(entity.dailyRecords || [], currentDay, growthRecordDays, growthRecordLimit),
     breakthroughs: trimRecordsByDay(entity.breakthroughs || [], currentDay, growthRecordDays, growthRecordLimit),
@@ -9972,6 +9947,12 @@ function publicCultivator(entity, state, options = {}) {
     dungeonHistory: publicDungeonHistory(entity.dungeonHistory || [], { currentDay, limit: dungeonHistoryLimit }),
     power: powerOf(entity, state)
   };
+}
+
+function formedSpiritPearlCount(state, entity) {
+  ensureSpiritPearls(state, entity);
+  const asset = entity?.spiritPearls || state.spiritPearls;
+  return Object.values(asset?.pearls || {}).filter((pearl) => Number(pearl?.tier || 0) > 0).length;
 }
 
 function publicDungeonHistory(records, options = {}) {

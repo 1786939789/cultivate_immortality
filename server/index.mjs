@@ -17,7 +17,6 @@ import {
   getDuelReplayId,
   getDuelDayPage,
   getDaoTrialHistoryPage,
-  getEncounterHistoryPage,
   getCultivatorPortrait,
   getPublicCultivatorDetail,
   getPublicReplay,
@@ -231,18 +230,6 @@ async function handleApi(req, res, url) {
     if (!id) throw new Error("缺少人物 ID");
     const state = await readState(saveId);
     sendJson(res, 200, getPublicCultivatorDetail(state, id));
-    return;
-  }
-
-  if (req.method === "GET" && url.pathname === "/api/encounters/history") {
-    const state = await readState(saveId);
-    sendJson(res, 200, getEncounterHistoryPage(state, {
-      offset: url.searchParams.get("offset"),
-      limit: url.searchParams.get("limit"),
-      category: url.searchParams.get("category"),
-      actorId: url.searchParams.get("actorId"),
-      status: url.searchParams.get("status")
-    }));
     return;
   }
 
