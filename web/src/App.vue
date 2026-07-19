@@ -1161,6 +1161,7 @@
           <div class="panel section-head">
             <div>
               <h3>副本闯关记录</h3>
+              <p class="battle-retention-note">完整副本战报保留最近 10 天；更早记录每 10 天归档为摘要并清理详情<span v-if="latestBattleArchive">，已归档 {{ battleArchives.length }} 个周期</span>。</p>
             </div>
           </div>
 
@@ -2768,6 +2769,7 @@
                 <span class="war-log-kicker">九州军情司 · 第 {{ selectedProvinceWarDay }} 日</span>
                 <h3>攻城战报</h3>
                 <p>{{ selectedProvinceWarDate }}，共记录 {{ selectedProvinceWarSummary.total }} 场攻守交锋</p>
+                <p class="battle-retention-note">完整攻城战报保留最近 10 天；更早记录每 10 天归档为摘要并清理详情<span v-if="latestBattleArchive">，已归档 {{ battleArchives.length }} 个周期</span>。</p>
               </div>
               <div class="war-log-summary-strip">
                 <span class="captured"><small>城池易主</small><b>{{ selectedProvinceWarSummary.captured }}</b><em>攻方得胜</em></span>
@@ -2926,6 +2928,7 @@
           <div class="duel-console-shell">
             <div class="duel-console-head">
               <h2>斗法场 · 赛季演武台</h2>
+              <p class="battle-retention-note">完整切磋战报保留最近 10 天；更早记录每 10 天归档为摘要并清理详情<span v-if="latestBattleArchive">，已归档 {{ battleArchives.length }} 个周期</span>。</p>
               <div class="duel-season-strip" aria-label="切磋赛季状态">
                 <span><i class="duel-mini-icon season" aria-hidden="true"></i>第 {{ duelSeasonInfo.season }} 赛季</span>
                 <span>第 {{ duelSeasonInfo.seasonDay }} / {{ duelSeasonInfo.length }} 天</span>
@@ -4812,6 +4815,7 @@ const emptyState = {
   provinceWars: [],
   duelDays: [],
   dungeonDays: [],
+  battleArchives: { summaries: [] },
   sectProfiles: [],
   catalog: {},
   derived: {}
@@ -6087,18 +6091,20 @@ const dungeonMonsterStages = monsterStageNames.map((stageName, stage) => ({
   monsters: monsterImageEntries.filter((monster) => monster.stage === stage)
 }));
 const dungeonDays = computed(() => gameState.value.dungeonDays || []);
+const battleArchives = computed(() => gameState.value.battleArchives?.summaries || []);
+const latestBattleArchive = computed(() => battleArchives.value[0] || null);
 const activeDungeonDayIndex = computed(() => dungeonDayIndexes[activeDungeonRecordTab.value] || 0);
 const selectedDungeonDay = computed(() => dungeonDays.value[activeDungeonDayIndex.value] || null);
 const canShowPreviousDungeonDay = computed(() => activeDungeonDayIndex.value < dungeonDays.value.length - 1);
 const canShowNextDungeonDay = computed(() => activeDungeonDayIndex.value > 0);
-const dungeonDateMin = computed(() => dateForDay(Math.max(1, (gameState.value.day || 1) - 6)));
+const dungeonDateMin = computed(() => dateForDay(recentBattleDayFloor()));
 const dungeonDateMax = computed(() => currentDate.value);
 const selectedDungeonCalendarDate = computed({
   get() {
     return selectedDungeonDay.value?.date || dateForDay(selectedDungeonDay.value?.day || gameState.value.day);
   },
   set(value) {
-    const day = clampDay(dayForDate(value));
+    const day = clampRecentBattleDay(dayForDate(value));
     const index = dungeonDays.value.findIndex((record) => Number(record.day) === Number(day));
     if (index >= 0) {
       dungeonDayIndexes[activeDungeonRecordTab.value] = index;
@@ -7002,11 +7008,12 @@ const provinceWarDayRecords = computed(() => {
 const provinceWarDayOptions = computed(() => {
   if (activeTab.value !== "sect") return [];
   const days = new Set([gameState.value.day, selectedProvinceWarDay.value, ...provinceWarDayRecords.value.map((record) => record.day)]);
-  return [...days].filter((day) => day >= 1 && day <= gameState.value.day).sort((a, b) => b - a);
+  const floor = recentBattleDayFloor();
+  return [...days].filter((day) => day >= floor && day <= gameState.value.day).sort((a, b) => b - a);
 });
 const provinceWarDateOptions = computed(() => provinceWarDayOptions.value.map((day) => ({ day, date: dateForDay(day) })));
 const selectedProvinceWarDayRecord = computed(() => provinceWarDayRecords.value.find((record) => record.day === selectedProvinceWarDay.value));
-const provinceWarMinDate = computed(() => provinceWarDateOptions.value.at(-1)?.date || currentDate.value);
+const provinceWarMinDate = computed(() => dateForDay(recentBattleDayFloor()));
 const provinceWarMaxDate = computed(() => provinceWarDateOptions.value[0]?.date || currentDate.value);
 const selectedProvinceWarDateInput = computed({
   get: () => selectedProvinceWarDate.value,
@@ -7076,22 +7083,23 @@ const tournamentDuelRecords = computed(() => (duelTournament.value?.rounds || []
 })));
 const duelDayOptions = computed(() => {
   if (activeTab.value !== "arena") return [];
+  const floor = recentBattleDayFloor();
   const days = new Set([
     gameState.value.day,
     selectedDuelDay.value,
     ...duelRecords.value.map((record) => record.day),
     ...tournamentDuelRecords.value.map((record) => record.day)
   ]);
-  return [...days].filter((day) => day >= 1 && day <= gameState.value.day).sort((a, b) => b - a);
+  return [...days].filter((day) => day >= floor && day <= gameState.value.day).sort((a, b) => b - a);
 });
-const duelDateMin = computed(() => dateForDay(1));
+const duelDateMin = computed(() => dateForDay(recentBattleDayFloor()));
 const duelDateMax = computed(() => currentDate.value);
 const selectedDuelCalendarDate = computed({
   get() {
     return dateForDay(selectedDuelDay.value || gameState.value.day);
   },
   set(value) {
-    selectedDuelDay.value = clampDay(dayForDate(value));
+    selectedDuelDay.value = clampRecentBattleDay(dayForDate(value));
     clearBattleReplay();
   }
 });
@@ -10241,7 +10249,7 @@ function duelRecordMeta(record) {
   else parts.push(hasReplay(record) ? "可回放" : "无回放");
   const scoreAfter = duelRecordScoreAfter(record);
   if (scoreAfter !== null) parts.push(`当日积分 ${scoreAfter}`);
-  if (!hasReplay(record)) parts.push("七天外无回放");
+  if (!hasReplay(record)) parts.push("十天外无回放");
   return parts.join(" · ");
 }
 
@@ -11757,9 +11765,9 @@ function syncSelectedDays() {
     selectedRealmStage.value = derived.value.currentRealmInfo?.stage || groupedRealmProgression.value[0]?.stage || "";
   }
   if (!selectedDuelDay.value) selectedDuelDay.value = gameState.value.day;
-  else selectedDuelDay.value = clampDay(selectedDuelDay.value);
+  else selectedDuelDay.value = clampRecentBattleDay(selectedDuelDay.value);
   if (!selectedProvinceWarDay.value) selectedProvinceWarDay.value = gameState.value.day;
-  else selectedProvinceWarDay.value = clampDay(selectedProvinceWarDay.value);
+  else selectedProvinceWarDay.value = clampRecentBattleDay(selectedProvinceWarDay.value);
   const currentDay = Math.max(1, Number(gameState.value.day) || 1);
   const floorDay = Math.max(1, currentDay - taskSelectableDayCount + 1);
   taskForm.targetDay = Math.max(floorDay, Math.min(currentDay, Number(taskForm.targetDay) || currentDay));
@@ -12043,7 +12051,7 @@ function openSectWarRecord(war) {
   openDetailFromCurrent("rank");
   activeTab.value = "sect";
   activeSectSubTab.value = "wars";
-  selectedProvinceWarDay.value = clampDay(war.day || gameState.value.day);
+  selectedProvinceWarDay.value = clampRecentBattleDay(war.day || gameState.value.day);
   selectedProvinceWarId.value = war.id;
   provinceWarSearch.value = "";
   clearBattleReplay();
@@ -12057,6 +12065,15 @@ function closeProvinceWarDetail() {
 function clampDay(day) {
   if (!state.value) return Math.max(1, Number(day) || 1);
   return Math.max(1, Math.min(gameState.value.day, Number(day) || gameState.value.day));
+}
+
+function recentBattleDayFloor() {
+  return Math.max(1, (Number(gameState.value.day) || 1) - 10 + 1);
+}
+
+function clampRecentBattleDay(day) {
+  if (!state.value) return Math.max(1, Number(day) || 1);
+  return Math.max(recentBattleDayFloor(), Math.min(gameState.value.day, Number(day) || gameState.value.day));
 }
 
 async function loadDuelMatchPage(page = 1) {
@@ -12091,13 +12108,13 @@ function changeDuelMatchPage(offset) {
 }
 
 function changeDuelDay(offset) {
-  selectedDuelDay.value = clampDay(selectedDuelDay.value + offset);
+  selectedDuelDay.value = clampRecentBattleDay(selectedDuelDay.value + offset);
   duelMatchPage.value = { day: null, matches: [], page: 1, pageSize: 10, total: 0, totalPages: 0 };
   clearBattleReplay();
 }
 
 function changeProvinceWarDay(offset) {
-  selectedProvinceWarDay.value = clampDay(selectedProvinceWarDay.value + offset);
+  selectedProvinceWarDay.value = clampRecentBattleDay(selectedProvinceWarDay.value + offset);
   selectedProvinceWarId.value = "";
   clearBattleReplay();
 }

@@ -397,9 +397,10 @@ export async function readState(id = "default") {
   const cached = stateCache.get(id);
   if (cached) {
     if (stateValidationCache.get(id) === dateKey()) return cached;
+    const storageChanged = Number(cached.storageCompactionVersion || 0) < 1;
     const shapeChanged = ensureStateShape(cached);
     const settled = settleIfNeeded(cached);
-    if (shapeChanged || settled) await writeState(cached, id);
+    if (shapeChanged || settled || storageChanged) await writeState(cached, id, { vacuum: storageChanged });
     else stateValidationCache.set(id, dateKey());
     return cached;
   }
@@ -415,10 +416,11 @@ export async function readState(id = "default") {
 
   const state = JSON.parse(result[0].values[0][0]);
   stateCache.set(id, state);
+  const needsReplayMigration = Number(state.storageCompactionVersion || 0) < 1;
+  const replaysMigrated = needsReplayMigration ? extractBattleReplays(db, state, id) : false;
   const shapeChanged = ensureStateShape(state);
   const settled = settleIfNeeded(state);
-  const replaysMigrated = extractBattleReplays(db, state, id);
-  if (shapeChanged || settled || replaysMigrated) await writeState(state, id);
+  if (shapeChanged || settled || replaysMigrated) await writeState(state, id, { vacuum: needsReplayMigration });
   else stateValidationCache.set(id, dateKey());
   return state;
 }
@@ -426,7 +428,6 @@ export async function readState(id = "default") {
 export async function writeState(state, id = "default", options = {}) {
   const db = await openDb();
   writePendingBattleReplays(db, state, id);
-  if (!options.skipReplayExtraction) extractBattleReplays(db, state, id);
   compactStateForStorage(state, { skipReplayCompaction: options.skipReplayExtraction });
   pruneBattleReplays(db, state, id);
   const statement = db.prepare(`
@@ -439,6 +440,7 @@ export async function writeState(state, id = "default", options = {}) {
   statement.run({ $id: id, $state: JSON.stringify(state) });
   statement.free();
   writeSaveMeta(db, state, id);
+  if (options.vacuum) db.run("VACUUM");
   stateCache.set(id, state);
   stateValidationCache.set(id, dateKey());
   publicStateCache.delete(id);
@@ -459,6 +461,9 @@ function pruneBattleReplays(db, state, saveId) {
 function writePendingBattleReplays(db, state, saveId) {
   const pending = Array.isArray(state.__pendingBattleReplays) ? state.__pendingBattleReplays : [];
   if (!pending.length) return false;
+  const uniquePending = [...new Map(pending
+    .filter((item) => item?.id && item.replay)
+    .map((item) => [item.id, item])).values()];
   const statement = db.prepare(`
     INSERT INTO battle_replays (id, save_id, kind, day, match_id, replay_json, updated_at)
     VALUES ($id, $saveId, $kind, $day, $matchId, $replay, datetime('now'))
@@ -467,8 +472,7 @@ function writePendingBattleReplays(db, state, saveId) {
       updated_at = excluded.updated_at
   `);
   try {
-    for (const item of pending) {
-      if (!item?.id || !item.replay) continue;
+    for (const item of uniquePending) {
       statement.run({
         $id: item.id,
         $saveId: saveId,

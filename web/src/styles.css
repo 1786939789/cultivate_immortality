@@ -1019,6 +1019,13 @@ button {
   margin-bottom: 0;
 }
 
+.battle-retention-note {
+  margin: 5px 0 0;
+  color: #8a6a43;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .segmented {
   display: flex;
   flex-wrap: wrap;

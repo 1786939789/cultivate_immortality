@@ -1285,6 +1285,8 @@ const equipmentCatalogMap = Object.fromEntries(equipmentCatalog.map((item) => [i
 const spiritPearlMap = Object.fromEntries(spiritPearls.map((pearl) => [pearl.id, pearl]));
 const equipmentVersion = 3;
 const dungeonRecordVersion = 4;
+const storageCompactionVersion = 1;
+const battleArchiveVersion = 1;
 const spiritPearlVersion = 3;
 const spiritDustExchangeCost = 10;
 const starSeaTeamSize = 10;
@@ -1318,14 +1320,16 @@ const monsterArchetypeById = Object.fromEntries(monsterArchetypes.map((archetype
 const monsterArchetypeByName = Object.fromEntries(monsterNamesByStage.flatMap((names) => names.map((name, index) => [name, monsterArchetypes[index % monsterArchetypes.length].id])));
 const sharedDungeonItemIds = equipmentCatalog.map((item) => item.id);
 const recentRecordDays = 30;
-const replayRetentionDays = 7;
-const battleRecordDays = 60;
+const replayRetentionDays = 10;
+const battleRecordDays = 10;
 const publicBattleRecordDays = replayRetentionDays;
 const publicBattleRecordLimit = replayRetentionDays;
 const publicProvinceWarLimit = replayRetentionDays * Math.max(sects.length, 1);
 const publicDuelDayLimit = replayRetentionDays;
-const publicDungeonRecordDays = 7;
-const publicDungeonDayLimit = 7;
+const publicDungeonRecordDays = replayRetentionDays;
+const publicDungeonDayLimit = replayRetentionDays;
+const battleArchiveIntervalDays = 10;
+const battleArchiveLimit = 36;
 const growthRecordDays = 60;
 const logRecordDays = 30;
 const flatLogLimit = 80;
@@ -1357,6 +1361,124 @@ function trimRecordsByDay(records, currentDay, days, limit = detailRecordLimit) 
     .filter((record) => isRecordWithinDays(record, currentDay, days))
     .sort((a, b) => (Number(b.day || 0) - Number(a.day || 0)))
     .slice(0, limit);
+}
+
+function emptyBattleArchiveSummary(startDay) {
+  const start = Math.max(1, Math.floor(Number(startDay) || 1));
+  return {
+    id: `battle-archive-${start}`,
+    startDay: start,
+    endDay: start + battleArchiveIntervalDays - 1,
+    startDate: "",
+    endDate: "",
+    dungeon: { days: 0, runs: 0, bloodClears: 0, sectClears: 0, starSeaTeams: 0, starSeaKills: 0 },
+    duel: { days: 0, matches: 0, battles: 0 },
+    province: { days: 0, wars: 0, captures: 0, defended: 0 }
+  };
+}
+
+function ensureBattleArchiveState(state) {
+  let changed = false;
+  if (!state.battleArchives || typeof state.battleArchives !== "object") {
+    state.battleArchives = { version: battleArchiveVersion, intervalDays: battleArchiveIntervalDays, summaries: [] };
+    return true;
+  }
+  if (Number(state.battleArchives.version) !== battleArchiveVersion) {
+    state.battleArchives.version = battleArchiveVersion;
+    changed = true;
+  }
+  if (Number(state.battleArchives.intervalDays) !== battleArchiveIntervalDays) {
+    state.battleArchives.intervalDays = battleArchiveIntervalDays;
+    changed = true;
+  }
+  if (!Array.isArray(state.battleArchives.summaries)) {
+    state.battleArchives.summaries = [];
+    changed = true;
+  }
+  const before = JSON.stringify(state.battleArchives.summaries);
+  state.battleArchives.summaries = state.battleArchives.summaries
+    .filter((summary) => summary && Number(summary.startDay) > 0)
+    .sort((a, b) => Number(b.startDay || 0) - Number(a.startDay || 0))
+    .slice(0, battleArchiveLimit);
+  if (before !== JSON.stringify(state.battleArchives.summaries)) changed = true;
+  return changed;
+}
+
+function battleArchiveSummaryFor(state, day) {
+  const numericDay = Math.max(1, Math.floor(Number(day) || 1));
+  const startDay = Math.floor((numericDay - 1) / battleArchiveIntervalDays) * battleArchiveIntervalDays + 1;
+  let summary = state.battleArchives.summaries.find((item) => Number(item.startDay) === startDay);
+  if (!summary) {
+    summary = emptyBattleArchiveSummary(startDay);
+    state.battleArchives.summaries.push(summary);
+  }
+  summary.startDate ||= stateDateForDay(state, summary.startDay);
+  summary.endDate ||= stateDateForDay(state, summary.endDay);
+  return summary;
+}
+
+function groupRecordsByDay(records, currentDay, cutoffDay) {
+  const grouped = new Map();
+  for (const record of records || []) {
+    const day = Math.floor(Number(record?.day) || 0);
+    if (!day || day >= cutoffDay || day > currentDay) continue;
+    const list = grouped.get(day) || [];
+    list.push(record);
+    grouped.set(day, list);
+  }
+  return grouped;
+}
+
+function archiveExpiredBattleRecords(state) {
+  ensureBattleArchiveState(state);
+  const currentDay = Math.max(1, Math.floor(Number(state.day) || 1));
+  const cutoffDay = currentDay - battleRecordDays + 1;
+  if (cutoffDay <= 1) return false;
+  let changed = false;
+
+  const dungeonByDay = groupRecordsByDay(state.dungeonDays, currentDay, cutoffDay);
+  for (const [day, records] of dungeonByDay) {
+    const summary = battleArchiveSummaryFor(state, day);
+    const dungeon = summary.dungeon;
+    dungeon.days += 1;
+    dungeon.runs += records.length;
+    for (const record of records) {
+      dungeon.bloodClears += (record.bloodTrial?.caves || []).reduce((sum, cave) => sum + Math.max(Number(cave.clearCount || 0), (cave.clears || []).length), 0);
+      dungeon.sectClears += (record.sects || []).filter((item) => item.success).length;
+      dungeon.starSeaTeams += record.public?.teams?.length || 0;
+      dungeon.starSeaKills += Number(record.public?.killed || 0);
+    }
+    changed = true;
+  }
+  const duelByDay = groupRecordsByDay(state.duelDays, currentDay, cutoffDay);
+  for (const [day, records] of duelByDay) {
+    const summary = battleArchiveSummaryFor(state, day);
+    const duel = summary.duel;
+    duel.days += 1;
+    duel.matches += records.reduce((sum, record) => sum + (record.matches || []).length, 0);
+    duel.battles += records.reduce((sum, record) => sum + (record.matches || []).filter((match) => match.type === "battle").length, 0);
+    changed = true;
+  }
+  const provinceByDay = groupRecordsByDay(state.provinceWars, currentDay, cutoffDay);
+  for (const [day, records] of provinceByDay) {
+    const summary = battleArchiveSummaryFor(state, day);
+    const province = summary.province;
+    province.days += 1;
+    province.wars += records.length;
+    province.captures += records.filter((record) => record.captured).length;
+    province.defended += records.filter((record) => !record.captured).length;
+    changed = true;
+  }
+
+  if (changed) {
+    state.dungeonDays = (state.dungeonDays || []).filter((record) => Number(record?.day || 0) >= cutoffDay || !record?.day);
+    state.duelDays = (state.duelDays || []).filter((record) => Number(record?.day || 0) >= cutoffDay || !record?.day);
+    state.provinceWars = (state.provinceWars || []).filter((record) => Number(record?.day || 0) >= cutoffDay || !record?.day);
+    state.battleArchives.summaries = state.battleArchives.summaries
+      .sort((a, b) => Number(b.startDay || 0) - Number(a.startDay || 0))
+      .slice(0, battleArchiveLimit);
+  }
+  return changed;
 }
 
 function duelHistoryKey(record) {
@@ -2749,6 +2871,7 @@ function runSoloDungeonFor(state, entity, date, caves) {
     compensation: drop?.compensation || 0,
     result: clears ? `连破 ${clears} 洞` : "外谷败退"
   };
+  if (finalReplay) queueBattleReplay(state, finalReplay, `blood-trial-${entity.id}-final`);
   for (const cave of caves.slice(0, clears)) {
     const clear = cave.clears.find((item) => item.id === entity.id);
     if (!clear?.item) continue;
@@ -2785,6 +2908,7 @@ function runSectDungeon(state, sectName, members, date) {
     const replay = buildReplay({ ...entity }, { ...monster, hp: beforeMonsterHp, mana: beforeMonsterMana }, battle, battle.winner === "left" ? "胜" : "负", timestampKey(), state);
     const order = battles.length + 1;
     replay.replayId = makeReplayId("void-hall", state.day, sectName, order, entity.id);
+    queueBattleReplay(state, replay, `void-hall-${sectName}-${order}`);
     contributions.push({ entity, damage });
     battles.push({
       order,
@@ -2807,6 +2931,7 @@ function runSectDungeon(state, sectName, members, date) {
   const spiritRange = dungeonLootRules.void_hall.spiritRange({ stage: targetStage });
   const recordReplay = publicGroupDungeonReplay("虚天殿", monster, contributions, success, totalDamage, monster.maxHp, state);
   recordReplay.replayId = makeReplayId("void-hall", state.day, sectName, "overview");
+  queueBattleReplay(state, recordReplay, `void-hall-${sectName}-overview`);
 
   const record = {
     type: "sect",
@@ -2840,6 +2965,7 @@ function runSectDungeon(state, sectName, members, date) {
   for (const { entity, damage } of contributions) {
     const historyReplay = publicGroupDungeonReplay("虚天殿", monster, contributions.slice(0, 8), success, totalDamage, monster.maxHp, state, entity.id);
     historyReplay.replayId = makeReplayId("void-hall", state.day, sectName, "history", entity.id);
+    queueBattleReplay(state, historyReplay, `void-hall-${sectName}-history-${entity.id}`);
     pushDungeonHistory(entity, {
       type: "sect",
       name: "虚天殿",
@@ -3990,6 +4116,7 @@ function runStarSeaDungeon(state, roster, date) {
     dailyAuction: null,
     cycleSummary: null
   };
+  queueBattleReplay(state, publicRecord.replay, `star-sea-${state.day}-overview`);
   const dailyAuction = settleStarSeaDailyAuction(state, publicRecord, monster);
   publicRecord.dailyAuction = dailyAuction;
   if (dailyAuction?.settled && dailyAuction.type === "auction") {
@@ -4035,6 +4162,7 @@ function runStarSeaDungeon(state, roster, date) {
 
   for (const record of teamRecords) {
     const replay = publicStarSeaTeamReplay(record, monster, state);
+    queueBattleReplay(state, replay, `star-sea-${record.id || record.rank}`);
     record.replay = replay;
     for (const member of record.members) {
       const entity = cultivatorById(state, member.id);
@@ -4102,6 +4230,11 @@ function runDailyDungeons(state, date) {
         .slice(0, 12)
     }))
   };
+  for (const cave of bloodTrial.caves) {
+    for (const entry of [...(cave.clears || []), ...(cave.challengers || [])]) {
+      if (entry.replay) queueBattleReplay(state, entry.replay, `blood-trial-${cave.cave}-${entry.id}`);
+    }
+  }
   const sectRecords = activeSectNames(state)
     .map((sectName) => runSectDungeon(state, sectName, membersForSect(state, sectName), date))
     .filter(Boolean);
@@ -5584,6 +5717,10 @@ function runWheelBattle(state, province, attackerSect, defenderSect, options = {
     const rootEventCount = battle.events.filter((event) => event.kind === "root").length;
     battle.events.splice(rootEventCount, 0, ...modifierEvents);
     const attackerWon = battle.winner === "left";
+    const replay = buildReplay(left, right, battle, attackerWon ? "胜" : "负", timestampKey(), state);
+    replay.kind = "province-war";
+    replay.replayId = makeReplayId("battle", state.day, province.id, attacker.entity.id, defender.entity.id, battles.length + 1);
+    queueBattleReplay(state, replay, `province-${province.id}-${battles.length + 1}`);
     battles.push({
       order: battles.length + 1,
       attacker: siegeEntityRef(attacker),
@@ -5591,7 +5728,8 @@ function runWheelBattle(state, province, attackerSect, defenderSect, options = {
       winnerSide: attackerWon ? "attacker" : "defender",
       winnerName: attackerWon ? attacker.entity.name : defender.entity.name,
       summary: `${attacker.entity.name} ${attackerWon ? "击败" : "败于"} ${defender.entity.name}`,
-      replay: buildReplay(left, right, battle, attackerWon ? "胜" : "负", timestampKey(), state)
+      replayId: replay.replayId,
+      replay
     });
     tryTransferEquipment(state, attackerWon ? attacker.entity : defender.entity, attackerWon ? defender.entity : attacker.entity, `${province.name}攻守战`);
     if (attackerWon) {
@@ -5729,6 +5867,10 @@ function runMonsterSiegeBattle(state, territory, province, defenderSect) {
     };
     const battle = runTurnBattle(left, right, { maxRounds: 16, state });
     const monsterWon = battle.winner === "left";
+    const replay = buildReplay(left, right, battle, monsterWon ? "胜" : "负", timestampKey(), state);
+    replay.kind = "province-monster";
+    replay.replayId = makeReplayId("battle", state.day, province.id, monster.id, defender.entity.id, battles.length + 1);
+    queueBattleReplay(state, replay, `province-monster-${province.id}-${battles.length + 1}`);
     battles.push({
       order: battles.length + 1,
       attacker: monsterEntityRef(monster),
@@ -5736,7 +5878,8 @@ function runMonsterSiegeBattle(state, territory, province, defenderSect) {
       winnerSide: monsterWon ? "monster" : "defender",
       winnerName: monsterWon ? monster.name : defender.entity.name,
       summary: `${monster.name} ${monsterWon ? "击溃" : "败于"} ${defender.entity.name}`,
-      replay: buildReplay(left, right, battle, monsterWon ? "胜" : "负", timestampKey(), state)
+      replayId: replay.replayId,
+      replay
     });
     if (monsterWon) {
       defenderIndex += 1;
@@ -6335,11 +6478,11 @@ function repairDuelSeasonFromRecords(state) {
 }
 
 function trimDuelDays(records, currentDay) {
-  const minDayToKeep = Math.max(1, Number(currentDay || 1) - battleRecordDays + 1);
+  const minDayToKeep = Math.max(1, Number(currentDay || 1) - publicDuelDayLimit + 1);
   return [...(records || [])]
     .filter((record) => (record.day || currentDay) >= minDayToKeep)
     .sort((a, b) => b.day - a.day)
-    .slice(0, battleRecordDays);
+    .slice(0, publicDuelDayLimit);
 }
 
 function randomRootSet() {
@@ -8054,6 +8197,8 @@ export function createDefaultState() {
     equipmentVersion,
     equipmentTransfers: [],
     dungeonRecordVersion,
+    storageCompactionVersion,
+    battleArchives: { version: battleArchiveVersion, intervalDays: battleArchiveIntervalDays, summaries: [] },
     dungeonDays: [],
     starSeaCycle: null,
     starSeaCycleHistory: [],
@@ -8137,6 +8282,7 @@ export function clearProgressHistory(state) {
   state.equipmentVersion = equipmentVersion;
   state.equipmentTransfers = [];
   state.dungeonRecordVersion = dungeonRecordVersion;
+  state.battleArchives = { version: battleArchiveVersion, intervalDays: battleArchiveIntervalDays, summaries: [] };
   state.dungeonDays = [];
   state.starSeaCycle = null;
   state.starSeaCycleHistory = [];
@@ -8436,6 +8582,8 @@ export function ensureStateShape(state) {
     state.logDays = trimLogDays(state.logDays, state);
     if (JSON.stringify(state.logDays) !== logDaysBefore) changed = true;
   }
+  changed = ensureBattleArchiveState(state) || changed;
+  changed = archiveExpiredBattleRecords(state) || changed;
   if (Array.isArray(state.tasks)) {
     for (const task of state.tasks) changed = ensureDatedRecord(task) || changed;
   }
@@ -8750,6 +8898,7 @@ export function powerOf(entity, state) {
 export function compactStateForStorage(state, options = {}) {
   if (!options.skipReplayCompaction) compactReplayFields(state);
   compactNonPlayerReplays(state);
+  archiveExpiredBattleRecords(state);
   for (const { entity, kind } of allCultivators(state)) {
     entity.dailyRecords = trimRecordsByDay(entity.dailyRecords || [], state.day, growthRecordDays, growthRecordLimit);
     entity.breakthroughs = trimRecordsByDay(entity.breakthroughs || [], state.day, growthRecordDays, growthRecordLimit);
@@ -8763,8 +8912,18 @@ export function compactStateForStorage(state, options = {}) {
     ).map(compactDungeonHistoryRecord);
   }
   state.duelDays = trimDuelDays(state.duelDays || [], state.day || 1);
-  state.provinceWars = trimRecordsByDay(state.provinceWars || [], state.day || 1, battleRecordDays).map(compactProvinceWarRecord);
-  state.dungeonDays = trimRecordsByDay(state.dungeonDays || [], state.day || 1, battleRecordDays, battleRecordDays);
+  state.provinceWars = trimRecordsByDay(
+    state.provinceWars || [],
+    state.day || 1,
+    publicBattleRecordDays,
+    publicProvinceWarLimit
+  ).map(compactProvinceWarRecord);
+  state.dungeonDays = trimRecordsByDay(
+    state.dungeonDays || [],
+    state.day || 1,
+    publicDungeonRecordDays,
+    publicDungeonDayLimit
+  ).map(compactDungeonDayRecord);
   state.starSeaCycleHistory = (state.starSeaCycleHistory || [])
     .sort((a, b) => (b.cycle || 0) - (a.cycle || 0))
     .slice(0, starSeaCycleHistoryLimit);
@@ -8779,8 +8938,261 @@ export function compactStateForStorage(state, options = {}) {
     state.encounters.history = (state.encounters.history || []).slice(0, encounterHistoryLimit);
   }
   if (state.daoTrial) state.daoTrial.history = (state.daoTrial.history || []).slice(0, daoTrialHistoryLimit);
+  state.storageCompactionVersion = storageCompactionVersion;
   normalizeTaskMultiplierRecords(state);
   return state;
+}
+
+function compactStoredEntityRef(ref) {
+  if (!ref || typeof ref !== "object") return ref;
+  return {
+    kind: ref.kind,
+    id: ref.id,
+    name: ref.name,
+    realm: ref.realm,
+    sect: ref.sect,
+    portraitUrl: compactPortraitUrl(ref.portraitUrl, ref.id),
+    rankId: ref.rankId || ref.duelSeason?.rankId || "",
+    rankName: ref.rankName || ref.duelSeason?.rankName || "",
+    rankColor: ref.rankColor || ref.duelSeason?.rankColor || "",
+    duelSeason: ref.duelSeason ? {
+      season: ref.duelSeason.season,
+      score: ref.duelSeason.score || 0,
+      wins: ref.duelSeason.wins || 0,
+      losses: ref.duelSeason.losses || 0,
+      rankId: ref.duelSeason.rankId || "",
+      rankName: ref.duelSeason.rankName || "",
+      rankColor: ref.duelSeason.rankColor || ""
+    } : null,
+    skillId: ref.skillId,
+    skillRank: ref.skillRank || 0
+  };
+}
+
+function compactStoredDuelMatch(match) {
+  if (!match || typeof match !== "object") return match;
+  return {
+    id: match.id,
+    type: match.type,
+    order: match.order,
+    left: compactStoredEntityRef(match.left),
+    right: compactStoredEntityRef(match.right),
+    winner: compactStoredEntityRef(match.winner),
+    loser: compactStoredEntityRef(match.loser),
+    winnerScoreDelta: match.winnerScoreDelta,
+    loserScoreDelta: match.loserScoreDelta,
+    replayId: match.replayId || match.replay?.replayId || "",
+    summary: match.summary || ""
+  };
+}
+
+function compactDuelDayRecord(record) {
+  if (!record || typeof record !== "object") return record;
+  return {
+    day: record.day,
+    date: record.date,
+    createdAt: record.createdAt,
+    matches: (record.matches || []).map(compactStoredDuelMatch)
+  };
+}
+
+function compactBloodEntry(entry) {
+  if (!entry || typeof entry !== "object") return entry;
+  return {
+    id: entry.id,
+    name: entry.name,
+    sect: entry.sect,
+    realm: entry.realm,
+    gender: entry.gender,
+    portraitUrl: compactPortraitUrl(entry.portraitUrl, entry.id),
+    primaryRootKey: entry.primaryRootKey,
+    skillId: entry.skillId,
+    output: entry.output || 0,
+    rounds: entry.rounds || 0,
+    score: bloodClearScoreValue(entry),
+    success: Boolean(entry.success),
+    startHp: entry.startHp || 0,
+    startMana: entry.startMana || 0,
+    endHp: entry.endHp || 0,
+    endMana: entry.endMana || 0,
+    spirit: entry.spirit || 0,
+    bonusSpirit: entry.bonusSpirit || 0,
+    item: entry.item || "",
+    tierName: entry.tierName || "",
+    replayId: entry.replayId || entry.replay?.replayId || ""
+  };
+}
+
+function compactBloodCaveRecord(cave) {
+  if (!cave || typeof cave !== "object") return cave;
+  return {
+    cave: cave.cave,
+    name: cave.name,
+    monster: cave.monster,
+    spiritPool: cave.spiritPool,
+    clearCount: Math.max(Number(cave.clearCount || 0), (cave.clears || []).length),
+    challengerCount: Math.max(Number(cave.challengerCount || 0), (cave.challengers || []).length),
+    clears: (cave.clears || []).map(compactBloodEntry),
+    challengers: (cave.challengers || []).map(compactBloodEntry)
+  };
+}
+
+function compactSectDungeonRecord(record) {
+  if (!record || typeof record !== "object") return record;
+  return {
+    type: record.type,
+    name: record.name,
+    sect: record.sect,
+    day: record.day,
+    date: record.date,
+    success: Boolean(record.success),
+    stage: record.stage,
+    highestRealm: record.highestRealm,
+    highestRealmName: record.highestRealmName,
+    monster: record.monster,
+    monsterRealm: record.monsterRealm,
+    monsterStats: record.monsterStats,
+    monsterPower: record.monsterPower,
+    totalDamage: record.totalDamage,
+    monsterRemainingHp: record.monsterRemainingHp,
+    requiredDamage: record.requiredDamage,
+    spiritPoolRange: record.spiritPoolRange,
+    spiritPool: record.spiritPool || 0,
+    sectSpirit: record.sectSpirit || 0,
+    spiritShare: record.spiritShare || 0,
+    spiritRemainder: record.spiritRemainder || 0,
+    top: (record.top || []).map((entry) => ({ id: entry.id, name: entry.name, damage: entry.damage || 0 })),
+    battles: (record.battles || []).map((battle) => ({
+      order: battle.order,
+      challenger: compactStoredEntityRef(battle.challenger),
+      damage: battle.damage || 0,
+      monsterStartHp: battle.monsterStartHp,
+      monsterStartMana: battle.monsterStartMana,
+      monsterEndHp: battle.monsterEndHp,
+      monsterEndMana: battle.monsterEndMana,
+      monsterMaxHp: battle.monsterMaxHp,
+      monsterMaxMana: battle.monsterMaxMana,
+      winnerName: battle.winnerName || "",
+      replayId: battle.replayId || battle.replay?.replayId || ""
+    })),
+    item: record.item || "",
+    itemId: record.itemId || "",
+    itemSlot: record.itemSlot || "",
+    itemTier: record.itemTier || 0,
+    itemOwner: record.itemOwner || "",
+    tierName: record.tierName || "",
+    replayId: record.replayId || record.replay?.replayId || ""
+  };
+}
+
+function compactStarSeaMember(member) {
+  if (!member || typeof member !== "object") return member;
+  return {
+    id: member.id,
+    name: member.name,
+    sect: member.sect,
+    realm: member.realm,
+    gender: member.gender,
+    portraitUrl: compactPortraitUrl(member.portraitUrl, member.id),
+    teamName: member.teamName,
+    teamRank: member.teamRank,
+    damage: member.damage || 0,
+    spirit: member.spirit || 0,
+    item: member.item || "",
+    tierName: member.tierName || ""
+  };
+}
+
+function compactStarSeaTeam(record) {
+  if (!record || typeof record !== "object") return record;
+  return {
+    id: record.id,
+    name: record.name,
+    rank: record.rank,
+    leaderId: record.leaderId,
+    leaderName: record.leaderName,
+    success: Boolean(record.success),
+    rounds: record.rounds || 0,
+    damage: record.damage || 0,
+    score: record.score || 0,
+    speedBonus: record.speedBonus || 0,
+    monsterRemainingHp: record.monsterRemainingHp,
+    monsterEndMana: record.monsterEndMana,
+    monsterMaxHp: record.monsterMaxHp,
+    monsterMaxMana: record.monsterMaxMana,
+    monsterCounterPenalty: record.monsterCounterPenalty || 0,
+    spirit: record.spirit || 0,
+    members: (record.members || []).map(compactStarSeaMember),
+    top: (record.top || []).map(compactStarSeaMember),
+    item: record.item || "",
+    itemId: record.itemId || "",
+    itemSlot: record.itemSlot || "",
+    itemTier: record.itemTier || 0,
+    itemOwner: record.itemOwner || "",
+    itemValue: record.itemValue || 0,
+    auctionDividend: record.auctionDividend || 0,
+    replayId: record.replayId || record.replay?.replayId || ""
+  };
+}
+
+function compactStarSeaRecord(record) {
+  if (!record || typeof record !== "object") return record;
+  return {
+    type: record.type,
+    name: record.name,
+    day: record.day,
+    date: record.date,
+    cycle: record.cycle,
+    cycleStartDay: record.cycleStartDay,
+    cycleEndDay: record.cycleEndDay,
+    teamSize: record.teamSize,
+    killed: record.killed,
+    monsterCount: record.monsterCount,
+    monster: record.monster,
+    monsters: record.monsters,
+    totalDamage: record.totalDamage,
+    spiritPoolRange: record.spiritPoolRange,
+    spiritPool: record.spiritPool,
+    dropChance: record.dropChance,
+    teams: (record.teams || []).map(compactStarSeaTeam),
+    top: (record.top || []).map(compactStarSeaMember),
+    item: record.item || "",
+    itemId: record.itemId || "",
+    itemSlot: record.itemSlot || "",
+    itemTier: record.itemTier || 0,
+    itemOwner: record.itemOwner || "",
+    tierName: record.tierName || "",
+    itemValue: record.itemValue || 0,
+    auctionDividend: record.auctionDividend || 0,
+    dailyAuction: record.dailyAuction || null,
+    cycleSummary: record.cycleSummary || null,
+    replayId: record.replayId || record.replay?.replayId || ""
+  };
+}
+
+function compactDungeonDayRecord(record) {
+  if (!record || typeof record !== "object") return record;
+  return {
+    day: record.day,
+    date: record.date,
+    bloodTrial: record.bloodTrial ? {
+      name: record.bloodTrial.name,
+      caves: (record.bloodTrial.caves || []).map(compactBloodCaveRecord)
+    } : null,
+    solo: (record.solo || []).slice(0, 20).map(compactSoloDungeonEntry),
+    sects: (record.sects || []).map(compactSectDungeonRecord),
+    voidHallSpiritPools: record.voidHallSpiritPools || [],
+    public: record.public ? compactStarSeaRecord(record.public) : null
+  };
+}
+
+function compactSoloDungeonEntry(record) {
+  return {
+    id: record?.id,
+    personName: record?.personName || record?.name || "",
+    sect: record?.sect || "",
+    ...compactDungeonHistoryRecord(record)
+  };
 }
 
 function compactDungeonHistoryRecord(record) {
@@ -8803,7 +9215,7 @@ function compactDungeonHistoryRecord(record) {
     item: record.item || "",
     tierName: record.tierName || "",
     foughtAt: record.foughtAt || "",
-    replayId: record.replayId || "",
+    replayId: record.replayId || record.replay?.replayId || "",
     replay: null
   };
 }
@@ -8922,6 +9334,7 @@ export function getPublicState(state, options = {}) {
       daoTrial: publicDaoTrial(state),
       log: state.log,
       logDays: publicLogDays(state),
+      battleArchives: state.battleArchives,
       bag: state.bag,
       spiritPearls: publicSpiritPearls(state, state.player),
       playerSectPlan: state.playerSectPlan,
@@ -9007,6 +9420,7 @@ function getHomeState(state) {
     daoTrial: publicDaoTrial(state),
     log: state.log,
     logDays: publicLogDays(state),
+    battleArchives: state.battleArchives,
     duelDays: publicDuelDays(state.duelDays || [], state.day, people),
     provinceWars: publicProvinceWars(state.provinceWars || [], state.day, people),
     bag: state.bag,
@@ -10229,6 +10643,7 @@ export function settleIfNeeded(state) {
 export function dailySettlement(state, options = {}) {
   rememberTaskMultiplierForDay(state, state.day);
   state.day += 1;
+  archiveExpiredBattleRecords(state);
   state.player.breakthroughAttemptsToday = 0;
   normalizeElixirEffects(state);
   rememberTaskMultiplierForDay(state, state.day);

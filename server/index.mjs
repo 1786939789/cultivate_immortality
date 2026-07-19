@@ -363,7 +363,7 @@ async function handleApi(req, res, url) {
 
   const requestedScope = body.scope === "lite" || body.scope === "full" ? body.scope : "";
   const scope = requestedScope || (liteActionRoutes.has(url.pathname) ? "lite" : "full");
-  const storageOptions = url.pathname === "/api/duels/day"
+  const storageOptions = ["/api/day/advance", "/api/duels/day"].includes(url.pathname)
     ? { skipReplayExtraction: true, deferPersist: true }
     : undefined;
   const resultOnly = url.pathname === "/api/duels/day";
