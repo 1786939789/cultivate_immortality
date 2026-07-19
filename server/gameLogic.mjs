@@ -116,6 +116,12 @@ export const birthStatRanges = {
   maxMana: [56, 76]
 };
 
+const manaGrowthMultiplier = 0.72;
+const majorManaGrowthMultiplier = 0.7;
+const manaBalanceVersion = 1;
+const skillManaBaseline = 220;
+const skillManaScaleCap = 20;
+
 function rollRange([min, max]) {
   return min + Math.floor(Math.random() * (max - min + 1));
 }
@@ -146,7 +152,7 @@ export function breakthroughGrowthRange(fromRealm) {
     const majorLeapMultiplier = 1.35 + stageIndex * 0.08;
     const baseGrowth = {
       maxHp: [96 + stageIndex * 42, 136 + stageIndex * 52],
-      maxMana: [32 + stageIndex * 13, 48 + stageIndex * 18],
+      maxMana: scaleStatRange([32 + stageIndex * 13, 48 + stageIndex * 18], majorManaGrowthMultiplier),
       attack: [attackMin, attackMin + 10 + stageIndex],
       defense: [defenseMin, defenseMax],
       divineSense: [9 + stageIndex * 4, 14 + stageIndex * 6]
@@ -162,7 +168,7 @@ export function breakthroughGrowthRange(fromRealm) {
   const attackMin = defenseMax + 4 + stageIndex;
   return {
     maxHp: [26 + stageIndex * 12 + levelBand * 4, 42 + stageIndex * 14 + levelBand * 5],
-    maxMana: [7 + stageIndex * 4 + Math.floor(level / 4), 13 + stageIndex * 5 + Math.floor(level / 3)],
+    maxMana: scaleStatRange([7 + stageIndex * 4 + Math.floor(level / 4), 13 + stageIndex * 5 + Math.floor(level / 3)], manaGrowthMultiplier),
     attack: [attackMin, attackMin + 4 + Math.floor(stageIndex / 2)],
     defense: [defenseMin, defenseMax],
     divineSense: [2 + stageIndex + Math.floor(level / 6), 5 + stageIndex + Math.floor(level / 4)]
@@ -507,8 +513,16 @@ function skillUpgradeRealmRequirement(targetRank) {
   return clamp((targetRank - 2) * 10, 0, realms.length - 1);
 }
 
-function skillManaCost(skill, rank) {
-  return Math.max(0, Math.ceil((skill.cost || 0) * (1 + 0.08 * (rank - 1))));
+function skillManaPoolScale(maxMana) {
+  const pool = Number(maxMana) || skillManaBaseline;
+  return clamp(pool / skillManaBaseline, 1, skillManaScaleCap);
+}
+
+function skillManaCost(skill, rank, maxMana = 0) {
+  if (!skill?.cost) return 0;
+  const rankMultiplier = 1 + 0.08 * (rank - 1);
+  const poolMultiplier = maxMana ? skillManaPoolScale(maxMana) : 1;
+  return Math.max(1, Math.ceil(skill.cost * rankMultiplier * poolMultiplier));
 }
 
 function roundSkillValue(key, value) {
@@ -524,11 +538,16 @@ function scaleSkillValue(skill, key, target, progress) {
   return roundSkillValue(key, skill[key] + (target - skill[key]) * progress);
 }
 
-function effectiveSkill(skill, rank = 1) {
+function effectiveSkill(skill, rank = 1, options = {}) {
   const safeRank = clamp(Math.floor(rank || 1), 1, maxSkillRank);
   const target = skillUpgradeTargets[skill.id] || {};
   const progress = (safeRank - 1) / (maxSkillRank - 1);
-  const upgraded = { ...skill, baseCost: skill.cost, rank: safeRank, cost: skillManaCost(skill, safeRank) };
+  const upgraded = {
+    ...skill,
+    baseCost: skill.cost,
+    rank: safeRank,
+    cost: skillManaCost(skill, safeRank, options.maxMana)
+  };
   for (const key of Object.keys(target)) {
     upgraded[key] = scaleSkillValue(skill, key, target[key], progress);
   }
@@ -538,7 +557,7 @@ function effectiveSkill(skill, rank = 1) {
 
 function effectiveSkillForEntity(entity) {
   const skill = findSkill(entity?.skillId);
-  const upgraded = effectiveSkill(skill, skillRankOf(entity, skill.id));
+  const upgraded = effectiveSkill(skill, skillRankOf(entity, skill.id), { maxMana: entity?.maxMana });
   const buffs = entity?.trialBuffs || {};
   if (!Object.keys(buffs).length) return upgraded;
   const result = { ...upgraded };
@@ -618,8 +637,8 @@ function skillUpgradePreview(entity) {
     name: skill.name,
     rank,
     maxRank: maxSkillRank,
-    current: effectiveSkill(skill, rank),
-    next: rank >= maxSkillRank ? null : effectiveSkill(skill, targetRank),
+    current: effectiveSkill(skill, rank, { maxMana: entity.maxMana }),
+    next: rank >= maxSkillRank ? null : effectiveSkill(skill, targetRank, { maxMana: entity.maxMana }),
     targetRank,
     requirementRealm: realms[requirement] || realms[0],
     requirementRealmIndex: requirement,
@@ -631,7 +650,7 @@ function skillUpgradePreview(entity) {
   };
 }
 
-function skillRankPlan(skill) {
+function skillRankPlan(skill, entity = {}) {
   return Array.from({ length: maxSkillRank }, (_, index) => {
     const rank = index + 1;
     const requirement = skillUpgradeRealmRequirement(rank);
@@ -641,7 +660,7 @@ function skillRankPlan(skill) {
       requirementRealmIndex: requirement,
       cost: rank <= 1 ? 0 : skillUpgradeCost(skill, rank),
       chance: rank <= 1 ? 1 : skillUpgradeChance(rank),
-      skill: effectiveSkill(skill, rank)
+      skill: effectiveSkill(skill, rank, { maxMana: entity.maxMana })
     };
   });
 }
@@ -656,7 +675,7 @@ function skillUpgradePlanForState(state, entity) {
     const snapshot = { ...entity, skillId: skill.id, __stateDay: state.day };
     return {
       ...skillUpgradePreview(snapshot),
-      ranks: skillRankPlan(skill),
+      ranks: skillRankPlan(skill, snapshot),
       isCurrent: entity.skillId === skill.id
     };
   });
@@ -8246,6 +8265,7 @@ export function createDefaultState() {
   return {
     day: 1,
     rebirth: 1,
+    manaBalanceVersion,
     xpModeVersion,
     player: {
       id: "player",
@@ -8640,6 +8660,20 @@ function migrateRoster(state) {
   clearProgressHistory(state);
 }
 
+function migrateManaBalance(state) {
+  if (Number(state.manaBalanceVersion) >= manaBalanceVersion) return false;
+  for (const entity of [state.player, ...(state.npcs || [])]) {
+    if (!entity) continue;
+    const oldMaxMana = Number(entity.maxMana);
+    if (!Number.isFinite(oldMaxMana) || oldMaxMana <= 0) continue;
+    const oldMana = Number.isFinite(Number(entity.mana)) ? Number(entity.mana) : oldMaxMana;
+    entity.maxMana = Math.max(1, Math.round(oldMaxMana * manaGrowthMultiplier));
+    entity.mana = clamp(Math.round(oldMana * manaGrowthMultiplier), 0, entity.maxMana);
+  }
+  state.manaBalanceVersion = manaBalanceVersion;
+  return true;
+}
+
 export function ensureStateShape(state) {
   let changed = false;
   if (state.realmTerminologyVersion !== realmTerminologyVersion) {
@@ -8946,6 +8980,7 @@ export function ensureStateShape(state) {
     full.mana = Math.min(full.mana, effectiveMaxMana(full, state));
     return full;
   });
+  changed = migrateManaBalance(state) || changed;
   const adminProfiles = ensureAdminProfiles(state);
   adminProfiles.playerSect ||= state.sect.name;
   const playerProfile = adminProfiles.cultivators.player;
