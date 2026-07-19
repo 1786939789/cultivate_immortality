@@ -42,6 +42,7 @@ import {
 } from "./gameLogic.mjs";
 import {
   clearSessionCookie,
+  getAdminManagedSaveId,
   getAuthSession,
   loginUser,
   logoutSession,
@@ -230,7 +231,7 @@ async function handleApi(req, res, url) {
     sendJson(res, 403, { error: "管理员账号仅可进行后台管理" });
     return;
   }
-  const saveId = session.user.saveId;
+  const saveId = session.user.isAdmin ? await getAdminManagedSaveId() : session.user.saveId;
 
   if (req.method === "GET" && url.pathname === "/api/state") {
     const requestedScope = url.searchParams.get("scope");

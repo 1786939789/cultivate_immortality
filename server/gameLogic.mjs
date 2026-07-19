@@ -17,7 +17,7 @@ function addDays(dateText, offset) {
 }
 
 function stateDateForDay(state, day = state.day) {
-  return addDays(state.calendarStartDate || state.lastSettlementDate || dateKey(), Math.max(0, Number(day || 1) - 1));
+  return addDays(state.calendarStartDate || state.lastSettlementDate || dateKey(), Math.max(0, Number(day ?? 1) - 1));
 }
 
 function timestampKey(date = new Date()) {
@@ -618,6 +618,60 @@ function normalizeSkillState(entity) {
   return changed;
 }
 
+function combatStat(entity, key) {
+  const stats = entity?.stats || entity || {};
+  if (key === "hp") return Number(entity?.hp ?? stats.hp ?? 0);
+  if (key === "maxHp") return Number(entity?.maxHp ?? stats.maxHp ?? 0);
+  if (key === "mana") return Number(entity?.mana ?? stats.mana ?? 0);
+  if (key === "maxMana") return Number(entity?.maxMana ?? stats.maxMana ?? 0);
+  return Number(entity?.[key] ?? stats[key] ?? 0);
+}
+
+function hasCombatEffect(effects, type, predicate = () => true) {
+  return (effects || []).some((effect) => effect?.type === type && Number(effect.duration || 0) > 0 && predicate(effect));
+}
+
+function shouldUseCombatSkill({ skill, actor, target, actorEffects = [], targetEffects = [] } = {}) {
+  if (!skill) return false;
+  const actorHp = combatStat(actor, "hp");
+  const actorMaxHp = Math.max(1, combatStat(actor, "maxHp"));
+  const targetHp = combatStat(target, "hp");
+  const targetMaxHp = Math.max(1, combatStat(target, "maxHp"));
+  const targetMana = combatStat(target, "mana");
+  const targetMaxMana = Math.max(1, combatStat(target, "maxMana"));
+
+  if (skill.type === "heal") {
+    const healAmount = actorMaxHp * Math.max(0, Number(skill.percent) || 0);
+    const missingHp = Math.max(0, actorMaxHp - actorHp);
+    return actorHp / actorMaxHp < 0.78 && missingHp >= Math.max(actorMaxHp * 0.05, healAmount * 0.35);
+  }
+  if (skill.type === "execute") {
+    return targetHp / targetMaxHp <= Math.max(0, Number(skill.threshold) || 0);
+  }
+  if (skill.type === "manaBurn") {
+    const burn = Math.max(1, Number(skill.burn) || 0);
+    return targetMana > Math.max(1, Math.min(burn, targetMaxMana * 0.2));
+  }
+  if (skill.type === "dot" || skill.type === "dotStrike") {
+    const sameStatus = hasCombatEffect(targetEffects, "dot", (effect) => (
+      (effect.name && effect.name === skill.name)
+      || (effect.sourceId && actor?.id && effect.sourceId === actor.id)
+    ));
+    return !sameStatus;
+  }
+  if (skill.type === "stun") return !hasCombatEffect(targetEffects, "stun");
+  if (skill.type === "weaken") return !hasCombatEffect(targetEffects, "attackDown");
+  if (skill.type === "shield") return !hasCombatEffect(actorEffects, "shield");
+  if (skill.type === "defenseBuff") return !hasCombatEffect(actorEffects, "defenseUp");
+  if (skill.type === "reflect") return !hasCombatEffect(actorEffects, "reflect");
+  if (skill.type === "evasionBuff") return !hasCombatEffect(actorEffects, "evasion");
+  if (skill.type === "dodge") return !hasCombatEffect(actorEffects, "dodgeNext");
+  if (skill.type === "field") {
+    return !hasCombatEffect(actorEffects, "shield") && !hasCombatEffect(targetEffects, "defenseDown");
+  }
+  return true;
+}
+
 function skillUpgradePreview(entity) {
   const skill = findSkill(entity.skillId);
   const rank = skillRankOf(entity, skill.id);
@@ -1029,7 +1083,13 @@ function runTurnBattle(left, right, options = {}) {
       }
 
       const skill = skills[side];
-      if (skill && state.mana >= skill.cost && cooldowns[side] <= 0) {
+      if (skill && state.mana >= skill.cost && cooldowns[side] <= 0 && shouldUseCombatSkill({
+        skill,
+        actor: { ...state.actor, hp: state.hp, mana: state.mana },
+        target: { ...state.target, hp: state.targetHp, mana: state.targetMana },
+        actorEffects: effects[side],
+        targetEffects: effects[targetSide]
+      })) {
         castSkill(side, skill);
       } else {
         const damage = applyStrike(side);
@@ -3388,7 +3448,17 @@ function runStarSeaTeamBattle(state, team, monster) {
       const target = pick(alive);
       const monsterActor = { id: monster.id, name: monster.name, stats: monsterState.stats, hp: monsterState.hp, mana: monsterState.mana, effects: monsterState.effects };
       const targetWrapper = { id: target.entity.id, name: target.entity.name, stats: target.stats, hp: target.hp, mana: target.mana, effects: target.effects };
-      const useSkill = monsterSkill && monsterState.mana >= monsterSkill.cost && monsterState.cooldown <= 0 && Math.random() < 0.45;
+      const useSkill = monsterSkill
+        && monsterState.mana >= monsterSkill.cost
+        && monsterState.cooldown <= 0
+        && shouldUseCombatSkill({
+          skill: monsterSkill,
+          actor: monsterActor,
+          target: targetWrapper,
+          actorEffects: monsterState.effects,
+          targetEffects: target.effects
+        })
+        && Math.random() < 0.45;
       let result;
       if (useSkill) {
         result = castTeamSkill(monsterActor, targetWrapper, monsterSkill);
@@ -3425,7 +3495,17 @@ function runStarSeaTeamBattle(state, team, monster) {
       }
       const actor = { id: fighter.entity.id, name: fighter.entity.name, stats: fighter.stats, hp: fighter.hp, mana: fighter.mana, effects: fighter.effects, cooldown: fighter.cooldown };
       const target = { id: monster.id, name: monster.name, stats: monsterState.stats, hp: monsterState.hp, mana: monsterState.mana, effects: monsterState.effects };
-      const canSkill = fighter.skill && fighter.mana >= fighter.skill.cost && fighter.cooldown <= 0 && Math.random() < 0.46;
+      const canSkill = fighter.skill
+        && fighter.mana >= fighter.skill.cost
+        && fighter.cooldown <= 0
+        && shouldUseCombatSkill({
+          skill: fighter.skill,
+          actor,
+          target,
+          actorEffects: fighter.effects,
+          targetEffects: monsterState.effects
+        })
+        && Math.random() < 0.46;
       const result = canSkill
         ? castTeamSkill(actor, target, fighter.skill)
         : strikeDamage(actor, target, 0.82 + Math.random() * 0.28);
@@ -8231,10 +8311,10 @@ export function createDefaultState() {
     ? `你在山脚租下一间小屋，翻开第一卷长生札记。本世灵根为${rootSetNameLine(rootSet)}。`
     : `你在山脚租下一间小屋，翻开第一卷长生札记。本世灵根为${root.name}。`;
   const openingDate = dateKey();
-  const openingEntry = { text: openingLog, type: "", day: 1, date: openingDate, time: "初入" };
+  const openingEntry = { text: openingLog, type: "", day: 0, date: openingDate, time: "初入" };
 
   return {
-    day: 1,
+    day: 0,
     rebirth: 1,
     manaBalanceVersion,
     xpModeVersion,
@@ -8306,7 +8386,7 @@ export function createDefaultState() {
       battleReplaySpeed: defaultBattleReplaySpeed,
       dailyTickerSpeed: defaultDailyTickerSpeed
     },
-    taskMultiplierRecords: [{ day: 1, date: openingDate, elixirMultiplier: 1, totalMultiplier: 1 }],
+    taskMultiplierRecords: [{ day: 0, date: openingDate, elixirMultiplier: 1, totalMultiplier: 1 }],
     encounters: {
       version: encounterStateVersion,
       lastGenerationDay: 0,
@@ -8345,7 +8425,7 @@ export function createDefaultState() {
     calendarStartDate: openingDate,
     lastSettlementDate: openingDate,
     log: [openingEntry],
-    logDays: [{ day: 1, date: openingDate, logs: [openingEntry] }]
+    logDays: [{ day: 0, date: openingDate, logs: [openingEntry] }]
   };
 }
 
@@ -8507,12 +8587,12 @@ function resetOpeningLogForProfile(state) {
   const openingEntry = {
     text: `你在山脚租下一间小屋，翻开第一卷长生札记。本世灵根为${rootText}。`,
     type: "",
-    day: 1,
+    day: 0,
     date: dateKey(),
     time: "初入"
   };
   state.log = [openingEntry];
-  state.logDays = [{ day: 1, date: openingEntry.date, logs: [openingEntry] }];
+  state.logDays = [{ day: 0, date: openingEntry.date, logs: [openingEntry] }];
 }
 
 function rebuildSectProfilesForReset(state, previousState) {

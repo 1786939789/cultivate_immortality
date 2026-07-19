@@ -53,7 +53,7 @@
         </div>
         <div>
           <h1>长生札记</h1>
-          <p>第 {{ state?.day || 1 }} 日 · {{ currentDate }} · {{ realmName(player.realm) }}</p>
+          <p>第 {{ state?.day ?? 0 }} 日 · {{ currentDate }} · {{ realmName(player.realm) }}</p>
         </div>
       </section>
 
@@ -3322,7 +3322,7 @@
               <div class="market-wallet">
                 <span>灵石</span>
                 <strong>{{ player.spirit || 0 }}</strong>
-                <small>第 {{ gameState.day || 1 }} 日行情</small>
+                <small>第 {{ gameState.day ?? 0 }} 日行情</small>
               </div>
             </div>
 
@@ -4181,12 +4181,12 @@
             <div class="section-head">
               <div>
                 <h3>后台管理</h3>
-                <p>角色、头像与宗门资料会保存到本地存档。</p>
+                <p>管理普通用户存档；修改会同步影响该用户及其 NPC。</p>
               </div>
               <div class="admin-head-actions">
                 <div class="admin-day-badge" aria-label="当前游戏日">
-                  <span>当前游戏日</span>
-                  <strong>第 {{ state?.day || 1 }} 天</strong>
+                  <span>普通用户游戏日</span>
+                  <strong>第 {{ state?.day ?? 0 }} 天</strong>
                 </div>
                 <label v-if="adminMode !== 'settings'" class="admin-search">
                   <span>搜索</span>
@@ -4593,7 +4593,7 @@
                 <h3>游戏指导书</h3>
                 <p>规则以当前版本实际结算逻辑为准。</p>
               </div>
-              <span class="tag">第 {{ state?.day || 1 }} 天</span>
+              <span class="tag">第 {{ state?.day ?? 0 }} 天</span>
             </div>
             <div class="admin-wiki-layout">
               <aside class="admin-wiki-toc" aria-label="游戏指导书目录">
@@ -4814,7 +4814,7 @@ const powerSortOptions = [
 ];
 
 const emptyState = {
-  day: 1,
+  day: 0,
   calendarStartDate: "",
   lastSettlementDate: "",
   player: {
@@ -7284,7 +7284,7 @@ const powerFormula = computed(() => {
 });
 
 const hudResources = computed(() => [
-  { label: "天数", value: `第 ${gameState.value.day || 1} 天`, icon: "day" },
+  { label: "天数", value: `第 ${gameState.value.day ?? 0} 天`, icon: "day" },
   { label: "灵石", value: player.value.spirit, icon: "spirit" }
 ]);
 
@@ -10159,7 +10159,7 @@ function addDays(dateText, offset) {
 }
 
 function dateForDay(day) {
-  return addDays(gameState.value.calendarStartDate || gameState.value.lastSettlementDate, Math.max(0, Number(day || 1) - 1));
+  return addDays(gameState.value.calendarStartDate || gameState.value.lastSettlementDate, Math.max(0, Number(day ?? 1) - 1));
 }
 
 function dayForDate(dateText) {

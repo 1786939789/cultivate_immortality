@@ -12,8 +12,9 @@ const battleDbPath = process.env.BATTLE_DB_PATH || join(dirname(dbPath), "battle
 const wasmPath = join(rootDir, "node_modules", "sql.js", "dist", "sql-wasm.wasm");
 const defaultRegistrationCode = "Rushac";
 const sessionMaxAgeSeconds = 60 * 60 * 24 * 30;
-const bootstrapAdminUsername = process.env.ADMIN_USERNAME || "csj-admin";
-const bootstrapAdminPassword = process.env.ADMIN_PASSWORD || "CsjAdmin#2026!";
+const bootstrapAdminUsername = process.env.ADMIN_USERNAME || "admin";
+const bootstrapAdminPassword = process.env.ADMIN_PASSWORD || "Admin@24";
+const legacyBootstrapAdminUsername = "csj-admin";
 
 mkdirSync(dataDir, { recursive: true });
 
@@ -144,7 +145,31 @@ function ensureAuthUserRoleColumn(db) {
 function seedAdminUser(db) {
   const existing = readUserByName(db, bootstrapAdminUsername);
   if (existing) {
-    if (existing[6] !== "admin") db.run("UPDATE auth_users SET role = 'admin' WHERE id = $id", { $id: existing[0] });
+    const { hash, salt } = hashPassword(bootstrapAdminPassword);
+    db.run(`
+      UPDATE auth_users
+      SET password_hash = $passwordHash, password_salt = $passwordSalt, role = 'admin'
+      WHERE id = $id
+    `, {
+      $id: existing[0],
+      $passwordHash: hash,
+      $passwordSalt: salt
+    });
+    return;
+  }
+  const legacy = readUserByName(db, legacyBootstrapAdminUsername);
+  if (legacy?.[6] === "admin") {
+    const { hash, salt } = hashPassword(bootstrapAdminPassword);
+    db.run(`
+      UPDATE auth_users
+      SET username = $username, password_hash = $passwordHash, password_salt = $passwordSalt, role = 'admin'
+      WHERE id = $id
+    `, {
+      $id: legacy[0],
+      $username: bootstrapAdminUsername,
+      $passwordHash: hash,
+      $passwordSalt: salt
+    });
     return;
   }
   const { hash, salt } = hashPassword(bootstrapAdminPassword);
@@ -333,6 +358,17 @@ function userCount(db) {
   return result.length ? Number(result[0].values[0][0] || 0) : 0;
 }
 
+function managedUserId(db) {
+  const result = db.exec(`
+    SELECT id
+    FROM auth_users
+    WHERE role IS NULL OR role <> 'admin'
+    ORDER BY datetime(created_at) ASC, id ASC
+    LIMIT 1
+  `);
+  return result.length && result[0].values.length ? result[0].values[0][0] : "default";
+}
+
 function assertRegistrationCode(db, code) {
   const text = String(code || "").trim();
   if (!text) throw new Error("请输入注册码");
@@ -469,11 +505,16 @@ export async function loginUser({ username, password }) {
   touchUserLogin(db, row[0]);
   const session = createSession(db, row[0]);
   persist(db);
-  await readState(row[0]);
+  await readState(row[6] === "admin" ? managedUserId(db) : row[0]);
   return {
     user: { ...publicUser([row[0], row[1], row[4], new Date().toISOString(), row[6]]) },
     session
   };
+}
+
+export async function getAdminManagedSaveId() {
+  const db = await openDb();
+  return managedUserId(db);
 }
 
 export async function logoutSession(token) {
