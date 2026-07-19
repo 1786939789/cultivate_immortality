@@ -2959,7 +2959,7 @@
               </div>
             </section>
 
-            <section v-if="duelTournament" class="tournament-bracket-panel">
+            <section ref="tournamentBracketPanel" v-if="duelTournament" class="tournament-bracket-panel">
               <div class="tournament-bracket-head">
                 <div><strong>天骄签表</strong><span>种子与晋级路径已锁定，未到赛日保留空位。</span></div>
                 <div class="tournament-bracket-tools">
@@ -2969,6 +2969,9 @@
                     <span>{{ Math.round(tournamentBracketZoom * 100) }}%</span>
                     <button type="button" title="放大签表" aria-label="放大签表" @click="adjustTournamentZoom(0.1)"><ZoomIn :size="15" /></button>
                     <button type="button" title="复位签表视图" aria-label="复位签表视图" @click="resetTournamentBracketView"><LocateFixed :size="15" /></button>
+                    <button type="button" :title="tournamentBracketFullscreen ? '退出全屏查看' : '全屏查看签表'" :aria-label="tournamentBracketFullscreen ? '退出全屏查看签表' : '全屏查看签表'" @click="toggleTournamentBracketFullscreen">
+                      <component :is="tournamentBracketFullscreen ? Minimize2 : Maximize2" :size="15" />
+                    </button>
                   </div>
                 </div>
               </div>
@@ -4701,7 +4704,9 @@ import {
   Zap,
   ZoomIn,
   ZoomOut,
-  LocateFixed
+  LocateFixed,
+  Maximize2,
+  Minimize2
 } from "lucide-vue-next";
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from "vue";
 import { clearCachedState, getBattleReplay, getCachedState, getCultivatorDetail, getCurrentUser, getDaoTrialHistory, getDuelDayPage, getDuelReplay, getEncounterHistory, getState, login, logout, postAction, register, saveCachedState } from "./api";
@@ -4932,8 +4937,10 @@ const selectedDuelDay = ref(null);
 const duelSearch = ref("");
 const duelMatchPage = ref({ day: null, matches: [], page: 1, pageSize: 10, total: 0, totalPages: 0 });
 const duelMatchPageLoading = ref(false);
+const tournamentBracketPanel = ref(null);
 const tournamentBracketViewport = ref(null);
 const tournamentBracketZoom = ref(0.72);
+const tournamentBracketFullscreen = ref(false);
 const tournamentBracketPan = reactive({ x: 0, y: 0 });
 const tournamentBracketDrag = reactive({ active: false, pointerId: null, startX: 0, startY: 0, originX: 0, originY: 0 });
 const collapsedTournamentRounds = ref(new Set());
@@ -5562,6 +5569,20 @@ function resetTournamentBracketView() {
   tournamentBracketZoom.value = 0.72;
   tournamentBracketPan.x = 0;
   tournamentBracketPan.y = 0;
+}
+
+async function toggleTournamentBracketFullscreen() {
+  const panel = tournamentBracketPanel.value;
+  if (!panel) return;
+  if (document.fullscreenElement === panel) {
+    await document.exitFullscreen?.();
+    return;
+  }
+  await panel.requestFullscreen?.();
+}
+
+function syncTournamentBracketFullscreen() {
+  tournamentBracketFullscreen.value = document.fullscreenElement === tournamentBracketPanel.value;
 }
 
 function onTournamentBracketWheel(event) {
@@ -12372,6 +12393,7 @@ onMounted(async () => {
   window.addEventListener("resize", resizeChinaMap);
   window.addEventListener("keydown", handleMapFullscreenKey);
   window.addEventListener("click", closeAccountMenu);
+  document.addEventListener("fullscreenchange", syncTournamentBracketFullscreen);
 });
 
 onUnmounted(() => {
@@ -12383,6 +12405,7 @@ onUnmounted(() => {
   window.removeEventListener("resize", resizeChinaMap);
   window.removeEventListener("keydown", handleMapFullscreenKey);
   window.removeEventListener("click", closeAccountMenu);
+  document.removeEventListener("fullscreenchange", syncTournamentBracketFullscreen);
   disposeChinaMap();
 });
 
