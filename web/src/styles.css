@@ -13108,12 +13108,13 @@ button.defender-chip.person:focus-visible .character-portrait {
 }
 
 .admin-wiki-toc-row strong {
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .admin-wiki-toc-row small {
   color: #796348;
-  font-size: 11px;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .admin-wiki-reader {
@@ -13153,7 +13154,7 @@ button.defender-chip.person:focus-visible .character-portrait {
 .admin-wiki-reader > header p {
   margin: 0;
   color: #71563c;
-  font-size: 14px;
+  font-size: 16px;
   line-height: 1.65;
 }
 
@@ -13170,14 +13171,14 @@ button.defender-chip.person:focus-visible .character-portrait {
 .admin-wiki-section h4 {
   margin: 0 0 10px;
   color: #285e50;
-  font-size: 18px;
+  font-size: 20px;
 }
 
 .admin-wiki-section p,
 .admin-wiki-section li {
   color: #4f3c2a;
-  font-size: 14px;
-  line-height: 1.8;
+  font-size: 16px;
+  line-height: 1.85;
 }
 
 .admin-wiki-section p {
@@ -13208,7 +13209,7 @@ button.defender-chip.person:focus-visible .character-portrait {
 .admin-wiki-tip b {
   margin-right: 8px;
   color: #9a5910;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .admin-list {
