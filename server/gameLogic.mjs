@@ -6917,12 +6917,12 @@ function ensureTaskSystem(state) {
   return changed;
 }
 
-const encounterStateVersion = 1;
+const encounterStateVersion = 2;
 const encounterPendingLimit = 3;
 const encounterHistoryLimit = 720;
 const encounterPublicHistoryLimit = 24;
-const encounterBaseChance = 0.5;
-const encounterPityDays = 3;
+const encounterMinGapDays = 2;
+const encounterMaxGapDays = 4;
 const encounterActiveChainLimit = 2;
 const encounterFamilyCooldownDays = 30;
 const daoTrialStateVersion = 1;
@@ -6956,6 +6956,7 @@ function ensureEncounterState(state) {
     state.encounters = {
       version: encounterStateVersion,
       lastGenerationDay: Number(previous.lastGenerationDay || state.day - 1),
+      nextGenerationDay: Number(previous.nextGenerationDay || 0),
       emptyDays: Number(previous.emptyDays || 0),
       pending: Array.isArray(previous.pending) ? previous.pending : [],
       history: Array.isArray(previous.history) ? previous.history : [],
@@ -6986,6 +6987,9 @@ function ensureEncounterState(state) {
   encounters.statistics.seasonCounts ??= {};
   encounters.emptyDays = Math.max(0, Math.floor(Number(encounters.emptyDays) || 0));
   encounters.lastGenerationDay = Math.min(state.day, Math.floor(Number(encounters.lastGenerationDay) || state.day - 1));
+  if (!Number.isFinite(Number(encounters.nextGenerationDay)) || Number(encounters.nextGenerationDay) <= encounters.lastGenerationDay) {
+    encounters.nextGenerationDay = Math.max(state.day + encounterMinGapDays, encounters.lastGenerationDay + encounterMinGapDays);
+  }
   return changed;
 }
 
@@ -7270,10 +7274,18 @@ function recordEncounterSeen(state, definition) {
   state.encounters.statistics.seasonCounts[encounterSeasonOfDay(state.day)] = (state.encounters.statistics.seasonCounts[encounterSeasonOfDay(state.day)] || 0) + 1;
 }
 
+function scheduleNextEncounter(state) {
+  const span = encounterMaxGapDays - encounterMinGapDays + 1;
+  const gap = encounterMinGapDays + Math.floor(deterministicUnit(`encounter-gap|${state.rebirth}|${state.day}|${state.encounters.statistics.seenCount}`) * span);
+  state.encounters.nextGenerationDay = state.day + clamp(gap, encounterMinGapDays, encounterMaxGapDays);
+  state.encounters.emptyDays = 0;
+}
+
 export function generateDailyEncounter(state) {
   ensureEncounterState(state);
   settleEncounterPromises(state);
   if (state.encounters.lastGenerationDay >= state.day) return null;
+  if (state.day < state.encounters.nextGenerationDay) return null;
   expireEncounters(state);
   state.encounters.lastGenerationDay = state.day;
   if (state.encounters.pending.length >= encounterPendingLimit) return null;
@@ -7285,28 +7297,56 @@ export function generateDailyEncounter(state) {
     state.encounters.pending.push(event);
     due.chain.nextEventId = "";
     recordEncounterSeen(state, due.definition);
+    scheduleNextEncounter(state);
     log(state, `因缘再续：「${event.title}」已有新的进展。`, "gold");
     return event;
-  }
-
-  const guaranteed = state.encounters.emptyDays >= encounterPityDays;
-  const rolled = deterministicUnit(`encounter-roll|${state.rebirth}|${state.day}`) < encounterBaseChance;
-  if (!guaranteed && !rolled) {
-    state.encounters.emptyDays += 1;
-    return null;
   }
   const definition = chooseEncounterDefinition(state);
   if (!definition) {
     state.encounters.emptyDays += 1;
+    scheduleNextEncounter(state);
     return null;
   }
   const event = materializeEncounter(state, definition);
   if (!event) return null;
   state.encounters.pending.push(event);
-  state.encounters.emptyDays = 0;
   recordEncounterSeen(state, definition);
+  scheduleNextEncounter(state);
   log(state, `因缘奇遇：「${event.title}」等待你的抉择。`, definition.rarity === "fated" ? "gold" : "");
   return event;
+}
+
+function signedEncounterValue(value) {
+  const amount = Number(value) || 0;
+  return amount > 0 ? `+${amount}` : `${amount}`;
+}
+
+function encounterChoiceImpact(choice = {}) {
+  const effects = choice.effects || {};
+  const parts = [];
+  const labels = [
+    ["xp", "修为"],
+    ["spirit", "灵石"],
+    ["dust", "灵尘"],
+    ["hp", "气血"],
+    ["mana", "灵力"],
+    ["reputation", "声望"],
+    ["sectSupplies", "宗门物资"],
+    ["rivalHeat", "宗门敌意"],
+    ["heartDemon", "心魔"]
+  ];
+  for (const [key, label] of labels) {
+    if (Number(effects[key]) !== 0) parts.push(`${label} ${signedEncounterValue(effects[key])}`);
+  }
+  if (Number(effects.affinity) !== 0) parts.push(`亲和 ${signedEncounterValue(effects.affinity)}`);
+  if (Number(effects.respect) !== 0) parts.push(`尊重 ${signedEncounterValue(effects.respect)}`);
+  if (effects.battle) parts.push("触发切磋");
+  if (effects.invite) parts.push("获得试炼邀约");
+  if (effects.nextEventId) parts.push("留下后续线索");
+  if (effects.endChain) parts.push("结束事件链");
+  if (effects.completeChain) parts.push("完成事件链");
+  if (choice.deferred?.days) parts.push(`${choice.deferred.days}日后回响`);
+  return parts.join(" · ");
 }
 
 function encounterChoiceAvailability(state, choice) {
@@ -7326,6 +7366,7 @@ function publicEncounterEvent(state, event) {
       tone: choice.tone,
       memoryTag: choice.memoryTag || "",
       deferred: choice.deferred || null,
+      impact: encounterChoiceImpact(choice),
       ...encounterChoiceAvailability(state, choice)
     }))
   };
@@ -7351,8 +7392,10 @@ function publicEncounters(state) {
   ]));
   return {
     definitionCount: encounterDefinitionCount,
-    baseChance: encounterBaseChance,
-    pityDays: encounterPityDays,
+    minGapDays: encounterMinGapDays,
+    maxGapDays: encounterMaxGapDays,
+    nextGenerationDay: state.encounters.nextGenerationDay,
+    daysUntilNext: Math.max(0, state.encounters.nextGenerationDay - state.day),
     emptyDays: state.encounters.emptyDays,
     season: encounterSeasonOfDay(state.day),
     cycle: encounterCycleOfDay(state.day),
@@ -7432,11 +7475,19 @@ export function resolveEncounter(state, payload = {}) {
   const actor = state.npcs.find((npc) => npc.id === event.actorId);
   const relation = relationshipEntry(state, event.actorId);
   const effects = choice.effects || {};
+  const impact = encounterChoiceImpact(choice);
   relation.affinity = clamp(relation.affinity + (Number(effects.affinity) || 0), -100, 100);
   relation.respect = clamp(relation.respect + (Number(effects.respect) || 0), 0, 100);
   relation.interactions += 1;
   relation.lastDay = state.day;
+  state.player.xp = Math.max(0, state.player.xp + (Number(effects.xp) || 0));
   state.player.spirit = Math.max(0, state.player.spirit + (Number(effects.spirit) || 0));
+  state.player.hp = clamp(state.player.hp + (Number(effects.hp) || 0), 1, effectiveMaxHp(state.player, state));
+  state.player.mana = clamp(state.player.mana + (Number(effects.mana) || 0), 0, effectiveMaxMana(state.player, state));
+  state.player.reputation = Math.max(0, state.player.reputation + (Number(effects.reputation) || 0));
+  state.player.heartDemon = clamp(state.player.heartDemon + (Number(effects.heartDemon) || 0), 0, 100);
+  state.sect.supplies = clamp(state.sect.supplies + (Number(effects.sectSupplies) || 0), 0, 160);
+  state.sect.rivalHeat = clamp(state.sect.rivalHeat + (Number(effects.rivalHeat) || 0), 0, 100);
   if (effects.dust > 0) addSpiritDust(state, effects.dust, `因缘事件「${event.title}」`, state.player);
   if (effects.invite) relation.invitedUntilCycle = daoTrialCycleOfDay(state.day) + 1;
 
@@ -7516,7 +7567,8 @@ export function resolveEncounter(state, payload = {}) {
     resolvedDate: stateDateForDay(state),
     choiceId: choice.id,
     choiceLabel: choice.label,
-    outcome: `${choice.outcome}${battleResult ? ` ${battleResult}。` : ""}`,
+    outcome: `${choice.outcome}${impact ? `（${impact}）` : ""}${battleResult ? ` ${battleResult}。` : ""}`,
+    impact,
     relationTitle: relationshipTitle(relation),
     affinity: relation.affinity,
     respect: relation.respect,
@@ -8267,6 +8319,7 @@ export function createDefaultState() {
     encounters: {
       version: encounterStateVersion,
       lastGenerationDay: 0,
+      nextGenerationDay: encounterMinGapDays + 1,
       emptyDays: 0,
       pending: [],
       history: [],

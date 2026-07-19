@@ -3058,6 +3058,26 @@ body::before {
   pointer-events: none;
 }
 
+.profile-avatar-link {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.profile-avatar-link:focus-visible {
+  outline: 3px solid rgba(255, 226, 145, .92);
+  outline-offset: -4px;
+}
+
 .avatar .character-portrait {
   --portrait-size: 100%;
   position: absolute;
@@ -13204,4 +13224,34 @@ body::before {
   .stat:focus-visible .stat-tip {
     transform: translate(-50%, 0);
   }
+}
+
+/* Keep encounter history readable without changing the density of other dossier ledgers. */
+.rank-surface.view.active > .character-dossier .dossier-records > .dossier-encounter-panel {
+  height: auto;
+  max-height: 440px;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-records .encounter-detail-scroll {
+  max-height: 340px;
+  gap: 8px;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-records .encounter-detail-scroll .event-button {
+  height: auto;
+  min-height: 82px;
+  padding: 10px 12px;
+  align-content: start;
+  gap: 5px;
+  line-height: 1.5;
+  white-space: normal;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-records .encounter-detail-scroll .event-button strong,
+.rank-surface.view.active > .character-dossier .dossier-records .encounter-detail-scroll .event-button span,
+.rank-surface.view.active > .character-dossier .dossier-records .encounter-detail-scroll .event-button small {
+  display: block;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }

@@ -117,7 +117,9 @@
     <div v-else-if="state" class="layout" :class="{ 'dossier-layout': activeTab === 'rank' && detailView === 'person' }">
       <aside class="sidebar">
         <section class="avatar hero-profile-card">
-          <CharacterPortrait :person="playerPortraitPerson" size="xl" />
+          <button class="profile-avatar-link" type="button" :aria-label="`查看${player.name}个人属性`" @click="openPlayerPersonDetail">
+            <CharacterPortrait :person="playerPortraitPerson" size="xl" />
+          </button>
           <div class="name-plaque">
             <span>{{ player.name }}</span>
           </div>
@@ -270,11 +272,11 @@
               <div class="section-head compact encounter-home-head">
                 <div>
                   <h3><Handshake :size="19" aria-hidden="true" /> 因缘奇遇簿</h3>
-                  <p>每日基础 {{ Math.round((encounterState.baseChance || .5) * 100) }}% 遇见因缘 · {{ encounterState.definitionCount || 240 }} 个事件节点</p>
+                  <p>每 {{ encounterState.minGapDays || 2 }}-{{ encounterState.maxGapDays || 4 }} 天一场因缘 · {{ encounterState.definitionCount || 240 }} 个事件节点</p>
                 </div>
                 <div class="encounter-home-metrics">
                   <span><small>待决</small><b>{{ pendingEncounters.length }}</b></span>
-                  <span><small>连空</small><b>{{ encounterState.emptyDays || 0 }} / {{ encounterState.pityDays || 3 }}</b></span>
+                  <span><small>下次因缘</small><b>{{ encounterState.daysUntilNext || 0 }} 天</b></span>
                   <span><small>进行中</small><b>{{ encounterState.activeChains?.length || 0 }} 条</b></span>
                   <span><small>已发现</small><b>{{ encounterCollection.discovered || 0 }} / {{ encounterCollection.total || 240 }}</b></span>
                 </div>
@@ -317,7 +319,7 @@
                         @click="chooseEncounter(choice)"
                       >
                         <span>{{ choice.label }}</span>
-                        <small>{{ choice.canChoose ? choice.hint : choice.reason }}</small>
+                        <small>{{ choice.canChoose ? encounterChoiceHint(choice) : choice.reason }}</small>
                       </button>
                     </div>
                     <small class="encounter-expiry">第 {{ activeEncounter.expiresDay }} 天结束前可处理，逾期平淡归档且不受处罚。</small>
@@ -343,7 +345,7 @@
                 <span class="encounter-quiet-mark"><Compass :size="28" aria-hidden="true" /></span>
                 <div>
                   <strong>今日天机平静</strong>
-                  <p>推进一天时会进行一次固定种子判定；连续三日未遇奇缘，下一日必有回响。</p>
+                  <p>因缘不会天天出现，下一场将在 {{ encounterState.daysUntilNext || 0 }} 天后开启。每个选择都会改变修行、资源或人物关系。</p>
                 </div>
                 <div v-if="encounterHistory.length" class="encounter-last-note">
                   <small>最近一笔</small>
@@ -356,44 +358,12 @@
                 <span><small>因缘记忆</small><b>{{ encounterState.memoryCount || 0 }} 条</b></span>
                 <span><small>完成事件链</small><b>{{ encounterCollection.completedChains || 0 }} 条</b></span>
                 <span><small>待兑现承诺</small><b>{{ encounterState.promises?.length || 0 }} 项</b></span>
-                <button class="secondary compact-button" type="button" @click="toggleEncounterArchive">
-                  {{ encounterArchiveOpen ? "收起因缘档案" : `查看因缘档案 · ${encounterState.archiveCount || 0}` }}
-                </button>
               </div>
               <div v-if="encounterState.promises?.length" class="encounter-promise-list">
                 <span v-for="promise in encounterState.promises.slice(0, 4)" :key="promise.id">
                   <b>{{ promise.title }}</b><small>第 {{ promise.dueDay }} 天回响</small>
                 </span>
               </div>
-              <section v-if="encounterArchiveOpen" class="encounter-archive" aria-label="因缘档案">
-                <div class="encounter-archive-toolbar">
-                  <div><strong>因缘档案</strong><small>共 {{ encounterArchive.total }} 条已归档记录</small></div>
-                  <select v-model="encounterArchiveFilter.category" aria-label="筛选因缘分类" @change="loadEncounterArchive(true)">
-                    <option value="">全部分类</option>
-                    <option value="cultivation">修行感悟</option>
-                    <option value="duel">斗法因缘</option>
-                    <option value="dungeon">秘境见闻</option>
-                    <option value="sect">宗门风云</option>
-                    <option value="relationship">人物因缘</option>
-                    <option value="market">坊市轶闻</option>
-                  </select>
-                  <select v-model="encounterArchiveFilter.status" aria-label="筛选因缘类型" @change="loadEncounterArchive(true)">
-                    <option value="">全部类型</option>
-                    <option value="chain">事件链</option>
-                    <option value="seasonal">季节事件</option>
-                  </select>
-                </div>
-                <div class="encounter-archive-grid">
-                  <button v-for="record in encounterArchive.items" :key="`${record.id}-${record.resolvedDay}`" type="button" :disabled="!record.replayId" @click="openEncounterReplay(record)">
-                    <span><small>第 {{ record.resolvedDay }} 天 · {{ record.categoryLabel }}</small><b>{{ record.title }}</b></span>
-                    <em>{{ record.choiceLabel }} · {{ record.outcome }}</em>
-                  </button>
-                  <div v-if="!encounterArchive.items.length && !encounterArchiveLoading" class="empty">当前筛选下暂无记录。</div>
-                </div>
-                <button v-if="encounterArchive.hasMore" class="secondary" type="button" :disabled="encounterArchiveLoading" @click="loadEncounterArchive(false)">
-                  {{ encounterArchiveLoading ? "翻阅中..." : "继续翻阅" }}
-                </button>
-              </section>
             </article>
 
             <article class="panel game-card equipment-home">
@@ -4726,7 +4696,7 @@ import {
   Minimize2
 } from "lucide-vue-next";
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from "vue";
-import { clearCachedState, getBattleReplay, getCachedState, getCultivatorDetail, getCurrentUser, getDaoTrialHistory, getDuelDayPage, getDuelReplay, getEncounterHistory, getState, login, logout, postAction, register, saveCachedState } from "./api";
+import { clearCachedState, getBattleReplay, getCachedState, getCultivatorDetail, getCurrentUser, getDaoTrialHistory, getDuelDayPage, getDuelReplay, getState, login, logout, postAction, register, saveCachedState } from "./api";
 import CharacterPortrait from "./components/CharacterPortrait.vue";
 import EquipmentIcon from "./components/EquipmentIcon.vue";
 import Meter from "./components/Meter.vue";
@@ -4926,10 +4896,6 @@ const equipmentSortDirection = ref("desc");
 const dungeonDayIndexes = reactive({ blood: 0, void: 0, sea: 0 });
 const activeDungeonRecordTab = ref("blood");
 const selectedEncounterId = ref("");
-const encounterArchiveOpen = ref(false);
-const encounterArchiveLoading = ref(false);
-const encounterArchive = reactive({ items: [], total: 0, offset: 0, hasMore: false });
-const encounterArchiveFilter = reactive({ category: "", status: "" });
 const selectedDaoTrialRouteId = ref("golden-pass");
 const selectedDaoTrialCompanionId = ref("");
 const daoTrialArchiveOpen = ref(false);
@@ -5692,7 +5658,7 @@ const taskProgressState = computed(() => {
   return progress.entries ? progress : { entries: progress, baseXp: 0, fullXpBudget: 500, reducedMultiplier: 0.4 };
 });
 const todayPlan = computed(() => derived.value.todayPlan || {});
-const encounterState = computed(() => gameState.value.encounters || { pending: [], history: [], relationships: [], focusedNpcIds: [], activeChains: [], definitionCount: 240, baseChance: 0.5, emptyDays: 0, collection: { discovered: 0, total: 240 } });
+const encounterState = computed(() => gameState.value.encounters || { pending: [], history: [], relationships: [], focusedNpcIds: [], activeChains: [], definitionCount: 240, minGapDays: 2, maxGapDays: 4, daysUntilNext: 0, collection: { discovered: 0, total: 240 } });
 const pendingEncounters = computed(() => encounterState.value.pending || []);
 const activeEncounter = computed(() => pendingEncounters.value.find((event) => event.id === selectedEncounterId.value) || pendingEncounters.value[0] || null);
 const encounterHistory = computed(() => encounterState.value.history || []);
@@ -6159,30 +6125,13 @@ function encounterRarityLabel(rarity) {
   return ({ common: "寻常", uncommon: "少见", rare: "稀有", fated: "奇缘" })[rarity] || "因缘";
 }
 
+function encounterChoiceHint(choice) {
+  if (!choice) return "";
+  return choice.impact ? `${choice.hint} · ${choice.impact}` : choice.hint;
+}
+
 function selectEncounter(eventId) {
   if (pendingEncounters.value.some((event) => event.id === eventId)) selectedEncounterId.value = eventId;
-}
-
-async function loadEncounterArchive(reset = false) {
-  if (encounterArchiveLoading.value) return;
-  encounterArchiveLoading.value = true;
-  try {
-    const offset = reset ? 0 : encounterArchive.items.length;
-    const result = await getEncounterHistory({ offset, limit: 24, ...encounterArchiveFilter });
-    encounterArchive.items = reset ? (result.items || []) : [...encounterArchive.items, ...(result.items || [])];
-    encounterArchive.total = Number(result.total) || 0;
-    encounterArchive.offset = Number(result.offset) || 0;
-    encounterArchive.hasMore = Boolean(result.hasMore);
-  } catch (archiveError) {
-    error.value = archiveError.message;
-  } finally {
-    encounterArchiveLoading.value = false;
-  }
-}
-
-async function toggleEncounterArchive() {
-  encounterArchiveOpen.value = !encounterArchiveOpen.value;
-  if (encounterArchiveOpen.value && !encounterArchive.items.length) await loadEncounterArchive(true);
 }
 
 async function loadDaoTrialArchive(reset = false) {
@@ -10423,6 +10372,15 @@ async function openPlayerSectDetail() {
   activeTab.value = "rank";
   detailView.value = "sect";
   if (state.value && (!sectByName(sectName) || fullStateStale.value || !hasFullCultivatorRoster())) await ensureFullState();
+}
+
+function openPlayerPersonDetail() {
+  closeBattleReplay();
+  openDetailFromCurrent("person");
+  selectedPersonId.value = "player";
+  selectedSectName.value = "";
+  activeTab.value = "rank";
+  ensurePersonDetail("player");
 }
 
 function returnFromDetail() {

@@ -276,23 +276,50 @@ function choiceEffects(category, index, choiceIndex) {
   const drift = (index % 3) + 1;
   if (choiceIndex === 0) {
     return {
-      affinity: category === "duel" ? 0 : 2 + drift,
-      respect: 3 + drift,
-      spirit: category === "market" ? -(4 + drift) : 0,
-      dust: category === "dungeon" && index % 4 === 0 ? 1 : 0,
-      battle: category === "duel" && index % 2 === 0,
-      invite: category === "relationship" && index % 4 === 0
+      affinity: category === "duel" ? 1 : 5 + drift,
+      respect: 4 + drift,
+      xp: category === "cultivation" ? 26 + drift * 3 : category === "duel" ? 18 + drift * 2 : 8 + drift * 2,
+      spirit: category === "market" ? -(8 + drift) : category === "duel" ? -4 : category === "dungeon" ? -2 : 0,
+      dust: category === "dungeon" ? 1 + (index % 2) : category === "market" ? 1 : 0,
+      hp: category === "duel" ? -8 - drift * 2 : category === "sect" ? -5 : 0,
+      mana: category === "cultivation" ? -8 - drift * 2 : category === "dungeon" ? -5 : 0,
+      reputation: category === "sect" ? 4 + drift : category === "duel" ? 2 : 1,
+      sectSupplies: category === "sect" ? 8 + drift : 0,
+      rivalHeat: category === "sect" ? 3 + (index % 3) : 0,
+      heartDemon: category === "cultivation" ? 2 + (index % 2) : 0,
+      battle: category === "duel",
+      invite: category === "relationship" && index % 3 === 0
     };
   }
   if (choiceIndex === 1) {
     return {
-      affinity: 3 + drift,
-      respect: 1 + drift,
-      spirit: category === "market" && index % 2 === 0 ? 3 + drift : 0,
-      dust: category === "cultivation" && index % 5 === 0 ? 1 : 0
+      affinity: 4 + drift,
+      respect: 2 + drift,
+      xp: category === "cultivation" ? 18 + drift * 2 : 6 + drift,
+      spirit: category === "market" ? 4 + drift : category === "relationship" ? 2 : 0,
+      dust: category === "cultivation" || category === "dungeon" ? 1 : 0,
+      hp: category === "relationship" ? 5 : 0,
+      mana: category === "cultivation" ? 4 + drift : category === "dungeon" ? 3 : 0,
+      reputation: category === "sect" ? 2 : 1,
+      sectSupplies: category === "sect" ? 4 : 0,
+      rivalHeat: category === "sect" ? -3 : 0,
+      heartDemon: category === "cultivation" ? -1 : 0,
+      invite: category === "relationship" && index % 4 === 0
     };
   }
-  return { affinity: index % 5 === 0 ? 1 : 0, respect: 1, spirit: 0, dust: 0 };
+  return {
+    affinity: category === "relationship" ? 2 : 1,
+    respect: 2,
+    xp: category === "cultivation" || category === "dungeon" ? 10 : 5,
+    spirit: category === "market" || category === "relationship" ? 6 : 2,
+    dust: category === "dungeon" ? 1 : 0,
+    hp: category === "duel" ? 8 : 0,
+    mana: category === "cultivation" || category === "duel" ? 6 : 0,
+    reputation: category === "sect" ? 1 : 0,
+    sectSupplies: category === "sect" ? 2 : 0,
+    rivalHeat: category === "sect" ? -4 : 0,
+    heartDemon: category === "cultivation" ? -2 : 0
+  };
 }
 
 function outcomeText(category, choiceIndex) {
