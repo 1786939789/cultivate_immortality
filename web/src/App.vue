@@ -4500,7 +4500,7 @@
                   <button class="secondary" type="button" @click="resetAdminTaskDraft">新增</button>
                   <button class="secondary" type="button" :disabled="!adminTaskDraft.id" @click="toggleAdminTask()">{{ adminTaskDraft.enabled ? "停用" : "启用" }}</button>
                   <button class="danger" type="button" :disabled="!adminTaskDraft.id" @click="deleteAdminTask()">删除</button>
-                  <button class="primary" type="submit" :disabled="isActionPending(adminTaskDraft.id ? '/api/task-definitions/update' : '/api/task-definitions')">保存任务</button>
+                  <button class="primary" type="submit" :disabled="isActionPending(adminTaskDraft.id ? '/api/admin/task-definitions/update' : '/api/admin/task-definitions')">保存任务</button>
                 </div>
               </form>
             </div>
@@ -11185,7 +11185,7 @@ async function saveSectProfile() {
 }
 
 async function saveTaskDefinition() {
-  const path = adminTaskDraft.id ? "/api/task-definitions/update" : "/api/task-definitions";
+  const path = adminTaskDraft.id ? "/api/admin/task-definitions/update" : "/api/admin/task-definitions";
   const saved = await act(path, { ...adminTaskDraft }, { scope: "lite", markStale: true });
   if (saved?.id) syncAdminTaskDraft(saved);
 }
@@ -11200,14 +11200,14 @@ async function saveGameSettings() {
 
 async function toggleAdminTask(task = adminTaskDefinition.value) {
   if (!task?.id) return;
-  const updated = await act("/api/task-definitions/toggle", { id: task.id, enabled: task.enabled === false }, { scope: "lite", markStale: true });
+  const updated = await act("/api/admin/task-definitions/toggle", { id: task.id, enabled: task.enabled === false }, { scope: "lite", markStale: true });
   if (updated?.id) syncAdminTaskDraft(updated);
 }
 
 async function deleteAdminTask(task = adminTaskDefinition.value) {
   if (!task?.id) return;
   if (!confirm(`确定删除现实任务「${task.name}」？历史完成记录会保留。`)) return;
-  await act("/api/task-definitions/delete", { id: task.id }, { scope: "lite", markStale: true });
+  await act("/api/admin/task-definitions/delete", { id: task.id }, { scope: "lite", markStale: true });
   resetAdminTaskDraft();
 }
 
