@@ -1630,7 +1630,6 @@
                             <span v-else>{{ skillEffectGlyph(event) }}</span>
                           </i>
                           <b>{{ skillEffectTitle(event) }}</b>
-                          <strong v-if="skillDamageText(event)" class="skill-cast-damage">{{ skillDamageText(event) }}</strong>
                         </div>
                         <span>{{ event.round ? `回合 ${event.round}` : "回合 1" }}</span>
                         <p>{{ event.text }}</p>
@@ -2449,7 +2448,6 @@
                       <span v-else>{{ skillEffectGlyph(event) }}</span>
                     </i>
                     <b>{{ skillEffectTitle(event) }}</b>
-                    <strong v-if="skillDamageText(event)" class="skill-cast-damage">{{ skillDamageText(event) }}</strong>
                   </div>
                   <span>{{ event.round ? `回合 ${event.round}` : "回合 1" }}</span>
                   <p>{{ siegeBattleEventText(event) }}</p>
@@ -2666,7 +2664,6 @@
                             <span v-else>{{ skillEffectGlyph(event) }}</span>
                           </i>
                           <b>{{ skillEffectTitle(event) }}</b>
-                          <strong v-if="skillDamageText(event)" class="skill-cast-damage">{{ skillDamageText(event) }}</strong>
                         </div>
                         <span>{{ event.round ? `回合 ${event.round}` : "回合 1" }}</span>
                         <p>{{ siegeBattleEventText(event) }}</p>
@@ -3254,7 +3251,6 @@
                       <span v-else>{{ skillEffectGlyph(event) }}</span>
                     </i>
                     <b>{{ skillEffectTitle(event) }}</b>
-                    <strong v-if="skillDamageText(event)" class="skill-cast-damage">{{ skillDamageText(event) }}</strong>
                   </div>
                   <span>{{ event.round ? `回合 ${event.round}` : "回合 1" }}</span>
                   <p>{{ event.text }}</p>
@@ -3654,7 +3650,6 @@
                       <span v-else>{{ skillEffectGlyph(event) }}</span>
                     </i>
                     <b>{{ skillEffectTitle(event) }}</b>
-                    <strong v-if="skillDamageText(event)" class="skill-cast-damage">{{ skillDamageText(event) }}</strong>
                   </div>
                   <span>{{ event.round ? `第${event.round}回合` : "战报" }}</span>
                   <p>{{ event.text }}</p>
@@ -7160,6 +7155,7 @@ const homeLogDayRecords = computed(() => {
       ...playerBreakthroughHomeLogs(day),
       ...playerDungeonHomeLogs(day),
       ...playerDuelHomeLogs(day),
+      ...playerSectWarHomeLogs(day),
       ...playerEquipmentHomeLogs(day),
       ...playerActionHomeLogs(day)
     ])
@@ -8165,7 +8161,7 @@ function playerDailyProgressHomeLogs(day) {
   return [{
     day: record.day || day,
     date: record.date || dateForDay(day),
-    time: logEntryMinute(record.time || record.createdAt || record.updatedAt) || defaultHomeLogMinute(record),
+    time: logEntryMinute(record.time || record.createdAt || record.updatedAt) || settlementMinuteForDay(record.day || day),
     order: 120,
     category: "progress",
     type: "good",
@@ -8201,7 +8197,7 @@ function playerBreakthroughHomeLogs(day) {
       return {
         day: record.day || day,
         date: record.date || dateForDay(day),
-        time: logEntryMinute(record.time || record.createdAt) || "00:00",
+        time: logEntryMinute(record.time || record.createdAt) || settlementMinuteForDay(record.day || day),
         order: 240 + index,
         category: "breakthrough",
         type: success ? "good" : "bad",
@@ -8221,7 +8217,7 @@ function playerDungeonHomeLogs(day) {
       return {
         day: record.day || day,
         date: record.date || dateForDay(day),
-        time: logEntryMinute(record.foughtAt) || "",
+        time: logEntryMinute(record.foughtAt || record.createdAt) || settlementMinuteForDay(record.day || day),
         order: 520 + index,
         category: "dungeon",
         type: success ? "good" : "bad",
@@ -8236,7 +8232,7 @@ function playerDungeonHomeLogs(day) {
   return [{
     day: dailyRecord.day || day,
     date: dailyRecord.date || dateForDay(day),
-    time: "",
+    time: settlementMinuteForDay(dailyRecord.day || day),
     order: 520,
     category: "dungeon",
     type: recordTextFailed(summary) ? "bad" : "good",
@@ -8265,7 +8261,7 @@ function playerEquipmentHomeLogs(day) {
     return {
       day: drop.day || day,
       date: drop.date || dateForDay(day),
-      time: logEntryMinute(drop.time || drop.createdAt) || "00:00",
+      time: logEntryMinute(drop.time || drop.createdAt) || settlementMinuteForDay(drop.day || day),
       order: 760 + index,
       category: "equipment",
       type: "good",
@@ -8350,7 +8346,7 @@ function playerSectWarHomeLogs(day) {
       return {
         day: war.day || day,
         date: war.date || dateForDay(day),
-        time: war.time || "",
+        time: logEntryMinute(war.time || war.createdAt) || settlementMinuteForDay(war.day || day),
         order: 2000,
         category: "siege",
         type: won ? "good" : "bad",
@@ -8383,7 +8379,7 @@ function playerDuelHomeLogs(day) {
       return {
         day: record.day || day,
         date: record.date || dateForDay(day),
-        time: match.time || logEntryMinute(record.createdAt) || "",
+        time: logEntryMinute(match.time || match.foughtAt || record.createdAt) || settlementMinuteForDay(record.day || day),
         order: (isPlayerMatch ? 900 : 1000) + Number(match.order || 0),
         category: "duel",
         type: isPlayerMatch && !playerWon ? "bad" : "good",
@@ -8401,7 +8397,7 @@ function playerDuelHomeLogs(day) {
       return {
         day: entry.day || day,
         date: String(entry.foughtAt || "").match(/^\d{4}-\d{2}-\d{2}/)?.[0] || dateForDay(day),
-        time: logEntryMinute(entry.foughtAt) || "",
+        time: logEntryMinute(entry.foughtAt) || settlementMinuteForDay(entry.day || day),
         order: 1100 + index,
         category: "duel",
         type: won ? "good" : "bad",
@@ -9122,11 +9118,6 @@ function skillEffectTitle(event) {
     return `${skill.name} · 灵光护身`;
   }
   return `${skill.name} · 术法爆发`;
-}
-
-function skillDamageText(event) {
-  const value = Number(event?.damage) || 0;
-  return value > 0 ? `${value} 伤害` : "";
 }
 
 function skillEffectImage(event) {
@@ -10387,10 +10378,23 @@ function logEntryDateTime(entry) {
   return minute ? `${date}T${minute}` : date;
 }
 
-function defaultHomeLogMinute(record) {
-  const note = String(record?.note || "");
-  if (note.includes("每日修行") || note.includes("现实任务")) return "00:00";
-  return "";
+function settlementMinuteForDay(day) {
+  const targetDay = Number(day);
+  const dayRecords = [
+    ...(gameState.value.logDays || []),
+    ...(homeSummary.value.logDays || [])
+  ];
+  const record = dayRecords.find((item) => Number(item.day) === targetDay);
+  if (!record) return "";
+  const settlementLog = (record.logs || []).find((entry) => {
+    const text = String(entry?.text || "");
+    return text.includes("自动结算完成")
+      || text.includes("手动推进了一天")
+      || text.startsWith("今日副本结算")
+      || text.includes("全员切磋完成")
+      || text.includes("九州攻守结算完成");
+  });
+  return logEntryMinute(settlementLog?.time);
 }
 
 function logTone(entry) {

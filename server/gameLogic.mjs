@@ -2813,7 +2813,7 @@ function settleBloodTrialRewards(state, caves) {
   }
 }
 
-function runSoloDungeonFor(state, entity, date, caves) {
+function runSoloDungeonFor(state, entity, date, caves, foughtAt = timestampKey()) {
   let clears = 0;
   let spirit = 0;
   let finalMonster = "";
@@ -2832,7 +2832,7 @@ function runSoloDungeonFor(state, entity, date, caves) {
     const startHp = runHp;
     const startMana = runMana;
     const battle = fightMonster(state, entity, monster, 13 + cave.cave, { hp: startHp, mana: startMana });
-    const replay = buildReplay({ ...entity, hp: startHp, mana: startMana }, { ...monster }, battle, battle.winner === "left" ? "胜" : "负", timestampKey(), state);
+    const replay = buildReplay({ ...entity, hp: startHp, mana: startMana }, { ...monster }, battle, battle.winner === "left" ? "胜" : "负", foughtAt, state);
     replay.replayId = makeReplayId("blood-trial", state.day, cave.cave, entity.id);
     finalMonster = monster.name;
     finalRealm = monster.realm;
@@ -2909,6 +2909,7 @@ function runSoloDungeonFor(state, entity, date, caves) {
     name: "血色禁地",
     day: state.day,
     date,
+    foughtAt,
     clears,
     spirit,
     monster: finalMonster,
@@ -2935,7 +2936,7 @@ function runSoloDungeonFor(state, entity, date, caves) {
   return entry;
 }
 
-function runSectDungeon(state, sectName, members, date) {
+function runSectDungeon(state, sectName, members, date, foughtAt = timestampKey()) {
   if (!members.length) return null;
   const highestRealm = Math.max(...members.map(({ entity }) => entity.realm || 0));
   const monsterRealm = voidHallMonsterRealmForHighestRealm(highestRealm);
@@ -2955,7 +2956,7 @@ function runSectDungeon(state, sectName, members, date) {
     const damage = Math.max(0, beforeMonsterHp - battle.rightHp);
     monsterHp = battle.rightHp;
     monsterMana = battle.rightMana;
-    const replay = buildReplay({ ...entity }, { ...monster, hp: beforeMonsterHp, mana: beforeMonsterMana }, battle, battle.winner === "left" ? "胜" : "负", timestampKey(), state);
+    const replay = buildReplay({ ...entity }, { ...monster, hp: beforeMonsterHp, mana: beforeMonsterMana }, battle, battle.winner === "left" ? "胜" : "负", foughtAt, state);
     const order = battles.length + 1;
     replay.replayId = makeReplayId("void-hall", state.day, sectName, order, entity.id);
     queueBattleReplay(state, replay, `void-hall-${sectName}-${order}`);
@@ -2989,6 +2990,7 @@ function runSectDungeon(state, sectName, members, date) {
     sect: sectName,
     day: state.day,
     date,
+    foughtAt,
     success,
     stage: targetStage,
     highestRealm,
@@ -3014,6 +3016,7 @@ function runSectDungeon(state, sectName, members, date) {
   };
   for (const { entity, damage } of contributions) {
     const historyReplay = publicGroupDungeonReplay("虚天殿", monster, contributions.slice(0, 8), success, totalDamage, monster.maxHp, state, entity.id);
+    historyReplay.foughtAt = foughtAt;
     historyReplay.replayId = makeReplayId("void-hall", state.day, sectName, "history", entity.id);
     queueBattleReplay(state, historyReplay, `void-hall-${sectName}-history-${entity.id}`);
     pushDungeonHistory(entity, {
@@ -3021,6 +3024,7 @@ function runSectDungeon(state, sectName, members, date) {
       name: "虚天殿",
       day: state.day,
       date,
+      foughtAt,
       result: success ? "宗门通关" : "未破殿门",
       spirit: 0,
       damage,
@@ -4078,7 +4082,7 @@ function refreshStarSeaCycleHistoryFromDungeonDays(state) {
   return JSON.stringify(state.starSeaCycleHistory) !== before;
 }
 
-function runStarSeaDungeon(state, roster, date) {
+function runStarSeaDungeon(state, roster, date, foughtAt = timestampKey()) {
   const maxRealm = Math.max(...roster.map(({ entity }) => entity.realm || 0));
   const monster = makeStarSeaMonster(state, maxRealm);
   const monsterStage = stageIndexOfRealm(monster.realm);
@@ -4232,6 +4236,7 @@ function runStarSeaDungeon(state, roster, date) {
 
   for (const record of teamRecords) {
     const replay = publicStarSeaTeamReplay(record, monster, state);
+    replay.foughtAt = foughtAt;
     queueBattleReplay(state, replay, `star-sea-${record.id || record.rank}`);
     record.replay = replay;
     for (const member of record.members) {
@@ -4242,6 +4247,7 @@ function runStarSeaDungeon(state, roster, date) {
         name: "乱星海猎妖",
         day: state.day,
         date,
+        foughtAt,
         result: `${record.name} 第 ${record.rank} 名${record.success ? ` · ${record.rounds} 回合斩妖` : ""}`,
         spirit: member.spirit || 0,
         damage: member.damage || 0,
@@ -4267,13 +4273,13 @@ function runStarSeaDungeon(state, roster, date) {
   return publicRecord;
 }
 
-function runDailyDungeons(state, date) {
+function runDailyDungeons(state, date, foughtAt = timestampKey()) {
   ensureDungeonState(state);
   if (state.dungeonDays.some((record) => record.day === state.day)) return state.dungeonDays.find((record) => record.day === state.day);
   const roster = allCultivators(state);
   const maxStage = Math.max(...roster.map(({ entity }) => stageIndexOfRealm(entity.realm || 0)));
   const bloodCaves = createBloodTrialCaves(maxStage);
-  const solo = roster.map(({ entity }) => ({ id: entity.id, personName: entity.name, sect: entity.id === "player" ? state.sect.name : entity.sect, ...runSoloDungeonFor(state, entity, date, bloodCaves) }));
+  const solo = roster.map(({ entity }) => ({ id: entity.id, personName: entity.name, sect: entity.id === "player" ? state.sect.name : entity.sect, ...runSoloDungeonFor(state, entity, date, bloodCaves, foughtAt) }));
   settleBloodTrialRewards(state, bloodCaves);
   for (const entry of solo) {
     const clearRewards = bloodCaves.flatMap((cave) => cave.clears || []).filter((clear) => clear.id === entry.id);
@@ -4306,14 +4312,15 @@ function runDailyDungeons(state, date) {
     }
   }
   const sectRecords = activeSectNames(state)
-    .map((sectName) => runSectDungeon(state, sectName, membersForSect(state, sectName), date))
+    .map((sectName) => runSectDungeon(state, sectName, membersForSect(state, sectName), date, foughtAt))
     .filter(Boolean);
   settleVoidHallRewards(state, sectRecords);
   const voidHallSpiritPools = buildVoidHallSpiritPools(state);
-  const publicRecord = runStarSeaDungeon(state, roster, date);
+  const publicRecord = runStarSeaDungeon(state, roster, date, foughtAt);
   const record = {
     day: state.day,
     date,
+    foughtAt,
     bloodTrial,
     solo: solo.slice(0, 20),
     sects: sectRecords,
@@ -6012,7 +6019,7 @@ function pickMonsterSiegeTargets(state, targeted = new Set()) {
   return picks;
 }
 
-function runProvinceSieges(state, settlementDate) {
+function runProvinceSieges(state, settlementDate, settlementTime = timestampKey()) {
   state.provinceWars ??= [];
   const targeted = new Set();
   const wars = [];
@@ -6035,6 +6042,7 @@ function runProvinceSieges(state, settlementDate) {
       kind: "monster",
       day: state.day,
       date: settlementDate,
+      time: settlementTime,
       provinceId: target.id,
       provinceName: province.name,
       attacker: "妖物",
@@ -6083,6 +6091,7 @@ function runProvinceSieges(state, settlementDate) {
       id: `${settlementDate}-${attackerSect}-${target.id}`,
       day: state.day,
       date: settlementDate,
+      time: settlementTime,
       provinceId: target.id,
       provinceName: province.name,
       attacker: attackerSect,
@@ -6404,7 +6413,7 @@ function ensureTournamentRewardState(state) {
   return changed;
 }
 
-function runDailyTournament(state) {
+function runDailyTournament(state, foughtAt = timestampKey()) {
   const tournament = seedTournament(state);
   const existing = tournament.rounds.find((round) => round.day === state.day);
   if (existing) return existing;
@@ -6416,7 +6425,7 @@ function runDailyTournament(state) {
     name: planRound.name,
     day: planRound.day,
     date: planRound.date,
-    createdAt: timestampKey(),
+    createdAt: foughtAt,
     matches: []
   };
   for (const planMatch of planRound.matches) {
@@ -6433,7 +6442,7 @@ function runDailyTournament(state) {
       continue;
     }
     const matchId = planMatch.id;
-    const result = runDuelMatch(state, left, right, { matchId, scored: false, tournament: { round: round.round, name: round.name } });
+    const result = runDuelMatch(state, left, right, { matchId, scored: false, foughtAt, tournament: { round: round.round, name: round.name } });
     const leftRef = { ...result.replay.left, seed: leftEntry?.seed || 0 };
     const rightRef = { ...result.replay.right, seed: rightEntry?.seed || 0 };
     const winnerRef = result.replay.winner === "left" ? leftRef : rightRef;
@@ -10911,6 +10920,7 @@ export function settleIfNeeded(state, options = {}) {
 }
 
 export function dailySettlement(state, options = {}) {
+  const settlementTime = options.settlementTime || timestampKey();
   rememberTaskMultiplierForDay(state, state.day);
   state.day += 1;
   archiveExpiredBattleRecords(state);
@@ -10935,7 +10945,7 @@ export function dailySettlement(state, options = {}) {
       duelSeasonRewards.set(entity.id, { reward, record: history });
     }
   }
-  runProvinceSieges(state, settlementDate);
+  runProvinceSieges(state, settlementDate, settlementTime);
   addProvinceIncome(state, settlementDate);
 
   for (const npc of state.npcs) {
@@ -10983,7 +10993,7 @@ export function dailySettlement(state, options = {}) {
       npc.breakthroughs.unshift({
         day: state.day,
         date: settlementDate,
-        time: timestampKey(),
+        time: settlementTime,
         from: realms[fromRealm],
         to: realms[targetRealm] || "未知境界",
         success,
@@ -11000,6 +11010,7 @@ export function dailySettlement(state, options = {}) {
     npc.dailyRecords.unshift({
       day: state.day,
       date: settlementDate,
+      time: settlementTime,
       xp: totalXp + boughtXp,
       baseXp,
       bonusXp,
@@ -11039,7 +11050,7 @@ export function dailySettlement(state, options = {}) {
   const playerCatchup = playerCatchupProfile(state);
   const playerPassiveXp = Math.floor((playerDailyBaseXp + playerProvinceXp) * playerTalentXpMultiplier * playerCatchup.multiplier);
   state.player.xp += playerPassiveXp;
-  runDailyDungeons(state, settlementDate);
+  runDailyDungeons(state, settlementDate, settlementTime);
   const playerDungeonEntries = (state.player.dungeonHistory || []).filter((record) => record.day === state.day);
   const playerSoloDungeon = playerDungeonEntries.find((record) => record.type === "solo");
   const playerDungeonSpirit = playerDungeonEntries.reduce((sum, record) => sum + (record.spirit || 0), 0);
@@ -11051,6 +11062,7 @@ export function dailySettlement(state, options = {}) {
   state.player.dailyRecords.unshift({
     day: state.day,
     date: settlementDate,
+    time: settlementTime,
     xp: playerPassiveXp,
     baseXp: playerDailyBaseXp,
     bonusXp: playerPassiveXp - playerDailyBaseXp,
@@ -11074,7 +11086,7 @@ export function dailySettlement(state, options = {}) {
   });
   state.player.dailyRecords = trimRecordsByDay(state.player.dailyRecords, state.day, growthRecordDays, growthRecordLimit);
   settleDailySpiritPearlAssets(state);
-  runDailyDuels(state);
+  runDailyDuels(state, settlementTime);
   ensureDaoTrialState(state);
   generateDailyEncounter(state);
   state.lastSettlementDate = options.settlementDate || dateKey();
@@ -11821,7 +11833,7 @@ function queueBattleReplay(state, replay, matchId = "") {
 }
 
 function runDuelMatch(state, left, right, options = {}) {
-  const foughtAt = timestampKey();
+  const foughtAt = options.foughtAt || timestampKey();
   const battleSeed = `duel|${state.day}|${options.matchId || "free"}|${left.id}|${right.id}|${foughtAt}`;
   const leftBefore = { ...left, duelSeason: { ...(left.duelSeason || {}) } };
   const rightBefore = { ...right, duelSeason: { ...(right.duelSeason || {}) } };
@@ -12037,8 +12049,8 @@ function findDuelOpponentIndex(state, queue, current) {
   return candidates[candidates.length - 1].index;
 }
 
-export function runDailyDuels(state) {
-  if (duelPhaseForDay(state.day) === "tournament") return runDailyTournament(state);
+export function runDailyDuels(state, foughtAt = timestampKey()) {
+  if (duelPhaseForDay(state.day) === "tournament") return runDailyTournament(state, foughtAt);
   state.duelDays ??= [];
   const existing = state.duelDays.find((record) => record.day === state.day);
   if (existing) {
@@ -12068,7 +12080,7 @@ export function runDailyDuels(state) {
     }
     const [right] = queue.splice(rightIndex, 1);
     const matchId = `day-${state.day}-match-${order}`;
-    const { replay, winner, loser, winnerScoreDelta, loserScoreDelta } = runDuelMatch(state, left.entity, right.entity, { matchId });
+    const { replay, winner, loser, winnerScoreDelta, loserScoreDelta } = runDuelMatch(state, left.entity, right.entity, { matchId, foughtAt });
     matches.push({
       id: matchId,
       type: "battle",
@@ -12079,6 +12091,7 @@ export function runDailyDuels(state) {
       loser: replay.winner === "left" ? replay.right : replay.left,
       winnerScoreDelta,
       loserScoreDelta,
+      time: foughtAt,
       replayId: replay.replayId,
       summary: `${winner.name}胜过${loser.name}，积分 ${winnerScoreDelta > 0 ? "+" : ""}${winnerScoreDelta}`
     });
@@ -12088,7 +12101,7 @@ export function runDailyDuels(state) {
   const record = {
     day: state.day,
     date: stateDateForDay(state),
-    createdAt: timestampKey(),
+    createdAt: foughtAt,
     matches
   };
   state.duelDays.unshift(record);
