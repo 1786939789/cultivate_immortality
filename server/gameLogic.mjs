@@ -10895,11 +10895,18 @@ function buildSectSummaries(state) {
     .sort((a, b) => b.totalPower - a.totalPower);
 }
 
-export function settleIfNeeded(state) {
+export function settleIfNeeded(state, options = {}) {
   const today = dateKey();
+  const maxDays = Math.max(1, Number(options.maxDays) || Number.POSITIVE_INFINITY);
+  let settledDays = 0;
   if (!state.lastSettlementDate) state.lastSettlementDate = today;
-  if (state.lastSettlementDate === today) return false;
-  dailySettlement(state, { auto: true });
+  if (state.lastSettlementDate >= today) return false;
+
+  while (state.lastSettlementDate < today && settledDays < maxDays) {
+    const settlementDate = addDays(state.lastSettlementDate, 1);
+    dailySettlement(state, { auto: true, settlementDate });
+    settledDays += 1;
+  }
   return true;
 }
 
@@ -11070,7 +11077,7 @@ export function dailySettlement(state, options = {}) {
   runDailyDuels(state);
   ensureDaoTrialState(state);
   generateDailyEncounter(state);
-  state.lastSettlementDate = dateKey();
+  state.lastSettlementDate = options.settlementDate || dateKey();
 
   if (options.auto) log(state, "子时已过，天地灵机一转，今日自动结算完成。", "gold");
   if (options.manual) log(state, "你翻过一页札记，手动推进了一天。", "gold");

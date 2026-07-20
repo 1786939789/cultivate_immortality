@@ -52,6 +52,7 @@ import {
   readState,
   registerUser,
   resetState,
+  settleAllStates,
   sessionCookie
 } from "./store.mjs";
 
@@ -413,6 +414,37 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+let dailySettlementTimer;
+
+function millisecondsUntilNextMidnight() {
+  const now = new Date();
+  const next = new Date(now);
+  next.setHours(24, 0, 0, 0);
+  return Math.max(1, next.getTime() - now.getTime() + 100);
+}
+
+async function runScheduledSettlement(reason) {
+  try {
+    const result = await settleAllStates();
+    console.log(`[daily-settlement] ${reason}: ${result.settledSaves}/${result.totalSaves} saves settled`);
+    for (const failure of result.failures) {
+      console.error(`[daily-settlement] save ${failure.id} failed: ${failure.error}`);
+    }
+  } catch (error) {
+    console.error(`[daily-settlement] ${reason} failed:`, error);
+  }
+}
+
+function scheduleNextDailySettlement() {
+  clearTimeout(dailySettlementTimer);
+  dailySettlementTimer = setTimeout(async () => {
+    await runScheduledSettlement("midnight");
+    scheduleNextDailySettlement();
+  }, millisecondsUntilNextMidnight());
+}
+
 server.listen(port, "127.0.0.1", () => {
   console.log(`API server: http://127.0.0.1:${port}`);
+  scheduleNextDailySettlement();
+  void runScheduledSettlement("startup");
 });

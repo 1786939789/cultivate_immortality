@@ -530,13 +530,13 @@ export async function logoutSession(token) {
   persist(db);
 }
 
-export async function readState(id = "default") {
+export async function readState(id = "default", options = {}) {
   const cached = stateCache.get(id);
   if (cached) {
     if (stateValidationCache.get(id) === dateKey()) return cached;
     const storageChanged = Number(cached.storageCompactionVersion || 0) < 1;
     const shapeChanged = ensureStateShape(cached);
-    const settled = settleIfNeeded(cached);
+    const settled = settleIfNeeded(cached, options);
     if (shapeChanged || settled || storageChanged) await writeState(cached, id, { vacuum: storageChanged });
     else stateValidationCache.set(id, dateKey());
     return cached;
@@ -558,10 +558,39 @@ export async function readState(id = "default") {
   const replaysMigrated = needsReplayMigration ? extractBattleReplays(battleDb, state, id) : false;
   if (replaysMigrated) persistBattleDb(battleDb);
   const shapeChanged = ensureStateShape(state);
-  const settled = settleIfNeeded(state);
+  const settled = settleIfNeeded(state, options);
   if (shapeChanged || settled || replaysMigrated) await writeState(state, id, { vacuum: needsReplayMigration });
   else stateValidationCache.set(id, dateKey());
   return state;
+}
+
+export async function settleAllStates() {
+  const db = await openDb();
+  const result = db.exec("SELECT id, state_json FROM saves ORDER BY id");
+  const rows = result[0]?.values || [];
+  let settledSaves = 0;
+  const failures = [];
+
+  for (const [id, stateJson] of rows) {
+    try {
+      const beforeState = stateCache.get(id) || JSON.parse(stateJson);
+      const beforeDay = beforeState.day;
+      const beforeDate = beforeState.lastSettlementDate;
+      let state;
+      do {
+        stateValidationCache.delete(id);
+        state = await readState(id, { maxDays: 1 });
+        stateValidationCache.delete(id);
+        if (state.lastSettlementDate < dateKey()) await new Promise((resolve) => setImmediate(resolve));
+      } while (state.lastSettlementDate < dateKey());
+      if (state.day !== beforeDay || state.lastSettlementDate !== beforeDate) settledSaves += 1;
+    } catch (error) {
+      failures.push({ id, error: error.message || String(error) });
+    }
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+
+  return { totalSaves: rows.length, settledSaves, failures };
 }
 
 export async function writeState(state, id = "default", options = {}) {

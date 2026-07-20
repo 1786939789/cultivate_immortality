@@ -12808,6 +12808,13 @@ let chinaMapChart;
 let echartsModulePromise;
 let echartsInstance;
 
+function localDateKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 async function loadMapRenderer() {
   if (!echartsModulePromise) {
     echartsModulePromise = Promise.all([
@@ -12834,10 +12841,15 @@ async function loadMapRenderer() {
 }
 
 onMounted(async () => {
+  let observedDate = localDateKey();
   updateCountdown();
   timer = setInterval(() => {
+    const currentDate = localDateKey();
     updateCountdown();
-    if (countdown.value === "00:00:00" && authUser.value) refresh();
+    if (currentDate !== observedDate) {
+      observedDate = currentDate;
+      if (authUser.value) refresh("home");
+    }
   }, 1000);
   await initializeAuth();
   window.addEventListener("resize", resizeChinaMap);
