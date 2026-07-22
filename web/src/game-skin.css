@@ -12531,6 +12531,30 @@ body::before {
   }
 }
 
+@media (max-width: 1040px) {
+  .layout.dossier-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .layout.dossier-layout > .main,
+  .rank-surface.view.active > .character-dossier,
+  .rank-surface.view.active > .character-dossier .dossier-overview,
+  .rank-surface.view.active > .character-dossier .dossier-stat-bank,
+  .rank-surface.view.active > .character-dossier .dossier-core {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .rank-surface.view.active > .character-dossier .dossier-overview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rank-surface.view.active > .character-dossier .dossier-stat-bank {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: auto;
+  }
+}
+
 @media (min-width: 1600px) {
   .rank-surface.view.active > .character-dossier .dossier-overview {
     grid-template-columns: minmax(240px, .44fr) minmax(760px, 1.24fr) minmax(240px, .44fr);
@@ -12546,6 +12570,22 @@ body::before {
 }
 
 @media (max-width: 720px) {
+  .rank-surface.view.active > .character-dossier .dossier-overview {
+    overflow: visible;
+  }
+
+  .rank-surface.view.active > .character-dossier .dossier-core {
+    order: 1;
+  }
+
+  .rank-surface.view.active > .character-dossier .dossier-stat-bank:first-child {
+    order: 2;
+  }
+
+  .rank-surface.view.active > .character-dossier .dossier-stat-bank:last-child {
+    order: 3;
+  }
+
   .rank-surface.view.active > .character-dossier .dossier-header,
   .rank-surface.view.active > .character-dossier .dossier-core .equipment-paperdoll {
     grid-template-columns: 1fr;
@@ -12573,9 +12613,33 @@ body::before {
     transform: translate(0, 0);
   }
 
-  .rank-surface.view.active > .character-dossier .dossier-stat-bank,
   .rank-surface.view.active > .character-dossier .dossier-records {
     grid-template-columns: 1fr;
+  }
+
+  .rank-surface.view.active > .character-dossier .dossier-stat-bank {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: auto;
+  }
+
+  .rank-surface.view.active > .character-dossier .dossier-stat-bank .detail-box {
+    grid-template-columns: 42px minmax(0, 1fr);
+    min-height: 62px;
+    padding: 8px;
+  }
+
+  .rank-surface.view.active > .character-dossier .dossier-stat-bank .detail-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .rank-surface.view.active > .character-dossier .dossier-stat-bank .detail-label {
+    font-size: 12px;
+    white-space: normal;
+  }
+
+  .rank-surface.view.active > .character-dossier .dossier-stat-bank .detail-box b {
+    font-size: 14px;
   }
 
   .rank-surface.view.active > .character-dossier .dossier-pearl-panel {
@@ -12584,6 +12648,12 @@ body::before {
 
   .rank-surface.view.active > .character-dossier .dossier-pearl-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 430px) {
+  .rank-surface.view.active > .character-dossier .dossier-stat-bank {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -13262,4 +13332,101 @@ body::before {
   min-width: 0;
   white-space: normal;
   overflow-wrap: anywhere;
+}
+
+/* Mobile rank cards need their own composition instead of shrinking the desktop row. */
+@media (max-width: 720px) {
+  .view.active.rank-surface .rank-list {
+    gap: 9px;
+  }
+
+  .view.active.rank-surface .rank-row.person-rank-row {
+    grid-template-columns: 52px minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    gap: 3px 10px;
+    min-height: 82px;
+    padding: 12px;
+    overflow: hidden;
+  }
+
+  .view.active.rank-surface .rank-row.person-rank-row > .rank-medal,
+  .view.active.rank-surface .rank-row.person-rank-row > .rank-number {
+    left: 2px;
+    top: auto;
+    bottom: 5px;
+    z-index: 3;
+    transform: none;
+  }
+
+  .view.active.rank-surface .rank-row.person-rank-row > .rank-number {
+    min-width: 22px;
+    min-height: 22px;
+    padding: 2px 3px;
+    font-size: 9px;
+    line-height: 1;
+  }
+
+  .view.active.rank-surface .rank-row.person-rank-row > .character-portrait {
+    --portrait-size: 52px;
+    grid-column: 1;
+    grid-row: 1 / 3;
+    align-self: center;
+    justify-self: center;
+  }
+
+  .view.active.rank-surface .rank-row.person-rank-row > div {
+    grid-column: 2;
+    grid-row: 1 / 3;
+    align-self: center;
+    min-width: 0;
+  }
+
+  .view.active.rank-surface .rank-row.person-rank-row > div > strong,
+  .view.active.rank-surface .rank-row.person-rank-row > div > small {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .view.active.rank-surface .rank-row.person-rank-row > div > strong {
+    font-size: 16px;
+    line-height: 1.3;
+  }
+
+  .view.active.rank-surface .rank-row.person-rank-row > div > small {
+    margin-top: 4px;
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .view.active.rank-surface .rank-row.person-rank-row .rank-value {
+    grid-column: 3;
+    grid-row: 1 / 3;
+    align-self: center;
+    justify-self: end;
+    max-width: 82px;
+    font-size: 16px;
+    line-height: 1.2;
+    text-align: right;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 360px) {
+  .view.active.rank-surface .rank-row.person-rank-row {
+    grid-template-columns: 46px minmax(0, 1fr) auto;
+    gap: 3px 8px;
+    padding: 10px;
+  }
+
+  .view.active.rank-surface .rank-row.person-rank-row > .character-portrait {
+    --portrait-size: 46px;
+  }
+
+  .view.active.rank-surface .rank-row.person-rank-row .rank-value {
+    max-width: 72px;
+    font-size: 14px;
+  }
 }
