@@ -7147,7 +7147,6 @@ const todayDungeonSummary = computed(() => {
 const homeLogDayRecords = computed(() => {
   const currentDay = Math.max(1, Number(gameState.value.day || 1));
   const firstDay = Math.max(1, currentDay - 29);
-  const flatLogs = gameState.value.log || [];
   const records = [];
   for (let day = currentDay; day >= firstDay; day -= 1) {
     const logs = uniqueHomeLogs([
@@ -7159,12 +7158,12 @@ const homeLogDayRecords = computed(() => {
       ...playerEquipmentHomeLogs(day),
       ...playerActionHomeLogs(day)
     ])
+      .map((entry) => ({ ...entry, date: dateForDay(day) }))
       .sort((a, b) => (a.order || 0) - (b.order || 0) || String(a.text).localeCompare(String(b.text), "zh-Hans-CN"))
       .slice(0, 30);
-    const dayFallback = flatLogs.find((entry) => Number(entry.day) === day);
     records.push({
       day,
-      date: logs[0]?.date || dayFallback?.date || dateForDay(day),
+      date: dateForDay(day),
       logs
     });
   }
@@ -10497,7 +10496,7 @@ function addDays(dateText, offset) {
 }
 
 function dateForDay(day) {
-  return addDays(gameState.value.calendarStartDate || gameState.value.lastSettlementDate, Math.max(0, Number(day ?? 1) - 1));
+  return addDays(gameState.value.calendarStartDate || gameState.value.lastSettlementDate, Math.max(0, Number(day ?? 0)));
 }
 
 function dayForDate(dateText) {

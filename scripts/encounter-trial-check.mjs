@@ -4,6 +4,7 @@ import { daoTrialEventOptions, daoTrialRoutes, daoTrialSeals } from "../server/d
 import {
   advanceDaoTrial,
   createDefaultState,
+  dailySettlement,
   ensureStateShape,
   generateDailyEncounter,
   getPublicState,
@@ -32,6 +33,16 @@ for (const event of encounterDefinitions) {
     if (choice.effects?.nextEventId) assert.ok(encounterDefinitions.some((candidate) => candidate.id === choice.effects.nextEventId), `${event.id} 后续节点不存在`);
   }
 }
+
+const calendarState = createDefaultState();
+ensureStateShape(calendarState);
+const openingDate = calendarState.calendarStartDate;
+dailySettlement(calendarState, { manual: true, settlementTime: `${openingDate} 00:01:00` });
+const expectedFirstDayDate = new Date(`${openingDate}T00:00:00`);
+expectedFirstDayDate.setDate(expectedFirstDayDate.getDate() + 1);
+const expectedFirstDayText = `${expectedFirstDayDate.getFullYear()}-${String(expectedFirstDayDate.getMonth() + 1).padStart(2, "0")}-${String(expectedFirstDayDate.getDate()).padStart(2, "0")}`;
+assert.equal(calendarState.day, 1, "首次结算后应进入第 1 天");
+assert.equal(calendarState.player.dailyRecords[0].date, expectedFirstDayText, "第 1 天应对应建档日次日");
 
 const state = createDefaultState();
 ensureStateShape(state);

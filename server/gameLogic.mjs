@@ -17,7 +17,7 @@ function addDays(dateText, offset) {
 }
 
 function stateDateForDay(state, day = state.day) {
-  return addDays(state.calendarStartDate || state.lastSettlementDate || dateKey(), Math.max(0, Number(day ?? 1) - 1));
+  return addDays(state.calendarStartDate || state.lastSettlementDate || dateKey(), Math.max(0, Number(day ?? 0)));
 }
 
 function timestampKey(date = new Date()) {
@@ -8779,7 +8779,7 @@ export function ensureStateShape(state) {
     state.rebirth = Math.floor(Number(state.rebirth));
   }
   if (!state.calendarStartDate) {
-    state.calendarStartDate = addDays(state.lastSettlementDate || dateKey(), 1 - Number(state.day || 1));
+    state.calendarStartDate = addDays(state.lastSettlementDate || dateKey(), -Math.max(0, Number(state.day || 0)));
     changed = true;
   }
   const ensureDatedRecord = (record) => {
