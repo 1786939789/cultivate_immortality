@@ -7741,6 +7741,12 @@ function ensureDaoTrialState(state) {
   }
   state.daoTrial.claimedMilestones = [...new Set(state.daoTrial.claimedMilestones || [])];
   state.daoTrial.history = (state.daoTrial.history || []).slice(0, daoTrialHistoryLimit);
+  if (state.daoTrial.activeRun) {
+    state.daoTrial.activeRun.rewards ??= { spirit: 0, dust: 0, milestones: [] };
+    state.daoTrial.activeRun.rewards.spirit = Number(state.daoTrial.activeRun.rewards.spirit) || 0;
+    state.daoTrial.activeRun.rewards.dust = Number(state.daoTrial.activeRun.rewards.dust) || 0;
+    state.daoTrial.activeRun.rewards.milestones = [...new Set(state.daoTrial.activeRun.rewards.milestones || [])];
+  }
   state.daoTrial.routeMastery ??= createDaoTrialState(state.day).routeMastery;
   state.daoTrial.yearGoals ??= createDaoTrialState(state.day).yearGoals;
   state.daoTrial.yearHistory = (state.daoTrial.yearHistory || []).slice(0, 8);
@@ -7960,6 +7966,10 @@ function trialMilestoneReward(state, run, node) {
   state.daoTrial.claimedMilestones.push(key);
   if (reward.spirit) state.player.spirit += reward.spirit;
   if (reward.dust) addSpiritDust(state, reward.dust, `问道秘境·${reward.label}`, state.player);
+  run.rewards ??= { spirit: 0, dust: 0, milestones: [] };
+  run.rewards.spirit += reward.spirit;
+  run.rewards.dust += reward.dust;
+  if (!run.rewards.milestones.includes(reward.label)) run.rewards.milestones.push(reward.label);
   return reward;
 }
 
@@ -7990,7 +8000,14 @@ function trialRunSummary(state, run) {
     lastReplayId: run.lastReplayId || "",
     score: trialRunScore(state, run, run.success),
     startedDay: run.startedDay,
-    endedDay: run.endedDay || state.day
+    startedDate: stateDateForDay(state, run.startedDay),
+    endedDay: run.endedDay || state.day,
+    date: stateDateForDay(state, run.endedDay || state.day),
+    rewards: run.rewards ? {
+      spirit: Number(run.rewards.spirit) || 0,
+      dust: Number(run.rewards.dust) || 0,
+      milestones: [...new Set(run.rewards.milestones || [])]
+    } : null
   };
 }
 
@@ -8150,6 +8167,7 @@ export function startDaoTrial(state, payload = {}) {
     bossCleared: false,
     tempSense: 0,
     companion: companion ? { ...companion, supportUsed: false } : null,
+    rewards: { spirit: 0, dust: 0, milestones: [] },
     combatant
   };
   state.daoTrial.activeRun = run;
@@ -9477,6 +9495,7 @@ function compactReplayFields(value) {
 export function getPublicState(state, options = {}) {
   ensureStateShape(state);
   if (options.scope === "home") return getHomeState(state);
+  if (options.scope === "dao-trial") return getDaoTrialActionState(state);
   const nextRealm = realms[Math.min(state.player.realm + 1, realms.length - 1)];
   const currentRealmInfo = realmInfo(state.player.realm);
   const breakChance = breakthroughChanceFor(state, state.player);
@@ -9806,6 +9825,24 @@ function formatPercentText(value) {
   if (typeof value !== "number") return "未记录";
   const percent = value * 100;
   return `${Number.isInteger(percent) ? percent : Number(percent.toFixed(1))}%`;
+}
+
+function getDaoTrialActionState(state) {
+  const spiritPearls = publicSpiritPearls(state, state.player);
+  return {
+    __scope: "dao-trial",
+    day: state.day,
+    player: {
+      spirit: state.player.spirit
+    },
+    spiritPearls,
+    daoTrial: publicDaoTrial(state),
+    log: state.log,
+    logDays: publicLogDays(state),
+    derived: {
+      spiritPearls
+    }
+  };
 }
 
 function skillRankText(rank) {

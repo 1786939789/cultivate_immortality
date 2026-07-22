@@ -1290,7 +1290,7 @@
                   <div><h3>选择同行者</h3><p>同行者只在本轮提供一次有上限的支援；无同行者也可独自问道。</p></div>
                   <button class="primary" type="button" :disabled="!selectedDaoTrialRoute || isActionPending('/api/dao-trial/start')" @click="startSelectedDaoTrial">
                     <Compass :size="16" aria-hidden="true" />
-                    {{ daoTrialState.attemptsRemaining > 0 ? `踏入${selectedDaoTrialRoute?.name || '秘境'}` : "开始无奖励演练" }}
+                    {{ isActionPending("/api/dao-trial/start") ? "踏入中..." : daoTrialState.attemptsRemaining > 0 ? `踏入${selectedDaoTrialRoute?.name || '秘境'}` : "开始无奖励演练" }}
                   </button>
                 </div>
                 <div class="dao-trial-companion-list">
@@ -1329,7 +1329,7 @@
                     <button v-for="record in daoTrialState.history" :key="record.id" class="event event-button" :class="{ gold: record.success, bad: !record.success, replayable: record.lastReplayId }" type="button" :disabled="!record.lastReplayId" @click="openEncounterReplay({ replayId: record.lastReplayId })">
                       <strong>第 {{ record.cycle }} 期 · {{ record.routeName }} · {{ record.result }}</strong>
                       <span>{{ record.nodesCleared }} / 7 节点 · {{ record.score }} 分 · {{ record.sealIds?.length || 0 }} 道印</span>
-                      <small>{{ record.practice ? "无奖励演练" : `正式第 ${record.attempt} 次` }}</small>
+                      <small>{{ record.practice ? "演练" : `正式第 ${record.attempt} 次` }} · {{ daoTrialRecordDate(record) }} · {{ daoTrialRewardText(record) }}</small>
                     </button>
                     <div v-if="!daoTrialState.history?.length" class="empty">尚未留下问道记录。</div>
                   </div>
@@ -1339,7 +1339,7 @@
                       <span>已载入 {{ daoTrialArchive.items.length }} / {{ daoTrialArchive.total }}</span>
                     </div>
                     <div class="dao-trial-archive-list">
-                      <button v-for="record in daoTrialArchive.items" :key="record.id" type="button" :disabled="!record.lastReplayId" @click="openEncounterReplay(record)"><span><b>第 {{ record.cycle }} 期 · {{ record.routeName }}</b><small>{{ record.affixName }} · {{ record.practice ? "演练" : `正式第 ${record.attempt} 次` }}</small></span><em>{{ record.result }} · {{ record.score }} 分</em></button>
+                      <button v-for="record in daoTrialArchive.items" :key="record.id" type="button" :disabled="!record.lastReplayId" @click="openEncounterReplay(record)"><span><b>第 {{ record.cycle }} 期 · {{ record.routeName }}</b><small>{{ record.affixName }} · {{ record.practice ? "演练" : `正式第 ${record.attempt} 次` }}</small><small>{{ daoTrialRecordDate(record) }} · {{ daoTrialRewardText(record) }}</small></span><em>{{ record.result }} · {{ record.score }} 分</em></button>
                       <div v-if="!daoTrialArchive.items.length && !daoTrialArchiveLoading" class="empty">暂无更多问道记录。</div>
                     </div>
                     <button v-if="daoTrialArchive.hasMore" class="secondary" type="button" :disabled="daoTrialArchiveLoading" @click="loadDaoTrialArchive(false)">{{ daoTrialArchiveLoading ? "翻阅中..." : "继续翻阅" }}</button>
@@ -6571,34 +6571,34 @@ async function startSelectedDaoTrial() {
   await act("/api/dao-trial/start", {
     routeId: route.id,
     companionId: selectedDaoTrialCompanionId.value || ""
-  }, { scope: "full" });
+  }, { scope: "dao-trial" });
 }
 
 async function chooseDaoTrialSeal(sealId) {
-  await act("/api/dao-trial/advance", { action: "seal", sealId }, { scope: "full" });
+  await act("/api/dao-trial/advance", { action: "seal", sealId }, { scope: "dao-trial" });
 }
 
 async function rerollDaoTrialSeals() {
-  await act("/api/dao-trial/advance", { action: "reroll" }, { scope: "full" });
+  await act("/api/dao-trial/advance", { action: "reroll" }, { scope: "dao-trial" });
 }
 
 async function useDaoTrialCompanionSupport() {
-  await act("/api/dao-trial/advance", { action: "companion" }, { scope: "full" });
+  await act("/api/dao-trial/advance", { action: "companion" }, { scope: "dao-trial" });
 }
 
 async function chooseDaoTrialEvent(optionId) {
-  await act("/api/dao-trial/advance", { optionId }, { scope: "full" });
+  await act("/api/dao-trial/advance", { optionId }, { scope: "dao-trial" });
 }
 
 async function fightDaoTrial() {
   const target = captureBattleReturn();
-  const result = await act("/api/dao-trial/advance", { action: "battle" }, { scope: "full" });
+  const result = await act("/api/dao-trial/advance", { action: "battle" }, { scope: "dao-trial" });
   if (result?.replay) openBattleReplay(result.replay, target);
 }
 
 async function abandonCurrentDaoTrial() {
   if (!confirm("确定离开本轮问道秘境？本次正式机会不会返还。")) return;
-  await act("/api/dao-trial/abandon", {}, { scope: "full" });
+  await act("/api/dao-trial/abandon", {}, { scope: "dao-trial" });
 }
 
 async function openEncounterReplay(record) {
@@ -10528,6 +10528,21 @@ function shortDisplayDate(record) {
   return shortDateText(displayDate(record));
 }
 
+function daoTrialRecordDate(record) {
+  return shortDateText(record?.date || dateForDay(record?.endedDay || record?.startedDay || gameState.value.day));
+}
+
+function daoTrialRewardText(record) {
+  if (record?.practice) return "无奖励";
+  if (!record?.rewards) return "旧记录未记载奖励";
+  const parts = [];
+  if (Number(record.rewards.spirit) > 0) parts.push(`灵石 +${record.rewards.spirit}`);
+  if (Number(record.rewards.dust) > 0) parts.push(`灵尘 +${record.rewards.dust}`);
+  const milestones = (record.rewards.milestones || []).filter(Boolean);
+  if (milestones.length) parts.unshift(milestones.join("、"));
+  return parts.length ? `奖励 ${parts.join(" · ")}` : "本次无新增奖励";
+}
+
 function compactRecordNote(note) {
   return String(note || "")
     .replace(/（[^）]*）/g, "")
@@ -12151,7 +12166,7 @@ function mergeGameState(current, incoming, options = {}) {
       derived: incomingState.derived || {}
     };
   }
-  if (!["home", "lite"].includes(incoming.__scope) || !current) {
+  if (!["home", "lite", "dao-trial"].includes(incoming.__scope) || !current) {
     const { __scope, ...fullState } = incoming;
     return fullState;
   }
@@ -12184,12 +12199,12 @@ function mergeGameState(current, incoming, options = {}) {
 }
 
 function applyState(nextState, options = {}) {
-  const shouldClearPersonDetails = options.replace || nextState?.__scope !== "home";
+  const shouldClearPersonDetails = options.replace || !["home", "dao-trial"].includes(nextState?.__scope);
   if (shouldClearPersonDetails) personDetails.value = {};
   state.value = mergeGameState(state.value, nextState, options);
   if (state.value && nextState?.__scope === "home") saveCachedState(state.value);
-  if (!["home", "lite"].includes(nextState?.__scope)) fullStateStale.value = false;
-  else fullStateStale.value = true;
+  if (!nextState?.__scope) fullStateStale.value = false;
+  else if (["home", "lite"].includes(nextState.__scope)) fullStateStale.value = true;
   if (
     nextState?.__scope === "home"
     && typeof nextState.home?.playerDuelRankPosition !== "number"

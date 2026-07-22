@@ -24,10 +24,15 @@ let battleStoragePromise;
 const stateCache = new Map();
 const stateValidationCache = new Map();
 const publicStateCache = new Map();
+const deferredStateWrites = new Map();
 let deferredPersistTimer = null;
 let deferredPersistDb = null;
 let deferredBattlePersistTimer = null;
 let deferredBattlePersistDb = null;
+let deferredPersistStartedAt = 0;
+let deferredBattlePersistStartedAt = 0;
+const deferredPersistIdleMs = 1200;
+const deferredPersistMaxMs = 5000;
 
 async function openDb() {
   if (!dbPromise) {
@@ -133,7 +138,31 @@ function seedRegistrationCode(db) {
 }
 
 function persist(db) {
+  flushDeferredStateWrites(db);
   writeFileSync(dbPath, Buffer.from(db.export()));
+}
+
+function writeStateRow(db, state, id, options = {}) {
+  compactStateForStorage(state, { skipReplayCompaction: options.skipReplayExtraction });
+  const statement = db.prepare(`
+    INSERT INTO saves (id, state_json, updated_at)
+    VALUES ($id, $state, datetime('now'))
+    ON CONFLICT(id) DO UPDATE SET
+      state_json = excluded.state_json,
+      updated_at = excluded.updated_at
+  `);
+  try {
+    statement.run({ $id: id, $state: JSON.stringify(state) });
+  } finally {
+    statement.free();
+  }
+}
+
+function flushDeferredStateWrites(db) {
+  if (!deferredStateWrites.size) return;
+  const pending = [...deferredStateWrites.entries()];
+  deferredStateWrites.clear();
+  for (const [id, entry] of pending) writeStateRow(db, entry.state, id, entry.options);
 }
 
 function ensureAuthUserRoleColumn(db) {
@@ -241,26 +270,34 @@ function migrateLegacyBattleReplays(mainDb, battleDb) {
 
 function schedulePersist(db) {
   deferredPersistDb = db;
-  if (deferredPersistTimer) return;
+  const now = Date.now();
+  if (!deferredPersistStartedAt) deferredPersistStartedAt = now;
+  clearTimeout(deferredPersistTimer);
+  const delay = Math.max(0, Math.min(deferredPersistIdleMs, deferredPersistMaxMs - (now - deferredPersistStartedAt)));
   deferredPersistTimer = setTimeout(() => {
     deferredPersistTimer = null;
+    deferredPersistStartedAt = 0;
     const targetDb = deferredPersistDb;
     deferredPersistDb = null;
     if (!targetDb) return;
     persist(targetDb);
-  }, 1200);
+  }, delay);
 }
 
 function scheduleBattlePersist(db) {
   deferredBattlePersistDb = db;
-  if (deferredBattlePersistTimer) return;
+  const now = Date.now();
+  if (!deferredBattlePersistStartedAt) deferredBattlePersistStartedAt = now;
+  clearTimeout(deferredBattlePersistTimer);
+  const delay = Math.max(0, Math.min(deferredPersistIdleMs, deferredPersistMaxMs - (now - deferredBattlePersistStartedAt)));
   deferredBattlePersistTimer = setTimeout(() => {
     deferredBattlePersistTimer = null;
+    deferredBattlePersistStartedAt = 0;
     const targetDb = deferredBattlePersistDb;
     deferredBattlePersistDb = null;
     if (!targetDb) return;
     persistBattleDb(targetDb);
-  }, 1200);
+  }, delay);
 }
 
 function flushDeferredPersist() {
@@ -268,6 +305,7 @@ function flushDeferredPersist() {
     clearTimeout(deferredPersistTimer);
     deferredPersistTimer = null;
   }
+  deferredPersistStartedAt = 0;
   if (!deferredPersistDb) return;
   const targetDb = deferredPersistDb;
   deferredPersistDb = null;
@@ -279,6 +317,7 @@ function flushDeferredBattlePersist() {
     clearTimeout(deferredBattlePersistTimer);
     deferredBattlePersistTimer = null;
   }
+  deferredBattlePersistStartedAt = 0;
   if (!deferredBattlePersistDb) return;
   const targetDb = deferredBattlePersistDb;
   deferredBattlePersistDb = null;
@@ -597,23 +636,20 @@ export async function writeState(state, id = "default", options = {}) {
   const db = await openDb();
   const battleDb = await ensureBattleStorage(db);
   const replaysWritten = writePendingBattleReplays(battleDb, state, id);
-  compactStateForStorage(state, { skipReplayCompaction: options.skipReplayExtraction });
   const replaysPruned = pruneBattleReplays(battleDb, state, id);
-  const statement = db.prepare(`
-    INSERT INTO saves (id, state_json, updated_at)
-    VALUES ($id, $state, datetime('now'))
-    ON CONFLICT(id) DO UPDATE SET
-      state_json = excluded.state_json,
-      updated_at = excluded.updated_at
-  `);
-  statement.run({ $id: id, $state: JSON.stringify(state) });
-  statement.free();
-  if (options.vacuum) db.run("VACUUM");
   stateCache.set(id, state);
   stateValidationCache.set(id, dateKey());
   publicStateCache.delete(id);
-  if (options.deferPersist) schedulePersist(db);
-  else persist(db);
+  if (options.deferStateWrite) {
+    deferredStateWrites.set(id, { state, options });
+    schedulePersist(db);
+  } else {
+    deferredStateWrites.delete(id);
+    writeStateRow(db, state, id, options);
+    if (options.vacuum) db.run("VACUUM");
+    if (options.deferPersist) schedulePersist(db);
+    else persist(db);
+  }
   if (replaysWritten || replaysPruned) {
     if (options.deferPersist) scheduleBattlePersist(battleDb);
     else persistBattleDb(battleDb);
@@ -762,6 +798,7 @@ export async function resetState(id = "default", options = {}) {
 
   const db = await openDb();
   const battleDb = await ensureBattleStorage(db);
+  deferredStateWrites.delete(id);
   const statement = db.prepare("DELETE FROM saves WHERE id = $id");
   statement.run({ $id: id });
   statement.free();

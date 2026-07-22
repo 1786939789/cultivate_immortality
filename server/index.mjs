@@ -85,6 +85,11 @@ const liteActionRoutes = new Set([
   "/api/items/use",
   "/api/items/sell"
 ]);
+const daoTrialActionRoutes = new Set([
+  "/api/dao-trial/start",
+  "/api/dao-trial/advance",
+  "/api/dao-trial/abandon"
+]);
 
 function sendJson(res, status, data, headers = {}) {
   const body = JSON.stringify(data);
@@ -369,11 +374,15 @@ async function handleApi(req, res, url) {
     return;
   }
 
-  const requestedScope = body.scope === "lite" || body.scope === "full" ? body.scope : "";
-  const scope = requestedScope || (liteActionRoutes.has(url.pathname) ? "lite" : "full");
-  const storageOptions = ["/api/day/advance", "/api/duels/day"].includes(url.pathname)
-    ? { skipReplayExtraction: true, deferPersist: true }
-    : undefined;
+  const requestedScope = ["lite", "full"].includes(body.scope) ? body.scope : "";
+  const scope = daoTrialActionRoutes.has(url.pathname)
+    ? "dao-trial"
+    : requestedScope || (liteActionRoutes.has(url.pathname) ? "lite" : "full");
+  const storageOptions = daoTrialActionRoutes.has(url.pathname)
+    ? { skipReplayExtraction: true, deferPersist: true, deferStateWrite: true }
+    : ["/api/day/advance", "/api/duels/day"].includes(url.pathname)
+      ? { skipReplayExtraction: true, deferPersist: true }
+      : undefined;
   const resultOnly = url.pathname === "/api/duels/day";
   sendJson(res, 200, await mutateState(mutator, saveId, { publicOptions: { scope }, storageOptions, resultOnly }));
 }

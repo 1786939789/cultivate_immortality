@@ -73,6 +73,10 @@ ensureStateShape(state);
 const companionId = getPublicState(state).daoTrial.companions[0]?.person?.id || "";
 const started = startDaoTrial(state, { routeId: "golden-pass", companionId });
 assert.ok(started.run && !started.practice, "首次问道应为正式挑战");
+const actionState = getPublicState(state, { scope: "dao-trial" });
+assert.equal(actionState.__scope, "dao-trial", "问道动作应返回专用局部状态");
+assert.ok(actionState.daoTrial.activeRun, "问道局部状态应包含当前挑战");
+assert.equal(actionState.npcs, undefined, "问道局部状态不应携带完整 NPC 列表");
 
 let actions = 0;
 while (state.daoTrial.activeRun && actions < 30) {
@@ -90,6 +94,10 @@ while (state.daoTrial.activeRun && actions < 30) {
 assert.ok(actions < 30, "问道流程不应陷入死循环");
 assert.equal(state.daoTrial.activeRun, null, "问道挑战应正常结束");
 assert.equal(state.daoTrial.history.length, 1, "问道结果应写入历史");
+assert.match(state.daoTrial.history[0].date, /^\d{4}-\d{2}-\d{2}$/, "问道记录应保存结算日期");
+assert.ok(state.daoTrial.history[0].rewards, "问道记录应保存本轮实际奖励");
+assert.ok(Number.isFinite(state.daoTrial.history[0].rewards.spirit), "问道灵石奖励应为数值");
+assert.ok(Number.isFinite(state.daoTrial.history[0].rewards.dust), "问道灵尘奖励应为数值");
 assert.doesNotThrow(() => JSON.stringify(getPublicState(state)), "公开状态必须可序列化");
 
 for (const route of daoTrialRoutes) {
