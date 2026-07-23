@@ -5603,11 +5603,13 @@ function normalizeTaskMultiplierRecords(state) {
       const day = Math.max(1, Math.floor(Number(record?.day) || 0));
       if (!day) return null;
       const elixirMultiplier = Math.max(1, Number(record?.elixirMultiplier ?? record?.cultivationMultiplier) || 1);
+      const sectXpMultiplier = Math.max(1, Number(record?.sectXpMultiplier) || 1);
       return {
         day,
         date: record?.date || stateDateForDay(state, day),
         elixirMultiplier,
-        totalMultiplier: elixirMultiplier
+        sectXpMultiplier,
+        totalMultiplier: elixirMultiplier * sectXpMultiplier
       };
     })
     .filter(Boolean)
@@ -5624,11 +5626,13 @@ function taskMultiplierSnapshot(state, day = state.day) {
   const targetDay = Math.max(1, Math.floor(Number(day) || state.day || 1));
   normalizeElixirEffects(state);
   const elixirMultiplier = activeCultivationMultiplier(state);
+  const sectXpMultiplier = 1 + sectXpBonus(state, state.sect?.name || state.player?.sect, state.player);
   return {
     day: targetDay,
     date: stateDateForDay(state, targetDay),
     elixirMultiplier,
-    totalMultiplier: elixirMultiplier
+    sectXpMultiplier,
+    totalMultiplier: elixirMultiplier * sectXpMultiplier
   };
 }
 
@@ -5655,6 +5659,7 @@ function taskMultiplierForDay(state, day = state.day) {
     day: targetDay,
     date: stateDateForDay(state, targetDay),
     elixirMultiplier: 1,
+    sectXpMultiplier: 1,
     totalMultiplier: 1
   };
 }
@@ -8413,7 +8418,7 @@ export function createDefaultState() {
       battleReplaySpeed: defaultBattleReplaySpeed,
       dailyTickerSpeed: defaultDailyTickerSpeed
     },
-    taskMultiplierRecords: [{ day: 0, date: openingDate, elixirMultiplier: 1, totalMultiplier: 1 }],
+    taskMultiplierRecords: [{ day: 0, date: openingDate, elixirMultiplier: 1, sectXpMultiplier: 1, totalMultiplier: 1 }],
     encounters: {
       version: encounterStateVersion,
       lastGenerationDay: 0,
@@ -11182,11 +11187,13 @@ export function addTask(state, payload) {
   const baseXpGain = efficiency.effectiveBaseXp;
   const spiritGain = Math.round(definition.spiritReward * deltaMultiplier);
   const dayMultiplier = taskMultiplierForDay(state, targetDay);
-  const elixirMultiplier = Math.max(1, Number(dayMultiplier.totalMultiplier) || 1);
+  const elixirMultiplier = Math.max(1, Number(dayMultiplier.elixirMultiplier) || 1);
+  const sectXpMultiplier = Math.max(1, Number(dayMultiplier.sectXpMultiplier) || 1);
   const taskTalentMultiplier = talentSnapshot(p).xpMultiplier;
   const catchup = playerCatchupProfile(state);
-  const beforeTalentXp = Math.round(baseXpGain * elixirMultiplier);
-  const xpMultiplier = elixirMultiplier * taskTalentMultiplier * catchup.multiplier;
+  const afterElixirXp = Math.round(baseXpGain * elixirMultiplier);
+  const beforeTalentXp = Math.round(afterElixirXp * sectXpMultiplier);
+  const xpMultiplier = elixirMultiplier * sectXpMultiplier * taskTalentMultiplier * catchup.multiplier;
   const xpGain = Math.round(beforeTalentXp * taskTalentMultiplier * catchup.multiplier);
   p.xp += xpGain;
   p.spirit += spiritGain;
@@ -11211,7 +11218,8 @@ export function addTask(state, payload) {
     requestedBaseXp,
     taskEfficiencyMultiplier: efficiency.multiplier,
     taskBudgetReducedXp: efficiency.reducedBaseXp,
-    elixirMultiplier: dayMultiplier.elixirMultiplier,
+    elixirMultiplier,
+    sectXpMultiplier,
     talentMultiplier: taskTalentMultiplier,
     catchupMultiplier: catchup.multiplier,
     xpMultiplier,
@@ -11249,7 +11257,10 @@ function removeTaskContributionFromDailyRecord(state, completion) {
   const xpGain = Math.max(0, Number(completion.xp) || 0);
   const baseXpGain = Math.max(0, Number(completion.baseXp) || 0);
   const beforeTalentXp = Math.max(0, Number(completion.beforeTalentXp)
-    || Math.floor(baseXpGain * Math.max(1, Number(completion.elixirMultiplier) || 1)));
+    || Math.round(
+      Math.round(baseXpGain * Math.max(1, Number(completion.elixirMultiplier) || 1))
+      * Math.max(1, Number(completion.sectXpMultiplier) || 1)
+    ));
   const bonusXp = Math.max(0, xpGain - baseXpGain);
   const spiritGain = Math.max(0, Number(completion.spirit) || 0);
   const subtract = (value, amount) => Math.max(0, (Number(value) || 0) - amount);

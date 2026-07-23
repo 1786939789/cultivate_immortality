@@ -6160,11 +6160,13 @@ const selectedTaskMultiplierRecord = computed(() => {
   if (day === gameState.value.day) {
     const effects = shopDerived.value.activeEffects || {};
     const elixirMultiplier = Math.max(1, Number(effects.cultivationMultiplier) || 1);
+    const sectXpMultiplier = Math.max(1, Number(personInsight(player.value).tomorrowXp?.sectMultiplier) || 1);
     return {
       day,
       date: found?.date || selectedTaskDate.value,
       elixirMultiplier,
-      totalMultiplier: elixirMultiplier
+      sectXpMultiplier,
+      totalMultiplier: elixirMultiplier * sectXpMultiplier
     };
   }
   if (found) return normalizeTaskMultiplierRecord(found, day, selectedTaskDate.value);
@@ -6172,6 +6174,7 @@ const selectedTaskMultiplierRecord = computed(() => {
     day,
     date: selectedTaskDate.value,
     elixirMultiplier: 1,
+    sectXpMultiplier: 1,
     totalMultiplier: 1
   };
 });
@@ -6270,7 +6273,7 @@ const recentTaskDays = computed(() => {
 });
 const taskRewardPreview = computed(() => {
   const task = selectedTaskDefinition.value;
-  if (!task) return { xp: 0, rawXp: 0, baseXp: 0, spirit: 0, multiplier: 0, elixirMultiplier: 1, xpMultiplier: 1 };
+  if (!task) return { xp: 0, rawXp: 0, baseXp: 0, spirit: 0, multiplier: 0, elixirMultiplier: 1, sectXpMultiplier: 1, talentMultiplier: 1, catchupMultiplier: 1, xpMultiplier: 1 };
   const amount = task.type === "measurable" ? Math.max(0, Number(taskForm.completedAmount) || 0) : 1;
   const target = Math.max(0.01, Number(task.targetAmount) || 1);
   const maxMultiplier = Math.max(0.01, Number(task.maxMultiplier) || 1);
@@ -6284,10 +6287,14 @@ const taskRewardPreview = computed(() => {
   const reduced = Math.max(0, requestedBaseXp - full);
   const baseXp = Math.round(full + reduced * Number(taskProgressState.value.reducedMultiplier || 0.4));
   const elixirMultiplier = Math.max(1, Number(selectedTaskMultiplierRecord.value?.elixirMultiplier) || 1);
+  const sectXpMultiplier = Math.max(1, Number(selectedTaskMultiplierRecord.value?.sectXpMultiplier) || 1);
+  const talentMultiplier = Math.max(1, Number(talentInfo(player.value).xpMultiplier) || 1);
   const catchupMultiplier = Math.max(1, Number(todayPlan.value.catchup?.multiplier) || 1);
-  const xpMultiplier = Math.max(1, Number(selectedTaskMultiplierRecord.value?.totalMultiplier) || elixirMultiplier) * catchupMultiplier;
+  const afterElixirXp = Math.round(baseXp * elixirMultiplier);
+  const beforeTalentXp = Math.round(afterElixirXp * sectXpMultiplier);
+  const xpMultiplier = elixirMultiplier * sectXpMultiplier * talentMultiplier * catchupMultiplier;
   return {
-    xp: Math.round(baseXp * xpMultiplier),
+    xp: Math.round(beforeTalentXp * talentMultiplier * catchupMultiplier),
     rawXp,
     baseXp,
     spirit: Math.round((Number(task.spiritReward) || 0) * multiplier),
@@ -6296,6 +6303,9 @@ const taskRewardPreview = computed(() => {
     requestedBaseXp,
     reducedBaseXp: reduced,
     elixirMultiplier,
+    sectXpMultiplier,
+    talentMultiplier,
+    catchupMultiplier,
     xpMultiplier
   };
 });
@@ -6307,6 +6317,9 @@ const taskRewardFormulaText = computed(() => {
   const parts = [`基础 +${Math.floor(preview.rawXp || 0)}`];
   if (task.type === "measurable") parts.push(`新增进度 x${formatFormulaMultiplier(preview.multiplier)}`);
   parts.push(`丹药 x${formatFormulaMultiplier(preview.elixirMultiplier)}`);
+  parts.push(`宗门 x${formatFormulaMultiplier(preview.sectXpMultiplier)}`);
+  parts.push(`天赋 x${formatFormulaMultiplier(preview.talentMultiplier)}`);
+  parts.push(`追赶 x${formatFormulaMultiplier(preview.catchupMultiplier)}`);
   const budget = preview.reducedBaseXp ? "；超出有效修行预算部分按 40% 计入" : "";
   return `${dayLabel}修为公式：${parts.join(" × ")} = +${preview.xp}（总加成 ${formatTaskBonusPercent(preview.xpMultiplier)}，各阶段四舍五入）${budget}`;
 });
@@ -6349,6 +6362,8 @@ const taskAmountMarks = computed(() => {
 const taskStatusCards = computed(() => {
   const effects = shopDerived.value.activeEffects || {};
   const multiplier = Math.max(1, Number(selectedTaskMultiplierRecord.value?.totalMultiplier) || 1);
+  const elixirMultiplier = Math.max(1, Number(selectedTaskMultiplierRecord.value?.elixirMultiplier) || 1);
+  const sectXpMultiplier = Math.max(1, Number(selectedTaskMultiplierRecord.value?.sectXpMultiplier) || 1);
   const daysLeft = selectedTaskDay.value === gameState.value.day ? Math.max(0, Number(effects.cultivationMultiplierDaysLeft) || 0) : 0;
   const dayLabel = selectedTaskDayMeta.value?.label || "所选日";
   return [
@@ -6358,7 +6373,9 @@ const taskStatusCards = computed(() => {
     {
       label: "修为加成",
       value: formatTaskBonusPercent(multiplier),
-      note: daysLeft > 0 ? `药力剩余 ${daysLeft} 天` : (selectedTaskDay.value === gameState.value.day ? "暂无丹药加成" : "当日快照"),
+      note: selectedTaskDay.value === gameState.value.day
+        ? `丹药 x${formatFormulaMultiplier(elixirMultiplier)} · 宗门 x${formatFormulaMultiplier(sectXpMultiplier)}${daysLeft > 0 ? ` · 药力剩余 ${daysLeft} 天` : ""}`
+        : "当日丹药与宗门快照",
       icon: Sparkles,
       asset: "/assets/tasks/icon-elixir.svg",
       tone: multiplier > 1 ? "elixir active" : "elixir"
@@ -10362,13 +10379,14 @@ function taskCompletionFormulaText(task) {
   const requestedBaseXp = Math.max(0, Number(task?.requestedBaseXp ?? task?.baseXp) || 0);
   const baseXp = Math.max(0, Number(task?.baseXp) || 0);
   const elixirMultiplier = Math.max(1, Number(task?.elixirMultiplier) || 1);
+  const sectXpMultiplier = Math.max(1, Number(task?.sectXpMultiplier) || 1);
   const talentMultiplier = Math.max(1, Number(task?.talentMultiplier) || 1);
   const catchupMultiplier = Math.max(1, Number(task?.catchupMultiplier) || 1);
   const baseText = requestedBaseXp !== baseXp
     ? `基础 ${requestedBaseXp} → 额度结算 ${baseXp}`
     : `有效修为 ${baseXp}`;
   const roundingText = task?.roundingMode === "round" ? "各阶段四舍五入" : "阶段取整";
-  return `修为公式：${baseText} × 丹药 x${formatFormulaMultiplier(elixirMultiplier)} × 天赋 x${formatFormulaMultiplier(talentMultiplier)} × 追赶 x${formatFormulaMultiplier(catchupMultiplier)} = +${Math.max(0, Number(task?.xp) || 0)}（${roundingText}）`;
+  return `修为公式：${baseText} × 丹药 x${formatFormulaMultiplier(elixirMultiplier)} × 宗门 x${formatFormulaMultiplier(sectXpMultiplier)} × 天赋 x${formatFormulaMultiplier(talentMultiplier)} × 追赶 x${formatFormulaMultiplier(catchupMultiplier)} = +${Math.max(0, Number(task?.xp) || 0)}（${roundingText}）`;
 }
 
 function formatTaskBonusPercent(value) {
@@ -11915,11 +11933,13 @@ function statTotal(total) {
 
 function normalizeTaskMultiplierRecord(record, day, date) {
   const elixirMultiplier = Math.max(1, Number(record?.elixirMultiplier ?? record?.cultivationMultiplier) || 1);
+  const sectXpMultiplier = Math.max(1, Number(record?.sectXpMultiplier) || 1);
   return {
     day,
     date: record?.date || date,
     elixirMultiplier,
-    totalMultiplier: elixirMultiplier
+    sectXpMultiplier,
+    totalMultiplier: elixirMultiplier * sectXpMultiplier
   };
 }
 
