@@ -4203,8 +4203,8 @@
                 <small>推进一天会结算攻守城、副本、灵珠与切磋；重开一世会清空当前本地存档。</small>
               </div>
               <div class="admin-game-actions-buttons">
-                <button class="secondary" :disabled="isActionPending('/api/day/advance')" @click="advanceDay">{{ isActionPending("/api/day/advance") ? "结算中..." : "推进一天" }}</button>
-                <button class="danger" :disabled="isActionPending('/api/reset')" @click="resetGame">重开一世</button>
+                <button class="secondary" :disabled="isActionPending('/api/day/advance')" @click="openRiskConfirmation('advance')">{{ isActionPending("/api/day/advance") ? "结算中..." : "推进一天" }}</button>
+                <button class="danger" :disabled="isActionPending('/api/reset')" @click="openRiskConfirmation('reset')">重开一世</button>
               </div>
             </section>
 
@@ -4630,6 +4630,41 @@
       </main>
     </div>
 
+    <div v-if="riskConfirmation.open" class="modal-backdrop risk-confirm-backdrop" @click.self="closeRiskConfirmation">
+      <form class="modal-panel risk-confirm-panel" role="dialog" aria-modal="true" :aria-label="riskConfirmationCopy.title" @submit.prevent="confirmRiskAction">
+        <div class="risk-confirm-heading">
+          <span class="risk-confirm-mark" aria-hidden="true">!</span>
+          <div>
+            <small>高风险操作</small>
+            <h3>{{ riskConfirmationCopy.title }}</h3>
+          </div>
+        </div>
+        <p>{{ riskConfirmationCopy.description }}</p>
+        <div class="risk-confirm-warning">
+          <strong>{{ riskConfirmationCopy.warning }}</strong>
+          <span>请输入下方文字以确认你已理解风险：</span>
+          <code>{{ riskConfirmationPhrase }}</code>
+        </div>
+        <label class="risk-confirm-field">
+          <span>风险确认</span>
+          <input
+            ref="riskConfirmInput"
+            v-model="riskConfirmation.input"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            :placeholder="riskConfirmationPhrase"
+          >
+        </label>
+        <div class="actions risk-confirm-actions">
+          <button class="secondary" type="button" :disabled="riskConfirmation.submitting" @click="closeRiskConfirmation">取消</button>
+          <button class="danger" type="submit" :disabled="!riskConfirmationReady || riskConfirmation.submitting">
+            {{ riskConfirmation.submitting ? riskConfirmationCopy.pendingLabel : riskConfirmationCopy.confirmLabel }}
+          </button>
+        </div>
+      </form>
+    </div>
+
     <div v-if="imageEditor.open" class="modal-backdrop" @click.self="closeImageEditor">
       <section class="image-cropper modal-panel" role="dialog" aria-modal="true" aria-label="头像裁剪">
         <div class="section-head compact">
@@ -5014,6 +5049,25 @@ const adminSelectedTaskId = ref("");
 const adminWikiArticleId = ref("home-cycle");
 const guideArticleId = ref("home-cycle");
 const adminGameSettingsDraft = reactive({ taskDailyFullXpBudget: 500, battleReplaySpeed: 1, dailyTickerSpeed: 1 });
+const riskConfirmationPhrase = "我已确认风险";
+const riskConfirmInput = ref(null);
+const riskConfirmation = reactive({ open: false, action: "", input: "", submitting: false });
+const riskConfirmationReady = computed(() => riskConfirmation.input.trim() === riskConfirmationPhrase);
+const riskConfirmationCopy = computed(() => riskConfirmation.action === "reset"
+  ? {
+      title: "确认重开一世",
+      description: "此操作会覆盖当前存档，并重新生成主角、NPC 与世界进度。",
+      warning: "当前角色成长、任务、宗门战、切磋、副本及全部历史记录都将被清空，且无法恢复。",
+      confirmLabel: "确认重开一世",
+      pendingLabel: "正在重开..."
+    }
+  : {
+      title: "确认推进一天",
+      description: "此操作会立即推进游戏日，并执行整套每日结算。",
+      warning: "攻守城、副本、灵珠、切磋及 NPC 成长将立即结算，结果写入存档后无法撤销。",
+      confirmLabel: "确认推进一天",
+      pendingLabel: "正在结算..."
+    });
 const battleReplaySpeedOptions = [
   { value: 0.5, label: "0.5x · 慢速" },
   { value: 0.75, label: "0.75x" },
@@ -6223,20 +6277,20 @@ const taskRewardPreview = computed(() => {
   const completedMultiplier = task.type === "measurable" ? Math.min(amount / target, maxMultiplier) : 1;
   const multiplier = Math.max(0, completedMultiplier - Number(selectedTaskProgress.value.awardedMultiplier || 0));
   const rawXp = Number(task.xpReward) || 0;
-  const requestedBaseXp = Math.floor(rawXp * multiplier);
+  const requestedBaseXp = Math.round(rawXp * multiplier);
   const usedBaseXp = Math.max(0, Number(taskProgressState.value.baseXp) || 0);
   const fullBudget = Math.max(0, Number(taskProgressState.value.fullXpBudget) || 500);
   const full = Math.min(requestedBaseXp, Math.max(0, fullBudget - usedBaseXp));
   const reduced = Math.max(0, requestedBaseXp - full);
-  const baseXp = Math.floor(full + reduced * Number(taskProgressState.value.reducedMultiplier || 0.4));
+  const baseXp = Math.round(full + reduced * Number(taskProgressState.value.reducedMultiplier || 0.4));
   const elixirMultiplier = Math.max(1, Number(selectedTaskMultiplierRecord.value?.elixirMultiplier) || 1);
   const catchupMultiplier = Math.max(1, Number(todayPlan.value.catchup?.multiplier) || 1);
   const xpMultiplier = Math.max(1, Number(selectedTaskMultiplierRecord.value?.totalMultiplier) || elixirMultiplier) * catchupMultiplier;
   return {
-    xp: Math.floor(baseXp * xpMultiplier),
+    xp: Math.round(baseXp * xpMultiplier),
     rawXp,
     baseXp,
-    spirit: Math.floor((Number(task.spiritReward) || 0) * multiplier),
+    spirit: Math.round((Number(task.spiritReward) || 0) * multiplier),
     multiplier,
     completedMultiplier,
     requestedBaseXp,
@@ -6254,7 +6308,7 @@ const taskRewardFormulaText = computed(() => {
   if (task.type === "measurable") parts.push(`新增进度 x${formatFormulaMultiplier(preview.multiplier)}`);
   parts.push(`丹药 x${formatFormulaMultiplier(preview.elixirMultiplier)}`);
   const budget = preview.reducedBaseXp ? "；超出有效修行预算部分按 40% 计入" : "";
-  return `${dayLabel}修为公式：${parts.join(" × ")} = +${preview.xp}（总加成 ${formatTaskBonusPercent(preview.xpMultiplier)}）${budget}`;
+  return `${dayLabel}修为公式：${parts.join(" × ")} = +${preview.xp}（总加成 ${formatTaskBonusPercent(preview.xpMultiplier)}，各阶段四舍五入）${budget}`;
 });
 const selectedTaskTypeText = computed(() => {
   const task = selectedTaskDefinition.value;
@@ -10313,7 +10367,8 @@ function taskCompletionFormulaText(task) {
   const baseText = requestedBaseXp !== baseXp
     ? `基础 ${requestedBaseXp} → 额度结算 ${baseXp}`
     : `有效修为 ${baseXp}`;
-  return `修为公式：${baseText} × 丹药 x${formatFormulaMultiplier(elixirMultiplier)} × 天赋 x${formatFormulaMultiplier(talentMultiplier)} × 追赶 x${formatFormulaMultiplier(catchupMultiplier)} = +${Math.max(0, Number(task?.xp) || 0)}（阶段取整）`;
+  const roundingText = task?.roundingMode === "round" ? "各阶段四舍五入" : "阶段取整";
+  return `修为公式：${baseText} × 丹药 x${formatFormulaMultiplier(elixirMultiplier)} × 天赋 x${formatFormulaMultiplier(talentMultiplier)} × 追赶 x${formatFormulaMultiplier(catchupMultiplier)} = +${Math.max(0, Number(task?.xp) || 0)}（${roundingText}）`;
 }
 
 function formatTaskBonusPercent(value) {
@@ -12668,7 +12723,37 @@ function dismissBreakthroughEffect() {
 }
 
 async function advanceDay() {
-  await act("/api/day/advance");
+  return act("/api/day/advance");
+}
+
+function openRiskConfirmation(action) {
+  riskConfirmation.action = action;
+  riskConfirmation.input = "";
+  riskConfirmation.submitting = false;
+  riskConfirmation.open = true;
+  nextTick(() => riskConfirmInput.value?.focus());
+}
+
+function clearRiskConfirmation() {
+  riskConfirmation.open = false;
+  riskConfirmation.action = "";
+  riskConfirmation.input = "";
+}
+
+function closeRiskConfirmation() {
+  if (riskConfirmation.submitting) return;
+  clearRiskConfirmation();
+}
+
+async function confirmRiskAction() {
+  if (!riskConfirmationReady.value || riskConfirmation.submitting) return;
+  riskConfirmation.submitting = true;
+  try {
+    const result = riskConfirmation.action === "reset" ? await resetGame() : await advanceDay();
+    if (result !== null) clearRiskConfirmation();
+  } finally {
+    riskConfirmation.submitting = false;
+  }
 }
 
 async function upgradeSkill() {
@@ -12801,10 +12886,9 @@ async function saveActiveAdminDraftBeforeReset() {
 }
 
 async function resetGame() {
-  if (!confirm("确定重开一世？将删除当前主角、NPC、成长、突破、切磋、闯关、宗门战等全部历史记录，并重新生成。")) return;
   await saveActiveAdminDraftBeforeReset();
   const result = await act("/api/reset", {}, { scope: "lite", replace: true, markStale: true, deferFullRefresh: true });
-  if (result === null) return;
+  if (result === null) return null;
   activeTab.value = authUser.value?.isAdmin ? "admin" : "practice";
   activeRankBoard.value = "power";
   detailView.value = "rank";
@@ -12818,6 +12902,7 @@ async function resetGame() {
   clearBattleReplay();
   clearCachedState();
   saveCachedState(state.value);
+  return result;
 }
 
 let timer;

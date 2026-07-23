@@ -3469,6 +3469,144 @@ body::before {
   background: linear-gradient(180deg, #ffe6d8, #e7c0a8);
 }
 
+.risk-confirm-backdrop {
+  z-index: 20000;
+  background: rgba(4, 8, 8, .78);
+  backdrop-filter: blur(5px);
+}
+
+.risk-confirm-panel {
+  width: min(520px, 100%);
+  border: 1px solid rgba(196, 142, 56, .72);
+  border-radius: 6px;
+  color: #3f2a14;
+  background:
+    linear-gradient(180deg, rgba(255, 250, 229, .98), rgba(230, 211, 171, .98)),
+    repeating-linear-gradient(0deg, rgba(105, 70, 28, .04) 0 1px, transparent 1px 6px);
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 247, 210, .72),
+    0 28px 80px rgba(0, 0, 0, .58);
+}
+
+.risk-confirm-heading {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(139, 84, 32, .24);
+}
+
+.risk-confirm-heading h3,
+.risk-confirm-heading small,
+.risk-confirm-panel p {
+  margin: 0;
+}
+
+.risk-confirm-heading h3 {
+  color: #6d281f;
+  font-size: 24px;
+}
+
+.risk-confirm-heading small {
+  display: block;
+  margin-bottom: 3px;
+  color: #9b5a2e;
+  font-weight: 900;
+  letter-spacing: .12em;
+}
+
+.risk-confirm-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(142, 51, 37, .55);
+  border-radius: 50%;
+  color: #fff0cf;
+  background: linear-gradient(180deg, #b64b38, #742a24);
+  box-shadow: 0 4px 12px rgba(112, 38, 30, .24);
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.risk-confirm-panel > p {
+  margin-top: 14px;
+  color: #5d452b;
+  line-height: 1.65;
+}
+
+.risk-confirm-warning {
+  display: grid;
+  gap: 7px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-left: 4px solid #a83e31;
+  border-radius: 3px;
+  background: rgba(139, 48, 37, .08);
+}
+
+.risk-confirm-warning strong {
+  color: #7e2d25;
+  line-height: 1.55;
+}
+
+.risk-confirm-warning span {
+  color: #6b5132;
+  font-size: 13px;
+}
+
+.risk-confirm-warning code {
+  width: fit-content;
+  padding: 4px 8px;
+  border: 1px solid rgba(118, 77, 30, .25);
+  border-radius: 3px;
+  color: #55330f;
+  background: rgba(255, 250, 230, .82);
+  font-family: "Microsoft YaHei", sans-serif;
+  font-weight: 900;
+}
+
+.risk-confirm-field {
+  display: grid;
+  gap: 7px;
+  margin-top: 16px;
+}
+
+.risk-confirm-field span {
+  color: #573a19;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.risk-confirm-field input {
+  width: 100%;
+  box-sizing: border-box;
+  border-color: rgba(129, 81, 34, .42);
+  background: rgba(255, 253, 240, .92);
+}
+
+.risk-confirm-field input:focus {
+  border-color: #9f5a2e;
+  box-shadow: 0 0 0 3px rgba(159, 90, 46, .14);
+  outline: none;
+}
+
+.risk-confirm-actions {
+  margin-top: 18px;
+  justify-content: flex-end;
+}
+
+.risk-confirm-actions button {
+  min-width: 132px;
+}
+
+.risk-confirm-actions button:disabled {
+  cursor: not-allowed;
+  filter: grayscale(.45);
+  opacity: .48;
+}
+
 .home-dashboard {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));

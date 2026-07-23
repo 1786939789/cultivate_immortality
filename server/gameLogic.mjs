@@ -6913,7 +6913,7 @@ function taskEfficiencyForDay(state, day, requestedBaseXp) {
   const requested = Math.max(0, Number(requestedBaseXp) || 0);
   const full = Math.max(0, Math.min(requested, taskDailyFullXpBudget(state) - prior));
   const reduced = Math.max(0, requested - full);
-  const effectiveBaseXp = Math.floor(full + reduced * taskDailyReducedXpMultiplier);
+  const effectiveBaseXp = Math.round(full + reduced * taskDailyReducedXpMultiplier);
   return {
     priorBaseXp: prior,
     fullBaseXp: full,
@@ -11177,17 +11177,17 @@ export function addTask(state, payload) {
   if (deltaMultiplier <= 0.000001) {
     throw new Error(`「${definition.name}」已计入 ${formatTaskProgressAmount(progress.amount, definition)}，提高完成量后再结算。`);
   }
-  const requestedBaseXp = Math.floor(definition.xpReward * deltaMultiplier);
+  const requestedBaseXp = Math.round(definition.xpReward * deltaMultiplier);
   const efficiency = taskEfficiencyForDay(state, targetDay, requestedBaseXp);
   const baseXpGain = efficiency.effectiveBaseXp;
-  const spiritGain = Math.floor(definition.spiritReward * deltaMultiplier);
+  const spiritGain = Math.round(definition.spiritReward * deltaMultiplier);
   const dayMultiplier = taskMultiplierForDay(state, targetDay);
   const elixirMultiplier = Math.max(1, Number(dayMultiplier.totalMultiplier) || 1);
   const taskTalentMultiplier = talentSnapshot(p).xpMultiplier;
   const catchup = playerCatchupProfile(state);
-  const beforeTalentXp = Math.floor(baseXpGain * elixirMultiplier);
+  const beforeTalentXp = Math.round(baseXpGain * elixirMultiplier);
   const xpMultiplier = elixirMultiplier * taskTalentMultiplier * catchup.multiplier;
-  const xpGain = Math.floor(beforeTalentXp * taskTalentMultiplier * catchup.multiplier);
+  const xpGain = Math.round(beforeTalentXp * taskTalentMultiplier * catchup.multiplier);
   p.xp += xpGain;
   p.spirit += spiritGain;
   progress.amount = Math.max(progress.amount, completedAmount);
@@ -11215,6 +11215,7 @@ export function addTask(state, payload) {
     talentMultiplier: taskTalentMultiplier,
     catchupMultiplier: catchup.multiplier,
     xpMultiplier,
+    roundingMode: "round",
     spirit: spiritGain,
     day: targetDay,
     date: dayMultiplier.date || stateDateForDay(state, targetDay)
