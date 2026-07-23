@@ -94,18 +94,7 @@ async function openBattleDb() {
       const db = existsSync(battleDbPath)
         ? new SQL.Database(readFileSync(battleDbPath))
         : new SQL.Database();
-      db.run(`
-        CREATE TABLE IF NOT EXISTS battle_replays (
-          id TEXT PRIMARY KEY,
-          save_id TEXT NOT NULL,
-          kind TEXT NOT NULL,
-          day INTEGER,
-          match_id TEXT,
-          replay_json TEXT NOT NULL,
-          created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-      `);
+      ensureBattleReplaySchema(db);
       db.run("CREATE INDEX IF NOT EXISTS idx_battle_replays_save_day ON battle_replays (save_id, day);");
       persistBattleDb(db);
       return db;
@@ -117,11 +106,161 @@ async function openBattleDb() {
 async function ensureBattleStorage(mainDb) {
   if (!battleStoragePromise) {
     battleStoragePromise = openBattleDb().then(async (battleDb) => {
-      await migrateLegacyBattleReplays(mainDb, battleDb);
+      const legacyMigrated = await migrateLegacyBattleReplays(mainDb, battleDb);
+      const referencesRecovered = recoverLegacyNpcBloodTrialReplays(mainDb, battleDb);
+      if (legacyMigrated || referencesRecovered) persistBattleDb(battleDb);
       return battleDb;
     });
   }
   return battleStoragePromise;
+}
+
+function createBattleReplayTable(db) {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS battle_replays (
+      id TEXT NOT NULL,
+      save_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      day INTEGER,
+      match_id TEXT,
+      replay_json TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (id, save_id)
+    );
+  `);
+}
+
+function ensureBattleReplaySchema(db) {
+  const table = db.exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'battle_replays' LIMIT 1");
+  if (!table.length || !table[0].values.length) {
+    createBattleReplayTable(db);
+    return false;
+  }
+
+  const columns = db.exec("PRAGMA table_info(battle_replays)");
+  const primaryKey = columns.length
+    ? columns[0].values
+      .filter((row) => Number(row[5]) > 0)
+      .sort((left, right) => Number(left[5]) - Number(right[5]))
+      .map((row) => row[1])
+    : [];
+  if (primaryKey.length === 2 && primaryKey[0] === "id" && primaryKey[1] === "save_id") return false;
+
+  db.run("ALTER TABLE battle_replays RENAME TO battle_replays_legacy");
+  createBattleReplayTable(db);
+  db.run(`
+    INSERT INTO battle_replays (id, save_id, kind, day, match_id, replay_json, created_at, updated_at)
+    SELECT id, save_id, kind, day, match_id, replay_json, created_at, updated_at
+    FROM battle_replays_legacy
+  `);
+  db.run("DROP TABLE battle_replays_legacy");
+  return true;
+}
+
+function recoverLegacyNpcBloodTrialReplays(mainDb, battleDb) {
+  const saves = mainDb.exec("SELECT id, state_json FROM saves");
+  if (!saves.length || !saves[0].values.length) return false;
+  const sourceStatement = battleDb.prepare(`
+    SELECT kind, day, match_id, replay_json, created_at, updated_at
+    FROM battle_replays
+    WHERE id = $id
+    ORDER BY updated_at DESC
+  `);
+  const existingStatement = battleDb.prepare(`
+    SELECT 1 FROM battle_replays WHERE id = $id AND save_id = $saveId LIMIT 1
+  `);
+  const insertStatement = battleDb.prepare(`
+    INSERT INTO battle_replays (id, save_id, kind, day, match_id, replay_json, created_at, updated_at)
+    VALUES ($id, $saveId, $kind, $day, $matchId, $replay, $createdAt, $updatedAt)
+    ON CONFLICT(id, save_id) DO NOTHING
+  `);
+  const sourceRowsByReplayId = new Map();
+  let changed = false;
+  try {
+    for (const [saveId, stateJson] of saves[0].values) {
+      const replayReferences = npcBloodTrialReplayReferences(stateJson);
+      for (const [replayId, reference] of replayReferences) {
+        existingStatement.bind({ $id: replayId, $saveId: saveId });
+        const exists = existingStatement.step();
+        existingStatement.reset();
+        if (exists) continue;
+
+        if (!sourceRowsByReplayId.has(replayId)) {
+          sourceStatement.bind({ $id: replayId });
+          const rows = [];
+          while (sourceStatement.step()) rows.push(sourceStatement.get());
+          sourceStatement.reset();
+          sourceRowsByReplayId.set(replayId, rows);
+        }
+        const matchingSources = sourceRowsByReplayId.get(replayId).filter((row) => {
+          try {
+            return bloodTrialReplayMatches(reference, JSON.parse(row[3]));
+          } catch {
+            return false;
+          }
+        });
+        if (matchingSources.length !== 1) continue;
+        const [kind, day, matchId, replay, createdAt, updatedAt] = matchingSources[0];
+        insertStatement.run({
+          $id: replayId,
+          $saveId: saveId,
+          $kind: kind || "battle",
+          $day: day === null ? null : Number(day) || null,
+          $matchId: matchId || "",
+          $replay: replay,
+          $createdAt: createdAt || new Date().toISOString(),
+          $updatedAt: updatedAt || new Date().toISOString()
+        });
+        changed = changed || battleDb.getRowsModified() > 0;
+      }
+    }
+  } finally {
+    sourceStatement.free();
+    existingStatement.free();
+    insertStatement.free();
+  }
+  return changed;
+}
+
+function npcBloodTrialReplayReferences(stateJson) {
+  const references = new Map();
+  let state;
+  try {
+    state = JSON.parse(stateJson);
+  } catch {
+    return references;
+  }
+  const visit = (value) => {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (/^blood-trial-\d+-\d+-npc-[a-z0-9-]+$/i.test(value.replayId || "")) {
+      references.set(value.replayId, value);
+    }
+    Object.values(value).forEach(visit);
+  };
+  visit(state);
+  return references;
+}
+
+function bloodTrialReplayMatches(reference, replay) {
+  if (!reference || !replay || replay.left?.id !== reference.id) return false;
+  if (reference.name && replay.left?.name !== reference.name) return false;
+  const leftStartHp = Number(replay.left?.startHp ?? replay.left?.stats?.hp);
+  const leftStartMana = Number(replay.left?.startMana ?? replay.left?.stats?.mana);
+  const leftEndHp = Number(replay.left?.endHp);
+  const leftEndMana = Number(replay.left?.endMana);
+  const rightStartHp = Number(replay.right?.startHp ?? replay.right?.stats?.hp);
+  const rightEndHp = Number(replay.right?.endHp);
+  const output = Math.max(1, Math.floor(rightStartHp - rightEndHp));
+  return leftStartHp === Number(reference.startHp)
+    && leftStartMana === Number(reference.startMana)
+    && leftEndHp === Number(reference.endHp)
+    && leftEndMana === Number(reference.endMana)
+    && output === Number(reference.output);
 }
 
 function seedRegistrationCode(db) {
@@ -235,8 +374,7 @@ function migrateLegacyBattleReplays(mainDb, battleDb) {
     const statement = battleDb.prepare(`
       INSERT INTO battle_replays (id, save_id, kind, day, match_id, replay_json, created_at, updated_at)
       VALUES ($id, $saveId, $kind, $day, $matchId, $replay, COALESCE($createdAt, datetime('now')), COALESCE($updatedAt, datetime('now')))
-      ON CONFLICT(id) DO UPDATE SET
-        save_id = excluded.save_id,
+      ON CONFLICT(id, save_id) DO UPDATE SET
         kind = excluded.kind,
         day = excluded.day,
         match_id = excluded.match_id,
@@ -676,7 +814,7 @@ function writePendingBattleReplays(db, state, saveId) {
   const statement = db.prepare(`
     INSERT INTO battle_replays (id, save_id, kind, day, match_id, replay_json, updated_at)
     VALUES ($id, $saveId, $kind, $day, $matchId, $replay, datetime('now'))
-    ON CONFLICT(id) DO UPDATE SET
+    ON CONFLICT(id, save_id) DO UPDATE SET
       replay_json = excluded.replay_json,
       updated_at = excluded.updated_at
   `);
@@ -703,7 +841,7 @@ function extractBattleReplays(db, state, saveId) {
   const statement = db.prepare(`
     INSERT INTO battle_replays (id, save_id, kind, day, match_id, replay_json, updated_at)
     VALUES ($id, $saveId, $kind, $day, $matchId, $replay, datetime('now'))
-    ON CONFLICT(id) DO UPDATE SET
+    ON CONFLICT(id, save_id) DO UPDATE SET
       replay_json = excluded.replay_json,
       updated_at = excluded.updated_at
   `);
