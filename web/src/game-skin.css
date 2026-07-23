@@ -10417,6 +10417,58 @@ body::before {
   display: none;
 }
 
+@media (max-width: 1040px) {
+  .arena-surface.view.active .duel-console-shell .duel-reward-rail {
+    grid-template-columns: 96px minmax(0, 1fr);
+    padding-inline: 10px;
+  }
+
+  .arena-surface.view.active .duel-console-shell .duel-rank-table {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    padding-left: 6px;
+  }
+
+  .arena-surface.view.active .duel-console-shell .duel-rank-cell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 38px auto;
+    justify-items: center;
+    gap: 4px;
+    min-height: 112px;
+    padding: 7px 2px;
+    text-align: center;
+  }
+
+  .arena-surface.view.active .duel-console-shell .duel-rank-cell > div {
+    min-width: 0;
+  }
+
+  .arena-surface.view.active .duel-console-shell .duel-rank-cell strong,
+  .arena-surface.view.active .duel-console-shell .duel-rank-cell span,
+  .arena-surface.view.active .duel-console-shell .duel-rank-cell small {
+    justify-self: center;
+    white-space: nowrap;
+  }
+
+  .arena-surface.view.active .duel-console-shell .duel-rank-cell strong {
+    font-size: 12px;
+  }
+
+  .arena-surface.view.active .duel-console-shell .duel-rank-cell span,
+  .arena-surface.view.active .duel-console-shell .duel-rank-cell small {
+    margin-top: 3px;
+    font-size: 9px;
+  }
+
+  .arena-surface.view.active .duel-console-shell .duel-rank-medal {
+    width: 36px;
+    height: 36px;
+  }
+
+  .arena-surface.view.active .duel-console-shell .duel-rank-cell em {
+    display: none;
+  }
+}
+
 .arena-surface.view.active .duel-console-shell .duel-match-card {
   display: grid;
   grid-template-columns: minmax(0, 1.04fr) 64px 72px 64px minmax(0, 1.04fr) 72px 44px;
