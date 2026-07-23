@@ -10606,7 +10606,7 @@ body::before {
 
 .wheel-battle-console .sect-war-replay-panel .duel-fighter-attrs {
   flex-wrap: nowrap;
-  gap: 2px;
+  gap: 1px;
   width: 100%;
   max-width: 148px;
   margin: 0;
@@ -10614,7 +10614,7 @@ body::before {
 
 .wheel-battle-console .sect-war-replay-panel .duel-fighter-attrs span {
   height: 16px;
-  padding: 1px 3px;
+  padding: 1px 2px;
   font-size: 9px;
   line-height: 12px;
 }
@@ -10739,6 +10739,16 @@ body::before {
   background:
     linear-gradient(180deg, rgba(6, 10, 11, .06), rgba(6, 10, 11, .34)),
     url("/assets/home-cards/duel-arena.png") center / cover no-repeat;
+}
+
+.view.active.sect-war-room .wheel-battle-console .sect-war-replay-panel .duel-arena-stage {
+  grid-template-columns: minmax(0, 1fr) 56px minmax(0, 1fr);
+  gap: 4px;
+  padding-inline: 8px;
+}
+
+.view.active.sect-war-room .wheel-battle-console .sect-war-replay-panel .duel-live-center strong {
+  font-size: 38px;
 }
 
 .view.active.sect-war-room .sect-war-replay-panel .duel-fighter {
