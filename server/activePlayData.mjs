@@ -100,7 +100,7 @@ export const expeditionRoutes = [
     subtitle: "稳中求进",
     accent: "jade",
     text: "灵兽与古修遗迹交错，适合检验均衡构筑。",
-    difficulty: 0.88,
+    difficulty: 0.84,
     rewardBias: "spirit",
     nodes: [
       { id: "ridge-ambush", type: "battle", name: "竹海伏影", text: "林间妖影试探来客。" },
@@ -114,7 +114,7 @@ export const expeditionRoutes = [
     subtitle: "以险换宝",
     accent: "vermilion",
     text: "地火旺盛，敌人攻势更烈，装备与功法残页更常出现。",
-    difficulty: 1.04,
+    difficulty: 0.94,
     rewardBias: "manual",
     nodes: [
       { id: "ember-raiders", type: "battle", name: "焦土劫修", text: "劫修借地火布下杀局。" },
@@ -128,7 +128,7 @@ export const expeditionRoutes = [
     subtitle: "控场试炼",
     accent: "moon",
     text: "迷雾削弱感知，善用控制、护体与回灵才能走远。",
-    difficulty: 1.12,
+    difficulty: 1.02,
     rewardBias: "dust",
     nodes: [
       { id: "marsh-wraith", type: "battle", name: "雾泽阴灵", text: "阴灵从水镜倒影中袭来。" },
@@ -147,12 +147,12 @@ export const expeditionEventOptions = {
   "ember-choice": [
     { id: "temper", label: "引火淬体", hint: "损失气血，强化本轮攻防", effects: { hpCost: 0.18, runAttack: 0.12, runDefense: 0.12 } },
     { id: "bottle", label: "收取灵焰", hint: "获得灵石与灵尘", effects: { spirit: 22, dust: 8 } },
-    { id: "rest", label: "封穴调息", hint: "安全恢复法力", effects: { mana: 0.42 } }
+    { id: "rest", label: "封穴调息", hint: "安全恢复气血与法力", effects: { heal: 0.35, mana: 0.42 } }
   ],
   "marsh-choice": [
     { id: "relic", label: "登舟取遗物", hint: "高风险获得更多战利品", effects: { hpCost: 0.2, bonusRewards: 1 } },
     { id: "ward", label: "布下避邪阵", hint: "本轮防御与神识提高", effects: { runDefense: 0.18, runSense: 0.14 } },
-    { id: "leave", label: "绕开残舟", hint: "恢复少量气血，稳妥前进", effects: { heal: 0.16 } }
+    { id: "leave", label: "绕开残舟", hint: "恢复气血，稳妥前进", effects: { heal: 0.32 } }
   ]
 };
 

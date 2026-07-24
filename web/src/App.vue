@@ -2196,7 +2196,7 @@
             </button>
           </div>
 
-          <div v-if="activeSectSubTab === 'dispatch'" class="sect-dispatch-surface">
+          <div v-if="activeSectSubTab === 'dispatch' && !lastBattle" class="sect-dispatch-surface">
             <header class="panel active-play-header sect-dispatch-header">
               <div>
                 <span class="active-play-kicker">即时经营</span>
@@ -2620,7 +2620,7 @@
             <section class="duel-replay-panel live sect-war-replay-panel">
               <div class="duel-replay-title">
                 <div>
-                  <h3>攻城实况</h3>
+                  <h3>{{ lastBattle.kind === "sect-operation" ? "宗门行动实况" : "攻城实况" }}</h3>
                   <p>{{ battleDisplayName(lastBattle.left) }} 对阵 {{ battleDisplayName(lastBattle.right) }}，{{ battleStatusText }}</p>
                 </div>
                 <div class="duel-replay-actions">
@@ -2668,7 +2668,7 @@
                     <span v-else>{{ skillIconGlyph(lastBattle.left) }}</span>
                   </span>
                   <span class="skill-chip-title">{{ skillLabel(lastBattle.left) }}</span>
-                  <small>攻城 (1)</small>
+                  <small>{{ lastBattle.kind === "sect-operation" ? "我方 (1)" : "攻城 (1)" }}</small>
                   <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.left) }}</span>
                 </div>
                 <div class="skill-chip" tabindex="0">
@@ -2677,7 +2677,7 @@
                     <span v-else>{{ skillIconGlyph(lastBattle.right) }}</span>
                   </span>
                   <span class="skill-chip-title">{{ skillLabel(lastBattle.right) }}</span>
-                  <small>守城 (2)</small>
+                  <small>{{ lastBattle.kind === "sect-operation" ? "敌方 (2)" : "守城 (2)" }}</small>
                   <span class="skill-tip" role="tooltip">{{ skillTip(lastBattle.right) }}</span>
                 </div>
               </div>
@@ -7891,6 +7891,7 @@ const starSeaBattleStatusText = computed(() => {
   return lastBattle.value.team?.success ? "妖物已被斩杀。" : "队伍未能击杀妖物。";
 });
 const battleBackLabel = computed(() => {
+  if (lastBattle.value?.kind === "sect-operation") return "返回行动队";
   const target = battleReturnTarget.value;
   if (!target) return activeTab.value === "sect" ? "返回攻城记录" : "返回切磋";
   if (target.detailView === "person") return "返回";
@@ -10233,7 +10234,7 @@ function battleMax(side, kind) {
   const startKey = kind === "mana" ? "startMana" : "startHp";
   const statKey = kind === "mana" ? "mana" : "hp";
   const fallbackKey = kind === "mana" ? "maxMana" : "maxHp";
-  return Math.max(1, Number(side.baseStats?.[fallbackKey] || side.baseStats?.[statKey] || side.stats?.[fallbackKey] || side.stats?.[statKey] || side[startKey] || 1));
+  return Math.max(1, Number(side.stats?.[fallbackKey] || side.stats?.[statKey] || side.baseStats?.[fallbackKey] || side.baseStats?.[statKey] || side[startKey] || 1));
 }
 
 function warTeam(war, side) {

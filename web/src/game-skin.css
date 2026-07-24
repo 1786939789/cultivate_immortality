@@ -11287,6 +11287,45 @@ body::before {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .view.active.sect-war-room .sect-war-replay-panel .duel-replay-title {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .view.active.sect-war-room .sect-war-replay-panel {
+    grid-template-rows: auto 238px auto minmax(180px, 1fr);
+  }
+
+  .view.active.sect-war-room .sect-war-replay-panel .duel-replay-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .view.active.sect-war-room .sect-war-replay-panel .duel-replay-actions button {
+    width: 100%;
+    white-space: nowrap;
+  }
+
+  .view.active.sect-war-room .sect-war-replay-panel .duel-skill-row {
+    flex-direction: column;
+    align-items: stretch;
+    min-height: 0;
+    height: auto;
+  }
+
+  .view.active.sect-war-room .sect-war-replay-panel .duel-skill-row .skill-chip {
+    width: 100%;
+  }
+
+  .view.active.sect-war-room .sect-war-replay-panel .duel-skill-row .skill-chip-title {
+    overflow: visible;
+    white-space: normal;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+  }
+
   .wheel-battle-board,
   .wheel-replay-panel {
     min-height: auto;

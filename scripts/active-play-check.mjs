@@ -5,7 +5,9 @@ import {
   commandSectOperation,
   createDefaultState,
   dailySettlement,
+  deleteTaskCompletion,
   getPublicState,
+  addTask,
   startActiveExpedition,
   startSectOperation,
   updateActiveSectSquad,
@@ -94,15 +96,28 @@ abandonActiveExpedition(expeditionState);
 assert.equal(publicActive(expeditionState).expeditionHistory[0].result, "abandoned");
 
 const rolloverState = createDefaultState();
-rolloverState.taskCompletions.push({ day: rolloverState.day, baseXp: 500 });
+rolloverState.taskCompletions.push({ day: 1, baseXp: 500 });
 assert.equal(publicActive(rolloverState).action.available, 4, "500 effective task XP should earn three bonus tokens");
 startActiveExpedition(rolloverState, { routeId: "green-ridge" });
 abandonActiveExpedition(rolloverState);
 assert.equal(publicActive(rolloverState).action.available, 3);
 dailySettlement(rolloverState, { manual: true });
 const rolloverAction = publicActive(rolloverState).action;
-assert.equal(rolloverAction.carry, 2, "only two unused tokens may carry into the next day");
-assert.equal(rolloverAction.available, 3, "next day availability should be two carried plus one daily token");
+assert.equal(rolloverAction.carry, 0, "day zero and day one share the first task accounting period");
+assert.equal(rolloverAction.available, 3, "the opening task period must not award the same task tokens twice");
+dailySettlement(rolloverState, { manual: true });
+const secondRolloverAction = publicActive(rolloverState).action;
+assert.equal(secondRolloverAction.carry, 2, "only two unused tokens may carry into a genuinely new task day");
+assert.equal(secondRolloverAction.available, 3, "a new task day should provide carried tokens plus one daily token");
+
+const openingTaskState = createDefaultState();
+addTask(openingTaskState, { taskId: "task-writing" });
+assert.equal(openingTaskState.taskCompletions[0].day, 1, "opening tasks use the first task accounting day");
+assert.equal(publicActive(openingTaskState).action.effectiveTaskXp, 120, "opening tasks must immediately count toward action thresholds");
+assert.equal(publicActive(openingTaskState).action.available, 2, "the first opening threshold must immediately grant a token");
+deleteTaskCompletion(openingTaskState, { id: openingTaskState.taskCompletions[0].id });
+assert.equal(publicActive(openingTaskState).action.effectiveTaskXp, 0, "withdrawing an opening task must remove its threshold progress");
+assert.equal(publicActive(openingTaskState).action.available, 1, "withdrawing an opening task must remove its unspent bonus token");
 
 const sectState = createDefaultState();
 const roster = publicActive(sectState).sect.roster;
@@ -123,6 +138,13 @@ const fatigueBefore = Object.fromEntries(memberIds.map((id) => [id, Number(sectS
 const allFatigueBefore = { ...sectState.sectFatigue };
 const operationStart = startSectOperation(sectState, { operationId: "patrol" });
 assert.equal(publicActive(sectState).action.available, 0, "starting a sect operation must spend one action token");
+if (!operationStart.completed) {
+  assert.equal(
+    publicActive(sectState).sect.activeOperation.rivalMemberIds.length,
+    memberIds.length,
+    "rival operations must field the same number of members as the player squad"
+  );
+}
 const operationResult = operationStart.completed
   ? operationStart
   : commandSectOperation(sectState, { commandId: "bulwark" });

@@ -24,6 +24,7 @@ let battleStoragePromise;
 const stateCache = new Map();
 const stateValidationCache = new Map();
 const publicStateCache = new Map();
+const stateMutationQueues = new Map();
 const deferredStateWrites = new Map();
 let deferredPersistTimer = null;
 let deferredPersistDb = null;
@@ -917,42 +918,57 @@ export async function readBattleReplay(replayId, id = "default") {
   return replay;
 }
 
-export async function mutateState(mutator, id = "default", options = {}) {
-  const state = await readState(id);
-  const result = mutator(state);
-  await writeState(state, id, options.storageOptions);
-  if (options.resultOnly) return { result };
-  const publicState = getPublicState(state, options.publicOptions);
-  return result === undefined ? publicState : { state: publicState, result };
+function enqueueStateMutation(id, mutation) {
+  const previous = stateMutationQueues.get(id) || Promise.resolve();
+  const operation = previous
+    .catch(() => {})
+    .then(mutation);
+  stateMutationQueues.set(id, operation);
+  return operation.finally(() => {
+    if (stateMutationQueues.get(id) === operation) stateMutationQueues.delete(id);
+  });
 }
 
-export async function resetState(id = "default", options = {}) {
-  let previousState = null;
-  try {
-    previousState = await readState(id);
-  } catch {
-    previousState = null;
-  }
+export function mutateState(mutator, id = "default", options = {}) {
+  return enqueueStateMutation(id, async () => {
+    const state = await readState(id);
+    const result = mutator(state);
+    await writeState(state, id, options.storageOptions);
+    if (options.resultOnly) return { result };
+    const publicState = getPublicState(state, options.publicOptions);
+    return result === undefined ? publicState : { state: publicState, result };
+  });
+}
 
-  const db = await openDb();
-  const battleDb = await ensureBattleStorage(db);
-  deferredStateWrites.delete(id);
-  const statement = db.prepare("DELETE FROM saves WHERE id = $id");
-  statement.run({ $id: id });
-  statement.free();
-  const replayStatement = battleDb.prepare("DELETE FROM battle_replays WHERE save_id = $id");
-  replayStatement.run({ $id: id });
-  const replayRowsDeleted = battleDb.getRowsModified() > 0;
-  replayStatement.free();
-  stateCache.delete(id);
-  stateValidationCache.delete(id);
-  publicStateCache.delete(id);
-  persist(db);
-  if (replayRowsDeleted) persistBattleDb(battleDb);
+export function resetState(id = "default", options = {}) {
+  return enqueueStateMutation(id, async () => {
+    let previousState = null;
+    try {
+      previousState = await readState(id);
+    } catch {
+      previousState = null;
+    }
 
-  const state = preserveProfilesForReset(clearProgressHistory(createDefaultState()), previousState);
-  await writeState(state, id);
-  return getPublicState(state, options.publicOptions);
+    const db = await openDb();
+    const battleDb = await ensureBattleStorage(db);
+    deferredStateWrites.delete(id);
+    const statement = db.prepare("DELETE FROM saves WHERE id = $id");
+    statement.run({ $id: id });
+    statement.free();
+    const replayStatement = battleDb.prepare("DELETE FROM battle_replays WHERE save_id = $id");
+    replayStatement.run({ $id: id });
+    const replayRowsDeleted = battleDb.getRowsModified() > 0;
+    replayStatement.free();
+    stateCache.delete(id);
+    stateValidationCache.delete(id);
+    publicStateCache.delete(id);
+    persist(db);
+    if (replayRowsDeleted) persistBattleDb(battleDb);
+
+    const state = preserveProfilesForReset(clearProgressHistory(createDefaultState()), previousState);
+    await writeState(state, id);
+    return getPublicState(state, options.publicOptions);
+  });
 }
 
 export async function publicState(id = "default", options = {}) {

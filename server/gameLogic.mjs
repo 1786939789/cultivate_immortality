@@ -7083,6 +7083,10 @@ function taskBaseXpForDay(state, day) {
     .reduce((sum, record) => sum + Math.max(0, Number(record.baseXp) || 0), 0);
 }
 
+function taskAccountingDay(state, day = state.day) {
+  return Math.max(1, Math.floor(Number(day) || 1));
+}
+
 function taskDailyFullXpBudget(state) {
   const value = Number(state.gameSettings?.taskDailyFullXpBudget);
   if (!Number.isFinite(value)) return defaultTaskDailyFullXpBudget;
@@ -8589,12 +8593,14 @@ function ensureActivePlayState(state) {
 
 function activeActionStatus(state) {
   ensureActivePlayState(state);
-  const effectiveTaskXp = taskBaseXpForDay(state, state.day);
+  const accountingDay = taskAccountingDay(state);
+  const effectiveTaskXp = taskBaseXpForDay(state, accountingDay);
   const taskEarned = actionEconomy.taskThresholds.filter((threshold) => effectiveTaskXp >= threshold).length;
   const dailyEarned = actionEconomy.baseDaily + taskEarned;
   const available = clamp(state.activePlay.carry + dailyEarned - state.activePlay.spentToday, 0, actionEconomy.hardCap);
   return {
     day: state.day,
+    accountingDay,
     base: actionEconomy.baseDaily,
     taskEarned,
     dailyEarned,
@@ -8618,6 +8624,10 @@ function spendActiveAction(state, amount, reason) {
 
 function rolloverActivePlayDay(state, nextDay) {
   ensureActivePlayState(state);
+  if (taskAccountingDay(state) === taskAccountingDay(state, nextDay)) {
+    state.activePlay.day = nextDay;
+    return;
+  }
   const status = activeActionStatus(state);
   state.activePlay.carry = Math.min(actionEconomy.carryLimit, status.available);
   state.activePlay.spentToday = 0;
@@ -8696,7 +8706,7 @@ export function updateActiveSectSquad(state, payload = {}) {
 
 function activeEnemyFor(state, contextId, name, difficulty = 1, boss = false) {
   const playerStats = combatSnapshot(state.player, state);
-  const scale = Math.max(0.62, Number(difficulty) || 1) * (boss ? 1.12 : 1);
+  const scale = Math.max(0.62, Number(difficulty) || 1) * (boss ? 1.02 : 1);
   const baseRoot = roots[stableHash(`${contextId}|root`) % roots.length];
   const rootRatio = (stableHash(`${contextId}|root-bonus`) % 1001) / 1000;
   const root = {
@@ -8824,7 +8834,7 @@ function publicActiveReplay(replay) {
 
 function stageExpeditionBattle(state, run, node) {
   const route = expeditionRoutes.find((entry) => entry.id === run.routeId);
-  const enemy = activeEnemyFor(state, `${run.id}-${node.id}`, node.name, route.difficulty * (1 + run.nodeIndex * 0.08), node.type === "boss");
+  const enemy = activeEnemyFor(state, `${run.id}-${node.id}`, node.name, route.difficulty * (1 + run.nodeIndex * 0.03), node.type === "boss");
   const seed = `expedition|${state.day}|${run.id}|${node.id}`;
   const fighter = expeditionCombatant(state, run);
   const preview = runTurnBattle(fighter, enemy, { state, seed, stopAtDecision: true, maxRounds: 16 });
@@ -8996,20 +9006,22 @@ function squadCombatant(state, memberIds, formationId, name, id) {
   return combatant;
 }
 
-function rivalOperationTeam(state, operation, seed) {
+function rivalOperationTeam(state, operation, seed, memberCount) {
   const rivalName = activeSectNames(state).filter((name) => name !== state.sect.name)[stableHash(`${seed}|rival`) % Math.max(1, activeSectNames(state).length - 1)] || sects[0];
+  const squadSize = clamp(Math.floor(Number(memberCount) || 5), 3, 5);
   const rivalMembers = membersForSect(state, rivalName)
     .sort((left, right) => powerOf(right.entity, state) - powerOf(left.entity, state))
-    .slice(0, 5)
+    .slice(0, squadSize)
     .map(({ entity }) => entity.id);
   const formation = sectFormations[stableHash(`${seed}|formation`) % sectFormations.length];
   const enemy = squadCombatant(state, rivalMembers, formation.id, `${rivalName}巡队`, `active-rival-${makeId("squad")}`);
   const difficulty = Number(operation.difficulty) || 1;
+  const pressure = difficulty - 1;
   enemy.trialBuffs = {
     ...enemy.trialBuffs,
-    attack: (Number(enemy.trialBuffs.attack) || 0) + (difficulty - 1) * 0.7,
-    defense: (Number(enemy.trialBuffs.defense) || 0) + (difficulty - 1) * 0.55,
-    maxHp: (Number(enemy.trialBuffs.maxHp) || 0) + (difficulty - 1) * 0.45
+    attack: (Number(enemy.trialBuffs.attack) || 0) + pressure * 1.25 - 0.12,
+    defense: (Number(enemy.trialBuffs.defense) || 0) + pressure - 0.09,
+    maxHp: (Number(enemy.trialBuffs.maxHp) || 0) + pressure * 0.8 - 0.07
   };
   return { rivalName, rivalMembers, formationId: formation.id, enemy };
 }
@@ -9066,7 +9078,7 @@ export function startSectOperation(state, payload = {}) {
   spendActiveAction(state, operation.cost, operation.name);
   const seed = `sect-operation|${state.day}|${operation.id}|${state.activePlay.sectOperationHistory.length}`;
   const playerSquad = squadCombatant(state, squad.memberIds, squad.formationId, `${state.sect.name}行动队`, `active-player-squad-${state.day}`);
-  const rival = rivalOperationTeam(state, operation, seed);
+  const rival = rivalOperationTeam(state, operation, seed, squad.memberIds.length);
   const preview = runTurnBattle(playerSquad, rival.enemy, { state, seed, stopAtDecision: true, maxRounds: 18 });
   const active = {
     id: makeId("sect-operation"),
@@ -12014,7 +12026,7 @@ export function addTask(state, payload) {
   if (!definition.enabled) throw new Error("该现实任务已停用");
 
   const p = state.player;
-  const currentDay = Math.max(1, Math.floor(Number(state.day) || 1));
+  const currentDay = taskAccountingDay(state);
   const targetDay = Math.max(1, Math.floor(Number(payload.day ?? payload.targetDay ?? currentDay) || currentDay));
   if (targetDay > currentDay || targetDay < Math.max(1, currentDay - taskMultiplierRecordDays + 1)) {
     throw new Error("只能补记最近三天的现实任务");
@@ -12147,7 +12159,7 @@ export function deleteTaskCompletion(state, payload = {}) {
   if (index < 0) throw new Error("未找到这条任务记录");
 
   const completion = state.taskCompletions[index];
-  if (Number(completion.day) !== Number(state.day)) {
+  if (Number(completion.day) !== taskAccountingDay(state)) {
     throw new Error("仅能撤回当日完成的任务");
   }
 
