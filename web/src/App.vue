@@ -229,20 +229,20 @@
 
         <section v-if="activeTab === 'practice'" class="view active">
           <div class="home-dashboard">
-            <article class="panel game-card scene-card scene-dungeon">
+            <article class="panel game-card scene-card scene-dungeon active-play-home-card">
               <div class="section-head compact">
-                <h3>历练副本</h3>
+                <h3>行走历练</h3>
+                <span class="action-token-badge"><Route :size="15" aria-hidden="true" /> {{ activeAction.available }} 枚道令</span>
               </div>
               <div class="scene-copy">
-                <h4>{{ featuredDungeon.title }}</h4>
+                <h4>{{ activeExpedition?.route?.name || featuredDungeon.title }}</h4>
+                <p v-if="activeExpedition">{{ activeExpedition.currentNode?.name }} · 已通过 {{ activeExpedition.nodesCleared }} 处</p>
                 <div class="scene-status-list" aria-label="今日副本摘要">
-                  <span v-for="item in featuredDungeon.summary" :key="item.key">
-                    <b aria-hidden="true">{{ item.icon }}</b>
-                    {{ item.text }}
-                  </span>
+                  <span><b aria-hidden="true">令</b>今日获得 {{ activeAction.dailyEarned }} · 已用 {{ activeAction.spent }}</span>
+                  <span><b aria-hidden="true">构</b>{{ activeCombatBuild.stance?.name || "守正" }} · {{ activeCombatBuild.skills?.length || 0 }} 项功法</span>
                 </div>
               </div>
-              <button class="primary game-cta" type="button" @click="switchTab('dungeon')">查看副本</button>
+              <button class="primary game-cta" type="button" @click="switchTab('dungeon')">{{ activeExpedition ? "继续远征" : "整备出发" }}</button>
             </article>
 
             <article class="panel game-card scene-card scene-sect">
@@ -940,6 +940,170 @@
         </section>
 
         <section v-if="activeTab === 'dungeon'" class="view active">
+          <div v-if="!lastBattle && !replayLoading" class="active-play-surface">
+            <header class="panel active-play-header">
+              <div>
+                <span class="active-play-kicker">当日行动</span>
+                <h3>行走历练</h3>
+                <p>现实任务提供道令，远征中的生命、法力与节点进度会即时保存。</p>
+              </div>
+              <div class="action-ledger" aria-label="今日道令">
+                <span><small>可用</small><strong>{{ activeAction.available }}</strong></span>
+                <span><small>今日获得</small><strong>{{ activeAction.dailyEarned }}</strong></span>
+                <span><small>可结转</small><strong>{{ activeAction.carryLimit }}</strong></span>
+              </div>
+            </header>
+
+            <div class="active-play-layout">
+              <section class="panel active-play-panel build-panel">
+                <div class="section-head compact">
+                  <div>
+                    <span class="active-play-kicker">战前整备</span>
+                    <h3>战斗构筑</h3>
+                  </div>
+                  <button class="primary icon-text-button" type="button" :disabled="combatBuildDraft.skillIds.length !== 3 || isActionPending('/api/active-play/build')" @click="saveActiveCombatBuild">
+                    <CheckCircle2 :size="16" aria-hidden="true" /> 保存
+                  </button>
+                </div>
+
+                <div class="build-section">
+                  <div class="build-section-label"><span>功法槽</span><small>{{ combatBuildDraft.skillIds.length }} / 3</small></div>
+                  <div class="skill-slot-grid">
+                    <button
+                      v-for="skill in activeKnownSkills"
+                      :key="`build-${skill.id}`"
+                      type="button"
+                      :class="['skill-slot-option', { active: combatBuildDraft.skillIds.includes(skill.id) }]"
+                      :disabled="!combatBuildDraft.skillIds.includes(skill.id) && combatBuildDraft.skillIds.length >= 3"
+                      @click="toggleBuildSkill(skill.id)"
+                    >
+                      <span>{{ skillGlyph(skill) }}</span>
+                      <strong>{{ skill.name }}</strong>
+                      <small>{{ activeSkillRoleLabel(skill.id) }}</small>
+                    </button>
+                  </div>
+                </div>
+
+                <div class="build-section">
+                  <div class="build-section-label"><span>战斗姿态</span><small>影响属性与出招优先级</small></div>
+                  <div class="stance-grid" role="radiogroup" aria-label="战斗姿态">
+                    <button v-for="stance in activeStances" :key="stance.id" type="button" :class="{ active: combatBuildDraft.stanceId === stance.id }" @click="combatBuildDraft.stanceId = stance.id">
+                      <strong>{{ stance.name }}</strong><small>{{ stance.short }}</small>
+                    </button>
+                  </div>
+                  <p class="selection-detail">{{ selectedBuildStance?.text }}</p>
+                </div>
+
+                <div class="build-section">
+                  <div class="build-section-label"><span>默认指令</span><small>自动战斗的危机策略</small></div>
+                  <div class="command-grid compact" role="radiogroup" aria-label="默认战斗指令">
+                    <button v-for="command in activeCommands" :key="`default-${command.id}`" type="button" :class="{ active: combatBuildDraft.commandId === command.id }" @click="combatBuildDraft.commandId = command.id">
+                      <strong>{{ command.name }}</strong><small>{{ command.text }}</small>
+                    </button>
+                  </div>
+                </div>
+
+                <div v-if="activeOwnedEquipment.length" class="build-section">
+                  <div class="build-section-label"><span>手动装备</span><small>留空时自动择优</small></div>
+                  <div class="equipment-build-grid">
+                    <label v-for="slot in equipmentSlots" :key="`build-slot-${slot.id}`">
+                      <span>{{ slot.name }}</span>
+                      <select v-model="combatBuildDraft.equipmentBySlot[slot.id]">
+                        <option value="">自动择优</option>
+                        <option v-for="item in activeEquipmentForSlot(slot.id)" :key="item.id" :value="item.id">{{ item.name }} · {{ item.tierName || item.tier }}</option>
+                      </select>
+                    </label>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel active-play-panel expedition-panel">
+                <template v-if="!activeExpedition">
+                  <div class="section-head compact">
+                    <div>
+                      <span class="active-play-kicker">三节点远征</span>
+                      <h3>选择路线</h3>
+                    </div>
+                    <span class="action-token-badge"><Route :size="15" aria-hidden="true" /> 消耗 1</span>
+                  </div>
+                  <div class="expedition-route-list">
+                    <button v-for="route in activeExpeditionRoutes" :key="route.id" type="button" :class="`route-option accent-${route.accent}`" :disabled="activeAction.available < 1 || isActionPending('/api/active-play/expedition/start')" @click="startExpedition(route.id)">
+                      <span class="route-index">{{ route.nodes.length }}</span>
+                      <span><small>{{ route.subtitle }}</small><strong>{{ route.name }}</strong><em>{{ route.text }}</em></span>
+                      <ChevronRight :size="19" aria-hidden="true" />
+                    </button>
+                  </div>
+                  <div v-if="activeExpeditionHistory.length" class="active-history">
+                    <div class="build-section-label"><span>最近远征</span><small>{{ activeExpeditionHistory.length }} 次</small></div>
+                    <div v-for="record in activeExpeditionHistory.slice(0, 4)" :key="record.id" class="active-history-row">
+                      <span><strong>{{ record.routeName }}</strong><small>第 {{ record.day }} 天 · {{ record.nodesCleared }} 处节点</small></span>
+                      <em :class="record.result">{{ expeditionResultLabel(record.result) }}</em>
+                    </div>
+                  </div>
+                </template>
+
+                <template v-else>
+                  <div class="section-head compact expedition-title-row">
+                    <div>
+                      <span class="active-play-kicker">{{ activeExpedition.route.subtitle }}</span>
+                      <h3>{{ activeExpedition.route.name }}</h3>
+                    </div>
+                    <button class="secondary compact-button" type="button" :disabled="isActionPending('/api/active-play/expedition/abandon')" @click="abandonExpedition">返程</button>
+                  </div>
+                  <div class="expedition-vitals">
+                    <Meter label="气血" icon="health" :value="activeExpedition.hp" :max="activeExpedition.maxHp || 1" tone="health" />
+                    <Meter label="法力" icon="mana" :value="activeExpedition.mana" :max="activeExpedition.maxMana || 1" tone="focus" />
+                  </div>
+                  <div class="expedition-path" aria-label="远征路线进度">
+                    <div v-for="(node, index) in activeExpedition.nodes" :key="node.id" :class="node.state">
+                      <span>{{ index + 1 }}</span><strong>{{ node.name }}</strong><small>{{ node.type === 'boss' ? '首领' : node.type === 'battle' ? '战斗' : '抉择' }}</small>
+                    </div>
+                  </div>
+
+                  <div class="current-node-stage">
+                    <span class="active-play-kicker">当前节点</span>
+                    <h4>{{ activeExpedition.currentNode?.name }}</h4>
+                    <p>{{ activeExpedition.currentNode?.text }}</p>
+
+                    <div v-if="activeExpedition.pendingBattle" class="crisis-panel">
+                      <div class="crisis-head">
+                        <ShieldCheck :size="22" aria-hidden="true" />
+                        <span><strong>危机窗口 · 第 {{ activeExpedition.pendingBattle.preview?.decisionRound }} 回合</strong><small>敌手 {{ activeExpedition.pendingBattle.enemy?.name }} 正在调整战术</small></span>
+                      </div>
+                      <div class="crisis-snapshot">
+                        <span>我方气血 <b>{{ activeExpedition.pendingBattle.preview?.leftHp }}</b></span>
+                        <span>敌方气血 <b>{{ activeExpedition.pendingBattle.preview?.rightHp }}</b></span>
+                        <span>我方法力 <b>{{ activeExpedition.pendingBattle.preview?.leftMana }}</b></span>
+                        <span>敌方法力 <b>{{ activeExpedition.pendingBattle.preview?.rightMana }}</b></span>
+                      </div>
+                      <div class="command-grid">
+                        <button v-for="command in activeCommands" :key="`expedition-${command.id}`" type="button" :disabled="isActionPending('/api/active-play/expedition/advance')" @click="commandExpedition(command.id)">
+                          <strong>{{ command.name }}</strong><small>{{ command.text }}</small>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div v-else-if="activeExpedition.pendingReward" class="reward-grid">
+                      <button v-for="reward in activeExpedition.pendingReward" :key="reward.id" type="button" :disabled="isActionPending('/api/active-play/expedition/advance')" @click="chooseExpeditionReward(reward.id)">
+                        <Sparkles :size="18" aria-hidden="true" /><span><strong>{{ reward.label }}</strong><small>{{ reward.text }}</small></span>
+                      </button>
+                    </div>
+
+                    <div v-else-if="activeExpedition.currentNode?.type === 'event'" class="event-choice-grid">
+                      <button v-for="option in activeExpedition.eventOptions" :key="option.id" type="button" :disabled="isActionPending('/api/active-play/expedition/advance')" @click="chooseExpeditionEvent(option.id)">
+                        <strong>{{ option.label }}</strong><small>{{ option.hint }}</small>
+                      </button>
+                    </div>
+
+                    <button v-else class="primary expedition-enter-button" type="button" :disabled="isActionPending('/api/active-play/expedition/advance')" @click="beginExpeditionBattle">
+                      <Swords :size="17" aria-hidden="true" /> 进入战斗
+                    </button>
+                  </div>
+                </template>
+              </section>
+            </div>
+          </div>
+
           <div v-if="isStarSeaBattle" class="battle-detail star-sea-battle-detail">
             <div class="panel battle-header">
               <div>
@@ -2030,6 +2194,91 @@
               <i aria-hidden="true">{{ tab.icon }}</i>
               {{ tab.label }}
             </button>
+          </div>
+
+          <div v-if="activeSectSubTab === 'dispatch'" class="sect-dispatch-surface">
+            <header class="panel active-play-header sect-dispatch-header">
+              <div>
+                <span class="active-play-kicker">即时经营</span>
+                <h3>宗门行动队</h3>
+                <p>从本宗修士中编成三至五人队伍，阵法、成员疲劳与战斗构筑共同决定行动结果。</p>
+              </div>
+              <div class="action-ledger" aria-label="宗门行动资源">
+                <span><small>可用道令</small><strong>{{ activeAction.available }}</strong></span>
+                <span><small>战略情报</small><strong>{{ activeSectPlay.intel || 0 }}</strong></span>
+                <span><small>行动队</small><strong>{{ sectSquadDraft.memberIds.length }} / 5</strong></span>
+              </div>
+            </header>
+
+            <div class="sect-dispatch-grid">
+              <section class="panel active-play-panel squad-panel">
+                <div class="section-head compact">
+                  <div><span class="active-play-kicker">出战名册</span><h3>选择成员</h3></div>
+                  <button class="primary icon-text-button" type="button" :disabled="sectSquadDraft.memberIds.length < 3 || isActionPending('/api/active-play/sect/squad')" @click="saveSectSquad">
+                    <CheckCircle2 :size="16" aria-hidden="true" /> 保存
+                  </button>
+                </div>
+                <div class="squad-roster">
+                  <button v-for="entry in activeSectRoster" :key="entry.person.id" type="button" :class="{ active: sectSquadDraft.memberIds.includes(entry.person.id) }" :disabled="entry.person.id === 'player' || (!sectSquadDraft.memberIds.includes(entry.person.id) && sectSquadDraft.memberIds.length >= 5)" @click="toggleSectMember(entry.person.id)">
+                    <CharacterPortrait :person="entry.person" size="sm" />
+                    <span><strong>{{ entry.person.name }}</strong><small>{{ realmName(entry.person.realm) }} · 战力 {{ entry.person.power }}</small></span>
+                    <em :class="{ tired: entry.fatigue >= 8 }">疲劳 {{ entry.fatigue }}</em>
+                  </button>
+                </div>
+
+                <div class="build-section formation-section">
+                  <div class="build-section-label"><span>行动阵法</span><small>敌方遵循同一套规则</small></div>
+                  <div class="formation-grid">
+                    <button v-for="formation in activeSectFormations" :key="formation.id" type="button" :class="{ active: sectSquadDraft.formationId === formation.id }" @click="sectSquadDraft.formationId = formation.id">
+                      <strong>{{ formation.name }}</strong><small>{{ formation.text }}</small>
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel active-play-panel operation-panel">
+                <template v-if="!activeSectOperation">
+                  <div class="section-head compact"><div><span class="active-play-kicker">宗门事务</span><h3>发起行动</h3></div></div>
+                  <div class="operation-list">
+                    <button v-for="operation in activeSectOperations" :key="operation.id" type="button" :disabled="activeAction.available < operation.cost || sectSquadDraft.memberIds.length < 3 || isActionPending('/api/active-play/sect/operation/start')" @click="startActiveSectOperation(operation.id)">
+                      <span><small>风险 {{ sectOperationRisk(operation.difficulty) }}</small><strong>{{ operation.name }}</strong><em>{{ operation.text }}</em></span>
+                      <span class="operation-rewards">{{ sectOperationRewardText(operation.reward) }}</span>
+                      <span class="action-token-badge"><Route :size="14" aria-hidden="true" /> {{ operation.cost }}</span>
+                    </button>
+                  </div>
+                  <div v-if="activeSectHistory.length" class="active-history sect-operation-history">
+                    <div class="build-section-label"><span>行动记录</span><small>{{ activeSectHistory.length }} 次</small></div>
+                    <button v-for="record in activeSectHistory.slice(0, 5)" :key="record.id" type="button" class="active-history-row replay-row" :disabled="!record.replay" @click="openReplay(record)">
+                      <span><strong>{{ record.operationName }}</strong><small>对阵 {{ record.rivalName }} · {{ formationName(record.formationId) }}</small></span>
+                      <em :class="record.won ? 'success' : 'failed'">{{ record.won ? "告捷" : "受挫" }}</em>
+                    </button>
+                  </div>
+                </template>
+
+                <template v-else>
+                  <div class="section-head compact">
+                    <div><span class="active-play-kicker">战局待决</span><h3>{{ activeSectOperation.operation?.name }}</h3></div>
+                    <span class="tag">对阵 {{ activeSectOperation.rivalName }}</span>
+                  </div>
+                  <div class="sect-versus">
+                    <span><small>我方</small><strong>{{ player.sect }}行动队</strong><em>{{ formationName(activeSectOperation.formationId) }}</em></span>
+                    <b>VS</b>
+                    <span><small>敌方</small><strong>{{ activeSectOperation.rivalName }}巡队</strong><em>{{ formationName(activeSectOperation.enemyFormationId) }}</em></span>
+                  </div>
+                  <div class="crisis-snapshot">
+                    <span>我方气血 <b>{{ activeSectOperation.preview?.leftHp }}</b></span>
+                    <span>敌方气血 <b>{{ activeSectOperation.preview?.rightHp }}</b></span>
+                    <span>危机回合 <b>{{ activeSectOperation.preview?.decisionRound }}</b></span>
+                    <span>双方人数 <b>{{ activeSectOperation.memberIds?.length }} / {{ activeSectOperation.rivalMemberIds?.length }}</b></span>
+                  </div>
+                  <div class="command-grid sect-command-grid">
+                    <button v-for="command in activeCommands" :key="`sect-command-${command.id}`" type="button" :disabled="isActionPending('/api/active-play/sect/operation/command')" @click="commandActiveSectOperation(command.id)">
+                      <strong>{{ command.name }}</strong><small>{{ command.text }}</small>
+                    </button>
+                  </div>
+                </template>
+              </section>
+            </div>
           </div>
 
           <div v-if="activeSectSubTab === 'map'" class="panel map-panel sect-system-panel sect-map-panel">
@@ -4789,7 +5038,7 @@ const tabs = [
   { id: "practice", label: "首页", icon: Sprout },
   { id: "cultivation", label: "修行", icon: Orbit },
   { id: "tasks", label: "任务", icon: ScrollText },
-  { id: "dungeon", label: "副本", icon: Sword },
+  { id: "dungeon", label: "历练", icon: Sword },
   { id: "sect", label: "宗门", icon: Landmark },
   { id: "arena", label: "切磋", icon: Swords },
   { id: "market", label: "坊市", icon: ShoppingBag },
@@ -4886,6 +5135,7 @@ const emptyState = {
   duelDays: [],
   dungeonDays: [],
   battleArchives: { summaries: [] },
+  activePlay: {},
   sectProfiles: [],
   catalog: {},
   derived: {}
@@ -4966,7 +5216,9 @@ const cultivationSubTab = ref("attributes");
 const marketSubTab = ref("shop");
 const activeMarketCategory = ref("xp");
 const selectedMarketItemId = ref("");
-const activeSectSubTab = ref("map");
+const activeSectSubTab = ref("dispatch");
+const combatBuildDraft = reactive({ skillIds: [], stanceId: "balanced", commandId: "bulwark", equipmentBySlot: {} });
+const sectSquadDraft = reactive({ memberIds: [], formationId: "spearhead" });
 const activeRankBoard = ref("power");
 const rankSearch = ref("");
 const rankPage = ref(1);
@@ -5789,6 +6041,7 @@ const playerPortraitOptions = [
 ];
 
 const sectSubTabs = [
+  { id: "dispatch", label: "行动队", icon: "令" },
   { id: "map", label: "势力地图", icon: "图" },
   { id: "sects", label: "宗门排行", icon: "榜" },
   { id: "provinces", label: "省份资源", icon: "资" },
@@ -5800,6 +6053,33 @@ const gameState = computed(() => state.value || emptyState);
 const player = computed(() => gameState.value.player);
 const derived = computed(() => gameState.value.derived || {});
 const catalog = computed(() => gameState.value.catalog || {});
+const activePlay = computed(() => gameState.value.activePlay || {});
+const activeAction = computed(() => activePlay.value.action || {
+  available: 0,
+  dailyEarned: 1,
+  spent: 0,
+  carry: 0,
+  carryLimit: 2,
+  thresholds: []
+});
+const activeCombatBuild = computed(() => activePlay.value.build || { skillIds: [], skills: [], knownSkillIds: [] });
+const activeStances = computed(() => activePlay.value.stances || []);
+const activeCommands = computed(() => activePlay.value.commands || []);
+const activeKnownSkills = computed(() => {
+  const known = new Set(activeCombatBuild.value.knownSkillIds || []);
+  return combatSkills.value.filter((skill) => known.has(skill.id));
+});
+const activeOwnedEquipment = computed(() => activePlay.value.ownedEquipment || []);
+const activeExpeditionRoutes = computed(() => activePlay.value.expeditionRoutes || []);
+const activeExpedition = computed(() => activePlay.value.activeExpedition || null);
+const activeExpeditionHistory = computed(() => activePlay.value.expeditionHistory || []);
+const activeSectPlay = computed(() => activePlay.value.sect || {});
+const activeSectRoster = computed(() => activeSectPlay.value.roster || []);
+const activeSectFormations = computed(() => activeSectPlay.value.formations || []);
+const activeSectOperations = computed(() => activeSectPlay.value.operations || []);
+const activeSectOperation = computed(() => activeSectPlay.value.activeOperation || null);
+const activeSectHistory = computed(() => activeSectPlay.value.history || []);
+const selectedBuildStance = computed(() => activeStances.value.find((stance) => stance.id === combatBuildDraft.stanceId) || activeStances.value[0]);
 const accountInitial = computed(() => {
   const name = String(authUser.value?.username || "?").trim();
   return name ? name.slice(0, 1).toUpperCase() : "?";
@@ -7588,15 +7868,22 @@ const isBattleReplayDone = computed(() => {
   const total = lastBattle.value?.events.length || 0;
   return total > 0 && battleCursor.value >= total;
 });
+function replayLeftWon(battle) {
+  if (!battle) return false;
+  if (battle.winner === "left") return true;
+  if (battle.winner === "right") return false;
+  if (battle.winner?.id && battle.left?.id) return battle.winner.id === battle.left.id;
+  return ["胜", "win", "won", "success"].includes(String(battle.result || "").toLowerCase());
+}
 const battleStatusText = computed(() => {
   if (!lastBattle.value) return "";
   if (!isBattleReplayDone.value) return "战斗正在回放中。";
   const leftName = lastBattle.value.left?.name || "挑战者";
   const isPlayerReplay = lastBattle.value.left?.id === "player" || lastBattle.value.left?.kind === "player";
-  if (isPlayerReplay) return lastBattle.value.result === "胜" ? "你胜出了这一场。" : "你败下阵来。";
-  return lastBattle.value.result === "胜" ? `${leftName}胜出了这一场。` : `${leftName}败下阵来。`;
+  if (isPlayerReplay) return replayLeftWon(lastBattle.value) ? "你胜出了这一场。" : "你败下阵来。";
+  return replayLeftWon(lastBattle.value) ? `${leftName}胜出了这一场。` : `${leftName}败下阵来。`;
 });
-const battleOutcomeLabel = computed(() => (isBattleReplayDone.value ? lastBattle.value.result : "回放"));
+const battleOutcomeLabel = computed(() => (isBattleReplayDone.value ? (replayLeftWon(lastBattle.value) ? "胜" : "负") : "回放"));
 const isStarSeaBattle = computed(() => lastBattle.value?.kind === "starSeaTeam");
 const starSeaBattleStatusText = computed(() => {
   if (!lastBattle.value) return "";
@@ -11066,7 +11353,7 @@ function resetTabHome(tabId) {
     lastBattle.value = null;
   }
   if (tabId === "sect") {
-    activeSectSubTab.value = "map";
+    activeSectSubTab.value = "dispatch";
     selectedProvinceWarId.value = "";
   }
   if (tabId === "dungeon") {
@@ -12471,6 +12758,115 @@ async function act(path, body = {}, options = {}) {
   }
 }
 
+function activeEquipmentForSlot(slotId) {
+  return activeOwnedEquipment.value.filter((item) => item.slot === slotId);
+}
+
+function activeSkillRoleLabel(skillId) {
+  return {
+    offense: "攻伐",
+    support: "护持",
+    control: "控场",
+    movement: "身法"
+  }[activePlay.value.skillRoles?.[skillId]] || "攻伐";
+}
+
+function toggleBuildSkill(skillId) {
+  const index = combatBuildDraft.skillIds.indexOf(skillId);
+  if (index >= 0) {
+    combatBuildDraft.skillIds.splice(index, 1);
+    return;
+  }
+  if (combatBuildDraft.skillIds.length < 3) combatBuildDraft.skillIds.push(skillId);
+}
+
+async function saveActiveCombatBuild() {
+  if (combatBuildDraft.skillIds.length !== 3) return;
+  await act("/api/active-play/build", {
+    skillIds: [...combatBuildDraft.skillIds],
+    stanceId: combatBuildDraft.stanceId,
+    commandId: combatBuildDraft.commandId,
+    equipmentBySlot: { ...combatBuildDraft.equipmentBySlot }
+  }, { scope: "lite" });
+}
+
+async function startExpedition(routeId) {
+  await act("/api/active-play/expedition/start", { routeId }, { scope: "lite" });
+}
+
+async function runExpeditionAction(payload) {
+  const result = await act("/api/active-play/expedition/advance", payload, { scope: "lite" });
+  if (result?.replay) openBattleReplay(result.replay, captureBattleReturn());
+  return result;
+}
+
+function beginExpeditionBattle() {
+  return runExpeditionAction({ action: "battle" });
+}
+
+function commandExpedition(commandId) {
+  return runExpeditionAction({ action: "command", commandId });
+}
+
+function chooseExpeditionReward(rewardId) {
+  return runExpeditionAction({ action: "reward", rewardId });
+}
+
+function chooseExpeditionEvent(optionId) {
+  return runExpeditionAction({ action: "choice", optionId });
+}
+
+async function abandonExpedition() {
+  if (!confirm("确定结束本轮远征并返程？已领取的战利品会保留，道令不会返还。")) return;
+  await act("/api/active-play/expedition/abandon", {}, { scope: "lite" });
+}
+
+function expeditionResultLabel(result) {
+  return { success: "完成", failed: "失利", abandoned: "返程" }[result] || result;
+}
+
+function toggleSectMember(memberId) {
+  if (memberId === "player") return;
+  const index = sectSquadDraft.memberIds.indexOf(memberId);
+  if (index >= 0) {
+    if (sectSquadDraft.memberIds.length > 3) sectSquadDraft.memberIds.splice(index, 1);
+    return;
+  }
+  if (sectSquadDraft.memberIds.length < 5) sectSquadDraft.memberIds.push(memberId);
+}
+
+async function saveSectSquad() {
+  await act("/api/active-play/sect/squad", {
+    memberIds: [...sectSquadDraft.memberIds],
+    formationId: sectSquadDraft.formationId
+  }, { scope: "lite" });
+}
+
+async function startActiveSectOperation(operationId) {
+  const result = await act("/api/active-play/sect/operation/start", { operationId }, { scope: "lite" });
+  if (result?.replay) openBattleReplay(result.replay, captureBattleReturn());
+}
+
+async function commandActiveSectOperation(commandId) {
+  const result = await act("/api/active-play/sect/operation/command", { commandId }, { scope: "lite" });
+  if (result?.replay) openBattleReplay(result.replay, captureBattleReturn());
+}
+
+function sectOperationRisk(difficulty) {
+  if (difficulty >= 1.1) return "高";
+  if (difficulty >= 0.95) return "中";
+  return "低";
+}
+
+function sectOperationRewardText(reward = {}) {
+  const labels = { supplies: "物资", reputation: "声望", spirit: "灵石", dust: "灵尘", intel: "情报" };
+  return Object.entries(reward).map(([key, value]) => `${labels[key] || key} +${value}`).join(" · ");
+}
+
+function formationName(formationId) {
+  return activeSectFormations.value.find((formation) => formation.id === formationId)?.name || formationId || "未设阵";
+}
+
 function shouldMarkFullStateStale(path) {
   return ["/api/day/advance", "/api/tasks", "/api/tasks/delete", "/api/breakthrough", "/api/sect/plan"].includes(path);
 }
@@ -12993,6 +13389,18 @@ onUnmounted(() => {
   document.removeEventListener("fullscreenchange", syncTournamentBracketFullscreen);
   disposeChinaMap();
 });
+
+watch(activeCombatBuild, (build) => {
+  combatBuildDraft.skillIds = [...(build?.skillIds || [])];
+  combatBuildDraft.stanceId = build?.stanceId || "balanced";
+  combatBuildDraft.commandId = build?.commandId || "bulwark";
+  combatBuildDraft.equipmentBySlot = { ...(build?.equipmentBySlot || {}) };
+}, { immediate: true });
+
+watch(() => activeSectPlay.value.squad, (squad) => {
+  sectSquadDraft.memberIds = [...(squad?.memberIds || [])];
+  sectSquadDraft.formationId = squad?.formationId || "spearhead";
+}, { immediate: true });
 
 watch([state, activeTab, activeSectSubTab], async () => {
   if (activeTab.value !== "sect" || activeSectSubTab.value !== "map" || !state.value) {

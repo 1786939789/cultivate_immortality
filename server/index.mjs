@@ -4,7 +4,9 @@ import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   addTask,
+  abandonActiveExpedition,
   advanceDaoTrial,
+  advanceActiveExpedition,
   attemptBreakthrough,
   abandonDaoTrial,
   buyItem,
@@ -29,14 +31,19 @@ import {
   sectMission,
   sectWar,
   sellItem,
+  startActiveExpedition,
   startDaoTrial,
+  startSectOperation,
   toggleTaskDefinition,
   updateCultivatorProfile,
   updateEncounterFocus,
   updateGameSettings,
   updateTaskDefinition,
   updatePlayerSectPlan,
+  updatePlayerCombatBuild,
+  updateActiveSectSquad,
   updateSectProfile,
+  commandSectOperation,
   upgradePlayerSkill,
   useItem
 } from "./gameLogic.mjs";
@@ -60,6 +67,13 @@ const port = Number(process.env.PORT || 8787);
 const rootDir = fileURLToPath(new URL("../", import.meta.url));
 const distDir = join(rootDir, "dist");
 const liteActionRoutes = new Set([
+  "/api/active-play/build",
+  "/api/active-play/expedition/start",
+  "/api/active-play/expedition/advance",
+  "/api/active-play/expedition/abandon",
+  "/api/active-play/sect/squad",
+  "/api/active-play/sect/operation/start",
+  "/api/active-play/sect/operation/command",
   "/api/tasks",
   "/api/tasks/delete",
   "/api/encounters/choose",
@@ -335,6 +349,13 @@ async function handleApi(req, res, url) {
 
   const body = await readJson(req);
   const routes = {
+    "/api/active-play/build": (state) => updatePlayerCombatBuild(state, body),
+    "/api/active-play/expedition/start": (state) => startActiveExpedition(state, body),
+    "/api/active-play/expedition/advance": (state) => advanceActiveExpedition(state, body),
+    "/api/active-play/expedition/abandon": (state) => abandonActiveExpedition(state),
+    "/api/active-play/sect/squad": (state) => updateActiveSectSquad(state, body),
+    "/api/active-play/sect/operation/start": (state) => startSectOperation(state, body),
+    "/api/active-play/sect/operation/command": (state) => commandSectOperation(state, body),
     "/api/tasks": (state) => addTask(state, body),
     "/api/tasks/delete": (state) => deleteTaskCompletion(state, body),
     "/api/encounters/choose": (state) => resolveEncounter(state, body),

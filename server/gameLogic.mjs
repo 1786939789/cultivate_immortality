@@ -1,6 +1,7 @@
 import { canonicalPotentialRealms, combatSkills, dungeons, duelLadderDays, duelLossScore, duelRankForScore, duelRanks, duelSeasonDay, duelSeasonLength, duelSeasonMaxScore, duelSeasonOfDay, duelTournamentBracketSize, duelTournamentDays, duelWinScore, equipmentCatalog, equipmentSlots, equipmentTiers, itemCatalog, npcGenders, npcNames, provinceVersion, provinces, realms, realmStages, rootCycle, specialRoots, spiritPearls, roots, rosterVersion, sectRoster, sects, taskTemplates } from "./gameData.mjs";
 import { encounterCategoryLabels, encounterDefinitionCount, encounterDefinitionMap, encounterDefinitions } from "./encounterData.mjs";
 import { daoTrialCycleAffixes, daoTrialCycleLength, daoTrialEventOptions, daoTrialNodeVariants, daoTrialOfficialAttempts, daoTrialRouteMap, daoTrialRoutes, daoTrialSealMap, daoTrialSeals, daoTrialSealSynergies } from "./daoTrialData.mjs";
+import { actionEconomy, activePlayVersion, battleCommands, combatSkillRole, combatStances, expeditionEventOptions, expeditionRoutes, sectFormations, sectOperations } from "./activePlayData.mjs";
 
 export function dateKey(date = new Date()) {
   const year = date.getFullYear();
@@ -218,8 +219,9 @@ export function rootBonus(root, fallback = 0) {
 
 export function normalizeRoot(root) {
   const picked = root?.key ? roots.find((item) => item.key === root.key) || pick(roots) : pick(roots);
+  if (typeof root?.bonus === "number") return { ...picked, bonus: root.bonus };
   const bonus = Number((picked.min + Math.random() * (picked.max - picked.min)).toFixed(3));
-  return { ...picked, bonus: typeof root?.bonus === "number" ? root.bonus : bonus };
+  return { ...picked, bonus };
 }
 
 function rootByKey(key) {
@@ -853,12 +855,32 @@ function applyBattleRootPenalty(snapshot, penalty) {
   };
 }
 
+function applyCombatModifiers(snapshot, modifiers = {}) {
+  const scale = (key) => Math.max(key === "defense" ? 0 : 1, Math.floor(snapshot[key] * (1 + (Number(modifiers[key]) || 0))));
+  const maxHp = scale("maxHp");
+  const maxMana = scale("maxMana");
+  return {
+    ...snapshot,
+    attack: scale("attack"),
+    defense: scale("defense"),
+    divineSense: scale("divineSense"),
+    maxHp,
+    hp: clamp(Math.floor(snapshot.hp * maxHp / Math.max(1, snapshot.maxHp)), 0, maxHp),
+    maxMana,
+    mana: clamp(Math.floor(snapshot.mana * maxMana / Math.max(1, snapshot.maxMana)), 0, maxMana)
+  };
+}
+
+function commandForId(id) {
+  return battleCommands.find((command) => command.id === id) || battleCommands[0];
+}
+
 function runTurnBattle(left, right, options = {}) {
   const random = options.random || (options.seed ? seededBattleRandom(options.seed) : Math.random);
   const leftPenalty = rootCounterPenalty(right, left) * (1 - clamp(Number(left?.trialBuffs?.rootResist) || 0, 0, 0.9));
   const rightPenalty = rootCounterPenalty(left, right) * (1 - clamp(Number(right?.trialBuffs?.rootResist) || 0, 0, 0.9));
-  const a = applyBattleRootPenalty(combatSnapshot(left, options.state), leftPenalty);
-  const b = applyBattleRootPenalty(combatSnapshot(right, options.state), rightPenalty);
+  const a = applyBattleRootPenalty(applyCombatModifiers(combatSnapshot(left, options.state), combatStance(left).modifiers), leftPenalty);
+  const b = applyBattleRootPenalty(applyCombatModifiers(combatSnapshot(right, options.state), combatStance(right).modifiers), rightPenalty);
   const order = a.divineSense === b.divineSense
     ? (random() < 0.5 ? ["left", "right"] : ["right", "left"])
     : (a.divineSense > b.divineSense ? ["left", "right"] : ["right", "left"]);
@@ -869,9 +891,11 @@ function runTurnBattle(left, right, options = {}) {
   let rightMana = b.mana;
   const events = [];
   let currentRound = 0;
-  const skills = { left: effectiveSkillForEntity(left), right: effectiveSkillForEntity(right) };
-  const cooldowns = { left: 0, right: 0 };
+  const skills = { left: effectiveSkillsForEntity(left), right: effectiveSkillsForEntity(right) };
+  const cooldowns = { left: {}, right: {} };
   const effects = { left: [], right: [] };
+  let decisionRound = 0;
+  let commandsApplied = false;
 
   const pushEvent = (kind, text, detail = {}) => {
     events.push({ round: currentRound, kind, text, ...detail });
@@ -964,10 +988,12 @@ function runTurnBattle(left, right, options = {}) {
     }
 
     const attackPenalty = effectSum(side, "attackDown", "amount");
+    const attackBonus = effectSum(side, "attackUp", "percent");
     const defensePenalty = effectSum(targetSide, "defenseDown", "amount");
+    const defenseRatePenalty = effectSum(targetSide, "defenseRateDown", "percent");
     const defenseBonus = effectSum(targetSide, "defenseUp", "amount");
-    const attack = Math.max(1, state.actor.attack - attackPenalty);
-    const defense = Math.max(0, state.target.defense + defenseBonus - defensePenalty);
+    const attack = Math.max(1, Math.floor((state.actor.attack - attackPenalty) * (1 + attackBonus)));
+    const defense = Math.max(0, Math.floor((state.target.defense + defenseBonus - defensePenalty) * (1 - defenseRatePenalty)));
     const pierce = options.pierce || 0;
     const rawDamage = attack * multiplier - defense * (1 - pierce);
     let damage = Math.max(1, Math.floor(rawDamage + random() * 5));
@@ -995,7 +1021,7 @@ function runTurnBattle(left, right, options = {}) {
     const targetSide = opposite(side);
     const state = sideState(side);
     setMana(side, state.mana - skill.cost);
-    cooldowns[side] = skill.cooldown;
+    cooldowns[side][skill.id] = skill.cooldown;
     let total = 0;
 
     if (skill.type === "double") {
@@ -1065,8 +1091,74 @@ function runTurnBattle(left, right, options = {}) {
     }
   };
 
+  const selectSkill = (side, state) => skills[side]
+    .filter((skill) => state.mana >= skill.cost && (cooldowns[side][skill.id] || 0) <= 0 && shouldUseCombatSkill({
+      skill,
+      actor: { ...state.actor, hp: state.hp, mana: state.mana },
+      target: { ...state.target, hp: state.targetHp, mana: state.targetMana },
+      actorEffects: effects[side],
+      targetEffects: effects[opposite(side)]
+    }))
+    .sort((leftSkill, rightSkill) => (
+      combatSkillPriority(leftSkill, side === "left" ? left.combatBuild?.stanceId : right.combatBuild?.stanceId)
+      - combatSkillPriority(rightSkill, side === "left" ? left.combatBuild?.stanceId : right.combatBuild?.stanceId)
+      || leftSkill.cost - rightSkill.cost
+    ))[0] || null;
+
+  const applyCommand = (side, commandId) => {
+    const command = commandForId(commandId);
+    const targetSide = opposite(side);
+    if (command.id === "burst") {
+      addEffect(side, { type: "attackUp", percent: 0.24, duration: 3 });
+      addEffect(side, { type: "defenseRateDown", percent: 0.12, duration: 3 });
+    } else if (command.id === "bulwark") {
+      addEffect(side, { type: "shield", reduce: 0.32, duration: 3 });
+    } else if (command.id === "restore") {
+      setMana(side, sideState(side).mana + Math.floor(sideState(side).actor.maxMana * 0.28));
+      for (const skillId of Object.keys(cooldowns[side])) cooldowns[side][skillId] = Math.max(0, cooldowns[side][skillId] - 1);
+    } else if (command.id === "focus") {
+      addEffect(targetSide, { type: "defenseRateDown", percent: 0.18, duration: 3 });
+    }
+    pushEvent("command", `${side === "left" ? left.name : right.name}一方发动战术指令「${command.name}」`, {
+      actorSide: side,
+      targetSide,
+      commandId: command.id,
+      commandName: command.name,
+      leftHp,
+      rightHp,
+      leftMana,
+      rightMana
+    });
+  };
+
+  const isDecisionWindow = (round) => round >= 3 && (
+    leftHp <= a.maxHp * 0.58
+    || rightHp <= b.maxHp * 0.58
+    || round >= 5
+  );
+
   for (let round = 1; round <= maxRounds && leftHp > 0 && rightHp > 0; round += 1) {
     currentRound = round;
+    if (!commandsApplied && isDecisionWindow(round)) {
+      decisionRound = round;
+      if (options.stopAtDecision && !options.commands?.left) {
+        return {
+          pendingDecision: true,
+          decisionRound,
+          winner: null,
+          leftStart: a,
+          rightStart: b,
+          leftHp,
+          rightHp,
+          leftMana,
+          rightMana,
+          events
+        };
+      }
+      applyCommand("left", options.commands?.left || left.combatBuild?.commandId);
+      applyCommand("right", options.commands?.right || right.combatBuild?.commandId);
+      commandsApplied = true;
+    }
     pushEvent("round", `第 ${round} 回合`, { leftHp, rightHp, leftMana, rightMana });
     tickEffects("left");
     tickEffects("right");
@@ -1082,14 +1174,8 @@ function runTurnBattle(left, right, options = {}) {
         continue;
       }
 
-      const skill = skills[side];
-      if (skill && state.mana >= skill.cost && cooldowns[side] <= 0 && shouldUseCombatSkill({
-        skill,
-        actor: { ...state.actor, hp: state.hp, mana: state.mana },
-        target: { ...state.target, hp: state.targetHp, mana: state.targetMana },
-        actorEffects: effects[side],
-        targetEffects: effects[targetSide]
-      })) {
+      const skill = selectSkill(side, state);
+      if (skill) {
         castSkill(side, skill);
       } else {
         const damage = applyStrike(side);
@@ -1097,8 +1183,9 @@ function runTurnBattle(left, right, options = {}) {
       }
       if (leftHp <= 0 || rightHp <= 0) break;
     }
-    cooldowns.left = Math.max(0, cooldowns.left - 1);
-    cooldowns.right = Math.max(0, cooldowns.right - 1);
+    for (const side of ["left", "right"]) {
+      for (const skillId of Object.keys(cooldowns[side])) cooldowns[side][skillId] = Math.max(0, cooldowns[side][skillId] - 1);
+    }
   }
 
   const winner = leftHp >= rightHp ? "left" : "right";
@@ -1416,6 +1503,8 @@ function trimRecordsByDay(records, currentDay, days, limit = detailRecordLimit) 
 function emptyBattleArchiveSummary(startDay) {
   const start = Math.max(1, Math.floor(Number(startDay) || 1));
   return {
+    pendingDecision: false,
+    decisionRound,
     id: `battle-archive-${start}`,
     startDay: start,
     endDay: start + battleArchiveIntervalDays - 1,
@@ -1452,6 +1541,103 @@ function ensureBattleArchiveState(state) {
     .slice(0, battleArchiveLimit);
   if (before !== JSON.stringify(state.battleArchives.summaries)) changed = true;
   return changed;
+}
+
+function defaultCombatSkillIds(entity) {
+  const currentId = findSkill(entity?.skillId).id;
+  const preferred = entity?.id === "player"
+    ? ["blood_escape", "golden_body"]
+    : [
+        combatSkills[stableHash(`${entity?.id || entity?.name}|combat-build|1`) % combatSkills.length]?.id,
+        combatSkills[stableHash(`${entity?.id || entity?.name}|combat-build|2`) % combatSkills.length]?.id
+      ];
+  const result = [...new Set([currentId, ...preferred].filter(Boolean))];
+  for (const skill of combatSkills) {
+    if (result.length >= 3) break;
+    if (!result.includes(skill.id)) result.push(skill.id);
+  }
+  return result.slice(0, 3);
+}
+
+function normalizeCombatBuild(entity) {
+  let changed = false;
+  const defaults = defaultCombatSkillIds(entity);
+  const knownSource = Array.isArray(entity.knownSkillIds) ? entity.knownSkillIds : [];
+  const knownSkillIds = [...new Set([entity.skillId, ...knownSource, ...defaults])]
+    .filter((id) => combatSkills.some((skill) => skill.id === id));
+  if (JSON.stringify(entity.knownSkillIds || []) !== JSON.stringify(knownSkillIds)) {
+    entity.knownSkillIds = knownSkillIds;
+    changed = true;
+  }
+  for (const skillId of knownSkillIds) {
+    if (!entity.skillRanks[skillId]) {
+      entity.skillRanks[skillId] = 1;
+      changed = true;
+    }
+  }
+
+  const source = entity.combatBuild && typeof entity.combatBuild === "object" ? entity.combatBuild : {};
+  const skillIds = [...new Set(Array.isArray(source.skillIds) ? source.skillIds : [])]
+    .filter((id) => knownSkillIds.includes(id))
+    .slice(0, 3);
+  for (const skillId of defaults) {
+    if (skillIds.length >= 3) break;
+    if (knownSkillIds.includes(skillId) && !skillIds.includes(skillId)) skillIds.push(skillId);
+  }
+  const stanceId = combatStances.some((stance) => stance.id === source.stanceId) ? source.stanceId : "balanced";
+  const commandId = battleCommands.some((command) => command.id === source.commandId) ? source.commandId : "bulwark";
+  const equipmentBySlot = source.equipmentBySlot && typeof source.equipmentBySlot === "object" && !Array.isArray(source.equipmentBySlot)
+    ? { ...source.equipmentBySlot }
+    : {};
+  const normalized = { skillIds, stanceId, commandId, equipmentBySlot };
+  if (JSON.stringify(source) !== JSON.stringify(normalized)) {
+    entity.combatBuild = normalized;
+    changed = true;
+  }
+  return changed;
+}
+
+function combatStance(entity) {
+  return combatStances.find((stance) => stance.id === entity?.combatBuild?.stanceId) || combatStances[0];
+}
+
+function effectiveSkillsForEntity(entity) {
+  normalizeSkillState(entity);
+  normalizeCombatBuild(entity);
+  const stance = combatStance(entity);
+  const manaCostModifier = Number(stance.modifiers?.manaCost) || 0;
+  return entity.combatBuild.skillIds.map((skillId) => {
+    const skill = findSkill(skillId);
+    const result = effectiveSkill(skill, skillRankOf(entity, skill.id), { maxMana: entity?.maxMana });
+    return {
+      ...result,
+      role: combatSkillRole(result),
+      cost: Math.max(1, Math.ceil(result.cost * (1 + manaCostModifier)))
+    };
+  });
+}
+
+function combatSkillPriority(skill, stanceId) {
+  const role = skill?.role || combatSkillRole(skill);
+  const priorities = {
+    assault: { offense: 0, control: 1, movement: 2, support: 3 },
+    guard: { support: 0, control: 1, movement: 2, offense: 3 },
+    control: { control: 0, support: 1, movement: 2, offense: 3 },
+    spirit: { support: 0, control: 1, offense: 2, movement: 3 },
+    balanced: { control: 0, support: 1, offense: 2, movement: 3 }
+  };
+  return priorities[stanceId]?.[role] ?? 9;
+}
+
+function publicCombatBuild(entity) {
+  normalizeCombatBuild(entity);
+  return {
+    ...entity.combatBuild,
+    knownSkillIds: [...entity.knownSkillIds],
+    skills: effectiveSkillsForEntity(entity),
+    stance: combatStance(entity),
+    command: battleCommands.find((command) => command.id === entity.combatBuild.commandId) || battleCommands[0]
+  };
 }
 
 function battleArchiveSummaryFor(state, day) {
@@ -1723,7 +1909,14 @@ function equipmentForOwner(state, ownerId) {
 
 function equippedItemsFor(state, entity) {
   const bestBySlot = new Map();
-  for (const item of equipmentForOwner(state, entity?.id)) {
+  const ownedItems = equipmentForOwner(state, entity?.id);
+  const manual = entity?.combatBuild?.equipmentBySlot || {};
+  for (const [slot, itemId] of Object.entries(manual)) {
+    const selected = ownedItems.find((item) => item.id === itemId && item.slot === slot);
+    if (selected) bestBySlot.set(slot, selected);
+  }
+  for (const item of ownedItems) {
+    if (bestBySlot.has(item.slot)) continue;
     const current = bestBySlot.get(item.slot);
     if (!current || equipmentScore(item) > equipmentScore(current)) bestBySlot.set(item.slot, item);
   }
@@ -8333,6 +8526,658 @@ export function abandonDaoTrial(state) {
   return advanceDaoTrial(state, { action: "abandon" });
 }
 
+function createActivePlayState(day = 0) {
+  return {
+    version: activePlayVersion,
+    day,
+    carry: 0,
+    spentToday: 0,
+    activeExpedition: null,
+    expeditionHistory: [],
+    sectSquad: { memberIds: [], formationId: "spearhead" },
+    activeSectOperation: null,
+    sectOperationHistory: [],
+    intel: 0
+  };
+}
+
+function ensureActivePlayState(state) {
+  let changed = false;
+  if (!state.activePlay || typeof state.activePlay !== "object") {
+    state.activePlay = createActivePlayState(state.day || 0);
+    changed = true;
+  }
+  const active = state.activePlay;
+  if (active.version !== activePlayVersion) {
+    active.version = activePlayVersion;
+    changed = true;
+  }
+  for (const [key, fallback] of Object.entries({ day: state.day || 0, carry: 0, spentToday: 0, intel: 0 })) {
+    if (!Number.isFinite(Number(active[key]))) {
+      active[key] = fallback;
+      changed = true;
+    } else active[key] = Math.max(0, Math.floor(Number(active[key])));
+  }
+  if (!Array.isArray(active.expeditionHistory)) {
+    active.expeditionHistory = [];
+    changed = true;
+  }
+  if (!Array.isArray(active.sectOperationHistory)) {
+    active.sectOperationHistory = [];
+    changed = true;
+  }
+  if (!active.sectSquad || typeof active.sectSquad !== "object") {
+    active.sectSquad = { memberIds: [], formationId: "spearhead" };
+    changed = true;
+  }
+  if (!Array.isArray(active.sectSquad.memberIds)) {
+    active.sectSquad.memberIds = [];
+    changed = true;
+  }
+  if (!sectFormations.some((formation) => formation.id === active.sectSquad.formationId)) {
+    active.sectSquad.formationId = "spearhead";
+    changed = true;
+  }
+  normalizeSkillState(state.player);
+  changed = normalizeCombatBuild(state.player) || changed;
+  for (const npc of state.npcs || []) {
+    normalizeSkillState(npc);
+    changed = normalizeCombatBuild(npc) || changed;
+  }
+  return changed;
+}
+
+function activeActionStatus(state) {
+  ensureActivePlayState(state);
+  const effectiveTaskXp = taskBaseXpForDay(state, state.day);
+  const taskEarned = actionEconomy.taskThresholds.filter((threshold) => effectiveTaskXp >= threshold).length;
+  const dailyEarned = actionEconomy.baseDaily + taskEarned;
+  const available = clamp(state.activePlay.carry + dailyEarned - state.activePlay.spentToday, 0, actionEconomy.hardCap);
+  return {
+    day: state.day,
+    base: actionEconomy.baseDaily,
+    taskEarned,
+    dailyEarned,
+    carry: state.activePlay.carry,
+    spent: state.activePlay.spentToday,
+    available,
+    thresholds: actionEconomy.taskThresholds.map((threshold) => ({ threshold, reached: effectiveTaskXp >= threshold })),
+    effectiveTaskXp,
+    nextThreshold: actionEconomy.taskThresholds.find((threshold) => effectiveTaskXp < threshold) || null,
+    carryLimit: actionEconomy.carryLimit
+  };
+}
+
+function spendActiveAction(state, amount, reason) {
+  const cost = Math.max(1, Math.floor(Number(amount) || 1));
+  const status = activeActionStatus(state);
+  if (status.available < cost) throw new Error(`道令不足，${reason || "此行动"}需要 ${cost} 枚。`);
+  state.activePlay.spentToday += cost;
+  return activeActionStatus(state);
+}
+
+function rolloverActivePlayDay(state, nextDay) {
+  ensureActivePlayState(state);
+  const status = activeActionStatus(state);
+  state.activePlay.carry = Math.min(actionEconomy.carryLimit, status.available);
+  state.activePlay.spentToday = 0;
+  state.activePlay.day = nextDay;
+}
+
+export function updatePlayerCombatBuild(state, payload = {}) {
+  ensureStateShape(state);
+  const player = state.player;
+  const known = new Set(player.knownSkillIds || []);
+  const requestedSkills = [...new Set(Array.isArray(payload.skillIds) ? payload.skillIds : [])];
+  if (requestedSkills.length !== 3) throw new Error("战斗构筑必须配置三项不同功法。");
+  if (requestedSkills.some((id) => !known.has(id))) throw new Error("构筑中包含尚未领悟的功法。");
+  if (!combatStances.some((stance) => stance.id === payload.stanceId)) throw new Error("未知战斗姿态。");
+  if (!battleCommands.some((command) => command.id === payload.commandId)) throw new Error("未知掌门令。");
+
+  const owned = equipmentForOwner(state, player.id);
+  const equipmentBySlot = {};
+  for (const slot of equipmentSlots) {
+    const itemId = String(payload.equipmentBySlot?.[slot.id] || "");
+    if (!itemId) continue;
+    const item = owned.find((entry) => entry.id === itemId && entry.slot === slot.id);
+    if (!item) throw new Error(`${slot.name}中选择了不属于你的装备。`);
+    equipmentBySlot[slot.id] = item.id;
+  }
+  player.combatBuild = {
+    skillIds: requestedSkills,
+    stanceId: payload.stanceId,
+    commandId: payload.commandId,
+    equipmentBySlot
+  };
+  player.skillId = requestedSkills[0];
+  normalizeCombatBuild(player);
+  log(state, `已调整战斗构筑：${requestedSkills.map((id) => findSkill(id).name).join("、")}，姿态「${combatStance(player).name}」。`, "gold");
+  return publicCombatBuild(player);
+}
+
+function activePlaySectRoster(state) {
+  return membersForSect(state, state.sect.name)
+    .map(({ entity }) => ({
+      person: publicCultivator(entity, state, { compact: true, kind: entity.id === "player" ? "player" : "npc" }),
+      fatigue: sectFatigueOf(state, entity.id),
+      build: publicCombatBuild(entity)
+    }))
+    .sort((left, right) => right.person.power - left.person.power);
+}
+
+function ensureDefaultSectSquad(state) {
+  ensureActivePlayState(state);
+  const validIds = new Set(activePlaySectRoster(state).map((entry) => entry.person.id));
+  const configuredIds = [...new Set(state.activePlay.sectSquad.memberIds)].slice(0, 5);
+  const configuredSize = configuredIds.length >= 3 ? configuredIds.length : 5;
+  const selected = configuredIds.filter((id) => validIds.has(id));
+  if (!selected.includes(state.player.id)) selected.unshift(state.player.id);
+  for (const entry of activePlaySectRoster(state)) {
+    if (selected.length >= configuredSize) break;
+    if (!selected.includes(entry.person.id)) selected.push(entry.person.id);
+  }
+  state.activePlay.sectSquad.memberIds = selected.slice(0, configuredSize);
+  return state.activePlay.sectSquad;
+}
+
+export function updateActiveSectSquad(state, payload = {}) {
+  ensureStateShape(state);
+  const validIds = new Set(activePlaySectRoster(state).map((entry) => entry.person.id));
+  const memberIds = [...new Set(Array.isArray(payload.memberIds) ? payload.memberIds : [])]
+    .map(String)
+    .filter((id) => validIds.has(id));
+  if (memberIds.length < 3 || memberIds.length > 5) throw new Error("宗门行动队需要 3 至 5 名本宗成员。");
+  if (!memberIds.includes(state.player.id)) throw new Error("宗门行动队必须包含玩家角色。");
+  if (!sectFormations.some((formation) => formation.id === payload.formationId)) throw new Error("未知阵法。");
+  state.activePlay.sectSquad = { memberIds, formationId: payload.formationId };
+  log(state, `宗门行动队已改用「${sectFormations.find((formation) => formation.id === payload.formationId).name}」。`, "gold");
+  return state.activePlay.sectSquad;
+}
+
+function activeEnemyFor(state, contextId, name, difficulty = 1, boss = false) {
+  const playerStats = combatSnapshot(state.player, state);
+  const scale = Math.max(0.62, Number(difficulty) || 1) * (boss ? 1.12 : 1);
+  const baseRoot = roots[stableHash(`${contextId}|root`) % roots.length];
+  const rootRatio = (stableHash(`${contextId}|root-bonus`) % 1001) / 1000;
+  const root = {
+    ...baseRoot,
+    bonus: Number((baseRoot.min + (baseRoot.max - baseRoot.min) * rootRatio).toFixed(3))
+  };
+  const skillId = combatSkills[stableHash(`${contextId}|skill`) % combatSkills.length].id;
+  const enemy = {
+    id: `active-enemy-${contextId}`,
+    name,
+    gender: "unknown",
+    sect: "游荡势力",
+    realm: state.player.realm,
+    root,
+    roots: [root],
+    primaryRootKey: root.key,
+    skillId,
+    skillRanks: { [skillId]: Math.max(1, Math.min(10, 1 + Math.floor(state.player.realm / 10))) },
+    attack: Math.max(6, Math.floor(playerStats.attack * scale)),
+    defense: Math.max(4, Math.floor(playerStats.defense * (0.9 + (scale - 1) * 0.7))),
+    maxHp: Math.max(45, Math.floor(playerStats.maxHp * (0.92 + (scale - 1) * 0.8))),
+    hp: Math.max(45, Math.floor(playerStats.maxHp * (0.92 + (scale - 1) * 0.8))),
+    divineSense: Math.max(4, Math.floor(playerStats.divineSense * (0.92 + (scale - 1) * 0.75))),
+    maxMana: Math.max(24, Math.floor(playerStats.maxMana * (0.95 + (scale - 1) * 0.65))),
+    mana: Math.max(24, Math.floor(playerStats.maxMana * (0.95 + (scale - 1) * 0.65))),
+    spirit: 0,
+    reputation: 0,
+    body: 0,
+    wisdom: 0,
+    chance: 0,
+    wealth: 0,
+    heartDemon: 0,
+    combatBuild: {
+      skillIds: [skillId],
+      stanceId: boss ? "assault" : ["balanced", "guard", "control"][stableHash(`${contextId}|stance`) % 3],
+      commandId: ["burst", "bulwark", "restore", "focus"][stableHash(`${contextId}|command`) % 4],
+      equipmentBySlot: {}
+    },
+    knownSkillIds: [skillId]
+  };
+  normalizeSkillState(enemy);
+  normalizeCombatBuild(enemy);
+  return enemy;
+}
+
+function expeditionCombatant(state, run) {
+  return {
+    ...state.player,
+    hp: clamp(run.hp, 1, effectiveMaxHp(state.player, state)),
+    mana: clamp(run.mana, 0, effectiveMaxMana(state.player, state)),
+    trialBuffs: {
+      attack: Number(run.buffs?.attack) || 0,
+      defense: Number(run.buffs?.defense) || 0,
+      divineSense: Number(run.buffs?.divineSense) || 0
+    }
+  };
+}
+
+function expeditionRewardOffer(state, run, node) {
+  const depth = run.nodeIndex + 1;
+  const route = expeditionRoutes.find((entry) => entry.id === run.routeId);
+  const bonus = Math.max(0, Math.floor(Number(run.bonusRewards) || 0)) * 8;
+  const base = 10 + depth * 7 + bonus;
+  const unknownSkills = combatSkills.filter((skill) => !state.player.knownSkillIds.includes(skill.id));
+  const manual = unknownSkills[stableHash(`${run.id}|${node.id}|manual`) % Math.max(1, unknownSkills.length)];
+  const offers = [
+    { id: `${node.id}-spirit`, type: "spirit", label: "收取灵石", text: `灵石 +${base + (route?.rewardBias === "spirit" ? 8 : 0)}`, effects: { spirit: base + (route?.rewardBias === "spirit" ? 8 : 0) } },
+    { id: `${node.id}-sect`, type: "sect", label: "归入宗门", text: `物资 +${base + 4}，声望 +${2 + depth}`, effects: { supplies: base + 4, reputation: 2 + depth } },
+    manual
+      ? { id: `${node.id}-manual`, type: "manual", label: "参悟残页", text: `领悟「${manual.name}」`, effects: { skillId: manual.id } }
+      : { id: `${node.id}-dust`, type: "dust", label: "炼化灵尘", text: `灵尘 +${base}`, effects: { dust: base } }
+  ];
+  if (route?.rewardBias === "dust") offers[1] = { id: `${node.id}-dust`, type: "dust", label: "炼化月华", text: `灵尘 +${base + 10}`, effects: { dust: base + 10 } };
+  return offers;
+}
+
+function applyActiveEffects(state, run, effects = {}) {
+  if (effects.spirit) state.player.spirit += Math.max(0, Math.floor(effects.spirit));
+  if (effects.dust) state.player.spiritDust = Math.max(0, Math.floor(Number(state.player.spiritDust) || 0)) + Math.max(0, Math.floor(effects.dust));
+  if (effects.supplies) state.sect.supplies = Math.max(0, Math.floor(Number(state.sect.supplies) || 0) + Math.floor(effects.supplies));
+  if (effects.reputation) {
+    state.player.reputation += Math.floor(effects.reputation);
+    state.sect.reputation += Math.floor(effects.reputation);
+  }
+  if (effects.heal) run.hp = clamp(run.hp + Math.floor(effectiveMaxHp(state.player, state) * effects.heal), 1, effectiveMaxHp(state.player, state));
+  if (effects.mana) run.mana = clamp(run.mana + Math.floor(effectiveMaxMana(state.player, state) * effects.mana), 0, effectiveMaxMana(state.player, state));
+  if (effects.hpCost) run.hp = clamp(run.hp - Math.floor(effectiveMaxHp(state.player, state) * effects.hpCost), 1, effectiveMaxHp(state.player, state));
+  if (effects.runAttack) run.buffs.attack = (Number(run.buffs.attack) || 0) + effects.runAttack;
+  if (effects.runDefense) run.buffs.defense = (Number(run.buffs.defense) || 0) + effects.runDefense;
+  if (effects.runSense) run.buffs.divineSense = (Number(run.buffs.divineSense) || 0) + effects.runSense;
+  if (effects.bonusRewards) run.bonusRewards = (Number(run.bonusRewards) || 0) + effects.bonusRewards;
+  if (effects.skillId && !state.player.knownSkillIds.includes(effects.skillId)) {
+    state.player.knownSkillIds.push(effects.skillId);
+    state.player.skillRanks[effects.skillId] = 1;
+    log(state, `你从远征残页中领悟「${findSkill(effects.skillId).name}」。`, "gold");
+  }
+}
+
+function finishActiveExpedition(state, result, note = "") {
+  const run = state.activePlay.activeExpedition;
+  if (!run) return null;
+  const route = expeditionRoutes.find((entry) => entry.id === run.routeId);
+  const record = {
+    id: run.id,
+    day: state.day,
+    date: stateDateForDay(state),
+    routeId: run.routeId,
+    routeName: route?.name || run.routeId,
+    result,
+    nodesCleared: run.nodesCleared,
+    commandUses: run.commandUses,
+    note
+  };
+  state.activePlay.expeditionHistory.unshift(record);
+  state.activePlay.expeditionHistory = state.activePlay.expeditionHistory.slice(0, 20);
+  state.activePlay.activeExpedition = null;
+  log(state, `${record.routeName}远征${result === "success" ? "完成" : result === "abandoned" ? "中止" : "失利"}：${note || `${record.nodesCleared} 处节点`}。`, result === "success" ? "gold" : result === "failed" ? "bad" : "");
+  return record;
+}
+
+function publicActiveReplay(replay) {
+  if (!replay) return null;
+  return publicReplay(replay);
+}
+
+function stageExpeditionBattle(state, run, node) {
+  const route = expeditionRoutes.find((entry) => entry.id === run.routeId);
+  const enemy = activeEnemyFor(state, `${run.id}-${node.id}`, node.name, route.difficulty * (1 + run.nodeIndex * 0.08), node.type === "boss");
+  const seed = `expedition|${state.day}|${run.id}|${node.id}`;
+  const fighter = expeditionCombatant(state, run);
+  const preview = runTurnBattle(fighter, enemy, { state, seed, stopAtDecision: true, maxRounds: 16 });
+  if (preview.pendingDecision) {
+    run.pendingBattle = { seed, enemy, nodeId: node.id, preview };
+    return { pendingDecision: true, battle: preview };
+  }
+  return resolveExpeditionBattleResult(state, run, node, enemy, preview);
+}
+
+function resolveExpeditionBattleResult(state, run, node, enemy, battle) {
+  run.hp = Math.max(1, battle.leftHp);
+  run.mana = Math.max(0, battle.leftMana);
+  const won = battle.winner === "left";
+  const replay = {
+    ...buildReplay(expeditionCombatant(state, run), enemy, battle, won ? "win" : "loss", timestampKey(), state),
+    kind: "expedition",
+    replayId: makeId("expedition-replay")
+  };
+  queueBattleReplay(state, replay, run.id);
+  run.lastReplay = publicActiveReplay(replay);
+  run.pendingBattle = null;
+  if (!won) {
+    const record = finishActiveExpedition(state, "failed", `止步于${node.name}`);
+    return { completed: true, won: false, replay: publicActiveReplay(replay), record };
+  }
+  run.nodesCleared += 1;
+  run.pendingReward = expeditionRewardOffer(state, run, node);
+  return { completed: false, won: true, replay: publicActiveReplay(replay), rewardOffer: run.pendingReward };
+}
+
+export function startActiveExpedition(state, payload = {}) {
+  ensureStateShape(state);
+  if (state.activePlay.activeExpedition) throw new Error("已有一轮远征正在进行。");
+  if (state.activePlay.activeSectOperation) throw new Error("宗门行动尚未结束，暂时无法远征。");
+  const route = expeditionRoutes.find((entry) => entry.id === payload.routeId);
+  if (!route) throw new Error("未知远征路线。");
+  spendActiveAction(state, 1, "远征");
+  state.activePlay.activeExpedition = {
+    id: makeId("expedition"),
+    routeId: route.id,
+    nodeIndex: 0,
+    nodesCleared: 0,
+    hp: effectiveMaxHp(state.player, state),
+    mana: effectiveMaxMana(state.player, state),
+    buffs: { attack: 0, defense: 0, divineSense: 0 },
+    bonusRewards: 0,
+    commandUses: 0,
+    pendingBattle: null,
+    pendingReward: null,
+    choices: [],
+    startedAt: timestampKey()
+  };
+  log(state, `消耗 1 枚道令，踏入「${route.name}」。`, "gold");
+  return publicActivePlay(state).activeExpedition;
+}
+
+export function advanceActiveExpedition(state, payload = {}) {
+  ensureStateShape(state);
+  const run = state.activePlay.activeExpedition;
+  if (!run) throw new Error("当前没有进行中的远征。");
+  const route = expeditionRoutes.find((entry) => entry.id === run.routeId);
+  const node = route?.nodes?.[run.nodeIndex];
+  if (!node) throw new Error("远征节点状态异常。");
+
+  if (payload.action === "abandon") return { completed: true, record: finishActiveExpedition(state, "abandoned", "主动返程") };
+  if (run.pendingReward) {
+    if (payload.action !== "reward") throw new Error("请先选择本节点战利品。");
+    const reward = run.pendingReward.find((entry) => entry.id === payload.rewardId);
+    if (!reward) throw new Error("未知战利品。");
+    applyActiveEffects(state, run, reward.effects);
+    run.pendingReward = null;
+    run.nodeIndex += 1;
+    if (run.nodeIndex >= route.nodes.length) {
+      const record = finishActiveExpedition(state, "success", `完成 ${run.nodesCleared} 场考验`);
+      return { completed: true, reward, record };
+    }
+    return { completed: false, reward, run: publicActivePlay(state).activeExpedition };
+  }
+  if (run.pendingBattle) {
+    if (payload.action !== "command") throw new Error("战局已进入危机窗口，请下达掌门令。");
+    const command = commandForId(payload.commandId);
+    if (!battleCommands.some((entry) => entry.id === payload.commandId)) throw new Error("未知掌门令。");
+    const fighter = expeditionCombatant(state, run);
+    const battle = runTurnBattle(fighter, run.pendingBattle.enemy, {
+      state,
+      seed: run.pendingBattle.seed,
+      commands: { left: command.id, right: run.pendingBattle.enemy.combatBuild.commandId },
+      maxRounds: 16
+    });
+    run.commandUses += 1;
+    return resolveExpeditionBattleResult(state, run, node, run.pendingBattle.enemy, battle);
+  }
+  if (node.type === "battle" || node.type === "boss") {
+    if (payload.action !== "battle") throw new Error("当前节点需要开始战斗。");
+    return stageExpeditionBattle(state, run, node);
+  }
+  if (payload.action !== "choice") throw new Error("当前节点需要作出选择。");
+  const option = (expeditionEventOptions[node.id] || []).find((entry) => entry.id === payload.optionId);
+  if (!option) throw new Error("未知事件选择。");
+  applyActiveEffects(state, run, option.effects);
+  run.choices.push({ nodeId: node.id, optionId: option.id, label: option.label });
+  run.nodesCleared += 1;
+  run.nodeIndex += 1;
+  return { completed: false, option, run: publicActivePlay(state).activeExpedition };
+}
+
+export function abandonActiveExpedition(state) {
+  return advanceActiveExpedition(state, { action: "abandon" });
+}
+
+function formationModifiersFor(state, memberIds, formationId) {
+  const formation = sectFormations.find((entry) => entry.id === formationId) || sectFormations[0];
+  const modifiers = { ...(formation.modifiers || {}) };
+  delete modifiers.adaptive;
+  if (formation.modifiers?.adaptive) {
+    const distinctRoots = new Set(memberIds.map((id) => cultivatorById(state, id)?.primaryRootKey).filter(Boolean)).size;
+    modifiers.divineSense = distinctRoots * 0.035;
+    modifiers.maxMana = distinctRoots * 0.045;
+  }
+  return modifiers;
+}
+
+function squadCombatant(state, memberIds, formationId, name, id) {
+  const members = memberIds.map((memberId) => cultivatorById(state, memberId)).filter(Boolean);
+  if (!members.length) throw new Error("行动队没有可出战成员。");
+  const leader = members.find((member) => member.id === state.player.id) || members[0];
+  const contributions = members.map((member) => {
+    const stats = effectiveStats(member, state);
+    const fatiguePenalty = sectFatigueOf(state, member.id) * sectFatiguePenaltyPerPoint;
+    const factor = Math.max(0.5, 1 - fatiguePenalty);
+    return { stats, factor };
+  });
+  const sum = (key, factor = 1) => Math.max(1, Math.floor(contributions.reduce((total, entry) => total + (Number(entry.stats[key]) || 0) * entry.factor, 0) * factor));
+  const root = primaryRoot(leader);
+  const combatant = {
+    id,
+    name,
+    gender: leader.gender,
+    sect: leader.id === state.player.id ? state.sect.name : leader.sect,
+    realm: Math.max(...members.map((member) => member.realm || 0)),
+    root,
+    roots: [root],
+    primaryRootKey: root.key,
+    skillId: leader.skillId,
+    skillRanks: { ...(leader.skillRanks || {}) },
+    knownSkillIds: [...(leader.knownSkillIds || [leader.skillId])],
+    combatBuild: { ...leader.combatBuild, equipmentBySlot: {} },
+    attack: sum("attack", 0.56),
+    defense: sum("defense", 0.48),
+    maxHp: sum("maxHp", 0.72),
+    hp: sum("maxHp", 0.72),
+    divineSense: sum("divineSense", 0.42),
+    maxMana: sum("maxMana", 0.52),
+    mana: sum("maxMana", 0.52),
+    spirit: 0,
+    reputation: 0,
+    body: 0,
+    wisdom: 0,
+    chance: 0,
+    wealth: 0,
+    heartDemon: 0,
+    trialBuffs: formationModifiersFor(state, memberIds, formationId),
+    squadMemberIds: [...memberIds],
+    formationId
+  };
+  normalizeSkillState(combatant);
+  normalizeCombatBuild(combatant);
+  return combatant;
+}
+
+function rivalOperationTeam(state, operation, seed) {
+  const rivalName = activeSectNames(state).filter((name) => name !== state.sect.name)[stableHash(`${seed}|rival`) % Math.max(1, activeSectNames(state).length - 1)] || sects[0];
+  const rivalMembers = membersForSect(state, rivalName)
+    .sort((left, right) => powerOf(right.entity, state) - powerOf(left.entity, state))
+    .slice(0, 5)
+    .map(({ entity }) => entity.id);
+  const formation = sectFormations[stableHash(`${seed}|formation`) % sectFormations.length];
+  const enemy = squadCombatant(state, rivalMembers, formation.id, `${rivalName}巡队`, `active-rival-${makeId("squad")}`);
+  const difficulty = Number(operation.difficulty) || 1;
+  enemy.trialBuffs = {
+    ...enemy.trialBuffs,
+    attack: (Number(enemy.trialBuffs.attack) || 0) + (difficulty - 1) * 0.7,
+    defense: (Number(enemy.trialBuffs.defense) || 0) + (difficulty - 1) * 0.55,
+    maxHp: (Number(enemy.trialBuffs.maxHp) || 0) + (difficulty - 1) * 0.45
+  };
+  return { rivalName, rivalMembers, formationId: formation.id, enemy };
+}
+
+function finishSectOperation(state, active, battle) {
+  const operation = sectOperations.find((entry) => entry.id === active.operationId);
+  const won = battle.winner === "left";
+  const multiplier = won ? 1 : 0.35;
+  const reward = Object.fromEntries(Object.entries(operation.reward || {}).map(([key, value]) => [key, Math.floor(value * multiplier)]));
+  applyActiveEffects(state, { hp: 1, mana: 0, buffs: {} }, reward);
+  if (reward.intel) state.activePlay.intel += reward.intel;
+  for (const memberId of active.memberIds) {
+    state.sectFatigue[memberId] = clamp(sectFatigueOf(state, memberId) + (won ? 2 : 3), 0, sectFatigueMax);
+  }
+  for (const memberId of active.rivalMemberIds) {
+    state.sectFatigue[memberId] = clamp(sectFatigueOf(state, memberId) + (won ? 3 : 2), 0, sectFatigueMax);
+  }
+  const replay = {
+    ...buildReplay(active.playerSquad, active.enemy, battle, won ? "win" : "loss", timestampKey(), state),
+    kind: "sect-operation",
+    replayId: makeId("sect-operation-replay")
+  };
+  queueBattleReplay(state, replay, active.id);
+  const record = {
+    id: active.id,
+    day: state.day,
+    date: stateDateForDay(state),
+    operationId: operation.id,
+    operationName: operation.name,
+    rivalName: active.rivalName,
+    won,
+    memberIds: active.memberIds,
+    rivalMemberIds: active.rivalMemberIds,
+    formationId: active.formationId,
+    enemyFormationId: active.enemyFormationId,
+    reward,
+    replay: publicActiveReplay(replay)
+  };
+  state.activePlay.sectOperationHistory.unshift(record);
+  state.activePlay.sectOperationHistory = state.activePlay.sectOperationHistory.slice(0, 20);
+  state.activePlay.activeSectOperation = null;
+  log(state, `${operation.name}${won ? "告捷" : "受挫"}，与${active.rivalName}交锋后${won ? "带回战利品" : "收拢残队"}。`, won ? "gold" : "bad");
+  return { completed: true, won, reward, replay: publicActiveReplay(replay), record };
+}
+
+export function startSectOperation(state, payload = {}) {
+  ensureStateShape(state);
+  if (state.activePlay.activeExpedition) throw new Error("个人远征尚未结束，无法调度宗门行动。");
+  if (state.activePlay.activeSectOperation) throw new Error("已有一项宗门行动正在进行。");
+  const operation = sectOperations.find((entry) => entry.id === payload.operationId);
+  if (!operation) throw new Error("未知宗门行动。");
+  ensureDefaultSectSquad(state);
+  const squad = state.activePlay.sectSquad;
+  spendActiveAction(state, operation.cost, operation.name);
+  const seed = `sect-operation|${state.day}|${operation.id}|${state.activePlay.sectOperationHistory.length}`;
+  const playerSquad = squadCombatant(state, squad.memberIds, squad.formationId, `${state.sect.name}行动队`, `active-player-squad-${state.day}`);
+  const rival = rivalOperationTeam(state, operation, seed);
+  const preview = runTurnBattle(playerSquad, rival.enemy, { state, seed, stopAtDecision: true, maxRounds: 18 });
+  const active = {
+    id: makeId("sect-operation"),
+    operationId: operation.id,
+    memberIds: [...squad.memberIds],
+    formationId: squad.formationId,
+    enemyFormationId: rival.formationId,
+    rivalName: rival.rivalName,
+    rivalMemberIds: rival.rivalMembers,
+    seed,
+    playerSquad,
+    enemy: rival.enemy,
+    preview
+  };
+  if (!preview.pendingDecision) return finishSectOperation(state, active, preview);
+  state.activePlay.activeSectOperation = active;
+  log(state, `${state.sect.name}行动队在${operation.name}中遭遇${rival.rivalName}，战局等待掌门令。`, "gold");
+  return { completed: false, pendingDecision: true, operation: publicActivePlay(state).activeSectOperation };
+}
+
+export function commandSectOperation(state, payload = {}) {
+  ensureStateShape(state);
+  const active = state.activePlay.activeSectOperation;
+  if (!active) throw new Error("当前没有等待指令的宗门行动。");
+  if (!battleCommands.some((command) => command.id === payload.commandId)) throw new Error("未知掌门令。");
+  const battle = runTurnBattle(active.playerSquad, active.enemy, {
+    state,
+    seed: active.seed,
+    commands: { left: payload.commandId, right: active.enemy.combatBuild.commandId },
+    maxRounds: 18
+  });
+  return finishSectOperation(state, active, battle);
+}
+
+function publicExpeditionRun(state, run) {
+  if (!run) return null;
+  const route = expeditionRoutes.find((entry) => entry.id === run.routeId);
+  const node = route?.nodes?.[run.nodeIndex] || null;
+  return {
+    id: run.id,
+    route,
+    nodeIndex: run.nodeIndex,
+    currentNode: node,
+    nodes: (route?.nodes || []).map((entry, index) => ({
+      ...entry,
+      state: index < run.nodeIndex ? "complete" : index === run.nodeIndex ? "current" : "future"
+    })),
+    nodesCleared: run.nodesCleared,
+    hp: run.hp,
+    maxHp: effectiveMaxHp(state.player, state),
+    mana: run.mana,
+    maxMana: effectiveMaxMana(state.player, state),
+    buffs: run.buffs,
+    commandUses: run.commandUses,
+    choices: run.choices,
+    eventOptions: node?.type === "event" ? expeditionEventOptions[node.id] || [] : [],
+    pendingReward: run.pendingReward,
+    pendingBattle: run.pendingBattle ? {
+      enemy: publicCultivator(run.pendingBattle.enemy, state, { compact: true, kind: "npc" }),
+      enemyBuild: publicCombatBuild(run.pendingBattle.enemy),
+      preview: run.pendingBattle.preview
+    } : null,
+    lastReplay: run.lastReplay || null
+  };
+}
+
+function publicSectOperation(state, active) {
+  if (!active) return null;
+  const operation = sectOperations.find((entry) => entry.id === active.operationId);
+  return {
+    id: active.id,
+    operation,
+    memberIds: active.memberIds,
+    formationId: active.formationId,
+    formation: sectFormations.find((entry) => entry.id === active.formationId),
+    rivalName: active.rivalName,
+    rivalMemberIds: active.rivalMemberIds,
+    enemyFormationId: active.enemyFormationId,
+    enemyFormation: sectFormations.find((entry) => entry.id === active.enemyFormationId),
+    playerSquad: active.playerSquad,
+    enemy: active.enemy,
+    preview: active.preview
+  };
+}
+
+function publicActivePlay(state) {
+  ensureActivePlayState(state);
+  ensureDefaultSectSquad(state);
+  const ownedEquipment = equipmentForOwner(state, state.player.id).map((item) => publicEquipment(item, state));
+  return {
+    action: activeActionStatus(state),
+    build: publicCombatBuild(state.player),
+    stances: combatStances,
+    commands: battleCommands,
+    skillRoles: Object.fromEntries(combatSkills.map((skill) => [skill.id, combatSkillRole(skill)])),
+    ownedEquipment,
+    expeditionRoutes,
+    activeExpedition: publicExpeditionRun(state, state.activePlay.activeExpedition),
+    expeditionHistory: state.activePlay.expeditionHistory,
+    sect: {
+      squad: state.activePlay.sectSquad,
+      roster: activePlaySectRoster(state),
+      formations: sectFormations,
+      operations: sectOperations,
+      activeOperation: publicSectOperation(state, state.activePlay.activeSectOperation),
+      history: state.activePlay.sectOperationHistory,
+      intel: state.activePlay.intel
+    }
+  };
+}
+
 export function createDefaultState() {
   const rootSet = randomRootSet();
   const root = rootSet.primaryRoot;
@@ -8368,6 +9213,13 @@ export function createDefaultState() {
       maxMana: stats.maxMana,
       skillId,
       skillRanks: { [skillId]: 1 },
+      knownSkillIds: [...new Set([skillId, "blood_escape", "golden_body"])],
+      combatBuild: {
+        skillIds: [...new Set([skillId, "blood_escape", "golden_body"])].slice(0, 3),
+        stanceId: "balanced",
+        commandId: "bulwark",
+        equipmentBySlot: {}
+      },
       lastSkillUpgradeDay: 0,
       spiritPearls: createSpiritPearlState(),
       breakthroughAttemptsToday: 0,
@@ -8432,6 +9284,7 @@ export function createDefaultState() {
     },
     relationships: {},
     daoTrial: createDaoTrialState(1),
+    activePlay: createActivePlayState(0),
     npcs: npcNames.map((name, index) => makeNpc(name, index)),
     sectNameMap: {},
     sect: {
@@ -9102,6 +9955,7 @@ export function ensureStateShape(state) {
   changed = ensureProvinceState(state) || changed;
   changed = ensureEncounterState(state) || changed;
   changed = ensureDaoTrialState(state) || changed;
+  changed = ensureActivePlayState(state) || changed;
   return changed;
 }
 
@@ -9555,6 +10409,7 @@ export function getPublicState(state, options = {}) {
       taskMultiplierRecords: state.taskMultiplierRecords,
       encounters: publicEncounters(state),
       daoTrial: publicDaoTrial(state),
+      activePlay: publicActivePlay(state),
       log: state.log,
       logDays: publicLogDays(state),
       battleArchives: state.battleArchives,
@@ -9578,6 +10433,7 @@ export function getPublicState(state, options = {}) {
     taskProgress: publicTaskProgress(state),
     encounters: publicEncounters(state),
     daoTrial: publicDaoTrial(state),
+    activePlay: publicActivePlay(state),
     player: publicCultivator(state.player, state, { includeRecentReplays: true, kind: "player" }),
     npcs: state.npcs.map((npc) => publicCultivator(npc, state, { kind: "npc", compact: true })),
     equipment: state.equipment.map((item) => publicEquipment(item, state)),
@@ -9642,6 +10498,7 @@ function getHomeState(state) {
     taskMultiplierRecords: state.taskMultiplierRecords,
     encounters: publicEncounters(state),
     daoTrial: publicDaoTrial(state),
+    activePlay: publicActivePlay(state),
     log: state.log,
     logDays: publicLogDays(state),
     battleArchives: state.battleArchives,
@@ -10964,6 +11821,7 @@ export function settleIfNeeded(state, options = {}) {
 export function dailySettlement(state, options = {}) {
   const settlementTime = options.settlementTime || timestampKey();
   rememberTaskMultiplierForDay(state, state.day);
+  rolloverActivePlayDay(state, state.day + 1);
   state.day += 1;
   archiveExpiredBattleRecords(state);
   state.player.breakthroughAttemptsToday = 0;
