@@ -1,11 +1,12 @@
 import { spawn } from "node:child_process";
 
 const apiPort = process.env.API_PORT || process.env.PORT || "8787";
+const host = process.env.HOST || "127.0.0.1";
 const env = { ...process.env, PORT: apiPort, API_PORT: apiPort };
 
 const commands = [
   ["api", "node", ["server/index.mjs"]],
-  ["web", "vite", ["--host", "127.0.0.1"]]
+  ["web", "vite", ["--host", host]]
 ];
 
 const children = commands.map(([name, command, args]) => {

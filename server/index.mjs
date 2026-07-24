@@ -460,8 +460,10 @@ function scheduleNextDailySettlement() {
   }, millisecondsUntilNextMidnight());
 }
 
-server.listen(port, "127.0.0.1", () => {
-  console.log(`API server: http://127.0.0.1:${port}`);
+const host = process.env.HOST || "127.0.0.1";
+
+server.listen(port, host, () => {
+  console.log(`API server: http://${host}:${port}`);
   scheduleNextDailySettlement();
   void runScheduledSettlement("startup");
 });
