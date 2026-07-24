@@ -1503,8 +1503,6 @@ function trimRecordsByDay(records, currentDay, days, limit = detailRecordLimit) 
 function emptyBattleArchiveSummary(startDay) {
   const start = Math.max(1, Math.floor(Number(startDay) || 1));
   return {
-    pendingDecision: false,
-    decisionRound,
     id: `battle-archive-${start}`,
     startDay: start,
     endDay: start + battleArchiveIntervalDays - 1,

@@ -119,6 +119,14 @@ deleteTaskCompletion(openingTaskState, { id: openingTaskState.taskCompletions[0]
 assert.equal(publicActive(openingTaskState).action.effectiveTaskXp, 0, "withdrawing an opening task must remove its threshold progress");
 assert.equal(publicActive(openingTaskState).action.available, 1, "withdrawing an opening task must remove its unspent bonus token");
 
+const archiveState = createDefaultState();
+archiveState.day = 11;
+archiveState.duelDays = [{ day: 1, matches: [] }];
+dailySettlement(archiveState, { manual: true });
+assert.equal(archiveState.battleArchives.summaries.length, 1, "expired battle records must be archived during settlement");
+assert.equal(archiveState.battleArchives.summaries[0].startDay, 1, "battle archives must use the correct ten-day bucket");
+assert.equal(archiveState.duelDays.some((record) => Number(record.day) === 1), false, "archived battle details must be removed from the live window");
+
 const sectState = createDefaultState();
 const roster = publicActive(sectState).sect.roster;
 assert.ok(roster.length >= 5, "player sect must expose at least five operation members");
