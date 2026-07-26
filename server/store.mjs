@@ -636,6 +636,11 @@ export async function setActiveAccount(saveId, active = true) {
   return publicActiveAccountState(db);
 }
 
+export async function activeSettlementSaveIds() {
+  const db = await openDb();
+  return ensureActiveSaveSetting(db);
+}
+
 export async function setAdminManagedSaveId(saveId) {
   const db = await openDb();
   const id = String(saveId || "").trim();

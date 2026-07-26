@@ -12,6 +12,7 @@
     "db:diff:mysql": "node --env-file-if-exists=.env scripts/diff-mysql-migration.mjs",
     "db:smoke:mysql": "node --env-file-if-exists=.env scripts/smoke-mysql-store.mjs",
     "db:test-safety:mysql": "node --env-file-if-exists=.env scripts/test-mysql-safety.mjs",
+    "db:test-domains:mysql": "node --env-file-if-exists=.env scripts/test-persistence-jobs.mjs",
     "auth:test-rate-limit:mysql": "node --env-file-if-exists=.env scripts/test-auth-rate-limit.mjs",
     "auth:create-admin": "node --env-file-if-exists=.env scripts/create-admin.mjs",
     "auth:create-code": "node --env-file-if-exists=.env scripts/create-registration-code.mjs",

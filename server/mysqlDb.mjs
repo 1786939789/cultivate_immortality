@@ -253,6 +253,25 @@ async function createSchema() {
         updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
         PRIMARY KEY (save_id, scope_name, owner_id, month_key),
         CONSTRAINT fk_history_summaries_save FOREIGN KEY (save_id) REFERENCES game_saves(save_id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
+      `CREATE TABLE IF NOT EXISTS background_jobs (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        job_type VARCHAR(64) NOT NULL,
+        save_id VARCHAR(64) NOT NULL,
+        target_key VARCHAR(96) NOT NULL,
+        status ENUM('pending','running','completed','failed','cancelled') NOT NULL DEFAULT 'pending',
+        attempts INT NOT NULL DEFAULT 0,
+        max_attempts INT NOT NULL DEFAULT 8,
+        available_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        locked_by VARCHAR(128) NULL,
+        locked_until DATETIME(3) NULL,
+        last_error TEXT NULL,
+        created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+        completed_at DATETIME(3) NULL,
+        UNIQUE KEY uq_background_job_target (job_type, save_id, target_key),
+        INDEX idx_background_jobs_claim (status, available_at, locked_until),
+        CONSTRAINT fk_background_jobs_save FOREIGN KEY (save_id) REFERENCES game_saves(save_id) ON DELETE CASCADE
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`
     ];
     for (const statement of statements) await connection.query(statement);

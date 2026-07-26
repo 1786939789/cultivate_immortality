@@ -1,8 +1,10 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { clearProgressHistory, createDefaultState, dateKey, ensureStateShape, getPublicState, minReplayDayFor, preserveProfilesForReset, settleIfNeeded } from "./gameLogic.mjs";
+import { clearProgressHistory, compactStateForStorage, createDefaultState, dateKey, ensureStateShape, getPublicState, minReplayDayFor, preserveProfilesForReset, settleIfNeeded } from "./gameLogic.mjs";
 import { hashAuthAttemptKey, hashPassword, hashRegistrationCode, verifyPassword } from "./authSecurity.mjs";
 import { ensureMysqlSchema, mysqlPool, parseMysqlJson, withMysqlTransaction } from "./mysqlDb.mjs";
 import { loadStateFromMysql, pruneBattleReplays, readReplayFromMysql, saveStateWithConnection, upsertBattleReplays } from "./mysqlStateRepository.mjs";
+import { changedPersistenceDomains, trackPersistenceDomains } from "./persistenceDomains.mjs";
+import { cancelPendingJobs, enqueueBackgroundJob } from "./mysqlBackgroundJobs.mjs";
 
 const sessionMaxAgeSeconds = 60 * 60 * 24 * 30;
 const activeSaveSettingKey = "active_save_ids";
@@ -62,6 +64,13 @@ function publicUser(row) {
 
 function publicStateWithRevision(state, options = {}) {
   return { ...getPublicState(state, options), stateRevision: Number(state.__stateRevision || 0) };
+}
+
+async function ensureSettlementJob(state, id) {
+  if (!state || state.lastSettlementDate >= dateKey()) return false;
+  if (!(await ensureActiveSaveIds()).includes(id)) return false;
+  await enqueueBackgroundJob({ jobType: "daily_settlement", saveId: id, targetKey: dateKey(), reopenCompleted: true });
+  return true;
 }
 
 async function bootstrapMysqlStore() {
@@ -136,6 +145,11 @@ async function ensureActiveSaveIds() {
   return next;
 }
 
+export async function activeSettlementSaveIds() {
+  await bootstrapMysqlStore();
+  return ensureActiveSaveIds();
+}
+
 async function managedUserId() {
   const players = await playerUserIds();
   const current = String(await readSetting(managedSaveSettingKey) || "");
@@ -151,8 +165,35 @@ async function writeStateInternal(state, id, options = {}) {
   const pending = Array.isArray(state.__pendingBattleReplays) ? [...state.__pendingBattleReplays] : [];
   const persistedState = structuredClone(state);
   delete persistedState.__pendingBattleReplays;
+  if (!options.skipCompaction) {
+    compactStateForStorage(persistedState, { skipReplayCompaction: options.skipReplayExtraction });
+  }
+  const previousState = options.previousState || stateCache.get(id) || null;
+  const metadataChanged = !previousState || ["day", "rebirth", "calendarStartDate", "lastSettlementDate", "storageCompactionVersion"]
+    .some((key) => previousState[key] !== persistedState[key]);
+  const candidateDomains = metadataChanged && previousState?.day !== persistedState.day
+    ? undefined
+    : options.domainCandidates;
+  const domains = options.domains || changedPersistenceDomains(previousState, persistedState, candidateDomains);
+  if (!metadataChanged && !domains.length && !pending.length) {
+    if (typeof options.beforeWrite === "function" || typeof options.beforeCommit === "function") {
+      await withMysqlTransaction(async (connection) => {
+        if (typeof options.beforeWrite === "function") await options.beforeWrite(connection);
+        if (typeof options.beforeCommit === "function") await options.beforeCommit(connection);
+      });
+    }
+    return previousState;
+  }
   const revision = await withMysqlTransaction(async (connection) => {
-    const nextRevision = await saveStateWithConnection(connection, persistedState, id, options);
+    if (typeof options.beforeWrite === "function") await options.beforeWrite(connection);
+    const nextRevision = await saveStateWithConnection(connection, persistedState, id, {
+      ...options,
+      compacted: true,
+      domains,
+      expectedRevision: Number.isFinite(options.expectedRevision)
+        ? options.expectedRevision
+        : Number.isFinite(previousState?.__stateRevision) ? Number(previousState.__stateRevision) : undefined
+    });
     await upsertBattleReplays(connection, id, pending);
     await pruneBattleReplays(connection, id, minReplayDayFor(persistedState.day || 1));
     if (typeof options.beforeCommit === "function") await options.beforeCommit(connection);
@@ -215,7 +256,10 @@ export async function setActiveAccount(saveId, active = true) {
   const current = new Set(await ensureActiveSaveIds());
   if (active) current.add(id);
   else current.delete(id);
-  await withMysqlTransaction((connection) => writeSetting(connection, activeSaveSettingKey, [...current]));
+  await withMysqlTransaction(async (connection) => {
+    await writeSetting(connection, activeSaveSettingKey, [...current]);
+    if (!active) await cancelPendingJobs("daily_settlement", id, connection);
+  });
   stateValidationCache.delete(id);
   publicStateCache.clear();
   if (active) await readState(id);
@@ -389,12 +433,19 @@ export async function readState(id = "default", options = {}) {
   await bootstrapMysqlStore();
   const cached = stateCache.get(id);
   if (cached) {
-    if (stateValidationCache.get(id) === dateKey()) return cached;
+    if (stateValidationCache.get(id) === dateKey()) {
+      if (!options.skipSettlementEnqueue) await ensureSettlementJob(cached, id);
+      return cached;
+    }
     const draft = structuredClone(cached);
     const changed = ensureStateShape(draft);
-    const settled = settleIfNeeded(draft, options);
-    if (changed || settled) return await writeState(draft, id);
-    else stateValidationCache.set(id, dateKey());
+    if (changed) {
+      const nextState = await writeState(draft, id, { previousState: cached });
+      if (!options.skipSettlementEnqueue) await ensureSettlementJob(nextState, id);
+      return nextState;
+    }
+    if (!options.skipSettlementEnqueue) await ensureSettlementJob(cached, id);
+    stateValidationCache.set(id, dateKey());
     return cached;
   }
   let state = await loadStateFromMysql(id);
@@ -405,10 +456,14 @@ export async function readState(id = "default", options = {}) {
   }
   const draft = structuredClone(state);
   const changed = ensureStateShape(draft);
-  const settled = settleIfNeeded(draft, options);
-  if (changed || settled) return await writeState(draft, id);
+  if (changed) {
+    const nextState = await writeState(draft, id, { previousState: state });
+    if (!options.skipSettlementEnqueue) await ensureSettlementJob(nextState, id);
+    return nextState;
+  }
   stateCache.set(id, state);
   stateValidationCache.set(id, dateKey());
+  if (!options.skipSettlementEnqueue) await ensureSettlementJob(state, id);
   return state;
 }
 
@@ -419,13 +474,16 @@ export async function settleAllStates() {
   const failures = [];
   for (const id of ids) {
     try {
-      let state = await readState(id);
+      let state = stateCache.get(id) || await loadStateFromMysql(id) || createDefaultState();
       const beforeDay = state.day;
       const beforeDate = state.lastSettlementDate;
       do {
-        stateValidationCache.delete(id);
-        state = await readState(id, { maxDays: 1 });
-        stateValidationCache.delete(id);
+        const response = await mutateState((draft) => settleIfNeeded(draft, { maxDays: 1 }), id, {
+          skipAutomaticSettlement: true,
+          trackPersistenceDomains: false,
+          storageOptions: { skipReplayExtraction: true }
+        });
+        state = response.state || response;
         if (state.lastSettlementDate < dateKey()) await new Promise((resolve) => setImmediate(resolve));
       } while (state.lastSettlementDate < dateKey());
       if (state.day !== beforeDay || state.lastSettlementDate !== beforeDate) settledSaves += 1;
@@ -450,14 +508,30 @@ export async function readBattleReplay(replayId, id = "default") {
 export async function mutateState(mutator, id = "default", options = {}) {
   return withSaveLock(id, async () => {
     const source = stateCache.get(id) || await loadStateFromMysql(id) || createDefaultState();
+    if (!options.skipAutomaticSettlement && source.lastSettlementDate < dateKey()) {
+      await ensureSettlementJob(source, id);
+      const error = new Error("存档正在补做每日结算，请稍后重试");
+      error.statusCode = 409;
+      throw error;
+    }
     const draft = structuredClone(source);
-    ensureStateShape(draft);
-    settleIfNeeded(draft);
-    const result = mutator(draft);
+    const shapeChanged = ensureStateShape(draft);
+    const tracked = options.trackPersistenceDomains === false || shapeChanged
+      ? { state: draft, domains: null }
+      : trackPersistenceDomains(draft);
+    const result = mutator(tracked.state);
     let state;
     try {
-      state = await writeStateInternal(draft, id, options.storageOptions);
+      state = await writeStateInternal(draft, id, {
+        ...options.storageOptions,
+        previousState: source,
+        domainCandidates: tracked.domains ? [...tracked.domains] : undefined
+      });
     } catch (error) {
+      if (error?.code === "STATE_REVISION_CONFLICT") {
+        stateCache.delete(id);
+        stateValidationCache.delete(id);
+      }
       publicStateCache.delete(id);
       throw error;
     }

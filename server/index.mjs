@@ -58,6 +58,8 @@ import {
   settleAllStates,
   sessionCookie
 } from "./storage.mjs";
+const usesMysqlBackgroundJobs = String(process.env.STORAGE_DRIVER || "sqlite").trim().toLowerCase() === "mysql";
+const backgroundWorker = usesMysqlBackgroundJobs ? await import("./backgroundWorker.mjs") : null;
 
 const port = Number(process.env.PORT || 8787);
 const rootDir = fileURLToPath(new URL("../", import.meta.url));
@@ -418,7 +420,8 @@ async function handleApi(req, res, url) {
       ? { skipReplayExtraction: true, deferPersist: true }
       : undefined;
   const resultOnly = url.pathname === "/api/duels/day";
-  sendJson(res, 200, await mutateState(mutator, saveId, { publicOptions: { scope }, storageOptions, resultOnly }));
+  const trackPersistenceDomains = ["/api/day/advance", "/api/duels/day"].includes(url.pathname) ? false : undefined;
+  sendJson(res, 200, await mutateState(mutator, saveId, { publicOptions: { scope }, storageOptions, resultOnly, trackPersistenceDomains }));
 }
 
 async function serveStatic(req, res, url) {
@@ -476,10 +479,13 @@ function millisecondsUntilNextMidnight() {
 
 async function runScheduledSettlement(reason) {
   try {
-    const result = await settleAllStates();
-    console.log(`[daily-settlement] ${reason}: ${result.settledSaves}/${result.totalSaves} saves settled`);
-    for (const failure of result.failures) {
-      console.error(`[daily-settlement] save ${failure.id} failed: ${failure.error}`);
+    if (backgroundWorker) {
+      const result = await backgroundWorker.enqueueDailySettlementJobs();
+      console.log(`[daily-settlement] ${reason}: queued ${result.queuedSaves}/${result.totalSaves} saves for ${result.targetDate}`);
+    } else {
+      const result = await settleAllStates();
+      console.log(`[daily-settlement] ${reason}: ${result.settledSaves}/${result.totalSaves} saves settled`);
+      for (const failure of result.failures) console.error(`[daily-settlement] save ${failure.id} failed: ${failure.error}`);
     }
   } catch (error) {
     console.error(`[daily-settlement] ${reason} failed:`, error);
@@ -498,6 +504,17 @@ const host = process.env.HOST || "127.0.0.1";
 
 server.listen(port, host, () => {
   console.log(`API server: http://${host}:${port}`);
+  backgroundWorker?.startBackgroundWorker();
   scheduleNextDailySettlement();
   void runScheduledSettlement("startup");
 });
+
+function shutdown(signal) {
+  backgroundWorker?.stopBackgroundWorker();
+  clearTimeout(dailySettlementTimer);
+  server.close(() => process.exit(signal === "SIGINT" ? 130 : 0));
+  setTimeout(() => process.exit(signal === "SIGINT" ? 130 : 0), 5000).unref();
+}
+
+process.once("SIGTERM", () => shutdown("SIGTERM"));
+process.once("SIGINT", () => shutdown("SIGINT"));

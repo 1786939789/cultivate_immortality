@@ -1,6 +1,20 @@
 import { compactStateForStorage } from "./gameLogic.mjs";
 import { ensureMysqlSchema, mysqlPool, parseMysqlJson, withMysqlTransaction } from "./mysqlDb.mjs";
 import { contentHash, decodeState, encodeState } from "./mysqlStateCodec.mjs";
+import { normalizePersistenceDomains, persistenceDomains } from "./persistenceDomains.mjs";
+
+function observedQuery(connection, observer) {
+  if (typeof observer !== "function") return connection;
+  return new Proxy(connection, {
+    get(target, property) {
+      if (property !== "query") return Reflect.get(target, property, target);
+      return async (sql, parameters) => {
+        observer(String(sql));
+        return target.query(sql, parameters);
+      };
+    }
+  });
+}
 
 async function existingHashes(connection, table, saveId, keyColumns) {
   const columns = [...keyColumns, "content_hash"].join(", ");
@@ -54,35 +68,49 @@ async function upsertPortraits(connection, portraits) {
   }
 }
 
-async function writeEncodedState(connection, state, saveId) {
-  const encoded = encodeState(state);
+async function writeEncodedState(rawConnection, state, saveId, options = {}) {
+  const connection = observedQuery(rawConnection, options.queryObserver);
+  const domains = normalizePersistenceDomains(options.domains);
+  const encoded = encodeState(state, { domains: [...domains] });
   const metadata = encoded.metadata;
-  await connection.query(`
-    INSERT INTO game_saves (save_id, day_no, rebirth_no, calendar_start_date, last_settlement_date, state_version, state_revision)
-    VALUES (?, ?, ?, ?, ?, ?, 1)
-    ON DUPLICATE KEY UPDATE
-      day_no = VALUES(day_no),
-      rebirth_no = VALUES(rebirth_no),
-      calendar_start_date = VALUES(calendar_start_date),
-      last_settlement_date = VALUES(last_settlement_date),
-      state_version = VALUES(state_version),
-      state_revision = state_revision + 1,
-      updated_at = CURRENT_TIMESTAMP(3)
-  `, [saveId, metadata.day, metadata.rebirth, metadata.calendarStartDate, metadata.lastSettlementDate, metadata.stateVersion]);
+  let revision;
+  if (Number.isFinite(options.expectedRevision)) {
+    const [result] = await connection.query(`
+      UPDATE game_saves SET day_no = ?, rebirth_no = ?, calendar_start_date = ?, last_settlement_date = ?,
+        state_version = ?, state_revision = state_revision + 1, updated_at = CURRENT_TIMESTAMP(3)
+      WHERE save_id = ? AND state_revision = ?
+    `, [metadata.day, metadata.rebirth, metadata.calendarStartDate, metadata.lastSettlementDate, metadata.stateVersion, saveId, options.expectedRevision]);
+    if (!result.affectedRows) {
+      const error = new Error("存档已被其他任务更新，请重试");
+      error.code = "STATE_REVISION_CONFLICT";
+      throw error;
+    }
+    revision = Number(options.expectedRevision) + 1;
+  } else {
+    await connection.query(`
+      INSERT INTO game_saves (save_id, day_no, rebirth_no, calendar_start_date, last_settlement_date, state_version, state_revision)
+      VALUES (?, ?, ?, ?, ?, ?, 1)
+      ON DUPLICATE KEY UPDATE
+        day_no = VALUES(day_no), rebirth_no = VALUES(rebirth_no), calendar_start_date = VALUES(calendar_start_date),
+        last_settlement_date = VALUES(last_settlement_date), state_version = VALUES(state_version),
+        state_revision = state_revision + 1, updated_at = CURRENT_TIMESTAMP(3)
+    `, [saveId, metadata.day, metadata.rebirth, metadata.calendarStartDate, metadata.lastSettlementDate, metadata.stateVersion]);
+    const [revisionRows] = await connection.query("SELECT state_revision FROM game_saves WHERE save_id = ?", [saveId]);
+    revision = Number(revisionRows[0]?.state_revision || 0);
+  }
 
-  const [revisionRows] = await connection.query("SELECT state_revision FROM game_saves WHERE save_id = ?", [saveId]);
-  const revision = Number(revisionRows[0]?.state_revision || 0);
+  if (domains.has(persistenceDomains.cultivators) || domains.has(persistenceDomains.adminProfiles)) {
+    await upsertPortraits(connection, encoded.portraits);
+  }
 
-  await upsertPortraits(connection, encoded.portraits);
-
-  await syncHashedRows(connection, {
+  if (domains.has(persistenceDomains.sections)) await syncHashedRows(connection, {
     table: "save_sections", saveId, rows: encoded.sections, keyColumns: ["section_key"],
     keyValues: (row) => ({ section_key: row.sectionKey }),
     values: (row) => [row.sectionKey, row.json, row.hash],
     upsertSql: `INSERT INTO save_sections (save_id, section_key, section_json, content_hash) VALUES (?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE section_json = VALUES(section_json), content_hash = VALUES(content_hash), updated_at = CURRENT_TIMESTAMP(3)`
   });
-  await syncHashedRows(connection, {
+  if (domains.has(persistenceDomains.cultivators)) await syncHashedRows(connection, {
     table: "cultivators", saveId, rows: encoded.cultivators, keyColumns: ["cultivator_id"],
     keyValues: (row) => ({ cultivator_id: row.cultivatorId }),
     values: (row) => [row.cultivatorId, row.kind, row.position, row.name, row.realm, row.xp, row.hp, row.maxHp, row.mana, row.maxMana, row.sect, row.portraitId || null, row.json, row.hash],
@@ -91,7 +119,7 @@ async function writeEncodedState(connection, state, saveId) {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE cultivator_kind=VALUES(cultivator_kind), position_no=VALUES(position_no), name=VALUES(name), realm_no=VALUES(realm_no), xp=VALUES(xp), hp=VALUES(hp), max_hp=VALUES(max_hp), mana=VALUES(mana), max_mana=VALUES(max_mana), sect_name=VALUES(sect_name), portrait_id=VALUES(portrait_id), cultivator_json=VALUES(cultivator_json), content_hash=VALUES(content_hash), updated_at=CURRENT_TIMESTAMP(3)`
   });
-  await syncHashedRows(connection, {
+  if (domains.has(persistenceDomains.cultivators)) await syncHashedRows(connection, {
     table: "cultivator_history", saveId, rows: encoded.cultivatorHistory,
     keyColumns: ["cultivator_id", "history_type", "record_key"],
     keyValues: (row) => ({ cultivator_id: row.cultivatorId, history_type: row.historyType, record_key: row.recordKey }),
@@ -101,7 +129,7 @@ async function writeEncodedState(connection, state, saveId) {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE day_no=VALUES(day_no), position_no=VALUES(position_no), record_json=VALUES(record_json), content_hash=VALUES(content_hash)`
   });
-  await syncHashedRows(connection, {
+  if (domains.has(persistenceDomains.equipment)) await syncHashedRows(connection, {
     table: "equipment_items", saveId, rows: encoded.equipment, keyColumns: ["equipment_key"],
     keyValues: (row) => ({ equipment_key: row.equipmentKey }),
     values: (row) => [row.equipmentKey, row.position, row.ownerId, row.itemId, row.slot, row.json, row.hash],
@@ -111,12 +139,12 @@ async function writeEncodedState(connection, state, saveId) {
       ON DUPLICATE KEY UPDATE position_no=VALUES(position_no), owner_id=VALUES(owner_id), item_id=VALUES(item_id), slot_name=VALUES(slot_name), item_json=VALUES(item_json), content_hash=VALUES(content_hash)`
   });
 
-  await syncSimpleRows(connection, "duel_days", saveId, "day_no", encoded.duelDays,
+  if (domains.has(persistenceDomains.duels)) await syncSimpleRows(connection, "duel_days", saveId, "day_no", encoded.duelDays,
     (row) => row.day,
     (row) => [row.day, row.date, row.createdAt],
     `INSERT INTO duel_days (save_id, day_no, date_key, created_at_text) VALUES (?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE date_key=VALUES(date_key), created_at_text=VALUES(created_at_text)`);
-  await syncHashedRows(connection, {
+  if (domains.has(persistenceDomains.duels)) await syncHashedRows(connection, {
     table: "duel_matches", saveId, rows: encoded.duelMatches, keyColumns: ["day_no", "match_id"],
     keyValues: (row) => ({ day_no: row.day, match_id: row.matchId }),
     values: (row) => [row.day, row.matchId, row.position, row.matchType, row.leftId, row.rightId, row.winnerId, row.loserId, row.replayId, row.json, row.hash],
@@ -126,12 +154,12 @@ async function writeEncodedState(connection, state, saveId) {
       ON DUPLICATE KEY UPDATE position_no=VALUES(position_no), match_type=VALUES(match_type), left_id=VALUES(left_id), right_id=VALUES(right_id), winner_id=VALUES(winner_id), loser_id=VALUES(loser_id), replay_id=VALUES(replay_id), match_json=VALUES(match_json), content_hash=VALUES(content_hash)`
   });
 
-  await syncSimpleRows(connection, "dungeon_days", saveId, "day_no", encoded.dungeonDays,
+  if (domains.has(persistenceDomains.dungeons)) await syncSimpleRows(connection, "dungeon_days", saveId, "day_no", encoded.dungeonDays,
     (row) => row.day,
     (row) => [row.day, row.date],
     `INSERT INTO dungeon_days (save_id, day_no, date_key) VALUES (?, ?, ?)
       ON DUPLICATE KEY UPDATE date_key=VALUES(date_key)`);
-  await syncHashedRows(connection, {
+  if (domains.has(persistenceDomains.dungeons)) await syncHashedRows(connection, {
     table: "dungeon_records", saveId, rows: encoded.dungeonRecords,
     keyColumns: ["day_no", "record_type", "record_key"],
     keyValues: (row) => ({ day_no: row.day, record_type: row.recordType, record_key: row.recordKey }),
@@ -141,7 +169,7 @@ async function writeEncodedState(connection, state, saveId) {
       VALUES (?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE position_no=VALUES(position_no), record_json=VALUES(record_json), content_hash=VALUES(content_hash)`
   });
-  await syncHashedRows(connection, {
+  if (domains.has(persistenceDomains.provinceWars)) await syncHashedRows(connection, {
     table: "province_wars", saveId, rows: encoded.provinceWars, keyColumns: ["war_id"],
     keyValues: (row) => ({ war_id: row.warId }),
     values: (row) => [row.warId, row.day, row.position, row.provinceId, row.attacker, row.defender, row.captured, row.json, row.hash],
@@ -150,7 +178,7 @@ async function writeEncodedState(connection, state, saveId) {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE day_no=VALUES(day_no), position_no=VALUES(position_no), province_id=VALUES(province_id), attacker_name=VALUES(attacker_name), defender_name=VALUES(defender_name), captured=VALUES(captured), war_json=VALUES(war_json), content_hash=VALUES(content_hash)`
   });
-  await syncHashedRows(connection, {
+  if (domains.has(persistenceDomains.adminProfiles)) await syncHashedRows(connection, {
     table: "admin_profiles", saveId, rows: encoded.adminProfiles,
     keyColumns: ["profile_type", "profile_key"],
     keyValues: (row) => ({ profile_type: row.profileType, profile_key: row.profileKey }),
@@ -165,12 +193,12 @@ async function writeEncodedState(connection, state, saveId) {
 
 export async function saveStateToMysql(state, saveId, options = {}) {
   compactStateForStorage(state, { skipReplayCompaction: options.skipReplayExtraction });
-  return withMysqlTransaction((connection) => writeEncodedState(connection, state, saveId));
+  return withMysqlTransaction((connection) => writeEncodedState(connection, state, saveId, options));
 }
 
 export async function saveStateWithConnection(connection, state, saveId, options = {}) {
-  compactStateForStorage(state, { skipReplayCompaction: options.skipReplayExtraction });
-  return writeEncodedState(connection, state, saveId);
+  if (!options.compacted) compactStateForStorage(state, { skipReplayCompaction: options.skipReplayExtraction });
+  return writeEncodedState(connection, state, saveId, options);
 }
 
 export async function loadStateFromMysql(saveId) {

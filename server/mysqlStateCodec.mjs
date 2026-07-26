@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { parseMysqlJson } from "./mysqlDb.mjs";
+import { normalizePersistenceDomains, persistenceDomains } from "./persistenceDomains.mjs";
 
 const metadataKeys = new Set(["day", "rebirth", "calendarStartDate", "lastSettlementDate"]);
 const extractedKeys = new Set(["player", "npcs", "equipment", "duelDays", "dungeonDays", "provinceWars", "adminProfiles"]);
@@ -175,7 +176,8 @@ function encodeAdminProfiles(encoded, adminProfiles = {}) {
   }
 }
 
-export function encodeState(state) {
+export function encodeState(state, options = {}) {
+  const domains = normalizePersistenceDomains(options.domains);
   const encoded = {
     metadata: {
       day: Number(state.day || 1),
@@ -197,15 +199,19 @@ export function encodeState(state) {
     adminProfiles: new Map()
   };
 
-  for (const [key, value] of Object.entries(state)) {
-    if (metadataKeys.has(key) || extractedKeys.has(key) || key.startsWith("__")) continue;
-    addJsonRow(encoded.sections, key, { sectionKey: key }, value);
+  if (domains.has(persistenceDomains.sections)) {
+    for (const [key, value] of Object.entries(state)) {
+      if (metadataKeys.has(key) || extractedKeys.has(key) || key.startsWith("__")) continue;
+      addJsonRow(encoded.sections, key, { sectionKey: key }, value);
+    }
   }
 
-  encodeCultivator(encoded, state.player || {}, "player", 0);
-  (state.npcs || []).forEach((npc, position) => encodeCultivator(encoded, npc, "npc", position));
+  if (domains.has(persistenceDomains.cultivators)) {
+    encodeCultivator(encoded, state.player || {}, "player", 0);
+    (state.npcs || []).forEach((npc, position) => encodeCultivator(encoded, npc, "npc", position));
+  }
 
-  (state.equipment || []).forEach((item, position) => {
+  if (domains.has(persistenceDomains.equipment)) (state.equipment || []).forEach((item, position) => {
     const equipmentKey = rowKey(position, item?.instanceId || item?.id || item?.itemId || "equipment", item);
     addJsonRow(encoded.equipment, equipmentKey, {
       equipmentKey,
@@ -216,7 +222,7 @@ export function encodeState(state) {
     }, item);
   });
 
-  (state.duelDays || []).forEach((dayRecord, dayPosition) => {
+  if (domains.has(persistenceDomains.duels)) (state.duelDays || []).forEach((dayRecord, dayPosition) => {
     const day = Number(dayRecord?.day || dayPosition + 1);
     encoded.duelDays.set(String(day), {
       day,
@@ -239,9 +245,9 @@ export function encodeState(state) {
     });
   });
 
-  encodeDungeons(encoded, state.dungeonDays || []);
+  if (domains.has(persistenceDomains.dungeons)) encodeDungeons(encoded, state.dungeonDays || []);
 
-  (state.provinceWars || []).forEach((war, position) => {
+  if (domains.has(persistenceDomains.provinceWars)) (state.provinceWars || []).forEach((war, position) => {
     const warId = rowKey(position, war?.id || war?.provinceId || "war", war);
     addJsonRow(encoded.provinceWars, warId, {
       warId,
@@ -254,7 +260,7 @@ export function encodeState(state) {
     }, war);
   });
 
-  encodeAdminProfiles(encoded, state.adminProfiles || {});
+  if (domains.has(persistenceDomains.adminProfiles)) encodeAdminProfiles(encoded, state.adminProfiles || {});
   return encoded;
 }
 

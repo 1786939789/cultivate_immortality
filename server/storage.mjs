@@ -18,6 +18,7 @@ export const loginUser = storage.loginUser;
 export const getAdminManagedSaveId = storage.getAdminManagedSaveId;
 export const logoutSession = storage.logoutSession;
 export const readState = storage.readState;
+export const activeSettlementSaveIds = storage.activeSettlementSaveIds;
 export const settleAllStates = storage.settleAllStates;
 export const writeState = storage.writeState;
 export const readBattleReplay = storage.readBattleReplay;

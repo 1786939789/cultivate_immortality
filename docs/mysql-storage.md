@@ -14,6 +14,10 @@ The production service uses `STORAGE_DRIVER=mysql`. SQLite remains available as 
 
 The domain logic still receives the existing in-memory state shape. `mysqlStateCodec.mjs` assembles and decomposes that state while `mysqlStateRepository.mjs` updates only rows whose content hash changed.
 
+Writes are divided into explicit persistence domains: sections, cultivators and their history, equipment, duels, dungeons, province wars, and admin profiles. Normal mutations track touched domains and verify changes only within those candidates before querying their tables. Full-world settlement, migration, reset, and first-save creation retain full-domain verification.
+
+Daily settlement uses the persistent `background_jobs` table. The scheduler enqueues one idempotent job per save and target date; workers claim jobs with leases, advance at most one game day per transaction, retry revision conflicts, and apply exponential backoff to failures.
+
 ## Required environment
 
 Use `.env.example` as the key reference. Keep the real password outside the repository.
