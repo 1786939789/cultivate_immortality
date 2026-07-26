@@ -11,7 +11,10 @@ const battlePath = process.env.BATTLE_DB_PATH || path.join(rootDir, "data", "bat
 function canonical(value) {
   if (Array.isArray(value)) return value.map(canonical);
   if (!value || typeof value !== "object") return value;
-  return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical(value[key])]));
+  return Object.fromEntries(Object.keys(value)
+    .filter((key) => key !== "__stateRevision")
+    .sort()
+    .map((key) => [key, canonical(value[key])]));
 }
 
 function stateHash(value) {

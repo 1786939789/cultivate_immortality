@@ -3,7 +3,9 @@ import { mysqlPool } from "../server/mysqlDb.mjs";
 import { loadStateFromMysql, saveStateToMysql } from "../server/mysqlStateRepository.mjs";
 
 function stateHash(value) {
-  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+  const state = structuredClone(value);
+  delete state.__stateRevision;
+  return createHash("sha256").update(JSON.stringify(state)).digest("hex");
 }
 
 const [[source]] = await mysqlPool.query("SELECT save_id FROM game_saves ORDER BY save_id LIMIT 1");
@@ -16,6 +18,10 @@ try {
   await saveStateToMysql(structuredClone(original), testId);
   const restored = await loadStateFromMysql(testId);
   if (!restored || stateHash(restored) !== stateHash(original)) throw new Error("Temporary save round-trip mismatch");
+  const firstRevision = restored.__stateRevision;
+  await saveStateToMysql(structuredClone(restored), testId);
+  const revised = await loadStateFromMysql(testId);
+  if (Number(revised.__stateRevision) !== Number(firstRevision) + 1) throw new Error("State revision did not increment");
   const [counts] = await mysqlPool.query(`
     SELECT
       (SELECT COUNT(*) FROM cultivators WHERE save_id = ?) AS cultivators,
@@ -23,6 +29,7 @@ try {
   `, [testId, testId]);
   console.log(JSON.stringify({
     roundTrip: true,
+    revisionIncremented: true,
     cultivators: Number(counts[0].cultivators),
     duelMatches: Number(counts[0].duel_matches)
   }));

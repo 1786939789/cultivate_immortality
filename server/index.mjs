@@ -53,6 +53,7 @@ import {
   readState,
   registerUser,
   resetState,
+  setAdminManagedSaveId,
   setActiveAccount,
   settleAllStates,
   sessionCookie
@@ -171,6 +172,14 @@ function authTokenFromRequest(req) {
   return parseCookies(req.headers.cookie || "").csj_session || "";
 }
 
+function requestIp(req) {
+  if (process.env.TRUST_PROXY === "1") {
+    const forwarded = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+    if (forwarded) return forwarded;
+  }
+  return String(req.socket.remoteAddress || "unknown");
+}
+
 async function handleAuthApi(req, res, url) {
   if (req.method === "GET" && url.pathname === "/api/auth/me") {
     const session = await getAuthSession(authTokenFromRequest(req));
@@ -188,13 +197,13 @@ async function handleAuthApi(req, res, url) {
   }
 
   if (url.pathname === "/api/auth/register") {
-    const result = await registerUser(await readJson(req));
+    const result = await registerUser(await readJson(req), { ip: requestIp(req) });
     sendJson(res, 200, { user: result.user }, { "set-cookie": sessionCookie(result.session) });
     return;
   }
 
   if (url.pathname === "/api/auth/login") {
-    const result = await loginUser(await readJson(req));
+    const result = await loginUser(await readJson(req), { ip: requestIp(req) });
     sendJson(res, 200, { user: result.user }, { "set-cookie": sessionCookie(result.session) });
     return;
   }
@@ -253,8 +262,15 @@ async function handleApi(req, res, url) {
   if (req.method === "POST" && url.pathname === "/api/admin/accounts/active") {
     const body = await readJson(req);
     const accounts = await setActiveAccount(body.saveId, body.active !== false);
+    sendJson(res, 200, { accounts });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/accounts/managed") {
+    const body = await readJson(req);
+    const accounts = await setAdminManagedSaveId(body.saveId);
     const scope = ["home", "lite"].includes(body.scope) ? body.scope : "full";
-    const state = body.active === false ? null : await publicState(body.saveId, { scope });
+    const state = await publicState(body.saveId, { scope });
     sendJson(res, 200, { accounts, state });
     return;
   }
@@ -339,6 +355,7 @@ async function handleApi(req, res, url) {
 
   if (req.method === "POST" && url.pathname === "/api/reset") {
     const body = await readJson(req);
+    if (session.user.isAdmin && body.saveId !== saveId) throw new Error("管理目标已变化，请刷新后重试");
     const scope = body.scope === "lite" ? "lite" : "full";
     sendJson(res, 200, await resetState(saveId, { publicOptions: { scope } }));
     return;
@@ -350,6 +367,7 @@ async function handleApi(req, res, url) {
   }
 
   const body = await readJson(req);
+  if (session.user.isAdmin && body.saveId !== saveId) throw new Error("管理目标已变化，请刷新后重试");
   const routes = {
     "/api/tasks": (state) => addTask(state, body),
     "/api/tasks/delete": (state) => deleteTaskCompletion(state, body),
@@ -443,7 +461,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname.startsWith("/api/")) await handleApi(req, res, url);
     else await serveStatic(req, res, url);
   } catch (error) {
-    sendJson(res, 400, { error: error.message || "请求失败" });
+    sendJson(res, Number(error.statusCode) || 400, { error: error.message || "请求失败" });
   }
 });
 

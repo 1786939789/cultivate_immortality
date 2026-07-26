@@ -48,10 +48,19 @@ async function createSchema() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
       `CREATE TABLE IF NOT EXISTS auth_registration_codes (
         code VARCHAR(128) PRIMARY KEY,
+        code_hash CHAR(64) NULL UNIQUE,
         active TINYINT(1) NOT NULL DEFAULT 1,
         max_uses INT NULL,
         used_count INT NOT NULL DEFAULT 0,
         created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
+      `CREATE TABLE IF NOT EXISTS auth_attempts (
+        attempt_key CHAR(64) PRIMARY KEY,
+        action_name VARCHAR(24) NOT NULL,
+        failure_count INT NOT NULL DEFAULT 0,
+        blocked_until DATETIME(3) NULL,
+        updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+        INDEX idx_auth_attempts_updated (updated_at)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
       `CREATE TABLE IF NOT EXISTS auth_sessions (
         token_hash VARCHAR(128) PRIMARY KEY,
@@ -74,6 +83,7 @@ async function createSchema() {
         calendar_start_date VARCHAR(32) NOT NULL DEFAULT '',
         last_settlement_date VARCHAR(32) NOT NULL DEFAULT '',
         state_version INT NOT NULL DEFAULT 1,
+        state_revision BIGINT NOT NULL DEFAULT 0,
         created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
         updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
         INDEX idx_game_saves_updated (updated_at)
@@ -246,6 +256,17 @@ async function createSchema() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`
     ];
     for (const statement of statements) await connection.query(statement);
+    const additiveColumns = [
+      ["auth_registration_codes", "code_hash", "CHAR(64) NULL UNIQUE"],
+      ["game_saves", "state_revision", "BIGINT NOT NULL DEFAULT 0"]
+    ];
+    for (const [table, column, definition] of additiveColumns) {
+      const [columns] = await connection.query(`
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ? LIMIT 1
+      `, [database, table, column]);
+      if (!columns.length) await connection.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    }
     const textColumns = [
       ["save_sections", "section_json", "LONGTEXT"],
       ["cultivators", "cultivator_json", "LONGTEXT"],

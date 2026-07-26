@@ -1,8 +1,9 @@
-import { createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import initSqlJs from "sql.js";
+import { hashPassword, verifyPassword } from "./authSecurity.mjs";
 import { clearProgressHistory, compactStateForStorage, createDefaultState, dateKey, ensureStateShape, getPublicState, minReplayDayFor, preserveProfilesForReset, settleIfNeeded } from "./gameLogic.mjs";
 
 const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -10,13 +11,10 @@ const dataDir = join(rootDir, "data");
 const dbPath = process.env.GAME_DB_PATH || join(dataDir, "game.sqlite");
 const battleDbPath = process.env.BATTLE_DB_PATH || join(dirname(dbPath), "battle.sqlite");
 const wasmPath = join(rootDir, "node_modules", "sql.js", "dist", "sql-wasm.wasm");
-const defaultRegistrationCode = "Rushac";
 const sessionMaxAgeSeconds = 60 * 60 * 24 * 30;
-const bootstrapAdminUsername = process.env.ADMIN_USERNAME || "admin";
-const bootstrapAdminPassword = process.env.ADMIN_PASSWORD || "Admin@24";
-const legacyBootstrapAdminUsername = "csj-admin";
 const activeSaveSettingKey = "active_save_ids";
 const legacyActiveSaveSettingKey = "active_save_id";
+const managedSaveSettingKey = "managed_save_id";
 
 mkdirSync(dataDir, { recursive: true });
 
@@ -35,6 +33,24 @@ let deferredPersistStartedAt = 0;
 let deferredBattlePersistStartedAt = 0;
 const deferredPersistIdleMs = 1200;
 const deferredPersistMaxMs = 5000;
+const authAttempts = new Map();
+
+function sqliteAuthAttempt(action, context, username) {
+  const key = `${action}\u0000${String(context?.ip || "unknown")}\u0000${String(username || "").toLocaleLowerCase("en-US")}`;
+  const current = authAttempts.get(key) || { failures: 0, blockedUntil: 0 };
+  if (current.blockedUntil > Date.now()) {
+    const error = new Error(`尝试次数过多，请在 ${Math.ceil((current.blockedUntil - Date.now()) / 1000)} 秒后重试`);
+    error.statusCode = 429;
+    throw error;
+  }
+  return { key, current };
+}
+
+function recordSqliteAuthFailure(attempt) {
+  const failures = attempt.current.failures + 1;
+  const delayMinutes = failures >= 12 ? 30 : failures >= 9 ? 15 : failures >= 7 ? 5 : failures >= 5 ? 1 : 0;
+  authAttempts.set(attempt.key, { failures, blockedUntil: delayMinutes ? Date.now() + delayMinutes * 60_000 : 0 });
+}
 
 async function openDb() {
   if (!dbPromise) {
@@ -88,8 +104,6 @@ async function openDb() {
         );
       `);
       db.run("DROP TABLE IF EXISTS save_meta;");
-      seedRegistrationCode(db);
-      seedAdminUser(db);
       ensureActiveSaveSetting(db);
       persist(db);
       return db;
@@ -273,19 +287,6 @@ function bloodTrialReplayMatches(reference, replay) {
     && output === Number(reference.output);
 }
 
-function seedRegistrationCode(db) {
-  const statement = db.prepare(`
-    INSERT INTO auth_registration_codes (code, active, max_uses, used_count)
-    VALUES ($code, 1, NULL, 0)
-    ON CONFLICT(code) DO NOTHING
-  `);
-  try {
-    statement.run({ $code: defaultRegistrationCode });
-  } finally {
-    statement.free();
-  }
-}
-
 function persist(db) {
   flushDeferredStateWrites(db);
   writeFileSync(dbPath, Buffer.from(db.export()));
@@ -318,53 +319,6 @@ function ensureAuthUserRoleColumn(db) {
   const columns = db.exec("PRAGMA table_info(auth_users)");
   const hasRole = columns.length && columns[0].values.some((row) => row[1] === "role");
   if (!hasRole) db.run("ALTER TABLE auth_users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'");
-}
-
-function seedAdminUser(db) {
-  const existing = readUserByName(db, bootstrapAdminUsername);
-  if (existing) {
-    const { hash, salt } = hashPassword(bootstrapAdminPassword);
-    db.run(`
-      UPDATE auth_users
-      SET password_hash = $passwordHash, password_salt = $passwordSalt, role = 'admin'
-      WHERE id = $id
-    `, {
-      $id: existing[0],
-      $passwordHash: hash,
-      $passwordSalt: salt
-    });
-    return;
-  }
-  const legacy = readUserByName(db, legacyBootstrapAdminUsername);
-  if (legacy?.[6] === "admin") {
-    const { hash, salt } = hashPassword(bootstrapAdminPassword);
-    db.run(`
-      UPDATE auth_users
-      SET username = $username, password_hash = $passwordHash, password_salt = $passwordSalt, role = 'admin'
-      WHERE id = $id
-    `, {
-      $id: legacy[0],
-      $username: bootstrapAdminUsername,
-      $passwordHash: hash,
-      $passwordSalt: salt
-    });
-    return;
-  }
-  const { hash, salt } = hashPassword(bootstrapAdminPassword);
-  const statement = db.prepare(`
-    INSERT INTO auth_users (id, username, password_hash, password_salt, role, last_login_at)
-    VALUES ($id, $username, $passwordHash, $passwordSalt, 'admin', NULL)
-  `);
-  try {
-    statement.run({
-      $id: `user-${randomUUID()}`,
-      $username: bootstrapAdminUsername,
-      $passwordHash: hash,
-      $passwordSalt: salt
-    });
-  } finally {
-    statement.free();
-  }
 }
 
 function persistBattleDb(db) {
@@ -499,17 +453,6 @@ function assertPassword(password) {
   if (password.length > 72) throw new Error("密码最多 72 位");
 }
 
-function hashPassword(password, salt = randomBytes(16).toString("base64url")) {
-  const hash = scryptSync(password, salt, 64).toString("base64url");
-  return { hash, salt };
-}
-
-function verifyPassword(password, salt, expectedHash) {
-  const actual = Buffer.from(hashPassword(password, salt).hash, "base64url");
-  const expected = Buffer.from(expectedHash, "base64url");
-  return actual.length === expected.length && timingSafeEqual(actual, expected);
-}
-
 function hashSessionToken(token) {
   return createHash("sha256").update(token).digest("base64url");
 }
@@ -611,7 +554,11 @@ function ensureActiveSaveSetting(db) {
 }
 
 function managedUserId(db) {
-  return ensureActiveSaveSetting(db)[0] || firstPlayerUserId(db) || "default";
+  const current = appSetting(db, managedSaveSettingKey);
+  if (isPlayerUserId(db, current)) return current;
+  const fallback = firstPlayerUserId(db) || "default";
+  if (fallback !== "default") setAppSetting(db, managedSaveSettingKey, fallback);
+  return fallback;
 }
 
 function activeSaveRows(db) {
@@ -661,7 +608,7 @@ function publicActiveAccountState(db) {
   const accounts = listPlayerAccounts(db);
   return {
     activeSaveIds,
-    managedSaveId: activeSaveIds[0] || "",
+    managedSaveId: managedUserId(db),
     accounts: accounts.map((account) => ({
       ...account,
       active: activeSet.has(account.id)
@@ -686,6 +633,16 @@ export async function setActiveAccount(saveId, active = true) {
   publicStateCache.clear();
   persist(db);
   if (active) await readState(id);
+  return publicActiveAccountState(db);
+}
+
+export async function setAdminManagedSaveId(saveId) {
+  const db = await openDb();
+  const id = String(saveId || "").trim();
+  if (!isPlayerUserId(db, id)) throw new Error("只能管理普通用户存档");
+  setAppSetting(db, managedSaveSettingKey, id);
+  persist(db);
+  await readState(id);
   return publicActiveAccountState(db);
 }
 
@@ -812,17 +769,24 @@ export async function getAuthSession(token) {
   return { user: publicUser(row.slice(0, 5)), expiresAt };
 }
 
-export async function registerUser({ username, password, registrationCode }) {
+export async function registerUser({ username, password, registrationCode }, context = {}) {
   const db = await openDb();
   const cleanUsername = normalizeUsername(username);
   assertUsername(cleanUsername);
   assertPassword(password);
-  const code = assertRegistrationCode(db, registrationCode);
-  if (readUserByName(db, cleanUsername)) throw new Error("账号名已存在");
+  const attempt = sqliteAuthAttempt("register", context, cleanUsername);
+  let code;
+  try {
+    code = assertRegistrationCode(db, registrationCode);
+    if (readUserByName(db, cleanUsername)) throw new Error("账号名已存在");
+  } catch (error) {
+    recordSqliteAuthFailure(attempt);
+    throw error;
+  }
 
   const isFirstUser = userCount(db) === 0;
   const id = `user-${randomUUID()}`;
-  const { hash, salt } = hashPassword(password);
+  const { hash, salt } = await hashPassword(password);
   const statement = db.prepare(`
     INSERT INTO auth_users (id, username, password_hash, password_salt, last_login_at)
     VALUES ($id, $username, $passwordHash, $passwordSalt, datetime('now'))
@@ -847,6 +811,7 @@ export async function registerUser({ username, password, registrationCode }) {
   } else {
     await readState(id);
   }
+  authAttempts.delete(attempt.key);
 
   return {
     user: { id, username: cleanUsername, saveId: id, createdAt: new Date().toISOString(), lastLoginAt: new Date().toISOString(), role: "user", isAdmin: false },
@@ -854,17 +819,22 @@ export async function registerUser({ username, password, registrationCode }) {
   };
 }
 
-export async function loginUser({ username, password }) {
+export async function loginUser({ username, password }, context = {}) {
   const db = await openDb();
   const cleanUsername = normalizeUsername(username);
   assertUsername(cleanUsername);
   assertPassword(password);
+  const attempt = sqliteAuthAttempt("login", context, cleanUsername);
   const row = readUserByName(db, cleanUsername);
-  if (!row || !verifyPassword(password, row[3], row[2])) throw new Error("账号或密码错误");
+  if (!row || !await verifyPassword(password, row[3], row[2])) {
+    recordSqliteAuthFailure(attempt);
+    throw new Error("账号或密码错误");
+  }
   touchUserLogin(db, row[0]);
   const session = createSession(db, row[0]);
   persist(db);
   await readState(row[6] === "admin" ? managedUserId(db) : row[0]);
+  authAttempts.delete(attempt.key);
   return {
     user: { ...publicUser([row[0], row[1], row[4], new Date().toISOString(), row[6]]) },
     session
@@ -956,6 +926,7 @@ export async function writeState(state, id = "default", options = {}) {
   const battleDb = await ensureBattleStorage(db);
   const replaysWritten = writePendingBattleReplays(battleDb, state, id);
   const replaysPruned = pruneBattleReplays(battleDb, state, id);
+  state.__stateRevision = Math.max(0, Number(state.__stateRevision || 0)) + 1;
   stateCache.set(id, state);
   stateValidationCache.set(id, dateKey());
   publicStateCache.delete(id);
@@ -1099,11 +1070,12 @@ export async function readBattleReplay(replayId, id = "default") {
 }
 
 export async function mutateState(mutator, id = "default", options = {}) {
-  const state = await readState(id);
+  const source = await readState(id);
+  const state = structuredClone(source);
   const result = mutator(state);
   await writeState(state, id, options.storageOptions);
   if (options.resultOnly) return { result };
-  const publicState = getPublicState(state, options.publicOptions);
+  const publicState = { ...getPublicState(state, options.publicOptions), stateRevision: Number(state.__stateRevision || 0) };
   return result === undefined ? publicState : { state: publicState, result };
 }
 
@@ -1132,8 +1104,9 @@ export async function resetState(id = "default", options = {}) {
   if (replayRowsDeleted) persistBattleDb(battleDb);
 
   const state = preserveProfilesForReset(clearProgressHistory(createDefaultState()), previousState);
+  state.__stateRevision = Number(previousState?.__stateRevision || 0);
   await writeState(state, id);
-  return getPublicState(state, options.publicOptions);
+  return { ...getPublicState(state, options.publicOptions), stateRevision: Number(state.__stateRevision || 0) };
 }
 
 export async function publicState(id = "default", options = {}) {
@@ -1141,7 +1114,7 @@ export async function publicState(id = "default", options = {}) {
   const cached = publicStateCache.get(id);
   if (cached?.date === dateKey() && cached?.[scope]) return cached[scope];
   const state = await readState(id);
-  const nextState = getPublicState(state, options);
+  const nextState = { ...getPublicState(state, options), stateRevision: Number(state.__stateRevision || 0) };
   const nextCache = { ...(cached?.date === dateKey() ? cached : {}), date: dateKey(), [scope]: nextState };
   publicStateCache.set(id, nextCache);
   return nextState;

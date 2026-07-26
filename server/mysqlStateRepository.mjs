@@ -58,16 +58,20 @@ async function writeEncodedState(connection, state, saveId) {
   const encoded = encodeState(state);
   const metadata = encoded.metadata;
   await connection.query(`
-    INSERT INTO game_saves (save_id, day_no, rebirth_no, calendar_start_date, last_settlement_date, state_version)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO game_saves (save_id, day_no, rebirth_no, calendar_start_date, last_settlement_date, state_version, state_revision)
+    VALUES (?, ?, ?, ?, ?, ?, 1)
     ON DUPLICATE KEY UPDATE
       day_no = VALUES(day_no),
       rebirth_no = VALUES(rebirth_no),
       calendar_start_date = VALUES(calendar_start_date),
       last_settlement_date = VALUES(last_settlement_date),
       state_version = VALUES(state_version),
+      state_revision = state_revision + 1,
       updated_at = CURRENT_TIMESTAMP(3)
   `, [saveId, metadata.day, metadata.rebirth, metadata.calendarStartDate, metadata.lastSettlementDate, metadata.stateVersion]);
+
+  const [revisionRows] = await connection.query("SELECT state_revision FROM game_saves WHERE save_id = ?", [saveId]);
+  const revision = Number(revisionRows[0]?.state_revision || 0);
 
   await upsertPortraits(connection, encoded.portraits);
 
@@ -156,6 +160,7 @@ async function writeEncodedState(connection, state, saveId) {
       VALUES (?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE position_no=VALUES(position_no), portrait_id=VALUES(portrait_id), profile_json=VALUES(profile_json), content_hash=VALUES(content_hash)`
   });
+  return revision;
 }
 
 export async function saveStateToMysql(state, saveId, options = {}) {
@@ -194,7 +199,9 @@ export async function loadStateFromMysql(saveId) {
     const [rows] = await mysqlPool.query(sql, parameters);
     loaded[key] = rows;
   }));
-  return decodeState(loaded);
+  const state = decodeState(loaded);
+  state.__stateRevision = Number(saveRows[0].state_revision || 0);
+  return state;
 }
 
 export async function upsertBattleReplays(connection, saveId, pending = []) {

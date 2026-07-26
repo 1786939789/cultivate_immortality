@@ -4217,13 +4217,13 @@
                   class="admin-list-row admin-account-row"
                   :class="{ active: adminSelectedAccountId === account.id }"
                   type="button"
-                  @click="adminSelectedAccountId = account.id"
+                  @click="selectManagedAdminAccount(account.id)"
                 >
                   <span>
                     <strong>{{ account.username }}</strong>
                     <small>{{ account.id }}</small>
                   </span>
-                  <b>{{ account.active ? "活跃" : account.hasSave ? "存档" : "未建档" }}</b>
+                  <b>{{ adminSelectedAccountId === account.id ? "管理中" : account.active ? "自动推进" : account.hasSave ? "存档" : "未建档" }}</b>
                 </button>
                 <div v-if="adminAccountsLoading" class="admin-editor empty">正在读取账户...</div>
                 <div v-else-if="!adminAccounts.length" class="admin-editor empty">暂无普通用户。</div>
@@ -4234,7 +4234,7 @@
                   <div>
                     <span>账户推进</span>
                     <strong>{{ adminSelectedAccount.username }}</strong>
-                    <small>{{ adminSelectedAccount.active ? "此账户会参与每日自动推进" : "此账户已暂停每日自动推进" }}</small>
+                    <small>当前后台操作目标；{{ adminSelectedAccount.active ? "参与每日自动推进" : "已暂停每日自动推进" }}</small>
                   </div>
                 </div>
                 <div class="admin-account-facts">
@@ -4820,7 +4820,7 @@ import {
   Minimize2
 } from "lucide-vue-next";
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from "vue";
-import { clearCachedState, getAdminAccounts, getBattleReplay, getCachedState, getCultivatorDetail, getCurrentUser, getDaoTrialHistory, getDuelDayPage, getDuelReplay, getState, login, logout, postAction, register, saveCachedState, setAdminActiveAccount } from "./api";
+import { clearCachedState, getAdminAccounts, getBattleReplay, getCachedState, getCultivatorDetail, getCurrentUser, getDaoTrialHistory, getDuelDayPage, getDuelReplay, getState, login, logout, postAction, register, saveCachedState, setAdminActiveAccount, setAdminManagedAccount } from "./api";
 import CharacterPortrait from "./components/CharacterPortrait.vue";
 import EquipmentIcon from "./components/EquipmentIcon.vue";
 import Meter from "./components/Meter.vue";
@@ -5004,6 +5004,9 @@ const homeStateRefreshing = ref(false);
 const fullStateStale = ref(false);
 let fullStateRefreshPromise = null;
 let homeStateRefreshPromise = null;
+const stateRefreshControllers = new Map();
+let authGeneration = 0;
+let highestStateRevision = -1;
 const personDetails = ref({});
 const personDetailLoading = ref(new Set());
 const activeTab = ref("practice");
@@ -6509,7 +6512,7 @@ const catalogRootRules = computed(() => {
   };
 });
 const adminCultivators = computed(() => cultivators.value);
-const adminSelectedAccount = computed(() => adminAccounts.value.find((account) => account.id === adminSelectedAccountId.value) || adminAccounts.value.find((account) => account.active) || adminAccounts.value[0] || null);
+const adminSelectedAccount = computed(() => adminAccounts.value.find((account) => account.id === adminSelectedAccountId.value) || adminAccounts.value[0] || null);
 const normalizedAdminSearch = computed(() => adminSearch.value.trim().toLowerCase());
 const filteredAdminCultivators = computed(() => {
   const keyword = normalizedAdminSearch.value;
@@ -6647,9 +6650,11 @@ function selectEncounter(eventId) {
 async function loadDaoTrialArchive(reset = false) {
   if (daoTrialArchiveLoading.value) return;
   daoTrialArchiveLoading.value = true;
+  const generation = authGeneration;
   try {
     const offset = reset ? 0 : daoTrialArchive.items.length;
     const result = await getDaoTrialHistory({ offset, limit: 24, routeId: daoTrialArchiveFilter.routeId });
+    if (generation !== authGeneration) return;
     daoTrialArchive.items = reset ? (result.items || []) : [...daoTrialArchive.items, ...(result.items || [])];
     daoTrialArchive.total = Number(result.total) || 0;
     daoTrialArchive.offset = Number(result.offset) || 0;
@@ -11031,7 +11036,9 @@ async function openReplay(record, fallbackRecord = null, target = captureBattleR
   openReplayLoading(target);
   setActionPending("/api/battles/replay", true);
   try {
+    const generation = authGeneration;
     const response = await getBattleReplay(source.replayId);
+    if (generation !== authGeneration) return;
     if (!response?.replay) return;
     if (!replayMatchesExpectation(source, response.replay)) {
       markReplayInvalid(source);
@@ -11299,8 +11306,28 @@ function formatBytes(value) {
 function applyAdminAccounts(payload) {
   const accounts = Array.isArray(payload?.accounts) ? payload.accounts : [];
   adminAccounts.value = accounts;
-  const active = accounts.find((account) => account.id === payload?.managedSaveId || account.active);
-  adminSelectedAccountId.value = active?.id || adminSelectedAccountId.value || accounts[0]?.id || "";
+  const managed = accounts.find((account) => account.id === payload?.managedSaveId);
+  adminSelectedAccountId.value = managed?.id || accounts[0]?.id || "";
+}
+
+async function selectManagedAdminAccount(saveId) {
+  if (!saveId || saveId === adminSelectedAccountId.value || adminAccountsSaving.value) return;
+  adminAccountsSaving.value = true;
+  abortStateRefreshes();
+  const generation = ++authGeneration;
+  highestStateRevision = -1;
+  try {
+    const result = await setAdminManagedAccount(saveId, "full");
+    if (generation !== authGeneration) return;
+    applyAdminAccounts(result.accounts);
+    applyState(result.state, { replace: true, force: true });
+    syncSelectedDays();
+    error.value = "";
+  } catch (err) {
+    if (err?.name !== "AbortError") error.value = err.message;
+  } finally {
+    adminAccountsSaving.value = false;
+  }
 }
 
 async function loadAdminAccounts() {
@@ -11321,12 +11348,6 @@ async function setActiveAdminAccount(saveId, active) {
   try {
     const result = await setAdminActiveAccount(saveId, active, "full");
     applyAdminAccounts(result.accounts);
-    if (result.state) {
-      applyState(result.state);
-      syncSelectedDays();
-    } else {
-      await refresh("full");
-    }
     error.value = "";
   } catch (err) {
     error.value = err.message;
@@ -12320,8 +12341,11 @@ async function ensurePersonDetail(id, force = false) {
   const nextLoading = new Set(personDetailLoading.value);
   nextLoading.add(id);
   personDetailLoading.value = nextLoading;
+  const generation = authGeneration;
   try {
-    mergeCultivatorDetail(await getCultivatorDetail(id));
+    const detail = await getCultivatorDetail(id);
+    if (generation !== authGeneration) return;
+    mergeCultivatorDetail(detail);
   } catch (err) {
     error.value = err.message;
   } finally {
@@ -12375,6 +12399,9 @@ function mergeGameState(current, incoming, options = {}) {
 }
 
 function applyState(nextState, options = {}) {
+  const incomingRevision = Number(nextState?.stateRevision);
+  if (!options.force && Number.isFinite(incomingRevision) && incomingRevision < highestStateRevision) return false;
+  if (Number.isFinite(incomingRevision)) highestStateRevision = Math.max(highestStateRevision, incomingRevision);
   const shouldClearPersonDetails = options.replace || !["home", "dao-trial"].includes(nextState?.__scope);
   if (shouldClearPersonDetails) personDetails.value = {};
   state.value = mergeGameState(state.value, nextState, options);
@@ -12391,6 +12418,7 @@ function applyState(nextState, options = {}) {
     });
   }
   if (state.value && detailView.value === "person" && selectedPersonId.value) ensurePersonDetail(selectedPersonId.value);
+  return true;
 }
 
 function syncSelectedDays() {
@@ -12424,6 +12452,9 @@ function isAuthErrorMessage(message = "") {
 }
 
 function resetClientStateForAuth() {
+  authGeneration += 1;
+  abortStateRefreshes();
+  highestStateRevision = -1;
   clearCachedState();
   state.value = null;
   personDetails.value = {};
@@ -12507,13 +12538,20 @@ async function refresh(scope = "full") {
 }
 
 async function refreshStateNow(scope = "full") {
+  stateRefreshControllers.get(scope)?.abort();
+  const controller = new AbortController();
+  stateRefreshControllers.set(scope, controller);
+  const generation = authGeneration;
   if (scope === "full") fullStateRefreshing.value = true;
   if (scope === "home") homeStateRefreshing.value = true;
   try {
-    applyState(await getState(scope));
+    const nextState = await getState(scope, controller.signal);
+    if (generation !== authGeneration) return;
+    if (!applyState(nextState)) return;
     syncSelectedDays();
     error.value = "";
   } catch (err) {
+    if (err?.name === "AbortError") return;
     error.value = err.message;
     if (isAuthErrorMessage(err.message)) {
       resetClientStateForAuth();
@@ -12529,6 +12567,7 @@ async function refreshStateNow(scope = "full") {
       }
     }
   } finally {
+    if (stateRefreshControllers.get(scope) === controller) stateRefreshControllers.delete(scope);
     loading.value = false;
     if (scope === "full") fullStateRefreshing.value = false;
     if (scope === "home") homeStateRefreshing.value = false;
@@ -12542,8 +12581,12 @@ async function ensureFullState() {
 async function act(path, body = {}, options = {}) {
   if (isActionPending(path)) return null;
   setActionPending(path, true);
+  abortStateRefreshes();
+  const generation = authGeneration;
   try {
-    const response = await postAction(path, body, options);
+    const requestBody = authUser.value?.isAdmin ? { ...body, saveId: adminSelectedAccountId.value } : body;
+    const response = await postAction(path, requestBody, options);
+    if (generation !== authGeneration) return null;
     const nextState = response.state || (response.result !== undefined ? null : response);
     if (nextState) {
       applyState(nextState, options);
@@ -12563,6 +12606,7 @@ async function act(path, body = {}, options = {}) {
     error.value = "";
     return response.result;
   } catch (err) {
+    if (err?.name === "AbortError") return null;
     error.value = err.message;
     if (isAuthErrorMessage(err.message)) {
       resetClientStateForAuth();
@@ -12572,6 +12616,13 @@ async function act(path, body = {}, options = {}) {
   } finally {
     setActionPending(path, false);
   }
+}
+
+function abortStateRefreshes() {
+  for (const controller of stateRefreshControllers.values()) controller.abort();
+  stateRefreshControllers.clear();
+  fullStateRefreshPromise = null;
+  homeStateRefreshPromise = null;
 }
 
 function shouldMarkFullStateStale(path) {
@@ -12658,8 +12709,10 @@ async function openMatchReplay(match, dayRecord) {
   }
   openReplayLoading(captureBattleReturn());
   setActionPending("/api/duels/replay", true);
+  const generation = authGeneration;
   try {
     const response = await getDuelReplay(dayRecord?.day || selectedDuelDay.value, match.id);
+    if (generation !== authGeneration) return;
     if (!response?.replay) return;
     match.replay = response.replay;
     openBattleReplay(response.replay);
@@ -12736,10 +12789,11 @@ async function loadDuelMatchPage(page = 1) {
     return;
   }
   const requestId = ++duelMatchPageRequestId;
+  const generation = authGeneration;
   duelMatchPageLoading.value = true;
   try {
     const result = await getDuelDayPage({ day, page, pageSize: 10, search: normalizedDuelSearch.value });
-    if (requestId !== duelMatchPageRequestId || Number(selectedDuelDay.value) !== day) return;
+    if (generation !== authGeneration || requestId !== duelMatchPageRequestId || Number(selectedDuelDay.value) !== day) return;
     duelMatchPage.value = result;
     error.value = "";
   } catch (err) {

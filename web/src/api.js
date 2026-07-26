@@ -17,6 +17,7 @@ async function fetchJson(path, options = {}) {
     const data = await response.json().catch(() => ({}));
     return { ok: response.ok, status: response.status, data };
   } catch (error) {
+    if (error?.name === "AbortError") throw error;
     return { ok: false, status: 0, data: { error: error.message } };
   }
 }
@@ -49,12 +50,12 @@ export function clearCachedState() {
   }
 }
 
-export function getState(scope = "full") {
+export function getState(scope = "full", signal) {
   const params = new URLSearchParams();
   if (scope !== "full") params.set("scope", scope);
   params.set("_", String(Date.now()));
   const suffix = `?${params.toString()}`;
-  return request(`/api/state${suffix}`);
+  return request(`/api/state${suffix}`, { signal });
 }
 
 export function getCurrentUser() {
@@ -79,6 +80,10 @@ export function getAdminAccounts() {
 
 export function setAdminActiveAccount(saveId, active = true, scope = "full") {
   return request("/api/admin/accounts/active", { method: "POST", body: { saveId, active, scope } });
+}
+
+export function setAdminManagedAccount(saveId, scope = "full") {
+  return request("/api/admin/accounts/managed", { method: "POST", body: { saveId, scope } });
 }
 
 export function getCultivatorDetail(id) {

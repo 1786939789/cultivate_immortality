@@ -19,6 +19,17 @@ The domain logic still receives the existing in-memory state shape. `mysqlStateC
 Use `.env.example` as the key reference. Keep the real password outside the repository.
 Local `npm run dev`, `npm run start`, and the MySQL migration commands automatically load an ignored root-level `.env` file when it exists.
 
+## Account bootstrap
+
+Normal service startup does not create administrators, reset passwords, or seed a default registration code. Create or rotate them explicitly with one-time commands:
+
+```bash
+NEW_ADMIN_USERNAME=admin NEW_ADMIN_PASSWORD=replace-me npm run auth:create-admin
+NEW_REGISTRATION_CODE=replace-me REGISTRATION_CODE_MAX_USES=10 npm run auth:create-code
+```
+
+In PowerShell, set the same environment variables before running the command. Keep real passwords and registration codes in ignored local environment configuration only.
+
 ## Migration
 
 The migration is destructive only to the target MySQL database. It never edits or deletes the SQLite source files.

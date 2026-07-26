@@ -8,6 +8,7 @@ const storage = await import(driver === "mysql" ? "./mysqlStore.mjs" : "./store.
 
 export const getAdminAccounts = storage.getAdminAccounts;
 export const setActiveAccount = storage.setActiveAccount;
+export const setAdminManagedSaveId = storage.setAdminManagedSaveId;
 export const deleteInactiveAccountData = storage.deleteInactiveAccountData;
 export const sessionCookie = storage.sessionCookie;
 export const clearSessionCookie = storage.clearSessionCookie;
