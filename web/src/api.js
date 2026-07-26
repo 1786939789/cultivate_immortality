@@ -73,6 +73,14 @@ export function logout() {
   return request("/api/auth/logout", { method: "POST", body: {} });
 }
 
+export function getAdminAccounts() {
+  return request(`/api/admin/accounts?_=${Date.now()}`);
+}
+
+export function setAdminActiveAccount(saveId, active = true, scope = "full") {
+  return request("/api/admin/accounts/active", { method: "POST", body: { saveId, active, scope } });
+}
+
 export function getCultivatorDetail(id) {
   const params = new URLSearchParams({ id, _: String(Date.now()) });
   return request(`/api/cultivators/detail?${params.toString()}`);

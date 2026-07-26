@@ -42,6 +42,7 @@ import {
 } from "./gameLogic.mjs";
 import {
   clearSessionCookie,
+  getAdminAccounts,
   getAdminManagedSaveId,
   getAuthSession,
   loginUser,
@@ -52,6 +53,7 @@ import {
   readState,
   registerUser,
   resetState,
+  setActiveAccount,
   settleAllStates,
   sessionCookie
 } from "./store.mjs";
@@ -242,6 +244,20 @@ async function handleApi(req, res, url) {
     return;
   }
   const saveId = session.user.isAdmin ? await getAdminManagedSaveId() : session.user.saveId;
+
+  if (req.method === "GET" && url.pathname === "/api/admin/accounts") {
+    sendJson(res, 200, await getAdminAccounts());
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/accounts/active") {
+    const body = await readJson(req);
+    const accounts = await setActiveAccount(body.saveId, body.active !== false);
+    const scope = ["home", "lite"].includes(body.scope) ? body.scope : "full";
+    const state = body.active === false ? null : await publicState(body.saveId, { scope });
+    sendJson(res, 200, { accounts, state });
+    return;
+  }
 
   if (req.method === "GET" && url.pathname === "/api/state") {
     const requestedScope = url.searchParams.get("scope");

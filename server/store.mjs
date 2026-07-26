@@ -15,6 +15,8 @@ const sessionMaxAgeSeconds = 60 * 60 * 24 * 30;
 const bootstrapAdminUsername = process.env.ADMIN_USERNAME || "admin";
 const bootstrapAdminPassword = process.env.ADMIN_PASSWORD || "Admin@24";
 const legacyBootstrapAdminUsername = "csj-admin";
+const activeSaveSettingKey = "active_save_ids";
+const legacyActiveSaveSettingKey = "active_save_id";
 
 mkdirSync(dataDir, { recursive: true });
 
@@ -78,9 +80,17 @@ async function openDb() {
         );
       `);
       db.run("CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions (user_id);");
+      db.run(`
+        CREATE TABLE IF NOT EXISTS app_settings (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL,
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
       db.run("DROP TABLE IF EXISTS save_meta;");
       seedRegistrationCode(db);
       seedAdminUser(db);
+      ensureActiveSaveSetting(db);
       persist(db);
       return db;
     });
@@ -535,7 +545,7 @@ function userCount(db) {
   return result.length ? Number(result[0].values[0][0] || 0) : 0;
 }
 
-function managedUserId(db) {
+function firstPlayerUserId(db) {
   const result = db.exec(`
     SELECT id
     FROM auth_users
@@ -543,7 +553,179 @@ function managedUserId(db) {
     ORDER BY datetime(created_at) ASC, id ASC
     LIMIT 1
   `);
-  return result.length && result[0].values.length ? result[0].values[0][0] : "default";
+  return result.length && result[0].values.length ? result[0].values[0][0] : "";
+}
+
+function isPlayerUserId(db, id) {
+  if (!id) return false;
+  const result = db.exec(
+    "SELECT 1 FROM auth_users WHERE id = $id AND (role IS NULL OR role <> 'admin') LIMIT 1",
+    { $id: id }
+  );
+  return Boolean(result.length && result[0].values.length);
+}
+
+function appSetting(db, key) {
+  const result = db.exec("SELECT value FROM app_settings WHERE key = $key LIMIT 1", { $key: key });
+  return result.length && result[0].values.length ? String(result[0].values[0][0] || "") : "";
+}
+
+function setAppSetting(db, key, value) {
+  db.run(`
+    INSERT INTO app_settings (key, value, updated_at)
+    VALUES ($key, $value, datetime('now'))
+    ON CONFLICT(key) DO UPDATE SET
+      value = excluded.value,
+      updated_at = excluded.updated_at
+  `, { $key: key, $value: String(value || "") });
+}
+
+function parseActiveSaveIds(value) {
+  const text = String(value || "").trim();
+  if (!text) return [];
+  try {
+    const parsed = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed.map((item) => String(item || "").trim()).filter(Boolean) : [];
+  } catch {
+    return [text].filter(Boolean);
+  }
+}
+
+function activeSaveIdsFromSetting(db) {
+  const current = parseActiveSaveIds(appSetting(db, activeSaveSettingKey));
+  if (current.length) return current;
+  return parseActiveSaveIds(appSetting(db, legacyActiveSaveSettingKey));
+}
+
+function setActiveSaveIds(db, ids) {
+  const validIds = [...new Set((ids || []).filter((id) => isPlayerUserId(db, id)))];
+  setAppSetting(db, activeSaveSettingKey, JSON.stringify(validIds));
+  return validIds;
+}
+
+function ensureActiveSaveSetting(db) {
+  const current = activeSaveIdsFromSetting(db).filter((id) => isPlayerUserId(db, id));
+  if (current.length) return setActiveSaveIds(db, current);
+  const fallback = firstPlayerUserId(db);
+  return fallback ? setActiveSaveIds(db, [fallback]) : [];
+}
+
+function managedUserId(db) {
+  return ensureActiveSaveSetting(db)[0] || firstPlayerUserId(db) || "default";
+}
+
+function activeSaveRows(db) {
+  const activeIds = ensureActiveSaveSetting(db);
+  const rows = [];
+  for (const id of activeIds) {
+    const result = db.exec(
+      "SELECT id, state_json FROM saves WHERE id = $id ORDER BY id",
+      { $id: id }
+    );
+    rows.push(...(result[0]?.values || []));
+  }
+  return rows;
+}
+
+function listPlayerAccounts(db) {
+  const result = db.exec(`
+    SELECT
+      u.id,
+      u.username,
+      u.role,
+      u.created_at,
+      u.last_login_at,
+      s.updated_at,
+      length(s.state_json)
+    FROM auth_users u
+    LEFT JOIN saves s ON s.id = u.id
+    WHERE u.role IS NULL OR u.role <> 'admin'
+    ORDER BY datetime(u.created_at) ASC, u.id ASC
+  `);
+  return (result[0]?.values || []).map(([id, username, role, createdAt, lastLoginAt, saveUpdatedAt, saveBytes]) => ({
+    id,
+    username,
+    role: role || "player",
+    createdAt,
+    lastLoginAt: lastLoginAt || "",
+    saveId: id,
+    saveUpdatedAt: saveUpdatedAt || "",
+    saveBytes: Number(saveBytes || 0),
+    hasSave: Boolean(saveUpdatedAt)
+  }));
+}
+
+function publicActiveAccountState(db) {
+  const activeSaveIds = ensureActiveSaveSetting(db);
+  const activeSet = new Set(activeSaveIds);
+  const accounts = listPlayerAccounts(db);
+  return {
+    activeSaveIds,
+    managedSaveId: activeSaveIds[0] || "",
+    accounts: accounts.map((account) => ({
+      ...account,
+      active: activeSet.has(account.id)
+    }))
+  };
+}
+
+export async function getAdminAccounts() {
+  const db = await openDb();
+  return publicActiveAccountState(db);
+}
+
+export async function setActiveAccount(saveId, active = true) {
+  const db = await openDb();
+  const id = String(saveId || "").trim();
+  if (!isPlayerUserId(db, id)) throw new Error("只能选择普通用户作为活跃账户");
+  const current = new Set(ensureActiveSaveSetting(db));
+  if (active) current.add(id);
+  else current.delete(id);
+  setActiveSaveIds(db, [...current]);
+  stateValidationCache.delete(id);
+  publicStateCache.clear();
+  persist(db);
+  if (active) await readState(id);
+  return publicActiveAccountState(db);
+}
+
+export async function deleteInactiveAccountData(activeSaveIds) {
+  const db = await openDb();
+  const battleDb = await ensureBattleStorage(db);
+  const activeIds = Array.isArray(activeSaveIds) ? activeSaveIds : ensureActiveSaveSetting(db);
+  const activeSet = new Set(activeIds.filter((id) => isPlayerUserId(db, id)));
+  if (!activeSet.size) throw new Error("缺少有效的活跃账户");
+
+  const inactiveSaveRows = db.exec("SELECT id FROM saves ORDER BY id");
+  const inactiveSaveIds = inactiveSaveRows[0]?.values.map((row) => row[0]) || [];
+  let deletedSaves = 0;
+  let deletedSummaries = 0;
+  let deletedReplays = 0;
+
+  for (const id of inactiveSaveIds.filter((item) => !activeSet.has(item))) {
+    const saveStatement = db.prepare("DELETE FROM saves WHERE id = $id");
+    saveStatement.run({ $id: id });
+    deletedSaves += db.getRowsModified();
+    saveStatement.free();
+
+    const summaryStatement = db.prepare("DELETE FROM history_monthly_summaries WHERE save_id = $id");
+    summaryStatement.run({ $id: id });
+    deletedSummaries += db.getRowsModified();
+    summaryStatement.free();
+
+    const replayStatement = battleDb.prepare("DELETE FROM battle_replays WHERE save_id = $id");
+    replayStatement.run({ $id: id });
+    deletedReplays += battleDb.getRowsModified();
+    replayStatement.free();
+
+    stateCache.delete(id);
+    stateValidationCache.delete(id);
+  }
+
+  publicStateCache.clear();
+  persist(db);
+  persistBattleDb(battleDb);
+  return { activeSaveIds: [...activeSet], deletedSaves, deletedSummaries, deletedReplays, deletedSaveIds: inactiveSaveIds.filter((item) => !activeSet.has(item)) };
 }
 
 function assertRegistrationCode(db, code) {
@@ -743,8 +925,7 @@ export async function readState(id = "default", options = {}) {
 
 export async function settleAllStates() {
   const db = await openDb();
-  const result = db.exec("SELECT id, state_json FROM saves ORDER BY id");
-  const rows = result[0]?.values || [];
+  const rows = activeSaveRows(db);
   let settledSaves = 0;
   const failures = [];
 

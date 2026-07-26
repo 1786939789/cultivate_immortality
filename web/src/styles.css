@@ -13030,6 +13030,39 @@ button.defender-chip.person:focus-visible .character-portrait {
   margin-top: 16px;
 }
 
+.admin-account-row b {
+  color: #8d5120;
+  font-size: 12px;
+}
+
+.admin-account-editor {
+  gap: 16px;
+}
+
+.admin-account-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.admin-account-facts span {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid rgba(92, 64, 35, .16);
+  border-radius: 8px;
+  background: rgba(255, 252, 239, .7);
+  color: #6f5a3a;
+  font-size: 12px;
+}
+
+.admin-account-facts b {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #33291d;
+  font-size: 13px;
+}
+
 .admin-wiki-layout {
   display: grid;
   grid-template-columns: minmax(250px, 310px) minmax(0, 1fr);

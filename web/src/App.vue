@@ -4183,11 +4183,12 @@
                   <span>普通用户游戏日</span>
                   <strong>第 {{ state?.day ?? 0 }} 天</strong>
                 </div>
-                <label v-if="adminMode !== 'settings'" class="admin-search">
+                <label v-if="!['accounts', 'settings'].includes(adminMode)" class="admin-search">
                   <span>搜索</span>
                   <input v-model.trim="adminSearch" :placeholder="adminMode === 'cultivators' ? '人物名或宗门名' : adminMode === 'sects' ? '宗门名' : adminMode === 'tasks' ? '任务名或分类' : '搜索指导书'">
                 </label>
                 <div class="segmented">
+                  <button class="segment" :class="{ active: adminMode === 'accounts' }" type="button" @click="adminMode = 'accounts'">账户</button>
                   <button class="segment" :class="{ active: adminMode === 'cultivators' }" type="button" @click="adminMode = 'cultivators'">角色</button>
                   <button class="segment" :class="{ active: adminMode === 'sects' }" type="button" @click="adminMode = 'sects'">宗门</button>
                   <button class="segment" :class="{ active: adminMode === 'tasks' }" type="button" @click="adminMode = 'tasks'">现实任务</button>
@@ -4208,7 +4209,51 @@
               </div>
             </section>
 
-            <div v-if="adminMode === 'cultivators'" class="admin-layout">
+            <div v-if="adminMode === 'accounts'" class="admin-layout">
+              <div class="admin-list" role="list" aria-label="账户列表">
+                <button
+                  v-for="account in adminAccounts"
+                  :key="account.id"
+                  class="admin-list-row admin-account-row"
+                  :class="{ active: adminSelectedAccountId === account.id }"
+                  type="button"
+                  @click="adminSelectedAccountId = account.id"
+                >
+                  <span>
+                    <strong>{{ account.username }}</strong>
+                    <small>{{ account.id }}</small>
+                  </span>
+                  <b>{{ account.active ? "活跃" : account.hasSave ? "存档" : "未建档" }}</b>
+                </button>
+                <div v-if="adminAccountsLoading" class="admin-editor empty">正在读取账户...</div>
+                <div v-else-if="!adminAccounts.length" class="admin-editor empty">暂无普通用户。</div>
+              </div>
+
+              <section v-if="adminSelectedAccount" class="admin-editor admin-account-editor">
+                <div class="admin-editor-head">
+                  <div>
+                    <span>账户推进</span>
+                    <strong>{{ adminSelectedAccount.username }}</strong>
+                    <small>{{ adminSelectedAccount.active ? "此账户会参与每日自动推进" : "此账户已暂停每日自动推进" }}</small>
+                  </div>
+                </div>
+                <div class="admin-account-facts">
+                  <span>存档 ID <b>{{ adminSelectedAccount.id }}</b></span>
+                  <span>创建时间 <b>{{ formatDateTime(adminSelectedAccount.createdAt) }}</b></span>
+                  <span>最后登录 <b>{{ adminSelectedAccount.lastLoginAt ? formatDateTime(adminSelectedAccount.lastLoginAt) : "未记录" }}</b></span>
+                  <span>存档大小 <b>{{ formatBytes(adminSelectedAccount.saveBytes) }}</b></span>
+                </div>
+                <div class="admin-actions">
+                  <button class="primary" type="button" :disabled="adminAccountsSaving" @click="setActiveAdminAccount(adminSelectedAccount.id, !adminSelectedAccount.active)">
+                    {{ adminAccountsSaving ? "保存中..." : adminSelectedAccount.active ? "暂停自动推进" : "启用自动推进" }}
+                  </button>
+                  <button class="secondary" type="button" :disabled="adminAccountsLoading" @click="loadAdminAccounts">刷新账户</button>
+                </div>
+              </section>
+              <div v-else class="admin-editor empty">选择一个普通用户作为每日结算账户。</div>
+            </div>
+
+            <div v-else-if="adminMode === 'cultivators'" class="admin-layout">
               <div class="admin-list" role="list" aria-label="角色列表">
                 <button
                   v-for="person in filteredAdminCultivators"
@@ -4775,7 +4820,7 @@ import {
   Minimize2
 } from "lucide-vue-next";
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from "vue";
-import { clearCachedState, getBattleReplay, getCachedState, getCultivatorDetail, getCurrentUser, getDaoTrialHistory, getDuelDayPage, getDuelReplay, getState, login, logout, postAction, register, saveCachedState } from "./api";
+import { clearCachedState, getAdminAccounts, getBattleReplay, getCachedState, getCultivatorDetail, getCurrentUser, getDaoTrialHistory, getDuelDayPage, getDuelReplay, getState, login, logout, postAction, register, saveCachedState, setAdminActiveAccount } from "./api";
 import CharacterPortrait from "./components/CharacterPortrait.vue";
 import EquipmentIcon from "./components/EquipmentIcon.vue";
 import Meter from "./components/Meter.vue";
@@ -5041,12 +5086,16 @@ const countdown = ref("--:--:--");
 const taskForm = reactive({ category: "", taskId: "", completedAmount: 1, targetDay: 0 });
 const collapsedTaskDays = ref(new Set());
 const expandedTaskDays = ref(new Set());
-const adminMode = ref("cultivators");
+const adminMode = ref("accounts");
 const adminSearch = ref("");
 const adminSelectedCultivatorId = ref("player");
 const adminSelectedSectName = ref("");
 const adminSelectedTaskId = ref("");
 const adminWikiArticleId = ref("home-cycle");
+const adminAccounts = ref([]);
+const adminAccountsLoading = ref(false);
+const adminAccountsSaving = ref(false);
+const adminSelectedAccountId = ref("");
 const guideArticleId = ref("home-cycle");
 const adminGameSettingsDraft = reactive({ taskDailyFullXpBudget: 500, battleReplaySpeed: 1, dailyTickerSpeed: 1 });
 const riskConfirmationPhrase = "我已确认风险";
@@ -6460,6 +6509,7 @@ const catalogRootRules = computed(() => {
   };
 });
 const adminCultivators = computed(() => cultivators.value);
+const adminSelectedAccount = computed(() => adminAccounts.value.find((account) => account.id === adminSelectedAccountId.value) || adminAccounts.value.find((account) => account.active) || adminAccounts.value[0] || null);
 const normalizedAdminSearch = computed(() => adminSearch.value.trim().toLowerCase());
 const filteredAdminCultivators = computed(() => {
   const keyword = normalizedAdminSearch.value;
@@ -11233,6 +11283,58 @@ function selectAdminTask(id) {
   syncAdminTaskDraft(task);
 }
 
+function formatDateTime(value) {
+  if (!value) return "";
+  return String(value).replace("T", " ").replace(/\.\d+Z$/, "").replace(/Z$/, "");
+}
+
+function formatBytes(value) {
+  const bytes = Number(value || 0);
+  if (!bytes) return "0 B";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function applyAdminAccounts(payload) {
+  const accounts = Array.isArray(payload?.accounts) ? payload.accounts : [];
+  adminAccounts.value = accounts;
+  const active = accounts.find((account) => account.id === payload?.managedSaveId || account.active);
+  adminSelectedAccountId.value = active?.id || adminSelectedAccountId.value || accounts[0]?.id || "";
+}
+
+async function loadAdminAccounts() {
+  if (!authUser.value?.isAdmin || adminAccountsLoading.value) return;
+  adminAccountsLoading.value = true;
+  try {
+    applyAdminAccounts(await getAdminAccounts());
+  } catch (err) {
+    error.value = err.message;
+  } finally {
+    adminAccountsLoading.value = false;
+  }
+}
+
+async function setActiveAdminAccount(saveId, active) {
+  if (!saveId || adminAccountsSaving.value) return;
+  adminAccountsSaving.value = true;
+  try {
+    const result = await setAdminActiveAccount(saveId, active, "full");
+    applyAdminAccounts(result.accounts);
+    if (result.state) {
+      applyState(result.state);
+      syncSelectedDays();
+    } else {
+      await refresh("full");
+    }
+    error.value = "";
+  } catch (err) {
+    error.value = err.message;
+  } finally {
+    adminAccountsSaving.value = false;
+  }
+}
+
 async function saveCultivatorProfile() {
   if (!adminCultivatorDraft.id) return;
   await act("/api/admin/cultivator", {
@@ -12338,6 +12440,7 @@ async function loadGameAfterAuth(user) {
   authUser.value = user;
   activeTab.value = user?.isAdmin ? "admin" : "practice";
   await refresh(user?.isAdmin ? "full" : "home");
+  if (user?.isAdmin) await loadAdminAccounts();
 }
 
 async function initializeAuth() {
@@ -13019,6 +13122,7 @@ watch(activeTab, () => {
   }
   if (activeTab.value === "rank" && detailView.value === "person") ensurePersonDetail(selectedPersonId.value);
   if (activeTab.value === "admin") {
+    if (adminMode.value === "accounts") loadAdminAccounts();
     if (adminMode.value === "cultivators") ensurePersonDetail(adminCultivatorPerson.value?.id);
     if (adminMode.value === "cultivators") syncAdminCultivatorDraft(adminCultivatorPerson.value);
     if (adminMode.value === "sects") syncAdminSectDraft(adminSelectedSectName.value);
@@ -13059,7 +13163,8 @@ watch([filteredAdminSects, adminSects], () => {
 
 watch([adminSearch, adminMode], () => {
   if (activeTab.value !== "admin") return;
-  if (adminMode.value === "cultivators") {
+  if (adminMode.value === "accounts") loadAdminAccounts();
+  else if (adminMode.value === "cultivators") {
     ensurePersonDetail(adminCultivatorPerson.value?.id);
     syncAdminCultivatorDraft(adminCultivatorPerson.value);
   }
