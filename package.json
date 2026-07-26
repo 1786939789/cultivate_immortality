@@ -4,14 +4,18 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node scripts/dev.mjs",
-    "dev:api": "node server/index.mjs",
+    "dev": "node --env-file-if-exists=.env scripts/dev.mjs",
+    "dev:api": "node --env-file-if-exists=.env server/index.mjs",
     "dev:web": "vite --host 127.0.0.1",
+    "db:migrate:mysql": "node --env-file-if-exists=.env scripts/migrate-sqlite-to-mysql.mjs",
+    "db:verify:mysql": "node --env-file-if-exists=.env scripts/verify-mysql-migration.mjs",
+    "db:diff:mysql": "node --env-file-if-exists=.env scripts/diff-mysql-migration.mjs",
+    "db:smoke:mysql": "node --env-file-if-exists=.env scripts/smoke-mysql-store.mjs",
     "check:balance": "node scripts/balance-check.mjs",
     "check:systems": "node scripts/encounter-trial-check.mjs",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "start": "node server/index.mjs"
+    "start": "node --env-file-if-exists=.env server/index.mjs"
   },
   "dependencies": {
     "@dicebear/adventurer": "^9.4.2",
@@ -21,6 +25,7 @@
     "china-geojson": "^1.0.0",
     "echarts": "^6.1.0",
     "lucide-vue-next": "^0.577.0",
+    "mysql2": "^3.23.1",
     "sql.js": "^1.14.1",
     "vite": "^6.3.5",
     "vue": "^3.5.16"

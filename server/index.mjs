@@ -56,7 +56,7 @@ import {
   setActiveAccount,
   settleAllStates,
   sessionCookie
-} from "./store.mjs";
+} from "./storage.mjs";
 
 const port = Number(process.env.PORT || 8787);
 const rootDir = fileURLToPath(new URL("../", import.meta.url));
