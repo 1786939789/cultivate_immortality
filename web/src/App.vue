@@ -1786,9 +1786,18 @@
                   </button>
                 </div>
                 <article class="star-sea-cycle-board" v-if="activeStarSeaCycle">
-                  <div class="star-sea-cycle-board-modes" role="tablist" aria-label="周期排行榜类型">
-                    <button type="button" :class="{ active: activeStarSeaCycleBoard === 'teams' }" @click="activeStarSeaCycleBoard = 'teams'">队伍总评分</button>
-                    <button type="button" :class="{ active: activeStarSeaCycleBoard === 'members' }" @click="activeStarSeaCycleBoard = 'members'">个人总输出</button>
+                  <div class="star-sea-cycle-board-modes">
+                    <span class="star-sea-cycle-mode-buttons" role="tablist" aria-label="周期排行榜类型">
+                      <button type="button" :class="{ active: activeStarSeaCycleBoard === 'teams' }" @click="activeStarSeaCycleBoard = 'teams'">队伍总评分</button>
+                      <button type="button" :class="{ active: activeStarSeaCycleBoard === 'members' }" @click="activeStarSeaCycleBoard = 'members'">个人总输出</button>
+                    </span>
+                    <label v-if="activeStarSeaCycleBoard === 'members'" class="star-sea-cycle-search">
+                      <span class="search-field">
+                        <Search :size="15" aria-hidden="true" />
+                        <input v-model.trim="starSeaCycleMemberSearch" type="search" placeholder="搜索姓名或宗门" aria-label="搜索周期个人总输出榜姓名或宗门">
+                        <button v-if="starSeaCycleMemberSearch" class="search-clear" type="button" aria-label="清空周期个人总输出榜搜索" @click="starSeaCycleMemberSearch = ''"><X :size="14" aria-hidden="true" /></button>
+                      </span>
+                    </label>
                   </div>
                   <div class="star-sea-cycle-board-head">
                     <div>
@@ -1828,15 +1837,15 @@
                   <div v-else class="star-sea-cycle-board-list" v-show="pagedStarSeaCycleMembers.length">
                     <div
                       class="star-sea-cycle-member-row"
-                      :class="{ 'rank-first': starSeaCycleMemberRankStart + index === 0 }"
+                      :class="{ 'rank-first': member.rank === 1 }"
                       v-for="(member, index) in pagedStarSeaCycleMembers"
                       :key="`${activeStarSeaCycle.cycle}-${member.id}-${member.teamName || ''}`"
                     >
-                      <span class="cycle-rank">{{ starSeaCycleMemberRankStart + index + 1 }}</span>
+                      <span class="cycle-rank">{{ member.rank }}</span>
                       <CharacterPortrait :person="personByRef(member)" size="sm" />
                       <span class="cycle-member-copy">
                         <strong>{{ member.name }}</strong>
-                        <small>{{ member.teamName || member.sect || "散修" }}</small>
+                        <small>{{ member.teamName || "猎妖小队" }} · {{ member.sect || "散修" }}</small>
                       </span>
                       <span class="cycle-score-bar personal" aria-hidden="true">
                         <i :style="{ width: `${starSeaCycleMemberDamagePercent(member)}%` }"></i>
@@ -1855,8 +1864,14 @@
                     <button class="secondary" type="button" :disabled="safeStarSeaCycleMemberRankPage >= starSeaCycleMemberRankPageCount" @click="starSeaCycleMemberRankPage++">下一页</button>
                   </div>
                   <div v-if="activeStarSeaCycleBoard === 'teams' ? !pagedStarSeaCycleTeams.length : !pagedStarSeaCycleMembers.length" class="star-sea-cycle-empty">
-                    <b>暂无第 {{ activeStarSeaCycle.cycle }} 期{{ activeStarSeaCycleBoard === "teams" ? "总评分" : "个人输出" }}记录</b>
-                    <span>该期没有可汇总的乱星海战报。</span>
+                    <template v-if="activeStarSeaCycleBoard === 'members' && starSeaCycleMemberSearch">
+                      <b>没有匹配“{{ starSeaCycleMemberSearch }}”的修士或宗门</b>
+                      <span>可尝试输入完整姓名或宗门名。</span>
+                    </template>
+                    <template v-else>
+                      <b>暂无第 {{ activeStarSeaCycle.cycle }} 期{{ activeStarSeaCycleBoard === "teams" ? "总评分" : "个人输出" }}记录</b>
+                      <span>该期没有可汇总的乱星海战报。</span>
+                    </template>
                   </div>
                 </article>
               </div>
@@ -5043,6 +5058,7 @@ const starSeaRankPageSize = 10;
 const activeStarSeaCycleBoard = ref("teams");
 const starSeaCycleTeamRankPage = ref(1);
 const starSeaCycleMemberRankPage = ref(1);
+const starSeaCycleMemberSearch = ref("");
 const starSeaTeamRankPage = ref(1);
 const starSeaPersonalRankPage = ref(1);
 const selectedVoidHallSect = ref("");
@@ -5664,7 +5680,7 @@ const legacyWikiArticles = [
           "期末未掉落时会明确记录“未发现可竞拍装备”，不是漏结算。",
           "竞拍赢家可能自动卖出被替换的旧同部位装备，所得灵石会写入流转记录。",
           "乱星海也会产出灵珠碎片或灵尘。",
-          "每日总池为 240 + 140s + 90×击杀队数 至 380 + 180s + 120×击杀队数，至少不低于参赛队数×10 灵石。",
+          "每日总池为 240 + 140s + 90×击杀队数 至 380 + 180s + 120×击杀队数，至少不低于实际参赛人数，确保每人保底 1 灵石。",
           "每队固定 10 人，妖物对一支队伍的车轮战最多 100 回合；总榜每期按 10 日累积队伍评分或个人输出统计。",
           "期末“50% 概率一定获得一件”指每期独立一次 50% 判定；触发后才进入竞拍，未触发不补发等值装备。"
         ],
@@ -6925,17 +6941,24 @@ const activeStarSeaCyclePreviousRanks = computed(() => {
     .map(([key], index) => [key, index + 1]));
 });
 const activeStarSeaCycleMemberList = computed(() => [...(activeStarSeaCycle.value?.topMembers || [])]
-  .sort((a, b) => b.damage - a.damage || b.spirit - a.spirit));
+  .sort((a, b) => b.damage - a.damage || b.spirit - a.spirit)
+  .map((member, index) => ({ ...member, rank: index + 1 })));
+const filteredStarSeaCycleMemberList = computed(() => {
+  const keyword = starSeaCycleMemberSearch.value.trim().toLowerCase();
+  if (!keyword) return activeStarSeaCycleMemberList.value;
+  return activeStarSeaCycleMemberList.value.filter((member) => [member.name, member.sect]
+    .some((value) => String(value || "").toLowerCase().includes(keyword)));
+});
 const starSeaCycleTeamRankPageCount = computed(() => Math.max(1, Math.ceil(activeStarSeaCycleTeamList.value.length / starSeaRankPageSize)));
 const safeStarSeaCycleTeamRankPage = computed(() => Math.min(starSeaCycleTeamRankPage.value, starSeaCycleTeamRankPageCount.value));
 const pagedStarSeaCycleTeams = computed(() => activeStarSeaCycleTeamList.value.slice(
   (safeStarSeaCycleTeamRankPage.value - 1) * starSeaRankPageSize,
   safeStarSeaCycleTeamRankPage.value * starSeaRankPageSize
 ));
-const starSeaCycleMemberRankPageCount = computed(() => Math.max(1, Math.ceil(activeStarSeaCycleMemberList.value.length / starSeaRankPageSize)));
+const starSeaCycleMemberRankPageCount = computed(() => Math.max(1, Math.ceil(filteredStarSeaCycleMemberList.value.length / starSeaRankPageSize)));
 const safeStarSeaCycleMemberRankPage = computed(() => Math.min(starSeaCycleMemberRankPage.value, starSeaCycleMemberRankPageCount.value));
 const starSeaCycleMemberRankStart = computed(() => (safeStarSeaCycleMemberRankPage.value - 1) * starSeaRankPageSize);
-const pagedStarSeaCycleMembers = computed(() => activeStarSeaCycleMemberList.value.slice(
+const pagedStarSeaCycleMembers = computed(() => filteredStarSeaCycleMemberList.value.slice(
   starSeaCycleMemberRankStart.value,
   starSeaCycleMemberRankStart.value + starSeaRankPageSize
 ));
@@ -13252,6 +13275,11 @@ watch([activeDungeonRecordTab, activeDungeonDayIndex], () => {
 
 watch(() => activeStarSeaCycle.value?.cycle, () => {
   starSeaCycleTeamRankPage.value = 1;
+  starSeaCycleMemberRankPage.value = 1;
+  starSeaCycleMemberSearch.value = "";
+});
+
+watch([starSeaCycleMemberSearch, activeStarSeaCycleBoard], () => {
   starSeaCycleMemberRankPage.value = 1;
 });
 

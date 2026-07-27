@@ -3587,19 +3587,22 @@ function runStarSeaTeamBattle(state, team, monster) {
   };
 }
 
-function distributeStarSeaTeamSpirit(teamRecord, teamSpirit) {
+function distributeStarSeaTeamSpirit(teamRecord, teamSpirit, options = {}) {
   const members = teamRecord.members || [];
-  for (const member of members) member.spirit = 0;
+  const minimumMemberShare = Math.max(0, Math.floor(Number(options.minimumMemberShare) || 0));
+  for (const member of members) member.spirit = minimumMemberShare;
   if (!members.length || teamSpirit <= 0) return;
-  const basePool = Math.floor(teamSpirit * 0.2);
-  const outputPool = teamSpirit - basePool;
+  const guaranteedPool = Math.min(teamSpirit, members.length * minimumMemberShare);
+  const distributablePool = Math.max(0, teamSpirit - guaranteedPool);
+  const basePool = Math.floor(distributablePool * 0.2);
+  const outputPool = distributablePool - basePool;
   const baseShare = Math.floor(basePool / members.length);
-  let remainder = teamSpirit - baseShare * members.length;
+  let remainder = distributablePool - baseShare * members.length;
   const totalDamage = Math.max(1, members.reduce((sum, member) => sum + (member.damage || 0), 0));
   const ranked = [...members].sort((a, b) => (b.damage || 0) - (a.damage || 0));
   for (const member of ranked) {
     const outputShare = Math.floor(outputPool * (member.damage || 0) / totalDamage);
-    member.spirit = baseShare + outputShare;
+    member.spirit += baseShare + outputShare;
     remainder -= outputShare;
   }
   for (let index = 0; remainder > 0 && ranked.length; index = (index + 1) % ranked.length) {
@@ -3608,13 +3611,25 @@ function distributeStarSeaTeamSpirit(teamRecord, teamSpirit) {
   }
 }
 
-function assignStarSeaSpiritShares(teamRecords, pool) {
+function assignStarSeaSpiritShares(teamRecords, pool, options = {}) {
   if (!teamRecords.length) return;
-  const minimumShare = 6;
-  const basePool = Math.min(pool, teamRecords.length * minimumShare);
-  const baseShare = Math.floor(basePool / teamRecords.length);
-  let remainder = pool - baseShare * teamRecords.length;
-  for (const record of teamRecords) record.spirit = baseShare;
+  const minimumMemberShare = Math.max(0, Math.floor(Number(options.minimumMemberShare) || 0));
+  const minimumTeamShare = minimumMemberShare > 0 ? 0 : 6;
+  const guaranteedShares = teamRecords.map((record) => (
+    minimumMemberShare > 0
+      ? (record.members || []).length * minimumMemberShare
+      : minimumTeamShare
+  ));
+  const guaranteedPool = Math.min(pool, guaranteedShares.reduce((sum, share) => sum + share, 0));
+  let guaranteedAssigned = 0;
+  teamRecords.forEach((record, index) => {
+    const share = index === teamRecords.length - 1
+      ? guaranteedPool - guaranteedAssigned
+      : Math.min(guaranteedShares[index], guaranteedPool - guaranteedAssigned);
+    record.spirit = Math.max(0, share);
+    guaranteedAssigned += record.spirit;
+  });
+  let remainder = pool - guaranteedAssigned;
 
   const podium = teamRecords.slice(0, 3);
   const podiumWeights = [9, 5, 3].slice(0, podium.length);
@@ -3637,7 +3652,7 @@ function assignStarSeaSpiritShares(teamRecords, pool) {
     rankAssigned += Math.max(0, share);
   });
 
-  for (const record of teamRecords) distributeStarSeaTeamSpirit(record, record.spirit);
+  for (const record of teamRecords) distributeStarSeaTeamSpirit(record, record.spirit, { minimumMemberShare });
 }
 
 function starSeaSpiritRangeForRecord(publicRecord) {
@@ -3689,7 +3704,7 @@ function migrateStarSeaSpiritRewards(state) {
 }
 
 function settleStarSeaSpirit(state, teamRecords, pool) {
-  assignStarSeaSpiritShares(teamRecords, pool);
+  assignStarSeaSpiritShares(teamRecords, pool, { minimumMemberShare: 1 });
 
   for (const record of teamRecords) {
     for (const member of record.members || []) {
@@ -4141,7 +4156,8 @@ function runStarSeaDungeon(state, roster, date, foughtAt = timestampKey()) {
   teamRecords.forEach((record, index) => { record.rank = index + 1; });
   const killed = teamRecords.filter((record) => record.success).length;
   const spiritRange = dungeonLootRules.star_sea.spiritRange({ stage: monsterStage, killed });
-  const spiritPool = Math.max(teamRecords.length * 10, rollSpiritFromRange(spiritRange));
+  const participantCount = teamRecords.reduce((sum, record) => sum + (record.members || []).length, 0);
+  const spiritPool = Math.max(participantCount, rollSpiritFromRange(spiritRange));
   settleStarSeaSpirit(state, teamRecords, spiritPool);
   for (const record of teamRecords) {
     for (const member of record.members || []) {
