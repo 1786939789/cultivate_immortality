@@ -9147,6 +9147,39 @@ button.defender-chip.person:focus-visible .character-portrait {
   grid-template-columns: auto auto minmax(0, 1fr) auto;
 }
 
+.rank-copy {
+  min-width: 0;
+}
+
+.combat-rank-components {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.combat-rank-components i {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(15, 118, 110, .18);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, .56);
+  color: #2d5f58;
+  font-size: 10px;
+  font-style: normal;
+  line-height: 1;
+  padding: 4px 6px;
+}
+
+.combat-rank-components i::before {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  width: var(--combat-score);
+  height: 2px;
+  background: #0f766e;
+}
+
 .rank-row.top-rank-row {
   background:
     linear-gradient(90deg, color-mix(in srgb, var(--rank-glow, #d7a23b) 14%, transparent), transparent 48%),
@@ -9279,6 +9312,129 @@ button.defender-chip.person:focus-visible .character-portrait {
 .rank-row:focus-visible .rank-tip {
   opacity: 1;
   transform: translateY(0);
+}
+
+.dossier-combat-rating {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  margin-top: 8px;
+  color: #245b55;
+}
+
+.dossier-combat-rating > span,
+.dossier-combat-rating > small {
+  font-size: 10px;
+}
+
+.dossier-combat-rating > strong {
+  color: #0f766e;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.dossier-combat-rating.provisional > strong,
+.dossier-combat-rating.provisional > small {
+  color: var(--muted);
+}
+
+.dossier-combat-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.dossier-combat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dossier-combat-head h3,
+.dossier-combat-head p {
+  margin: 0;
+}
+
+.dossier-combat-head p {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.dossier-combat-head > strong {
+  color: #0f766e;
+  font-size: 26px;
+}
+
+.dossier-combat-components {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.dossier-combat-components > span {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 5px 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.dossier-combat-components b {
+  color: var(--ink);
+}
+
+.dossier-combat-components i {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(120, 91, 43, .12);
+}
+
+.dossier-combat-components em {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #0f766e;
+}
+
+.combat-rating-trend {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  align-items: end;
+  gap: 5px;
+  min-height: 82px;
+  border-bottom: 1px solid rgba(120, 91, 43, .18);
+  padding-top: 6px;
+}
+
+.combat-rating-trend > span {
+  display: grid;
+  grid-template-rows: 58px auto;
+  align-items: end;
+  justify-items: center;
+  gap: 4px;
+  height: 100%;
+}
+
+.combat-rating-trend i {
+  width: min(18px, 76%);
+  max-height: 58px;
+  border-radius: 3px 3px 0 0;
+  background: linear-gradient(180deg, #2f9c8d, #0f766e);
+}
+
+.combat-rating-trend small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.combat-rating-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
 }
 
 .rank-pager {

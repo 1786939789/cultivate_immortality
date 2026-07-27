@@ -3732,7 +3732,15 @@
                 </span>
                 <span v-else class="tag rank-number">#{{ rankPageStart + index + 1 }}</span>
                 <CharacterPortrait v-if="item.kind === 'person'" :person="rankPerson(item)" size="sm" />
-                <div><strong>{{ item.name }}</strong><small>{{ item.subtitle }}</small></div>
+                <div class="rank-copy">
+                  <strong>{{ item.name }}</strong>
+                  <small>{{ item.subtitle }}</small>
+                  <span v-if="activeRankBoard === 'combat'" class="combat-rank-components" aria-hidden="true">
+                    <i :style="{ '--combat-score': `${item.rating.dungeonScore}%` }">副本 {{ Math.round(item.rating.dungeonScore) }}</i>
+                    <i :style="{ '--combat-score': `${item.rating.duelScore}%` }">切磋 {{ Math.round(item.rating.duelScore) }}</i>
+                    <i :style="{ '--combat-score': `${item.rating.provinceScore}%` }">攻守 {{ Math.round(item.rating.provinceScore) }}</i>
+                  </span>
+                </div>
                 <span class="rank-value">{{ activeRankBoard === "power" ? item.sortLabel : item.value }}</span>
                 <small class="rank-tip" role="tooltip">{{ item.help }}</small>
               </button>
@@ -3828,6 +3836,11 @@
                     <CharacterPortrait :person="withDuelRank(selectedPerson)" size="xl" />
                     <div class="dossier-power-line" :aria-label="`战斗力：${personPower(selectedPerson)}`">
                       <span>战斗力：<b>{{ personPower(selectedPerson) }}</b></span>
+                    </div>
+                    <div class="dossier-combat-rating" :class="{ provisional: !selectedPersonCombatRating.sampleEnough }" :aria-label="selectedPersonCombatRatingLabel">
+                      <span>近十日战斗评分</span>
+                      <strong>{{ selectedPersonCombatRating.score }}</strong>
+                      <small>{{ selectedPersonCombatRating.sampleEnough ? `有效 ${selectedPersonCombatRating.activeDays} 天` : `样本不足 · ${selectedPersonCombatRating.activeDays}/${combatRatingMinimumDays} 天` }}</small>
                     </div>
                   </div>
                   <div class="equipment-slot-column">
@@ -3942,6 +3955,28 @@
                     <small>{{ breakthroughPartsText(selectedPerson) }}</small>
                   </div>
                 </div>
+              </div>
+              <div class="panel flat dossier-combat-panel">
+                <div class="dossier-combat-head">
+                  <div>
+                    <h3>近十日战斗评分</h3>
+                    <p>副本 40% · 切磋 30% · 攻守城 30%</p>
+                  </div>
+                  <strong>{{ selectedPersonCombatRating.score }}</strong>
+                </div>
+                <div class="dossier-combat-components">
+                  <span><small>副本</small><b>{{ formatCombatComponent(selectedPersonCombatRating.dungeonScore) }}</b><i><em :style="{ width: `${selectedPersonCombatRating.dungeonScore}%` }"></em></i></span>
+                  <span><small>切磋</small><b>{{ formatCombatComponent(selectedPersonCombatRating.duelScore) }}</b><i><em :style="{ width: `${selectedPersonCombatRating.duelScore}%` }"></em></i></span>
+                  <span><small>攻守城</small><b>{{ formatCombatComponent(selectedPersonCombatRating.provinceScore) }}</b><i><em :style="{ width: `${selectedPersonCombatRating.provinceScore}%` }"></em></i></span>
+                </div>
+                <div v-if="selectedPersonCombatRating.daily.length" class="combat-rating-trend" aria-label="最近十日战斗评分趋势">
+                  <span v-for="entry in [...selectedPersonCombatRating.daily].reverse()" :key="`${selectedPerson.id}-combat-${entry.day}`" :title="combatRatingDayTitle(entry)">
+                    <i :style="{ height: `${Math.max(8, entry.score)}%` }"></i>
+                    <small>{{ entry.day }}</small>
+                  </span>
+                </div>
+                <p v-else class="empty compact-empty">最近十天暂无实际出战记录。</p>
+                <p class="combat-rating-note">轮空、阵容待命、未参战和兵不血刃不计分；每个系统按日汇总，近期表现权重更高。</p>
               </div>
               <div class="panel flat dossier-encounter-panel">
                 <div class="dossier-encounter-head">
@@ -4885,7 +4920,7 @@ const rankBoards = [
   { id: "power", label: "个人战力" },
   { id: "duel", label: "切磋段位" },
   { id: "sect", label: "宗门战力" },
-  { id: "dungeon", label: "副本闯关" },
+  { id: "combat", label: "战斗评分" },
   { id: "realmStats", label: "境界统计" }
 ];
 
@@ -9607,6 +9642,29 @@ const selectedPerson = computed(() => {
   const detail = personDetails.value[selectedPersonId.value];
   return detailedPerson(base || detail?.person);
 });
+const combatRatingMinimumDays = computed(() => derived.value.combatRatings?.minimumActiveDays || personDetails.value[selectedPersonId.value]?.combatRatingMeta?.minimumActiveDays || 3);
+const selectedPersonCombatRating = computed(() => (
+  personDetails.value[selectedPersonId.value]?.combatRating
+  || combatRatingById.value.get(selectedPersonId.value)
+  || { score: 500, dungeonScore: 50, duelScore: 50, provinceScore: 50, activeDays: 0, sampleEnough: false, daily: [] }
+));
+const selectedPersonCombatRatingLabel = computed(() => {
+  const rating = selectedPersonCombatRating.value;
+  return `近十日战斗评分 ${rating.score}，副本 ${formatCombatComponent(rating.dungeonScore)}，切磋 ${formatCombatComponent(rating.duelScore)}，攻守城 ${formatCombatComponent(rating.provinceScore)}，有效 ${rating.activeDays} 天`;
+});
+
+function formatCombatComponent(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number.toFixed(1) : "50.0";
+}
+
+function combatRatingDayTitle(entry) {
+  const parts = [`第 ${entry.day} 天`, `综合 ${formatCombatComponent(entry.score)}`];
+  if (Number.isFinite(entry.dungeonScore)) parts.push(`副本 ${formatCombatComponent(entry.dungeonScore)}`);
+  if (Number.isFinite(entry.duelScore)) parts.push(`切磋 ${formatCombatComponent(entry.duelScore)}`);
+  if (Number.isFinite(entry.provinceScore)) parts.push(`攻守 ${formatCombatComponent(entry.provinceScore)}`);
+  return parts.join(" · ");
+}
 const selectedPersonRelationship = computed(() => {
   const id = selectedPerson.value?.id;
   if (!id || id === "player") return null;
@@ -10240,7 +10298,7 @@ const activeRanking = computed(() => {
   if (!rankRosterReady.value && activeRankBoard.value !== "sect") return [];
   if (activeRankBoard.value === "duel") return duelRanking.value;
   if (activeRankBoard.value === "sect") return sectRanking.value;
-  if (activeRankBoard.value === "dungeon") return dungeonRanking.value;
+  if (activeRankBoard.value === "combat") return combatRanking.value;
   if (activeRankBoard.value === "realmStats") return realmStatsRanking.value;
   return powerRanking.value;
 });
@@ -10310,17 +10368,36 @@ const sectRanking = computed(() => sectSummaries.value
     };
   }));
 
-const dungeonRanking = computed(() => cultivators.value
-  .map((item) => ({
-    name: item.name,
-    id: item.id,
-    kind: "person",
-    sect: item.sect,
-    subtitle: `${item.sect} · ${item.bestDungeonName || "未入秘境"} · ${item.dungeonClears || 0}次`,
-    value: item.bestDungeonPower || 0,
-    help: `最高副本：${item.bestDungeonName || "未入秘境"}；副本评分 ${item.bestDungeonPower || 0}；累计通关 ${item.dungeonClears || 0} 次。`
-  }))
-  .sort((a, b) => b.value - a.value));
+const combatRatingById = computed(() => new Map((derived.value.combatRatings?.entries || []).map((entry) => [entry.id, entry])));
+
+const combatRanking = computed(() => cultivators.value
+  .map((item) => {
+    const rating = combatRatingById.value.get(item.id) || {
+      score: 500,
+      dungeonScore: 50,
+      duelScore: 50,
+      provinceScore: 50,
+      activeDays: 0,
+      sampleEnough: false
+    };
+    const sampleText = rating.sampleEnough
+      ? `有效 ${rating.activeDays}/${derived.value.combatRatings?.windowDays || 10} 天`
+      : `样本不足 · ${rating.activeDays}/${derived.value.combatRatings?.minimumActiveDays || 3} 天`;
+    return {
+      name: item.name,
+      id: item.id,
+      kind: "person",
+      sect: item.sect,
+      subtitle: `${item.sect} · ${sampleText}`,
+      value: rating.score,
+      score: rating.score,
+      sampleEnough: rating.sampleEnough,
+      activeDays: rating.activeDays,
+      rating,
+      help: `最近 ${derived.value.combatRatings?.windowDays || 10} 天战斗评分 ${rating.score}；副本 ${rating.dungeonScore.toFixed(1)}，切磋 ${rating.duelScore.toFixed(1)}，攻守城 ${rating.provinceScore.toFixed(1)}；有效战斗 ${rating.activeDays} 天。未参战、轮空、待命和兵不血刃不计分。`
+    };
+  })
+  .sort((a, b) => Number(b.sampleEnough) - Number(a.sampleEnough) || b.score - a.score || b.activeDays - a.activeDays));
 
 const realmStatsRanking = computed(() => {
   const groups = new Map();

@@ -1372,6 +1372,9 @@ const sharedDungeonItemIds = equipmentCatalog.map((item) => item.id);
 const recentRecordDays = 30;
 const replayRetentionDays = 10;
 const battleRecordDays = 10;
+const combatRatingNeutralScore = 50;
+const combatRatingMinimumDays = 3;
+const combatRatingWeights = { dungeon: 0.4, duel: 0.3, province: 0.3 };
 const publicBattleRecordDays = replayRetentionDays;
 const publicBattleRecordLimit = replayRetentionDays;
 const publicProvinceWarLimit = replayRetentionDays * Math.max(sects.length, 1);
@@ -2369,6 +2372,280 @@ function allCultivators(state) {
 
 function cultivatorById(state, id) {
   return allCultivators(state).find((item) => item.entity.id === id)?.entity || null;
+}
+
+function combatAverage(values) {
+  const numbers = (values || []).map(Number).filter(Number.isFinite);
+  return numbers.length ? numbers.reduce((sum, value) => sum + value, 0) / numbers.length : 0;
+}
+
+function pushCombatDailyScore(store, id, day, score) {
+  if (!id || !day || !Number.isFinite(Number(score))) return;
+  if (!store.has(id)) store.set(id, new Map());
+  const daily = store.get(id);
+  if (!daily.has(day)) daily.set(day, []);
+  daily.get(day).push(clamp(Number(score), 0, 100));
+}
+
+function combatDayMapScore(dayMap, day) {
+  return combatAverage(dayMap?.get(day) || []);
+}
+
+function combatComponentSummary(dayMap, currentDay) {
+  const entries = [...(dayMap || new Map()).entries()]
+    .filter(([day]) => isRecordWithinDays({ day }, currentDay, battleRecordDays))
+    .sort(([left], [right]) => right - left);
+  if (!entries.length) return { score: combatRatingNeutralScore, activeDays: 0, days: [] };
+  let weightedTotal = 0;
+  let totalWeight = 0;
+  const days = entries.map(([day, values]) => {
+    const age = Math.max(0, currentDay - day);
+    const weight = Math.max(0.7, 1 - age * (0.3 / Math.max(1, battleRecordDays - 1)));
+    const score = clamp(combatAverage(values), 0, 100);
+    weightedTotal += score * weight;
+    totalWeight += weight;
+    return { day, score: Math.round(score * 10) / 10, weight: Math.round(weight * 100) / 100 };
+  });
+  const activeDays = entries.length;
+  const average = totalWeight ? weightedTotal / totalWeight : combatRatingNeutralScore;
+  const sampleWeight = Math.min(1, activeDays / combatRatingMinimumDays);
+  const score = average * sampleWeight + combatRatingNeutralScore * (1 - sampleWeight);
+  return { score: Math.round(score * 10) / 10, activeDays, days };
+}
+
+function combatDungeonDailyScores(state, rosterIds) {
+  const systems = { blood: new Map(), void: new Map(), sea: new Map() };
+  for (const dayRecord of state.dungeonDays || []) {
+    const day = Number(dayRecord?.day || 0);
+    if (!day || !isRecordWithinDays(dayRecord, state.day, battleRecordDays)) continue;
+
+    const caves = dayRecord.bloodTrial?.caves || [];
+    if (caves.length) {
+      const maxCave = Math.max(1, ...caves
+        .filter((cave) => (cave.challengers || []).length || (cave.clears || []).length)
+        .map((cave) => Number(cave.cave || 0)));
+      const maxOutputByCave = new Map(caves.map((cave) => [
+        Number(cave.cave || 0),
+        Math.max(1, ...(cave.challengers?.length ? cave.challengers : cave.clears || []).map((entry) => Number(entry.output || 0)))
+      ]));
+      const bloodByPerson = new Map();
+      for (const cave of caves) {
+        const caveIndex = Number(cave.cave || 0);
+        const clearedIds = new Set((cave.clears || []).map((entry) => entry.id));
+        const challengers = cave.challengers?.length ? cave.challengers : cave.clears || [];
+        for (const entry of challengers) {
+          if (!rosterIds.has(entry?.id)) continue;
+          const current = bloodByPerson.get(entry.id) || { attempted: 0, clears: 0, final: null, finalCave: 0 };
+          const success = typeof entry.success === "boolean" ? entry.success : clearedIds.has(entry.id);
+          current.attempted = Math.max(current.attempted, caveIndex);
+          if (success) current.clears = Math.max(current.clears, caveIndex);
+          if (caveIndex >= current.finalCave) {
+            current.finalCave = caveIndex;
+            current.final = { ...entry, success, monsterMaxHp: cave.monster?.maxHp || 0 };
+          }
+          bloodByPerson.set(entry.id, current);
+        }
+      }
+      for (const [id, result] of bloodByPerson) {
+        const final = result.final || {};
+        const fallbackOutput = maxOutputByCave.get(result.finalCave) || 1;
+        const damageRate = final.success
+          ? 1
+          : clamp(Number(final.output || 0) / Math.max(1, Number(final.monsterMaxHp || fallbackOutput)), 0, 1);
+        const progress = clamp((Math.max(0, result.attempted - 1) + damageRate) / maxCave, 0, 1);
+        const survival = final.success && Number(final.startHp || 0) > 0
+          ? clamp(Number(final.endHp || 0) / Number(final.startHp), 0, 1)
+          : 0;
+        const maxRounds = Math.max(2, 13 + result.finalCave);
+        const efficiency = final.success
+          ? clamp(1 - (Math.max(1, Number(final.rounds || maxRounds)) - 1) / (maxRounds - 1), 0, 1)
+          : 0;
+        pushCombatDailyScore(systems.blood, id, day, 20 + progress * 55 + survival * 15 + efficiency * 10);
+      }
+    } else if (dayRecord.solo?.length) {
+      const maxClears = Math.max(1, ...dayRecord.solo.map((entry) => Number(entry.clears || 0)));
+      const maxDamage = Math.max(1, ...dayRecord.solo.map((entry) => Number(entry.damage || 0)));
+      for (const entry of dayRecord.solo) {
+        if (!rosterIds.has(entry?.id)) continue;
+        const depth = clamp(Number(entry.clears || 0) / maxClears, 0, 1);
+        const output = clamp(Number(entry.damage || 0) / maxDamage, 0, 1);
+        pushCombatDailyScore(systems.blood, entry.id, day, 20 + depth * 60 + output * 20);
+      }
+    }
+
+    for (const record of dayRecord.sects || []) {
+      const contributions = (record.battles || [])
+        .map((battle) => ({ id: battle.challenger?.id, damage: Number(battle.damage || 0) }))
+        .filter((entry) => rosterIds.has(entry.id));
+      if (!contributions.length) continue;
+      const totalDamage = Math.max(0, Number(record.totalDamage || contributions.reduce((sum, entry) => sum + entry.damage, 0)));
+      const averageDamage = totalDamage / contributions.length;
+      const progress = clamp(totalDamage / Math.max(1, Number(record.requiredDamage || record.monsterStats?.maxHp || totalDamage)), 0, 1);
+      for (const entry of contributions) {
+        const relativeContribution = averageDamage > 0 ? entry.damage / averageDamage : 0;
+        const score = (record.success ? 55 : 25) + clamp(relativeContribution / 2, 0, 1) * 30 + progress * 15;
+        pushCombatDailyScore(systems.void, entry.id, day, score);
+      }
+    }
+
+    const teams = dayRecord.public?.teams || [];
+    const maxSpeedBonus = Math.max(1, ...teams.map((team) => Number(team.speedBonus || 0)));
+    for (const team of teams) {
+      const members = (team.members || []).filter((member) => rosterIds.has(member?.id));
+      if (!members.length) continue;
+      const averageDamage = Number(team.damage || members.reduce((sum, member) => sum + Number(member.damage || 0), 0)) / members.length;
+      const rankBonus = teams.length > 1
+        ? clamp((teams.length - Number(team.rank || teams.length)) / (teams.length - 1), 0, 1) * 20
+        : 20;
+      const speedScore = team.success ? clamp(Number(team.speedBonus || 0) / maxSpeedBonus, 0, 1) * 5 : 0;
+      for (const member of members) {
+        const relativeContribution = averageDamage > 0 ? Number(member.damage || 0) / averageDamage : 0;
+        const score = (team.success ? 50 : 25) + rankBonus + clamp(relativeContribution / 2, 0, 1) * 25 + speedScore;
+        pushCombatDailyScore(systems.sea, member.id, day, score);
+      }
+    }
+  }
+
+  const combined = new Map();
+  for (const id of rosterIds) {
+    const days = new Set();
+    for (const store of Object.values(systems)) {
+      for (const day of store.get(id)?.keys() || []) days.add(day);
+    }
+    for (const day of days) {
+      const parts = [
+        { score: combatDayMapScore(systems.blood.get(id), day), weight: 0.4, present: systems.blood.get(id)?.has(day) },
+        { score: combatDayMapScore(systems.void.get(id), day), weight: 0.3, present: systems.void.get(id)?.has(day) },
+        { score: combatDayMapScore(systems.sea.get(id), day), weight: 0.3, present: systems.sea.get(id)?.has(day) }
+      ].filter((part) => part.present);
+      const totalWeight = parts.reduce((sum, part) => sum + part.weight, 0);
+      if (totalWeight) pushCombatDailyScore(combined, id, day, parts.reduce((sum, part) => sum + part.score * part.weight, 0) / totalWeight);
+    }
+  }
+  return combined;
+}
+
+function combatRankIndex(ref) {
+  const rankId = ref?.rankId || ref?.duelSeason?.rankId;
+  const explicitIndex = duelRanks.findIndex((rank) => rank.id === rankId);
+  if (explicitIndex >= 0) return explicitIndex;
+  const score = Number(ref?.duelSeason?.score);
+  const derivedRank = Number.isFinite(score) ? duelRankForScore(score) : null;
+  return Math.max(0, duelRanks.findIndex((rank) => rank.id === derivedRank?.id));
+}
+
+function combatDuelDailyScores(state, rosterIds) {
+  const daily = new Map();
+  const recordsByDay = new Map();
+  for (const record of state.duelDays || []) recordsByDay.set(Number(record.day || 0), record);
+  for (const tournament of [state.duelTournament, ...(state.duelTournamentHistory || [])]) {
+    for (const round of tournament?.rounds || []) recordsByDay.set(Number(round.day || 0), { ...round, tournament: true });
+  }
+  for (const [day, record] of recordsByDay) {
+    if (!day || !isRecordWithinDays({ day }, state.day, battleRecordDays)) continue;
+    const tournamentBonus = record.tournament ? Math.min(10, Math.max(0, Number(record.round || 1)) * 2.5) : 0;
+    for (const match of record.matches || []) {
+      if (match.type !== "battle") continue;
+      const winner = match.winner;
+      const loser = match.loser;
+      if (rosterIds.has(winner?.id)) {
+        const rankAdjustment = clamp((combatRankIndex(loser) - combatRankIndex(winner)) * 7.5, -15, 15);
+        pushCombatDailyScore(daily, winner.id, day, 70 + rankAdjustment + tournamentBonus);
+      }
+      if (rosterIds.has(loser?.id)) {
+        const rankAdjustment = clamp((combatRankIndex(winner) - combatRankIndex(loser)) * 7.5, -15, 15);
+        pushCombatDailyScore(daily, loser.id, day, 30 + rankAdjustment + tournamentBonus);
+      }
+    }
+  }
+  return daily;
+}
+
+function combatProvinceDailyScores(state, rosterIds) {
+  const daily = new Map();
+  for (const war of state.provinceWars || []) {
+    const day = Number(war?.day || 0);
+    if (!day || !isRecordWithinDays(war, state.day, battleRecordDays)) continue;
+    const warScores = new Map();
+    for (const battle of war.battles || []) {
+      for (const side of ["attacker", "defender"]) {
+        const person = battle?.[side];
+        if (!rosterIds.has(person?.id)) continue;
+        const opponent = battle?.[side === "attacker" ? "defender" : "attacker"];
+        const won = battle.winnerSide === side;
+        const realmAdjustment = clamp((Number(opponent?.realm || 0) - Number(person.realm || 0)) * 3, -15, 15);
+        const current = warScores.get(person.id) || { side, scores: [], wins: 0 };
+        current.scores.push((won ? 70 : 30) + realmAdjustment);
+        if (won) current.wins += 1;
+        warScores.set(person.id, current);
+      }
+    }
+    const winningSide = war.kind === "monster" ? (!war.captured ? "defender" : "attacker") : (war.captured ? "attacker" : "defender");
+    for (const [id, result] of warScores) {
+      const streakBonus = Math.min(15, Math.max(0, result.wins - 1) * 5);
+      const objectiveBonus = result.side === winningSide ? 10 : 0;
+      pushCombatDailyScore(daily, id, day, combatAverage(result.scores) + streakBonus + objectiveBonus);
+    }
+  }
+  return daily;
+}
+
+export function buildCombatRatings(state) {
+  const currentDay = Math.max(1, Number(state.day || 1));
+  const roster = allCultivators(state);
+  const rosterIds = new Set(roster.map(({ entity }) => entity.id));
+  const dungeonDaily = combatDungeonDailyScores(state, rosterIds);
+  const duelDaily = combatDuelDailyScores(state, rosterIds);
+  const provinceDaily = combatProvinceDailyScores(state, rosterIds);
+  const entries = roster.map(({ entity }) => {
+    const dungeon = combatComponentSummary(dungeonDaily.get(entity.id), currentDay);
+    const duel = combatComponentSummary(duelDaily.get(entity.id), currentDay);
+    const province = combatComponentSummary(provinceDaily.get(entity.id), currentDay);
+    const activeDaySet = new Set([...dungeon.days, ...duel.days, ...province.days].map((entry) => entry.day));
+    const daily = [...activeDaySet]
+      .sort((left, right) => right - left)
+      .map((day) => {
+        const available = [
+          { key: "dungeon", score: dungeon.days.find((entry) => entry.day === day)?.score, weight: combatRatingWeights.dungeon },
+          { key: "duel", score: duel.days.find((entry) => entry.day === day)?.score, weight: combatRatingWeights.duel },
+          { key: "province", score: province.days.find((entry) => entry.day === day)?.score, weight: combatRatingWeights.province }
+        ].filter((part) => Number.isFinite(part.score));
+        const totalWeight = available.reduce((sum, part) => sum + part.weight, 0);
+        return {
+          day,
+          score: totalWeight ? Math.round(available.reduce((sum, part) => sum + part.score * part.weight, 0) / totalWeight * 10) / 10 : combatRatingNeutralScore,
+          dungeonScore: available.find((part) => part.key === "dungeon")?.score ?? null,
+          duelScore: available.find((part) => part.key === "duel")?.score ?? null,
+          provinceScore: available.find((part) => part.key === "province")?.score ?? null
+        };
+      });
+    const score = Math.round((
+      dungeon.score * combatRatingWeights.dungeon
+      + duel.score * combatRatingWeights.duel
+      + province.score * combatRatingWeights.province
+    ) * 10);
+    return {
+      id: entity.id,
+      score,
+      dungeonScore: dungeon.score,
+      duelScore: duel.score,
+      provinceScore: province.score,
+      activeDays: activeDaySet.size,
+      dungeonDays: dungeon.activeDays,
+      duelDays: duel.activeDays,
+      provinceDays: province.activeDays,
+      sampleEnough: activeDaySet.size >= combatRatingMinimumDays,
+      daily
+    };
+  }).sort((left, right) => Number(right.sampleEnough) - Number(left.sampleEnough) || right.score - left.score || right.activeDays - left.activeDays);
+  return {
+    windowDays: battleRecordDays,
+    windowStartDay: minDayForWindow(currentDay, battleRecordDays),
+    windowEndDay: currentDay,
+    minimumActiveDays: combatRatingMinimumDays,
+    weights: { ...combatRatingWeights },
+    entries
+  };
 }
 
 function membersForSect(state, sectName) {
@@ -9588,6 +9865,7 @@ export function getPublicState(state, options = {}) {
     };
   }
 
+  const combatRatings = buildCombatRatings(state);
   const { adminProfiles, encounters: _encounterState, relationships: _relationshipState, daoTrial: _daoTrialState, ...publicState } = state;
   return {
     ...publicState,
@@ -9613,6 +9891,7 @@ export function getPublicState(state, options = {}) {
       duelRanks: Object.fromEntries(allCultivators(state).map(({ entity }) => [entity.id, duelRankSnapshot(entity)])),
       duelTournament: publicDuelTournament(state),
       npcPowers: Object.fromEntries(state.npcs.map((npc) => [npc.id, powerOf(npc, state)])),
+      combatRatings,
     }
   };
 }
@@ -9621,6 +9900,7 @@ export function getPublicCultivatorDetail(state, id) {
   ensureStateShape(state);
   const match = allCultivators(state).find((item) => item.entity.id === id);
   if (!match) throw new Error("未找到该人物");
+  const combatRatings = buildCombatRatings(state);
   const person = publicCultivator(match.entity, state, {
     includeRecentReplays: true,
     kind: match.kind
@@ -9631,6 +9911,14 @@ export function getPublicCultivatorDetail(state, id) {
     equippedItems: equippedItemsFor(state, match.entity).map((item) => publicEquipment(item, state)),
     spiritPearls: publicSpiritPearls(state, match.entity),
     duelRank: duelRankSnapshot(match.entity),
+    combatRating: combatRatings.entries.find((entry) => entry.id === id) || null,
+    combatRatingMeta: {
+      windowDays: combatRatings.windowDays,
+      windowStartDay: combatRatings.windowStartDay,
+      windowEndDay: combatRatings.windowEndDay,
+      minimumActiveDays: combatRatings.minimumActiveDays,
+      weights: combatRatings.weights
+    },
     power: powerOf(match.entity, state),
     relationship: match.kind === "npc" ? publicRelationship(state, match.entity.id) : null,
     encounterHistory: match.kind === "npc"
