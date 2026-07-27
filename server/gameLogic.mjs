@@ -12068,7 +12068,12 @@ function syncDuelDayRecords(state) {
   }
 }
 
-function findDuelOpponentIndex(state, queue, current) {
+function duelMatchGroupKey(entry) {
+  const sect = String(entry?.entity?.sect || "").trim();
+  return sect || `unaffiliated:${entry?.entity?.id || "unknown"}`;
+}
+
+function duelOpponentWeight(state, current, candidate) {
   const currentPower = powerOf(current.entity, state);
   const recentOpponentIds = new Set(
     (current.entity.duelHistory || [])
@@ -12076,17 +12081,50 @@ function findDuelOpponentIndex(state, queue, current) {
       .map((record) => record.opponentId)
       .filter(Boolean)
   );
-  const candidates = queue.flatMap((candidate, index) => {
-    if (!canDuelMatch(current.entity, candidate.entity)) return [];
+  const candidatePower = powerOf(candidate.entity, state);
+  const powerGap = Math.abs(currentPower - candidatePower);
+  const powerScale = Math.max(120, Math.max(currentPower, candidatePower) * 0.25);
+  const rankWeight = [1, 0.45, 0.15][duelRankGap(current.entity, candidate.entity)] || 0.1;
+  const powerWeight = Math.exp(-powerGap / powerScale);
+  const rematchWeight = recentOpponentIds.has(candidate.entity.id) ? 0.18 : 1;
+  return Math.max(0.01, rankWeight * powerWeight * rematchWeight);
+}
 
-    const candidatePower = powerOf(candidate.entity, state);
-    const powerGap = Math.abs(currentPower - candidatePower);
-    const powerScale = Math.max(120, Math.max(currentPower, candidatePower) * 0.25);
-    const rankWeight = [1, 0.45, 0.15][duelRankGap(current.entity, candidate.entity)] || 0.1;
-    const powerWeight = Math.exp(-powerGap / powerScale);
-    const rematchWeight = recentOpponentIds.has(candidate.entity.id) ? 0.18 : 1;
-    return [{ index, weight: Math.max(0.01, rankWeight * powerWeight * rematchWeight) }];
-  });
+function findDuelLeftIndex(state, queue) {
+  const groupCounts = new Map();
+  for (const entry of queue) {
+    const key = duelMatchGroupKey(entry);
+    groupCounts.set(key, (groupCounts.get(key) || 0) + 1);
+  }
+  const largestGroupSize = Math.max(...groupCounts.values());
+  let selectedIndex = 0;
+  let fewestPreferredOpponents = Number.POSITIVE_INFINITY;
+  for (const [index, entry] of queue.entries()) {
+    if (groupCounts.get(duelMatchGroupKey(entry)) !== largestGroupSize) continue;
+    const preferredOpponentCount = queue.reduce((count, candidate, candidateIndex) => (
+      candidateIndex !== index && canDuelMatch(entry.entity, candidate.entity) ? count + 1 : count
+    ), 0);
+    if (preferredOpponentCount < fewestPreferredOpponents) {
+      selectedIndex = index;
+      fewestPreferredOpponents = preferredOpponentCount;
+    }
+  }
+  return selectedIndex;
+}
+
+function findDuelOpponentIndex(state, queue, current) {
+  const currentGroup = duelMatchGroupKey(current);
+  const crossSectCandidates = queue.flatMap((candidate, index) => (
+    duelMatchGroupKey(candidate) === currentGroup
+      ? []
+      : [{ index, candidate, preferred: canDuelMatch(current.entity, candidate.entity) }]
+  ));
+  const preferredCandidates = crossSectCandidates.filter((candidate) => candidate.preferred);
+  const candidatePool = preferredCandidates.length ? preferredCandidates : crossSectCandidates;
+  const candidates = candidatePool.map(({ index, candidate }) => ({
+    index,
+    weight: duelOpponentWeight(state, current, candidate)
+  }));
   if (!candidates.length) return -1;
 
   const totalWeight = candidates.reduce((sum, candidate) => sum + candidate.weight, 0);
@@ -12116,7 +12154,8 @@ export function runDailyDuels(state, foughtAt = timestampKey()) {
   let order = 1;
 
   while (queue.length) {
-    const left = queue.shift();
+    const leftIndex = findDuelLeftIndex(state, queue);
+    const [left] = queue.splice(leftIndex, 1);
     const rightIndex = findDuelOpponentIndex(state, queue, left);
     if (rightIndex < 0) {
       matches.push({
