@@ -3838,9 +3838,8 @@
                       <span>战斗力：<b>{{ personPower(selectedPerson) }}</b></span>
                     </div>
                     <div class="dossier-combat-rating" :class="{ provisional: !selectedPersonCombatRating.sampleEnough }" :aria-label="selectedPersonCombatRatingLabel">
-                      <span>近十日战斗评分</span>
+                      <span>战斗评分</span>
                       <strong>{{ selectedPersonCombatRating.score }}</strong>
-                      <small>{{ selectedPersonCombatRating.sampleEnough ? `有效 ${selectedPersonCombatRating.activeDays} 天` : `样本不足 · ${selectedPersonCombatRating.activeDays}/${combatRatingMinimumDays} 天` }}</small>
                     </div>
                   </div>
                   <div class="equipment-slot-column">
@@ -3929,6 +3928,29 @@
                 </div>
             </div>
 
+            <div class="panel flat dossier-combat-panel dossier-combat-summary">
+              <div class="dossier-combat-head">
+                <div>
+                  <h3>近十日战斗评分</h3>
+                  <p>副本 40% · 切磋 30% · 攻守城 30%</p>
+                </div>
+                <strong>{{ selectedPersonCombatRating.score }}</strong>
+              </div>
+              <div class="dossier-combat-components">
+                <span><small>副本</small><b>{{ formatCombatComponent(selectedPersonCombatRating.dungeonScore) }}</b><i><em :style="{ width: `${selectedPersonCombatRating.dungeonScore}%` }"></em></i></span>
+                <span><small>切磋</small><b>{{ formatCombatComponent(selectedPersonCombatRating.duelScore) }}</b><i><em :style="{ width: `${selectedPersonCombatRating.duelScore}%` }"></em></i></span>
+                <span><small>攻守城</small><b>{{ formatCombatComponent(selectedPersonCombatRating.provinceScore) }}</b><i><em :style="{ width: `${selectedPersonCombatRating.provinceScore}%` }"></em></i></span>
+              </div>
+              <div v-if="selectedPersonCombatRating.daily.length" class="combat-rating-trend" aria-label="最近十日战斗评分趋势">
+                <span v-for="entry in [...selectedPersonCombatRating.daily].reverse()" :key="`${selectedPerson.id}-combat-${entry.day}`" :title="combatRatingDayTitle(entry)">
+                  <i :style="{ height: `${Math.max(8, entry.score)}%` }"></i>
+                  <small>{{ entry.day }}</small>
+                </span>
+              </div>
+              <p v-else class="empty compact-empty">最近十天暂无实际出战记录。</p>
+              <p class="combat-rating-note">轮空、阵容待命、未参战和兵不血刃不计分；每个系统按日汇总，近期表现权重更高。</p>
+            </div>
+
             <div class="grid detail-sections record-sections dossier-records">
               <div class="panel flat">
                 <h3>根盘</h3>
@@ -3954,72 +3976,6 @@
                     <strong>{{ formatPercent(personInsight(selectedPerson).breakthrough.total) }}</strong>
                     <small>{{ breakthroughPartsText(selectedPerson) }}</small>
                   </div>
-                </div>
-              </div>
-              <div class="panel flat dossier-combat-panel">
-                <div class="dossier-combat-head">
-                  <div>
-                    <h3>近十日战斗评分</h3>
-                    <p>副本 40% · 切磋 30% · 攻守城 30%</p>
-                  </div>
-                  <strong>{{ selectedPersonCombatRating.score }}</strong>
-                </div>
-                <div class="dossier-combat-components">
-                  <span><small>副本</small><b>{{ formatCombatComponent(selectedPersonCombatRating.dungeonScore) }}</b><i><em :style="{ width: `${selectedPersonCombatRating.dungeonScore}%` }"></em></i></span>
-                  <span><small>切磋</small><b>{{ formatCombatComponent(selectedPersonCombatRating.duelScore) }}</b><i><em :style="{ width: `${selectedPersonCombatRating.duelScore}%` }"></em></i></span>
-                  <span><small>攻守城</small><b>{{ formatCombatComponent(selectedPersonCombatRating.provinceScore) }}</b><i><em :style="{ width: `${selectedPersonCombatRating.provinceScore}%` }"></em></i></span>
-                </div>
-                <div v-if="selectedPersonCombatRating.daily.length" class="combat-rating-trend" aria-label="最近十日战斗评分趋势">
-                  <span v-for="entry in [...selectedPersonCombatRating.daily].reverse()" :key="`${selectedPerson.id}-combat-${entry.day}`" :title="combatRatingDayTitle(entry)">
-                    <i :style="{ height: `${Math.max(8, entry.score)}%` }"></i>
-                    <small>{{ entry.day }}</small>
-                  </span>
-                </div>
-                <p v-else class="empty compact-empty">最近十天暂无实际出战记录。</p>
-                <p class="combat-rating-note">轮空、阵容待命、未参战和兵不血刃不计分；每个系统按日汇总，近期表现权重更高。</p>
-              </div>
-              <div class="panel flat dossier-encounter-panel">
-                <div class="dossier-encounter-head">
-                  <h3>{{ selectedPerson.id === "player" ? "因缘总览" : "与你的因缘" }}</h3>
-                  <button
-                    v-if="selectedPerson.id !== 'player'"
-                    class="secondary compact-button"
-                    type="button"
-                    :disabled="isActionPending('/api/encounters/focus')"
-                    @click="toggleEncounterFocus(selectedPerson)"
-                  >
-                    <Handshake :size="14" aria-hidden="true" />
-                    {{ selectedPersonRelationship?.focused ? "取消关注" : "关注此人" }}
-                  </button>
-                </div>
-                <div v-if="selectedPersonRelationship" class="relationship-gauges">
-                  <div>
-                    <span><b>{{ selectedPersonRelationship.title }}</b><small>{{ selectedPersonRelationship.interactions || 0 }} 次往来</small></span>
-                  </div>
-                  <label>
-                    <span>交情 <b>{{ selectedPersonRelationship.affinity }}</b></span>
-                    <i><em :style="{ width: `${Math.max(0, Math.min(100, (selectedPersonRelationship.affinity + 100) / 2))}%` }"></em></i>
-                  </label>
-                  <label>
-                    <span>敬意 <b>{{ selectedPersonRelationship.respect }}</b></span>
-                    <i><em :style="{ width: `${Math.max(0, Math.min(100, selectedPersonRelationship.respect))}%` }"></em></i>
-                  </label>
-                </div>
-                <div class="timeline detail-scroll encounter-detail-scroll">
-                  <button
-                    v-for="record in selectedPersonEncounterHistory"
-                    :key="`${record.id}-${record.resolvedDay}`"
-                    class="event event-button"
-                    :class="{ replayable: record.replayId, gold: record.rarity === 'rare' || record.rarity === 'fated' }"
-                    type="button"
-                    :disabled="!record.replayId"
-                    @click="openEncounterReplay(record)"
-                  >
-                    <strong>{{ record.title }} · {{ record.choiceLabel }}</strong>
-                    <span>{{ record.outcome }}</span>
-                    <small>对方：{{ encounterCounterpartName(record, selectedPerson) }} · 第 {{ record.resolvedDay }} 天 · {{ record.relationTitle || record.categoryLabel }}</small>
-                  </button>
-                  <div v-if="!selectedPersonEncounterHistory.length" class="empty">暂无因缘纪事。</div>
                 </div>
               </div>
               <div class="panel flat">
@@ -4118,6 +4074,50 @@
                     <span>{{ skillUpgradeRecordMetaText(record) }}</span>
                   </div>
                   <div v-if="!selectedPerson.skillUpgrades?.length" class="empty">暂无技能升阶记录。</div>
+                </div>
+              </div>
+              <div class="panel flat dossier-encounter-panel">
+                <div class="dossier-encounter-head">
+                  <h3>{{ selectedPerson.id === "player" ? "因缘总览" : "与你的因缘" }}</h3>
+                  <button
+                    v-if="selectedPerson.id !== 'player'"
+                    class="secondary compact-button"
+                    type="button"
+                    :disabled="isActionPending('/api/encounters/focus')"
+                    @click="toggleEncounterFocus(selectedPerson)"
+                  >
+                    <Handshake :size="14" aria-hidden="true" />
+                    {{ selectedPersonRelationship?.focused ? "取消关注" : "关注此人" }}
+                  </button>
+                </div>
+                <div v-if="selectedPersonRelationship" class="relationship-gauges">
+                  <div>
+                    <span><b>{{ selectedPersonRelationship.title }}</b><small>{{ selectedPersonRelationship.interactions || 0 }} 次往来</small></span>
+                  </div>
+                  <label>
+                    <span>交情 <b>{{ selectedPersonRelationship.affinity }}</b></span>
+                    <i><em :style="{ width: `${Math.max(0, Math.min(100, (selectedPersonRelationship.affinity + 100) / 2))}%` }"></em></i>
+                  </label>
+                  <label>
+                    <span>敬意 <b>{{ selectedPersonRelationship.respect }}</b></span>
+                    <i><em :style="{ width: `${Math.max(0, Math.min(100, selectedPersonRelationship.respect))}%` }"></em></i>
+                  </label>
+                </div>
+                <div class="timeline detail-scroll encounter-detail-scroll">
+                  <button
+                    v-for="record in selectedPersonEncounterHistory"
+                    :key="`${record.id}-${record.resolvedDay}`"
+                    class="event event-button"
+                    :class="{ replayable: record.replayId, gold: record.rarity === 'rare' || record.rarity === 'fated' }"
+                    type="button"
+                    :disabled="!record.replayId"
+                    @click="openEncounterReplay(record)"
+                  >
+                    <strong>{{ record.title }} · {{ record.choiceLabel }}</strong>
+                    <span>{{ record.outcome }}</span>
+                    <small>对方：{{ encounterCounterpartName(record, selectedPerson) }} · 第 {{ record.resolvedDay }} 天 · {{ record.relationTitle || record.categoryLabel }}</small>
+                  </button>
+                  <div v-if="!selectedPersonEncounterHistory.length" class="empty">暂无因缘纪事。</div>
                 </div>
               </div>
             </div>
@@ -10380,15 +10380,12 @@ const combatRanking = computed(() => cultivators.value
       activeDays: 0,
       sampleEnough: false
     };
-    const sampleText = rating.sampleEnough
-      ? `有效 ${rating.activeDays}/${derived.value.combatRatings?.windowDays || 10} 天`
-      : `样本不足 · ${rating.activeDays}/${derived.value.combatRatings?.minimumActiveDays || 3} 天`;
     return {
       name: item.name,
       id: item.id,
       kind: "person",
       sect: item.sect,
-      subtitle: `${item.sect} · ${sampleText}`,
+      subtitle: `${item.sect} · ${realmName(item.realm)} · 战斗力 ${personPower(item)}`,
       value: rating.score,
       score: rating.score,
       sampleEnough: rating.sampleEnough,
@@ -11617,6 +11614,7 @@ function personStats(person) {
   const power = personPower(person);
   const powerRank = personPowerRank(person);
   const talent = talentInfo(person);
+  const combatRank = personCombatRank(person);
   const duelRankPosition = personDuelRankPosition(person);
   return [
     { label: "性别", value: genderLabel(person.gender), icon: "gender" },
@@ -11629,7 +11627,7 @@ function personStats(person) {
     { label: "技能", value: skillNameOnlyLabel(person), icon: "skill", help: skillTip(person) },
     { label: "天赋", value: talent.score, icon: "power", help: talentHint(person) },
     { label: "战力排名", value: powerRank ? `#${powerRank}` : "未上榜", icon: "rank", help: powerRank ? `当前个人战力榜第 ${powerRank} 名。` : "当前不在个人战力榜中。" },
-    { label: "段位", value: duelRankText(person), icon: `duel-rank-${duelRankId(person)}`, help: `第 ${duelSeasonInfo.value.season} 赛季段位：${duelRankText(person)}。` },
+    { label: "评分排名", value: combatRank ? `#${combatRank}` : "未上榜", icon: "rank", help: combatRank ? `当前战斗评分榜第 ${combatRank} 名。` : "当前不在战斗评分榜中。" },
     { label: "段位排名", value: duelRankPosition ? `#${duelRankPosition}` : "未上榜", icon: "rank", help: duelRankPosition ? `当前切磋段位榜第 ${duelRankPosition} 名。` : "当前不在切磋段位榜中。" }
   ];
 }
@@ -11653,6 +11651,11 @@ function detailIconComponent(icon) {
 
 function personPowerRank(person) {
   const index = powerRanking.value.findIndex((item) => item.id === person?.id);
+  return index >= 0 ? index + 1 : 0;
+}
+
+function personCombatRank(person) {
+  const index = combatRanking.value.findIndex((item) => item.id === person?.id);
   return index >= 0 ? index + 1 : 0;
 }
 
@@ -12219,13 +12222,13 @@ function sectAvatarStyle(sect) {
 
 function sectStats(sect) {
   const members = sectMembers(sect);
-  const warStats = sectWarStats(sect);
+  const occupiedCities = provinceTerritories.value.filter((province) => province.owner === sect.name).length;
   return [
     ["总战力", sect.totalPower],
     ["成员", members.length],
     ["掌门", sectLeaderName(sect)],
     ["长老", sectElderNames(sect)],
-    ["攻守城", `${warStats.wins}胜${warStats.losses}负`]
+    ["攻占城市", occupiedCities]
   ];
 }
 

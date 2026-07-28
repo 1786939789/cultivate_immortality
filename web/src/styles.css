@@ -9165,10 +9165,11 @@ button.defender-chip.person:focus-visible .character-portrait {
   border-radius: 5px;
   background: rgba(255, 255, 255, .56);
   color: #2d5f58;
-  font-size: 10px;
+  font-size: 12px;
+  font-weight: 800;
   font-style: normal;
   line-height: 1;
-  padding: 4px 6px;
+  padding: 5px 7px;
 }
 
 .combat-rank-components i::before {
@@ -9315,26 +9316,27 @@ button.defender-chip.person:focus-visible .character-portrait {
 }
 
 .dossier-combat-rating {
-  display: grid;
-  justify-items: center;
-  gap: 2px;
-  margin-top: 8px;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 10px;
   color: #245b55;
 }
 
-.dossier-combat-rating > span,
-.dossier-combat-rating > small {
-  font-size: 10px;
+.dossier-combat-rating > span {
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: .12em;
 }
 
 .dossier-combat-rating > strong {
   color: #0f766e;
-  font-size: 22px;
+  font-size: 28px;
   line-height: 1;
 }
 
-.dossier-combat-rating.provisional > strong,
-.dossier-combat-rating.provisional > small {
+.dossier-combat-rating.provisional > strong {
   color: var(--muted);
 }
 
