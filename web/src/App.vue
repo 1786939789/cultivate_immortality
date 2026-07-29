@@ -2206,7 +2206,7 @@
                 <span class="province-owner-name">{{ territory.owner || "无主之地" }}</span>
                 <span v-if="provinceBattleRoster(territory).participants.length" class="province-battle-roster">
                   <small class="province-roster-label" :class="provinceBattleRoster(territory).status">{{ provinceBattleRoster(territory).label }}</small>
-                  <span class="defender-stack">
+                  <span class="defender-stack" :class="{ compact: provinceBattleRoster(territory).participants.length > maxSiegeTeamSize }">
                     <template
                       v-for="participant in provinceBattleRoster(territory).participants"
                       :key="`${territory.id}-${provinceBattleRoster(territory).status}-${participant.id}`"
@@ -2289,9 +2289,9 @@
                 <div class="section-head compact strategy-section-heading">
                   <div>
                     <h3>攻城队伍</h3>
-                    <p>{{ selectedAttackProvince ? `目标 ${selectedAttackProvince.name}，最多 ${selectedAttackProvince.attackerLimit || maxSiegeTeamSize} 人，距离 ${selectedAttackProvince.distance}` : `不指定目标时由 AI 选城选人，攻守双方均不超过 ${maxSiegeTeamSize} 人` }}</p>
+                    <p>{{ selectedAttackProvince ? `目标 ${selectedAttackProvince.name}，最多 ${selectedAttackProvince.attackerLimit || playerAttackTeamLimit} 人，距离 ${selectedAttackProvince.distance}` : `不指定目标时由 AI 选城选人；${playerOwnedProvinces.length ? `攻守双方均不超过 ${maxSiegeTeamSize} 人` : `本宗暂无城市，攻城最多 ${playerAttackTeamLimit} 人，守城仍最多 ${maxSiegeTeamSize} 人`}` }}</p>
                   </div>
-                  <span class="strategy-count-badge attack">已选 {{ sectPlanDraft.attackMemberIds.length }} / {{ maxSiegeTeamSize }}</span>
+                  <span class="strategy-count-badge attack">已选 {{ sectPlanDraft.attackMemberIds.length }} / {{ playerAttackTeamLimit }}</span>
                 </div>
                 <div class="timeline compact-list strategy-member-list">
                   <button
@@ -2791,7 +2791,7 @@
                 </div>
 
                 <div class="war-lineup war-versus-board" v-if="warTeam(war, 'attacker').length || warTeam(war, 'defender').length">
-                  <div class="war-team war-team-attacker" :class="{ victor: war.captured }">
+                  <div class="war-team war-team-attacker" :class="{ victor: war.captured, compact: warTeam(war, 'attacker').length > maxSiegeTeamSize }">
                     <span class="war-team-name"><i :style="{ '--banner-color': sectColor(war.attacker) }">攻</i><span><small>攻城方 {{ war.captured ? "· 胜" : "" }}</small>{{ war.attacker }}</span></span>
                     <div class="war-team-row">
                       <div
@@ -2815,7 +2815,7 @@
                     <span>{{ war.captured ? "攻破城防" : "固守成功" }}</span>
                     <i></i>
                   </div>
-                  <div class="war-team war-team-defender" :class="{ victor: !war.captured }">
+                  <div class="war-team war-team-defender" :class="{ victor: !war.captured, compact: warTeam(war, 'defender').length > maxSiegeTeamSize }">
                     <span class="war-team-name defender"><i :style="{ '--banner-color': sectColor(war.defender) }">守</i><span><small>守城方 {{ !war.captured ? "· 胜" : "" }}</small>{{ war.defender }}</span></span>
                     <div class="war-team-row">
                       <div
@@ -5178,6 +5178,7 @@ const sectPlanDraft = reactive({
   defense: {}
 });
 const maxSiegeTeamSize = 5;
+const zeroTerritorySiegeTeamSize = 6;
 const lastBattle = ref(null);
 const battleReturnTarget = ref(null);
 const replayLoading = ref(false);
@@ -5462,7 +5463,7 @@ const adminWikiArticles = [
         title: "明日战略、攻城与守城",
         paragraphs: [
           "明日战略支持保守、均衡和激进三种风格，并可手动指定目标省份、攻城成员和守军；未指定的名额会自动补位。",
-          "攻城队最多 5 人。距离越远、疲劳越高，实际攻城战力越低；守城方享受城防阵法加成。攻守城战报会记录目标、队伍、距离、疲劳、灵根克制、城防和胜负。"
+          "常规攻城队最多 5 人；暂无城市的宗门拥有一次破局优势，攻城队最多 6 人，夺得城市后恢复 5 人。距离越远、疲劳越高，实际攻城战力越低；守城方享受城防阵法加成。攻守城战报会记录目标、队伍、距离、疲劳、灵根克制、城防和胜负。"
         ],
         bullets: [
           "疲劳范围 0–20；每点使战斗五维降低 2.5%，满疲劳另有 50% 降幅。攻城距离每多 1 格再降低 6%，最多降低 25%，攻守修正最低保留 45%。",
@@ -5796,7 +5797,7 @@ const legacyWikiArticles = [
         title: "明日战略与攻城顺序",
         paragraphs: [
           "可为玩家宗门保存下一日的保守、均衡或激进策略，并手动指定攻城目标、攻城成员和守军；自动补位会在结算时按规则补齐。没有手动目标时，系统为各宗门生成计划。当前版本会随机打乱各宗门的计划处理顺序，不存在“占城更少必定先攻”的固定规则；同一城市一日只会被一个计划锁定。",
-          "攻城成员最多 5 人。有效攻城战力会扣除疲劳与远征距离；守城成员享受城防加成。攻守城战报会解释择城、选将、布防、疲劳、灵根相克和城防等快照因素。"
+          "常规攻城成员最多 5 人；0 城宗门最多可派 6 人争夺立足之地，取得城市后恢复 5 人。有效攻城战力会扣除疲劳与远征距离；守城成员始终最多 5 人并享受城防加成。攻守城战报会解释择城、选将、布防、疲劳、灵根相克和城防等快照因素。"
         ],
         bullets: [
           "妖潮每天会随机挑选若干已占领城市，优先关注资源高、持有久、领地多的目标，并为刚被袭击的城市提供短暂保护权重。",
@@ -7485,8 +7486,8 @@ const provinceTerritories = computed(() => {
       distance: strategy.distances?.[province.id] || 0,
       resourceValue: strategyValue.resourceValue || 0,
       defenseValue: strategyValue.defenseValue || 0,
-      defenderLimit: maxSiegeTeamSize,
-      attackerLimit: maxSiegeTeamSize,
+      defenderLimit: strategyValue.defenderLimit || maxSiegeTeamSize,
+      attackerLimit: strategyValue.attackerLimit || maxSiegeTeamSize,
       effect: provinceEffect(currentProvince)
     };
   });
@@ -7582,6 +7583,10 @@ const playerSectMembers = computed(() => sectMembers(sectByName(playerSectNameFo
 const playerOwnedProvinces = computed(() => provinceTerritories.value
   .filter((province) => province.owner === playerSectNameForPlan.value)
   .sort((a, b) => (b.defenseValue || 0) - (a.defenseValue || 0) || (a.rank || 99) - (b.rank || 99)));
+const playerAttackTeamLimit = computed(() => Math.max(
+  maxSiegeTeamSize,
+  Number(derived.value.sectStrategy?.attackTeamLimit) || (playerOwnedProvinces.value.length ? maxSiegeTeamSize : zeroTerritorySiegeTeamSize)
+));
 const attackableProvinces = computed(() => provinceTerritories.value
   .filter((province) => province.owner && province.owner !== playerSectNameForPlan.value)
   .sort((a, b) => (a.distance || 9) - (b.distance || 9) || (b.resourceValue || 0) - (a.resourceValue || 0)));
@@ -9567,7 +9572,7 @@ function syncSectPlanDraft() {
   const plan = derived.value.sectStrategy?.plan || gameState.value.playerSectPlan || {};
   sectPlanDraft.mode = plan.mode || "balanced";
   sectPlanDraft.attackTarget = plan.attack?.targetProvinceId || "";
-  sectPlanDraft.attackMemberIds = Array.isArray(plan.attack?.memberIds) ? [...new Set(plan.attack.memberIds)].slice(0, maxSiegeTeamSize) : [];
+  sectPlanDraft.attackMemberIds = Array.isArray(plan.attack?.memberIds) ? [...new Set(plan.attack.memberIds)].slice(0, playerAttackTeamLimit.value) : [];
   const unavailableIds = new Set(sectPlanDraft.attackMemberIds);
   sectPlanDraft.defense = Object.fromEntries(Object.entries(plan.defense?.provinceIdToMemberIds || {})
     .map(([provinceId, ids]) => {
@@ -9586,7 +9591,7 @@ function togglePlanAttackMember(id) {
   if (assignedDefenseIds.value.has(id)) return;
   const next = new Set(sectPlanDraft.attackMemberIds);
   if (next.has(id)) next.delete(id);
-  else if (next.size < (selectedAttackProvince.value?.attackerLimit || maxSiegeTeamSize)) next.add(id);
+  else if (next.size < (selectedAttackProvince.value?.attackerLimit || playerAttackTeamLimit.value)) next.add(id);
   sectPlanDraft.attackMemberIds = [...next];
 }
 

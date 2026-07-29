@@ -8681,6 +8681,24 @@ button.sect-rank-name:focus-visible strong {
   min-width: 0;
 }
 
+.province-battle-roster .defender-stack.compact {
+  gap: 2px;
+  overflow-x: visible;
+}
+
+.province-battle-roster .defender-stack.compact .defender-chip {
+  width: 31px;
+  height: 31px;
+}
+
+.province-battle-roster .defender-stack.compact .defender-chip .character-portrait {
+  --portrait-size: 31px;
+}
+
+.province-battle-roster .defender-stack.compact .defender-chip.monster .monster-emblem {
+  --monster-emblem-size: 31px;
+}
+
 .province-roster-label {
   display: inline-grid;
   place-items: center;
