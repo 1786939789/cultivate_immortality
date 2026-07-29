@@ -2637,7 +2637,26 @@ export function buildCombatRatings(state) {
       sampleEnough: activeDaySet.size >= combatRatingMinimumDays,
       daily
     };
-  }).sort((left, right) => Number(right.sampleEnough) - Number(left.sampleEnough) || right.score - left.score || right.activeDays - left.activeDays);
+  });
+  const rankingsByDay = new Map();
+  for (const entry of entries) {
+    for (const daily of entry.daily) {
+      if (!rankingsByDay.has(daily.day)) rankingsByDay.set(daily.day, []);
+      rankingsByDay.get(daily.day).push({ id: entry.id, daily });
+    }
+  }
+  for (const participants of rankingsByDay.values()) {
+    participants.sort((left, right) => right.daily.score - left.daily.score || left.id.localeCompare(right.id));
+    const participantCount = participants.length;
+    participants.forEach(({ daily }, index) => {
+      daily.rank = index + 1;
+      daily.participantCount = participantCount;
+      daily.rankPoints = participantCount === 1
+        ? 200
+        : Math.round(200 - index * 199 / (participantCount - 1));
+    });
+  }
+  entries.sort((left, right) => Number(right.sampleEnough) - Number(left.sampleEnough) || right.score - left.score || right.activeDays - left.activeDays);
   return {
     windowDays: battleRecordDays,
     windowStartDay: minDayForWindow(currentDay, battleRecordDays),
@@ -2646,6 +2665,121 @@ export function buildCombatRatings(state) {
     weights: { ...combatRatingWeights },
     entries
   };
+}
+
+function dailyRankingRankPoints(rank, participantCount) {
+  if (participantCount <= 1) return 200;
+  return Math.round(200 - (rank - 1) * 199 / (participantCount - 1));
+}
+
+function personRecordForDay(entity, day) {
+  return (entity.dailyRecords || []).find((record) => Number(record.day) === Number(day));
+}
+
+function estimatedPowerForDay(entity, day, state) {
+  const savedPower = Number(personRecordForDay(entity, day)?.power);
+  if (Number.isFinite(savedPower) && savedPower > 0) return savedPower;
+
+  const historical = { ...entity };
+  for (const record of entity.breakthroughs || []) {
+    if (!record.success || Number(record.day || 0) <= day) continue;
+    const growth = record.growth || {};
+    historical.maxHp = Math.max(1, Number(historical.maxHp || 0) - Number(growth.maxHp || 0));
+    historical.attack = Math.max(1, Number(historical.attack || 0) - Number(growth.attack || 0));
+    historical.defense = Math.max(0, Number(historical.defense || 0) - Number(growth.defense || 0));
+    historical.divineSense = Math.max(0, Number(historical.divineSense || 0) - Number(growth.divineSense || 0));
+    historical.maxMana = Math.max(1, Number(historical.maxMana || 0) - Number(growth.maxMana || 0));
+  }
+  historical.hp = historical.maxHp;
+  historical.mana = historical.maxMana;
+  return powerOf(historical, state);
+}
+
+function duelScoreForDay(entity, day) {
+  const savedScore = Number(personRecordForDay(entity, day)?.duelScore);
+  if (Number.isFinite(savedScore) && savedScore >= 0) return savedScore;
+
+  const season = duelSeasonOfDay(day);
+  const currentSeason = Number(entity.duelSeason?.season) || duelSeasonOfDay(day);
+  const completedSeason = (entity.duelSeasonHistory || []).find((record) => Number(record.season) === season);
+  let score = season === currentSeason
+    ? Number(entity.duelSeason?.score || 0)
+    : Number(completedSeason?.score || 0);
+  for (const record of entity.duelHistory || []) {
+    if (Number(record.season || duelSeasonOfDay(record.day)) !== season) continue;
+    if (Number(record.day || 0) > day) score -= Number(record.scoreDelta || 0);
+  }
+  return clamp(Math.round(score), 0, duelSeasonMaxScore);
+}
+
+function buildDailyRankingTrends(state, id) {
+  const currentDay = Math.max(1, Number(state.day || 1));
+  const startDay = Math.max(1, currentDay - battleRecordDays + 1);
+  const roster = allCultivators(state).map(({ entity }) => entity);
+  const trends = { power: [], duel: [] };
+
+  for (let day = startDay; day <= currentDay; day += 1) {
+    const powerRows = roster
+      .map((entity) => ({ entity, value: estimatedPowerForDay(entity, day, state) }))
+      .sort((left, right) => right.value - left.value || left.entity.id.localeCompare(right.entity.id));
+    const duelRows = roster
+      .map((entity) => ({ entity, value: duelScoreForDay(entity, day) }))
+      .sort((left, right) => right.value - left.value
+        || estimatedPowerForDay(right.entity, day, state) - estimatedPowerForDay(left.entity, day, state)
+        || left.entity.id.localeCompare(right.entity.id));
+    const participantCount = roster.length;
+    const powerIndex = powerRows.findIndex((row) => row.entity.id === id);
+    const duelIndex = duelRows.findIndex((row) => row.entity.id === id);
+    if (powerIndex >= 0) {
+      const rank = powerIndex + 1;
+      trends.power.push({
+        day,
+        rank,
+        participantCount,
+        rankPoints: dailyRankingRankPoints(rank, participantCount),
+        value: powerRows[powerIndex].value
+      });
+    }
+    if (duelIndex >= 0) {
+      const rank = duelIndex + 1;
+      const score = duelRows[duelIndex].value;
+      trends.duel.push({
+        day,
+        rank,
+        participantCount,
+        rankPoints: dailyRankingRankPoints(rank, participantCount),
+        value: score,
+        rankName: duelRankForScore(score).name
+      });
+    }
+  }
+  return trends;
+}
+
+function captureDailyRankSnapshots(state) {
+  const roster = allCultivators(state).map(({ entity }) => entity);
+  const powerRows = roster
+    .map((entity) => ({ entity, value: powerOf(entity, state) }))
+    .sort((left, right) => right.value - left.value || left.entity.id.localeCompare(right.entity.id));
+  const duelRows = roster
+    .map((entity) => ({ entity, value: Number(entity.duelSeason?.score || 0) }))
+    .sort((left, right) => right.value - left.value
+      || powerOf(right.entity, state) - powerOf(left.entity, state)
+      || left.entity.id.localeCompare(right.entity.id));
+  const powerRanks = new Map(powerRows.map((row, index) => [row.entity.id, { rank: index + 1, value: row.value }]));
+  const duelRanksById = new Map(duelRows.map((row, index) => [row.entity.id, { rank: index + 1, value: row.value }]));
+
+  for (const entity of roster) {
+    const record = personRecordForDay(entity, state.day);
+    if (!record) continue;
+    const power = powerRanks.get(entity.id);
+    const duel = duelRanksById.get(entity.id);
+    record.power = power?.value || powerOf(entity, state);
+    record.powerRank = power?.rank || 0;
+    record.duelScore = duel?.value || 0;
+    record.duelRank = duel?.rank || 0;
+    record.duelRankName = duelRankForScore(record.duelScore).name;
+  }
 }
 
 function membersForSect(state, sectName) {
@@ -2958,21 +3092,29 @@ function publicStarSeaTeamReplay(teamRecord, monster, state) {
   };
 }
 
-function createBloodTrialCaves(maxStage) {
-  return Array.from({ length: realmStages.length }, (_, cave) => {
-    const stage = clamp(cave, 0, realmStages.length - 1);
-    const realm = topRealmOfStage(stage);
-    const stageMonsterNames = monsterNamesByStage[stage] || monsterNames;
-    const monsterName = pick(stageMonsterNames);
-    const archetype = monsterArchetypeForName(monsterName);
-    return {
-      cave: cave + 1,
-      name: dungeonTierNames[stage],
-      monster: makeMonster(`${dungeonTierNames[stage]}·${monsterName}`, realm, pick(roots).key, 0.8 + cave * 0.18, archetype.id),
-      clears: [],
-      challengers: []
-    };
-  });
+function createBloodTrialCave(caveIndex) {
+  const stage = clamp(caveIndex, 0, realmStages.length - 1);
+  const realm = topRealmOfStage(stage);
+  const stageMonsterNames = monsterNamesByStage[stage] || monsterNames;
+  const monsterName = pick(stageMonsterNames);
+  const archetype = monsterArchetypeForName(monsterName);
+  return {
+    cave: caveIndex + 1,
+    name: dungeonTierNames[stage],
+    monster: makeMonster(`${dungeonTierNames[stage]}·${monsterName}`, realm, pick(roots).key, 0.8 + caveIndex * 0.18, archetype.id),
+    clears: [],
+    challengers: []
+  };
+}
+
+function ensureBloodTrialCave(caves, caveIndex) {
+  if (caveIndex < 0 || caveIndex >= realmStages.length) return null;
+  if (!caves[caveIndex]) caves[caveIndex] = createBloodTrialCave(caveIndex);
+  return caves[caveIndex];
+}
+
+function createBloodTrialCaves() {
+  return [createBloodTrialCave(0)];
 }
 
 function rollSpiritFromRange(range) {
@@ -3104,7 +3246,9 @@ function runSoloDungeonFor(state, entity, date, caves, foughtAt = timestampKey()
   let runHp = maxHp;
   let runMana = maxMana;
 
-  for (const cave of caves) {
+  for (let caveIndex = 0; caveIndex < realmStages.length; caveIndex += 1) {
+    const cave = ensureBloodTrialCave(caves, caveIndex);
+    if (!cave) break;
     const monster = cave.monster;
     const startHp = runHp;
     const startMana = runMana;
@@ -4570,8 +4714,7 @@ function runDailyDungeons(state, date, foughtAt = timestampKey()) {
   ensureDungeonState(state);
   if (state.dungeonDays.some((record) => record.day === state.day)) return state.dungeonDays.find((record) => record.day === state.day);
   const roster = allCultivators(state);
-  const maxStage = Math.max(...roster.map(({ entity }) => stageIndexOfRealm(entity.realm || 0)));
-  const bloodCaves = createBloodTrialCaves(maxStage);
+  const bloodCaves = createBloodTrialCaves();
   const solo = roster.map(({ entity }) => ({ id: entity.id, personName: entity.name, sect: entity.id === "player" ? state.sect.name : entity.sect, ...runSoloDungeonFor(state, entity, date, bloodCaves, foughtAt) }));
   settleBloodTrialRewards(state, bloodCaves);
   for (const entry of solo) {
@@ -9912,6 +10055,7 @@ export function getPublicCultivatorDetail(state, id) {
     spiritPearls: publicSpiritPearls(state, match.entity),
     duelRank: duelRankSnapshot(match.entity),
     combatRating: combatRatings.entries.find((entry) => entry.id === id) || null,
+    rankingTrends: buildDailyRankingTrends(state, id),
     combatRatingMeta: {
       windowDays: combatRatings.windowDays,
       windowStartDay: combatRatings.windowStartDay,
@@ -10605,7 +10749,12 @@ function publicDungeonDays(records, currentDay = 1, people = null) {
     date: record.date,
     bloodTrial: record.bloodTrial ? {
       name: record.bloodTrial.name,
-      caves: (record.bloodTrial.caves || []).map((cave) => publicBloodCaveRecord(cave, currentDay, record.day, people))
+      caves: (record.bloodTrial.caves || [])
+        .filter((cave) => Number(cave.challengerCount || 0) > 0
+          || Number(cave.clearCount || 0) > 0
+          || (cave.challengers || []).length > 0
+          || (cave.clears || []).length > 0)
+        .map((cave) => publicBloodCaveRecord(cave, currentDay, record.day, people))
     } : null,
     solo: (record.solo || []).slice(0, 20).map((entry) => publicDungeonHistoryEntry(entry, currentDay, record.day)),
     sects: (record.sects || []).map((sectRecord) => publicSectDungeonRecord(sectRecord, currentDay, record.day, people)),
@@ -11433,6 +11582,7 @@ export function dailySettlement(state, options = {}) {
   state.player.dailyRecords = trimRecordsByDay(state.player.dailyRecords, state.day, growthRecordDays, growthRecordLimit);
   settleDailySpiritPearlAssets(state);
   runDailyDuels(state, settlementTime);
+  captureDailyRankSnapshots(state);
   ensureDaoTrialState(state);
   generateDailyEncounter(state);
   state.lastSettlementDate = options.settlementDate || dateKey();

@@ -3905,7 +3905,10 @@
                     v-for="pearl in personSpiritPearls(selectedPerson).pearls || []"
                     :key="`${selectedPerson.id}-pearl-${pearl.id}`"
                     class="dossier-pearl-item"
-                    :class="{ formed: pearl.tier > 0, matched: pearl.matchMultiplier > 1 }"
+                    :class="[
+                      personPearlTierClass(pearl),
+                      { formed: pearl.tier > 0, matched: pearl.tier > 0 && pearl.matchMultiplier > 1 }
+                    ]"
                     tabindex="0"
                   >
                     <span class="dossier-pearl-orb">
@@ -3929,6 +3932,21 @@
             </div>
 
             <div class="panel flat dossier-combat-panel dossier-combat-summary">
+              <div class="dossier-ranking-tabs" role="tablist" aria-label="每日排名走势类型">
+                <button
+                  v-for="tab in dossierRankingTabs"
+                  :key="tab.id"
+                  class="segment"
+                  :class="{ active: activeDossierRanking === tab.id }"
+                  type="button"
+                  role="tab"
+                  :aria-selected="activeDossierRanking === tab.id"
+                  @click="activeDossierRanking = tab.id"
+                >
+                  {{ tab.label }}
+                </button>
+              </div>
+              <template v-if="activeDossierRanking === 'combat'">
               <div class="dossier-combat-head">
                 <div>
                   <h3>近十日战斗评分</h3>
@@ -3941,14 +3959,42 @@
                 <span><small>切磋</small><b>{{ formatCombatComponent(selectedPersonCombatRating.duelScore) }}</b><i><em :style="{ width: `${selectedPersonCombatRating.duelScore}%` }"></em></i></span>
                 <span><small>攻守城</small><b>{{ formatCombatComponent(selectedPersonCombatRating.provinceScore) }}</b><i><em :style="{ width: `${selectedPersonCombatRating.provinceScore}%` }"></em></i></span>
               </div>
-              <div v-if="selectedPersonCombatRating.daily.length" class="combat-rating-trend" aria-label="最近十日战斗评分趋势">
-                <span v-for="entry in [...selectedPersonCombatRating.daily].reverse()" :key="`${selectedPerson.id}-combat-${entry.day}`" :title="combatRatingDayTitle(entry)">
-                  <i :style="{ height: `${Math.max(8, entry.score)}%` }"></i>
-                  <small>{{ entry.day }}</small>
-                </span>
+              <div v-if="selectedPersonCombatTrend.length" class="combat-rating-trend-block">
+                <div class="combat-rating-trend" aria-label="最近十日每日战斗评分排名走势">
+                  <svg class="combat-rating-line" viewBox="0 0 1000 120" preserveAspectRatio="none" aria-hidden="true">
+                    <polyline :points="combatRatingTrendPoints(selectedPersonCombatTrend)" />
+                    <circle v-for="(entry, index) in selectedPersonCombatTrend" :key="`${selectedPerson.id}-combat-point-${entry.day}`" :cx="combatRatingTrendPointX(index)" :cy="combatRatingTrendPointY(entry)" r="4" />
+                  </svg>
+                  <span v-for="entry in selectedPersonCombatTrend" :key="`${selectedPerson.id}-combat-${entry.day}`" :title="combatRatingDayTitle(entry)">
+                    <i :style="{ height: `${combatRatingRankPercent(entry)}%` }"></i>
+                    <small>第{{ entry.rank }}名</small>
+                  </span>
+                </div>
               </div>
               <p v-else class="empty compact-empty">最近十天暂无实际出战记录。</p>
-              <p class="combat-rating-note">轮空、阵容待命、未参战和兵不血刃不计分；每个系统按日汇总，近期表现权重更高。</p>
+              </template>
+              <template v-else>
+                <div class="dossier-combat-head dossier-ranking-head">
+                  <div>
+                    <h3>{{ activeDossierRankingMeta.title }}</h3>
+                    <p>{{ activeDossierRankingMeta.description }}</p>
+                  </div>
+                  <strong>{{ activeDossierRankingMeta.value }}</strong>
+                </div>
+                <div v-if="selectedPersonDailyRankingTrend.length" class="combat-rating-trend-block">
+                  <div class="combat-rating-trend" :aria-label="activeDossierRankingMeta.ariaLabel">
+                    <svg class="combat-rating-line" viewBox="0 0 1000 120" preserveAspectRatio="none" aria-hidden="true">
+                      <polyline :points="combatRatingTrendPoints(selectedPersonDailyRankingTrend)" />
+                      <circle v-for="(entry, index) in selectedPersonDailyRankingTrend" :key="`${selectedPerson.id}-${activeDossierRanking}-point-${entry.day}`" :cx="combatRatingTrendPointX(index)" :cy="combatRatingTrendPointY(entry)" r="4" />
+                    </svg>
+                    <span v-for="entry in selectedPersonDailyRankingTrend" :key="`${selectedPerson.id}-${activeDossierRanking}-${entry.day}`" :title="dailyRankingDayTitle(entry)">
+                      <i :style="{ height: `${combatRatingRankPercent(entry)}%` }"></i>
+                      <small>第{{ entry.rank }}名</small>
+                    </span>
+                  </div>
+                </div>
+                <p v-else class="empty compact-empty">最近十天暂无排名记录。</p>
+              </template>
             </div>
 
             <div class="grid detail-sections record-sections dossier-records">
@@ -4919,8 +4965,8 @@ const taskCategoryOptions = [
 const rankBoards = [
   { id: "power", label: "个人战力" },
   { id: "duel", label: "切磋段位" },
-  { id: "sect", label: "宗门战力" },
   { id: "combat", label: "战斗评分" },
+  { id: "sect", label: "宗门战力" },
   { id: "realmStats", label: "境界统计" }
 ];
 
@@ -5099,6 +5145,7 @@ const starSeaPersonalRankPage = ref(1);
 const selectedVoidHallSect = ref("");
 const detailView = ref("rank");
 const selectedPersonId = ref("player");
+const activeDossierRanking = ref("combat");
 const selectedSectName = ref("");
 const detailReturnStack = ref([]);
 const selectedRealmStage = ref("");
@@ -9648,6 +9695,34 @@ const selectedPersonCombatRating = computed(() => (
   || combatRatingById.value.get(selectedPersonId.value)
   || { score: 500, dungeonScore: 50, duelScore: 50, provinceScore: 50, activeDays: 0, sampleEnough: false, daily: [] }
 ));
+const selectedPersonCombatTrend = computed(() => [...(selectedPersonCombatRating.value.daily || [])].reverse());
+const dossierRankingTabs = [
+  { id: "combat", label: "战斗评分排名" },
+  { id: "power", label: "战斗力排名" },
+  { id: "duel", label: "段位排名" }
+];
+const selectedPersonRankingTrends = computed(() => personDetails.value[selectedPersonId.value]?.rankingTrends || { power: [], duel: [] });
+const selectedPersonDailyRankingTrend = computed(() => selectedPersonRankingTrends.value[activeDossierRanking.value] || []);
+const activeDossierRankingMeta = computed(() => {
+  const latest = selectedPersonDailyRankingTrend.value[selectedPersonDailyRankingTrend.value.length - 1];
+  if (activeDossierRanking.value === "duel") {
+    return {
+      title: "近十日每日段位排名",
+      description: latest ? `当前 ${latest.rankName || "未定段"} · ${latest.value || 0} 分` : "按每日切磋积分排名",
+      value: latest ? `#${latest.rank}` : "-",
+      ariaLabel: "最近十日每日段位排名走势"
+    };
+  }
+  return {
+    title: "近十日每日战斗力排名",
+    description: latest ? `当前战斗力 ${latest.value || 0}` : "按每日角色战斗力排名",
+    value: latest ? `#${latest.rank}` : "-",
+    ariaLabel: "最近十日每日战斗力排名走势"
+  };
+});
+watch(selectedPersonId, () => {
+  activeDossierRanking.value = "combat";
+});
 const selectedPersonCombatRatingLabel = computed(() => {
   const rating = selectedPersonCombatRating.value;
   return `近十日战斗评分 ${rating.score}，副本 ${formatCombatComponent(rating.dungeonScore)}，切磋 ${formatCombatComponent(rating.duelScore)}，攻守城 ${formatCombatComponent(rating.provinceScore)}，有效 ${rating.activeDays} 天`;
@@ -9659,11 +9734,42 @@ function formatCombatComponent(value) {
 }
 
 function combatRatingDayTitle(entry) {
-  const parts = [`第 ${entry.day} 天`, `综合 ${formatCombatComponent(entry.score)}`];
+  const parts = [
+    `第 ${entry.day} 天`,
+    `排名 第 ${entry.rank} / ${entry.participantCount}`,
+    `排名点 ${entry.rankPoints}`,
+    `综合分 ${formatCombatComponent(entry.score)}`
+  ];
   if (Number.isFinite(entry.dungeonScore)) parts.push(`副本 ${formatCombatComponent(entry.dungeonScore)}`);
   if (Number.isFinite(entry.duelScore)) parts.push(`切磋 ${formatCombatComponent(entry.duelScore)}`);
   if (Number.isFinite(entry.provinceScore)) parts.push(`攻守 ${formatCombatComponent(entry.provinceScore)}`);
   return parts.join(" · ");
+}
+
+function dailyRankingDayTitle(entry) {
+  const valueLabel = activeDossierRanking.value === "duel"
+    ? `${entry.rankName || "未定段"} ${entry.value || 0} 分`
+    : `战斗力 ${entry.value || 0}`;
+  return `第 ${entry.day} 天 · 排名 第 ${entry.rank} / ${entry.participantCount} · ${valueLabel}`;
+}
+
+function combatRatingRankPercent(entry) {
+  const rankPoints = Math.max(1, Math.min(200, Number(entry?.rankPoints) || 1));
+  return Math.max(3, rankPoints / 2);
+}
+
+function combatRatingTrendPoints(entries) {
+  return entries.map((entry, index) => {
+    return `${combatRatingTrendPointX(index)},${combatRatingTrendPointY(entry)}`;
+  }).join(" ");
+}
+
+function combatRatingTrendPointX(index) {
+  return (index + 0.5) * 100;
+}
+
+function combatRatingTrendPointY(entry) {
+  return Math.round((120 - combatRatingRankPercent(entry) * 1.2) * 10) / 10;
 }
 const selectedPersonRelationship = computed(() => {
   const id = selectedPerson.value?.id;
@@ -9755,6 +9861,11 @@ function personPearlStatusText(pearl) {
   if (pearl?.tier) return `${pearl.tier}阶${pearl.star}星`;
   const progress = personPearlProgressInfo(pearl);
   return `${progress.fragmentTier}阶 ${progress.count}/${progress.cost}`;
+}
+
+function personPearlTierClass(pearl) {
+  const tier = Math.max(0, Math.min(9, Number(pearl?.tier) || 0));
+  return tier ? `pearl-tier-${tier}` : "pearl-unformed";
 }
 
 function personPearlMatchText(pearl) {

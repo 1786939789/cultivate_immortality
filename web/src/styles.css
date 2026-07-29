@@ -2304,6 +2304,18 @@ button {
   transform: none;
 }
 
+.dungeon-cave-card .blood-podium {
+  padding-bottom: 18px;
+}
+
+.dungeon-cave-card .blood-podium-card.rank-2 {
+  transform: translateY(10px);
+}
+
+.dungeon-cave-card .blood-podium-card.rank-3 {
+  transform: translateY(16px);
+}
+
 .blood-podium-card.failed {
   background:
     linear-gradient(180deg, rgba(241, 245, 249, .88), rgba(255, 250, 240, .62)),
@@ -9345,6 +9357,27 @@ button.defender-chip.person:focus-visible .character-portrait {
   gap: 12px;
 }
 
+.dossier-ranking-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.dossier-ranking-tabs .segment {
+  min-height: 34px;
+  font-weight: 800;
+}
+
+.dossier-ranking-head > strong {
+  font-size: 22px;
+}
+
+.dossier-ranking-head p {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
 .dossier-combat-head {
   display: flex;
   align-items: center;
@@ -9401,19 +9434,54 @@ button.defender-chip.person:focus-visible .character-portrait {
   background: #0f766e;
 }
 
+.combat-rating-trend-block {
+  display: grid;
+}
+
 .combat-rating-trend {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(10, minmax(0, 1fr));
   align-items: end;
   gap: 5px;
-  min-height: 82px;
+  min-height: 154px;
   border-bottom: 1px solid rgba(120, 91, 43, .18);
   padding-top: 6px;
 }
 
+.combat-rating-line {
+  position: absolute;
+  z-index: 2;
+  top: 6px;
+  left: 0;
+  width: 100%;
+  height: 120px;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.combat-rating-line polyline {
+  fill: none;
+  stroke: #b45309;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 1px 0 rgba(255, 250, 220, .8));
+}
+
+.combat-rating-line circle {
+  fill: #f7e7b0;
+  stroke: #b45309;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
 .combat-rating-trend > span {
+  position: relative;
+  z-index: 1;
   display: grid;
-  grid-template-rows: 58px auto;
+  grid-template-rows: 120px 24px;
   align-items: end;
   justify-items: center;
   gap: 4px;
@@ -9422,21 +9490,37 @@ button.defender-chip.person:focus-visible .character-portrait {
 
 .combat-rating-trend i {
   width: min(18px, 76%);
-  max-height: 58px;
+  max-height: 120px;
   border-radius: 3px 3px 0 0;
   background: linear-gradient(180deg, #2f9c8d, #0f766e);
+  box-shadow: 0 0 0 1px rgba(15, 118, 110, .12);
 }
 
 .combat-rating-trend small {
-  color: var(--muted);
-  font-size: 9px;
+  min-width: 46px;
+  padding: 3px 5px;
+  border: 1px solid rgba(120, 91, 43, .24);
+  border-radius: 4px;
+  background: rgba(255, 248, 218, .9);
+  color: #5d3514;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.15;
+  text-align: center;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, .8);
+  white-space: nowrap;
 }
 
-.combat-rating-note {
-  margin: 0;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.55;
+@media (max-width: 720px) {
+  .dossier-ranking-tabs {
+    grid-template-columns: 1fr;
+  }
+
+  .combat-rating-trend small {
+    min-width: 42px;
+    padding-inline: 2px;
+    font-size: 11px;
+  }
 }
 
 .rank-pager {

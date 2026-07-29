@@ -12462,12 +12462,12 @@ body::before {
   position: relative;
   min-height: 114px;
   gap: 3px;
-  border: 1px solid rgba(111, 79, 33, .3);
+  border: 1px solid rgba(91, 83, 68, .32);
   border-radius: 3px;
   background:
-    linear-gradient(145deg, rgba(255, 250, 222, .94), rgba(217, 190, 127, .68)),
-    rgba(255, 255, 255, .25);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .4), 0 3px 7px rgba(72, 47, 18, .1);
+    linear-gradient(145deg, rgba(224, 218, 196, .72), rgba(172, 160, 132, .52)),
+    rgba(126, 118, 98, .16);
+  box-shadow: inset 0 0 0 1px rgba(255, 252, 234, .28), 0 2px 5px rgba(55, 48, 36, .1);
   cursor: help;
   outline: none;
   transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
@@ -12477,15 +12477,15 @@ body::before {
   content: "";
   position: absolute;
   inset: 3px;
-  border: 1px solid rgba(120, 84, 28, .14);
+  border: 1px solid rgba(87, 79, 64, .14);
   pointer-events: none;
 }
 
 .rank-surface.view.active > .character-dossier .dossier-pearl-item:hover,
 .rank-surface.view.active > .character-dossier .dossier-pearl-item:focus-visible {
   z-index: 20;
-  border-color: rgba(22, 107, 91, .78);
-  box-shadow: inset 0 0 0 1px rgba(255, 244, 198, .8), 0 8px 16px rgba(25, 84, 70, .25);
+  border-color: rgba(91, 77, 52, .58);
+  box-shadow: inset 0 0 0 1px rgba(255, 249, 218, .48), 0 8px 16px rgba(62, 51, 33, .2);
   transform: translateY(-3px);
 }
 
@@ -12495,10 +12495,10 @@ body::before {
   place-items: center;
   width: 45px;
   height: 45px;
-  border: 1px solid rgba(94, 69, 31, .34);
+  border: 1px solid rgba(78, 74, 65, .38);
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 26%, #fff6cd, #b68b42 65%, #5e421d);
-  box-shadow: 0 3px 7px rgba(74, 48, 16, .22), inset 0 0 0 3px rgba(255, 248, 213, .28);
+  background: radial-gradient(circle at 35% 26%, #ded9c7, #918979 65%, #4a4741);
+  box-shadow: 0 2px 5px rgba(52, 48, 41, .2), inset 0 0 0 3px rgba(241, 237, 220, .18);
 }
 
 .rank-surface.view.active > .character-dossier .dossier-pearl-item img,
@@ -12511,15 +12511,164 @@ body::before {
   filter: grayscale(.72) brightness(.68);
 }
 
-.rank-surface.view.active > .character-dossier .dossier-pearl-item.formed img,
-.rank-surface.view.active > .character-dossier .dossier-pearl-item.matched img {
+.rank-surface.view.active > .character-dossier .dossier-pearl-item.formed img {
   filter: none;
 }
 
-.rank-surface.view.active > .character-dossier .dossier-pearl-item.matched .dossier-pearl-orb {
-  border-color: rgba(26, 124, 101, .72);
-  background: radial-gradient(circle at 35% 26%, #e5fff3, #3eaa90 64%, #145a4e);
-  box-shadow: 0 0 0 2px rgba(37, 139, 112, .15), 0 0 15px rgba(36, 148, 119, .34), inset 0 0 0 3px rgba(230, 255, 243, .25);
+.rank-surface.view.active > .character-dossier .dossier-pearl-item.formed {
+  border-color: var(--pearl-border);
+  background:
+    radial-gradient(circle at 82% 8%, var(--pearl-glow), transparent 48%),
+    linear-gradient(145deg, var(--pearl-surface-light), var(--pearl-surface-dark));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, .58),
+    0 4px 10px var(--pearl-shadow);
+}
+
+.rank-surface.view.active > .character-dossier .dossier-pearl-item.formed::before {
+  border-color: var(--pearl-inner-border);
+}
+
+.rank-surface.view.active > .character-dossier .dossier-pearl-item.formed .dossier-pearl-orb {
+  border-color: var(--pearl-border);
+  background: radial-gradient(circle at 35% 26%, var(--pearl-orb-light), var(--pearl-orb-main) 64%, var(--pearl-orb-dark));
+  box-shadow:
+    0 0 0 2px var(--pearl-ring),
+    0 0 var(--pearl-blur) var(--pearl-shadow),
+    inset 0 0 0 3px rgba(255, 255, 255, .2);
+}
+
+.rank-surface.view.active > .character-dossier .dossier-pearl-item.formed.matched {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, .72),
+    0 0 0 2px rgba(24, 125, 101, .18),
+    0 6px 16px var(--pearl-shadow);
+}
+
+.rank-surface.view.active > .character-dossier .dossier-pearl-item.pearl-tier-1 {
+  --pearl-border: #9b6a37;
+  --pearl-inner-border: rgba(137, 87, 40, .3);
+  --pearl-surface-light: #f2dfbd;
+  --pearl-surface-dark: #c9a16b;
+  --pearl-glow: rgba(211, 154, 83, .28);
+  --pearl-orb-light: #fff0cb;
+  --pearl-orb-main: #c98948;
+  --pearl-orb-dark: #70401f;
+  --pearl-ring: rgba(165, 101, 44, .18);
+  --pearl-shadow: rgba(126, 75, 31, .28);
+  --pearl-blur: 9px;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-pearl-item.pearl-tier-2 {
+  --pearl-border: #4f8a58;
+  --pearl-inner-border: rgba(58, 122, 69, .3);
+  --pearl-surface-light: #e2f0cc;
+  --pearl-surface-dark: #a8ca86;
+  --pearl-glow: rgba(89, 165, 92, .28);
+  --pearl-orb-light: #efffd7;
+  --pearl-orb-main: #6eae68;
+  --pearl-orb-dark: #315d36;
+  --pearl-ring: rgba(61, 139, 72, .2);
+  --pearl-shadow: rgba(43, 109, 55, .3);
+  --pearl-blur: 10px;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-pearl-item.pearl-tier-3 {
+  --pearl-border: #3c7ca8;
+  --pearl-inner-border: rgba(45, 113, 158, .32);
+  --pearl-surface-light: #dcecf4;
+  --pearl-surface-dark: #8fbcd1;
+  --pearl-glow: rgba(55, 144, 194, .3);
+  --pearl-orb-light: #e7f8ff;
+  --pearl-orb-main: #4f9bc5;
+  --pearl-orb-dark: #24577b;
+  --pearl-ring: rgba(45, 126, 177, .22);
+  --pearl-shadow: rgba(35, 101, 146, .32);
+  --pearl-blur: 11px;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-pearl-item.pearl-tier-4 {
+  --pearl-border: #7552a8;
+  --pearl-inner-border: rgba(103, 68, 158, .34);
+  --pearl-surface-light: #e9ddf4;
+  --pearl-surface-dark: #b89bd2;
+  --pearl-glow: rgba(132, 84, 190, .3);
+  --pearl-orb-light: #f6eaff;
+  --pearl-orb-main: #9368c1;
+  --pearl-orb-dark: #4e2f76;
+  --pearl-ring: rgba(112, 70, 168, .24);
+  --pearl-shadow: rgba(89, 51, 137, .34);
+  --pearl-blur: 12px;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-pearl-item.pearl-tier-5 {
+  --pearl-border: #b58a22;
+  --pearl-inner-border: rgba(170, 123, 21, .38);
+  --pearl-surface-light: #fff1bd;
+  --pearl-surface-dark: #d7ae49;
+  --pearl-glow: rgba(238, 187, 53, .36);
+  --pearl-orb-light: #fff8ca;
+  --pearl-orb-main: #e3b42d;
+  --pearl-orb-dark: #80600d;
+  --pearl-ring: rgba(202, 147, 20, .26);
+  --pearl-shadow: rgba(168, 116, 10, .38);
+  --pearl-blur: 14px;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-pearl-item.pearl-tier-6 {
+  --pearl-border: #af4a3f;
+  --pearl-inner-border: rgba(165, 53, 43, .38);
+  --pearl-surface-light: #f7dfd4;
+  --pearl-surface-dark: #d78d7c;
+  --pearl-glow: rgba(210, 79, 63, .34);
+  --pearl-orb-light: #ffe9df;
+  --pearl-orb-main: #d35e4e;
+  --pearl-orb-dark: #762c29;
+  --pearl-ring: rgba(182, 57, 46, .26);
+  --pearl-shadow: rgba(143, 45, 38, .4);
+  --pearl-blur: 15px;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-pearl-item.pearl-tier-7 {
+  --pearl-border: #278f93;
+  --pearl-inner-border: rgba(28, 135, 140, .4);
+  --pearl-surface-light: #d8f3ed;
+  --pearl-surface-dark: #72c9bd;
+  --pearl-glow: rgba(50, 197, 186, .36);
+  --pearl-orb-light: #e4fffb;
+  --pearl-orb-main: #32b7ae;
+  --pearl-orb-dark: #126268;
+  --pearl-ring: rgba(27, 158, 155, .28);
+  --pearl-shadow: rgba(21, 124, 126, .42);
+  --pearl-blur: 17px;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-pearl-item.pearl-tier-8 {
+  --pearl-border: #a452a1;
+  --pearl-inner-border: rgba(143, 57, 150, .42);
+  --pearl-surface-light: #f5e1ef;
+  --pearl-surface-dark: #ca8fc5;
+  --pearl-glow: rgba(204, 89, 193, .38);
+  --pearl-orb-light: #ffeafd;
+  --pearl-orb-main: #c25bbb;
+  --pearl-orb-dark: #6d276d;
+  --pearl-ring: rgba(172, 62, 165, .3);
+  --pearl-shadow: rgba(130, 40, 127, .44);
+  --pearl-blur: 19px;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-pearl-item.pearl-tier-9 {
+  --pearl-border: #c68e19;
+  --pearl-inner-border: rgba(201, 143, 19, .5);
+  --pearl-surface-light: #fffbe1;
+  --pearl-surface-dark: #e5c45c;
+  --pearl-glow: rgba(255, 223, 95, .5);
+  --pearl-orb-light: #fffde8;
+  --pearl-orb-main: #f0cf4a;
+  --pearl-orb-dark: #976a08;
+  --pearl-ring: rgba(232, 183, 41, .36);
+  --pearl-shadow: rgba(193, 134, 12, .52);
+  --pearl-blur: 22px;
 }
 
 .rank-surface.view.active > .character-dossier .dossier-pearl-item small {
@@ -12549,13 +12698,13 @@ body::before {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #bc8433, #f2cd65);
-  box-shadow: 0 0 6px rgba(233, 179, 62, .72);
+  background: linear-gradient(90deg, #807765, #b2a890);
+  box-shadow: none;
 }
 
-.rank-surface.view.active > .character-dossier .dossier-pearl-item.matched .dossier-pearl-progress i {
-  background: linear-gradient(90deg, #147c6a, #77dbc1);
-  box-shadow: 0 0 6px rgba(56, 179, 145, .64);
+.rank-surface.view.active > .character-dossier .dossier-pearl-item.formed .dossier-pearl-progress i {
+  background: linear-gradient(90deg, var(--pearl-orb-dark), var(--pearl-orb-main), var(--pearl-orb-light));
+  box-shadow: 0 0 7px var(--pearl-shadow);
 }
 
 .rank-surface.view.active > .character-dossier .dossier-pearl-tooltip {
