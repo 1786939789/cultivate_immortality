@@ -6473,14 +6473,23 @@ function runProvinceSieges(state, settlementDate, settlementTime = timestampKey(
   state.provinceWars ??= [];
   const targeted = new Set();
   const wars = [];
-  const attackTeamLimits = new Map(activeSectNames(state).map((sectName) => [sectName, attackTeamLimitForSect(state, sectName)]));
+  const sectNames = activeSectNames(state);
+  const attackTeamLimits = new Map(sectNames.map((sectName) => [sectName, attackTeamLimitForSect(state, sectName)]));
   const playerPlan = normalizePlayerSectPlan(
     state.playerSectPlan,
     state.day,
     attackTeamLimits.get(state.sect.name) || maxSiegeTeamSize
   );
+  const monsterTargets = pickMonsterSiegeTargets(state, targeted);
   const plans = [];
-  for (const sectName of shuffle(activeSectNames(state))) {
+
+  // Monster sieges claim cities first. A saved player target then takes priority
+  // over other sect plans, while automatic player plans remain randomly ordered.
+  const hasPriorityPlayerAttack = playerPlan.targetDay === state.day && Boolean(playerPlan.attack.targetProvinceId);
+  const planningOrder = hasPriorityPlayerAttack
+    ? [state.sect.name, ...shuffle(sectNames.filter((sectName) => sectName !== state.sect.name))]
+    : shuffle(sectNames);
+  for (const sectName of planningOrder) {
     const isPlayerSect = sectName === state.sect.name;
     const planOptions = {
       ...(isPlayerSect && playerPlan.targetDay === state.day ? playerPlan : {}),
@@ -6490,7 +6499,7 @@ function runProvinceSieges(state, settlementDate, settlementTime = timestampKey(
   }
   applyPlannedDefenders(state, plans.filter(Boolean));
 
-  for (const target of pickMonsterSiegeTargets(state, targeted)) {
+  for (const target of monsterTargets) {
     const province = provinceById(target.id);
     if (!province || !target.owner) continue;
     const defenderSect = target.owner;
