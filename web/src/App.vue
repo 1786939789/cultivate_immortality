@@ -3911,9 +3911,10 @@
               </div>
             </div>
 
-            <div class="panel flat dossier-pearl-panel dossier-pearl-strip">
+            <div class="panel flat dossier-pearl-panel dossier-pearl-strip dossier-treasury">
                 <div class="dossier-pearl-head">
                   <div class="dossier-pearl-title">
+                    <small>灵藏宝匣 · SPIRIT TREASURY</small>
                     <h3>灵珠资产</h3>
                     <span>每日结算：每 10 灵尘自动换 1 枚随机一阶碎片</span>
                   </div>
@@ -3955,7 +3956,11 @@
                 </div>
             </div>
 
-            <div class="panel flat dossier-combat-panel dossier-combat-summary">
+            <div class="panel flat dossier-combat-panel dossier-combat-summary dossier-ranking-vault">
+              <div class="dossier-section-banner">
+                <span aria-hidden="true">榜</span>
+                <div><small>战绩卷轴</small><strong>排名与战斗走势</strong></div>
+              </div>
               <div class="dossier-ranking-tabs" role="tablist" aria-label="每日排名走势类型">
                 <button
                   v-for="tab in dossierRankingTabs"
@@ -4022,7 +4027,7 @@
             </div>
 
             <div class="grid detail-sections record-sections dossier-records">
-              <div class="panel flat">
+              <div class="panel flat dossier-record-panel dossier-root-panel">
                 <h3>根盘</h3>
                 <div class="root-chip-list">
                   <span class="root-chip" v-for="root in rootList(selectedPerson)" :key="`${selectedPerson.id}-${root.key}`" :class="{ primary: root.key === primaryRoot(selectedPerson).key }">
@@ -4033,7 +4038,7 @@
                   <li v-for="line in rootSummaryLines(selectedPerson)" :key="line">{{ line }}</li>
                 </ul>
               </div>
-              <div class="panel flat">
+              <div class="panel flat dossier-record-panel dossier-forecast-panel">
                 <h3>明日预估</h3>
                 <div class="attribute-list compact">
                   <div class="attribute-row">
@@ -4048,7 +4053,7 @@
                   </div>
                 </div>
               </div>
-              <div class="panel flat">
+              <div class="panel flat dossier-record-panel dossier-growth-panel">
                 <h3>每日成长</h3>
                 <div class="timeline detail-scroll">
                   <div
@@ -4063,7 +4068,7 @@
                   <div v-if="!personDailyRecords(selectedPerson).length" class="empty">暂无成长记录。</div>
                 </div>
               </div>
-              <div class="panel flat">
+              <div class="panel flat dossier-record-panel dossier-breakthrough-panel">
                 <h3>突破记录</h3>
                 <div class="timeline detail-scroll">
                   <div class="event" :class="{ bad: !record.success, gold: record.success }" v-for="record in selectedPerson.breakthroughs" :key="`${record.day}-${record.from}-${record.to}`">
@@ -4073,7 +4078,7 @@
                   <div v-if="!selectedPerson.breakthroughs.length" class="empty">暂无突破记录。</div>
                 </div>
               </div>
-              <div class="panel flat">
+              <div class="panel flat dossier-record-panel dossier-dungeon-panel">
                 <h3>秘境记录</h3>
                 <div class="timeline detail-scroll">
                   <button
@@ -4092,7 +4097,7 @@
                   <div v-if="!selectedPerson.dungeonHistory?.length" class="empty">暂无副本闯关记录。</div>
                 </div>
               </div>
-              <div class="panel flat pearl-history-panel">
+              <div class="panel flat dossier-record-panel pearl-history-panel">
                 <h3>灵珠流水 · 近30天</h3>
                 <div class="timeline detail-scroll">
                   <div
@@ -4107,7 +4112,7 @@
                   <div v-if="!personPearlHistory(selectedPerson).length" class="empty">近 30 天暂无灵尘或灵珠记录。</div>
                 </div>
               </div>
-              <div class="panel flat">
+              <div class="panel flat dossier-record-panel dossier-duel-panel">
                 <h3>切磋战绩</h3>
                 <p>第 {{ duelSeasonInfo.season }} 赛季：{{ duelRankText(selectedPerson) }}，{{ selectedPerson.duelSeason?.wins || 0 }} 胜 {{ selectedPerson.duelSeason?.losses || 0 }} 负；累计 {{ selectedPerson.duelWins || 0 }} 胜 {{ selectedPerson.duelLosses || 0 }} 负。</p>
                 <div class="duel-history-strip" v-if="selectedPerson.duelSeasonHistory?.length">
@@ -4136,7 +4141,7 @@
                   <div v-if="!selectedPerson.duelHistory?.length" class="empty">暂无切磋明细。</div>
                 </div>
               </div>
-              <div class="panel flat">
+              <div class="panel flat dossier-record-panel dossier-skill-panel">
                 <h3>技能升阶</h3>
                 <div class="timeline detail-scroll">
                   <div class="event" :class="{ gold: skillUpgradeRecordSucceeded(record), bad: !skillUpgradeRecordSucceeded(record) }" v-for="record in selectedPerson.skillUpgrades || []" :key="`${record.day}-${record.skillId}-${record.toRank}-${record.success === false ? 'fail' : 'success'}`">
@@ -4146,7 +4151,7 @@
                   <div v-if="!selectedPerson.skillUpgrades?.length" class="empty">暂无技能升阶记录。</div>
                 </div>
               </div>
-              <div class="panel flat dossier-encounter-panel">
+              <div class="panel flat dossier-record-panel dossier-encounter-panel">
                 <div class="dossier-encounter-head">
                   <h3>{{ selectedPerson.id === "player" ? "因缘总览" : "与你的因缘" }}</h3>
                   <button
