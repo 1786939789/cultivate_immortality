@@ -5024,14 +5024,19 @@ const maxSiegeTeamSize = 5;
 const zeroTerritorySiegeTeamSize = 6;
 const sectFatigueMax = 20;
 const sectFatiguePenaltyPerPoint = 0.025;
-const sectFatigueRecoveryPerIdleDay = 3;
+const sectFatigueRecoveryPerRestDay = 1;
+const sectFatigueRecoveryPerGarrisonDay = 1;
 const sectDefenseFatigueGain = 2;
+const sectFatigueAutoRestThreshold = 16;
+const sectFatigueHeavyRestThreshold = 10;
+const sectFatigueHeavyRestRecovery = 2;
+const sectFatigueCriticalRestRecovery = 3;
 
 function defaultPlayerSectPlan(targetDay = 1) {
   return {
     targetDay,
     mode: "balanced",
-    attack: { targetProvinceId: "", memberIds: [], autoFill: true },
+    attack: { targetProvinceId: "", memberIds: [], autoFill: true, onConflict: "retarget" },
     defense: { provinceIdToMemberIds: {}, autoFill: true }
   };
 }
@@ -5107,7 +5112,8 @@ function normalizePlayerSectPlan(plan, targetDay, attackLimit = maxSiegeTeamSize
     attack: {
       targetProvinceId: provinceById(plan?.attack?.targetProvinceId) ? plan.attack.targetProvinceId : "",
       memberIds: cleanIds(plan?.attack?.memberIds, attackLimit),
-      autoFill: plan?.attack?.autoFill !== false
+      autoFill: plan?.attack?.autoFill !== false,
+      onConflict: plan?.attack?.onConflict === "cancel" ? "cancel" : "retarget"
     },
     defense: {
       provinceIdToMemberIds: defense,
@@ -5192,6 +5198,144 @@ function defenseBaselineForProvince(province) {
   return 1;
 }
 
+function provinceBorderExposure(state, territory, sectName) {
+  return (provinceAdjacency[territory?.id] || [])
+    .map((id) => provinceStateById(state, id)?.owner || "")
+    .filter((owner) => owner && owner !== sectName).length;
+}
+
+function recentProvinceWarPressure(state, provinceId, lookbackDays = 4) {
+  const cutoff = Math.max(1, Math.floor(Number(state.day) || 1) - lookbackDays);
+  return (state.provinceWars || []).filter((war) => war.provinceId === provinceId && Number(war.day || 0) >= cutoff).length;
+}
+
+function sectPublicPower(state, sectName) {
+  const powers = membersForSect(state, sectName)
+    .map(({ entity }) => powerOf(entity, state))
+    .sort((a, b) => b - a)
+    .slice(0, maxSiegeTeamSize);
+  return powers.reduce((sum, power) => sum + power, 0);
+}
+
+function expectedDefenseProfile(state, territory, attackerSect) {
+  if (!territory?.owner) {
+    return { pressure: 1, level: "vacant", label: "无主", confidence: "confirmed", estimatedCount: 0 };
+  }
+  const province = provinceById(territory.id);
+  const defenderSect = territory.owner;
+  const memberCount = membersForSect(state, defenderSect).length;
+  const ownedCount = Math.max(1, provinceIdsForSect(state, defenderSect).length);
+  const borderExposure = provinceBorderExposure(state, territory, defenderSect);
+  const recentPressure = recentProvinceWarPressure(state, territory.id);
+  const baseCount = Math.max(1, Math.round(memberCount / ownedCount));
+  const valueBias = defenseBaselineForProvince(province) >= 2 ? 1 : 0;
+  const riskBias = borderExposure >= 2 || recentPressure >= 2 ? 1 : 0;
+  const estimatedCount = clamp(baseCount + valueBias + riskBias, 1, maxSiegeTeamSize);
+  const averagePower = sectPublicPower(state, defenderSect) / Math.max(1, Math.min(memberCount, maxSiegeTeamSize));
+  const uncertainty = 0.86 + deterministicUnit(`siege-intel|${state.rebirth || 1}|${state.day}|${attackerSect}|${territory.id}`) * 0.28;
+  const pressure = Math.max(1, Math.round(averagePower * estimatedCount * uncertainty + defenseValueForProvince(state, territory, defenderSect) * 2));
+  const level = estimatedCount <= 1 ? "thin" : estimatedCount <= 3 ? "normal" : "strong";
+  const label = level === "thin" ? "守备迹象薄弱" : level === "strong" ? "守备迹象森严" : "守备迹象寻常";
+  const confidence = recentPressure ? "informed" : "uncertain";
+  return { pressure, level, label, confidence, estimatedCount, borderExposure, recentPressure };
+}
+
+function publicProvinceIntel(state, territory, viewerSect = state.sect.name) {
+  if (!territory?.owner) return { level: "vacant", label: "无主", confidence: "confirmed" };
+  if (territory.owner === viewerSect) {
+    const count = (territory.defenders || []).length;
+    return { level: "own", label: `己方驻军 ${count} 人`, confidence: "confirmed", count };
+  }
+  const profile = expectedDefenseProfile(state, territory, viewerSect);
+  return { level: profile.level, label: profile.label, confidence: profile.confidence };
+}
+
+function siegeRestReserve(memberCount, mode, ownedCount) {
+  if (memberCount < 4) return 0;
+  const desired = memberCount <= 5
+    ? 1
+    : memberCount <= 8
+      ? (mode === "conservative" ? 3 : mode === "aggressive" ? 1 : 2)
+      : Math.min(
+        mode === "conservative" ? 5 : mode === "aggressive" ? 3 : 5,
+        Math.ceil(memberCount * (mode === "conservative" ? 0.5 : mode === "aggressive" ? 0.25 : 0.4))
+      );
+  const defenseFloor = minimumSiegeDefenders(memberCount, ownedCount);
+  const attackFloor = minimumAutomaticAttackers(memberCount, ownedCount);
+  return Math.min(desired, Math.max(0, memberCount - defenseFloor - attackFloor));
+}
+
+function minimumSiegeDefenders(memberCount, ownedCount) {
+  if (!ownedCount || !memberCount) return 0;
+  return Math.min(memberCount, ownedCount);
+}
+
+function minimumAutomaticAttackers(memberCount, ownedCount) {
+  if (!memberCount) return 0;
+  const defenseFloor = minimumSiegeDefenders(memberCount, ownedCount);
+  const available = Math.max(0, memberCount - defenseFloor);
+  const restFloor = memberCount >= 4 && available >= 2 ? 1 : 0;
+  const deployable = Math.max(0, available - restFloor);
+  const target = memberCount >= 6 ? 3 : memberCount >= 4 ? 2 : 1;
+  return Math.min(target, deployable);
+}
+
+function sectSiegeDutyRecord(state, entityId) {
+  const record = state.sectSiegeDuty?.[entityId] || {};
+  const activeYesterday = Number(record.lastDay || 0) === Number(state.day || 0) - 1;
+  return {
+    burden: Math.max(0, Number(record.burden) || 0),
+    consecutiveDuty: activeYesterday ? Math.max(0, Number(record.consecutiveDuty) || 0) : 0,
+    consecutiveRest: activeYesterday ? Math.max(0, Number(record.consecutiveRest) || 0) : 0,
+    consecutiveRole: activeYesterday ? Math.max(0, Number(record.consecutiveRole) || 0) : 0,
+    lastRole: activeYesterday ? String(record.lastRole || "") : ""
+  };
+}
+
+function fatigueDutyBand(fatigue) {
+  if (fatigue >= sectFatigueMax) return 4;
+  if (fatigue >= 19) return 3;
+  if (fatigue >= sectFatigueAutoRestThreshold) return 2;
+  if (fatigue >= sectFatigueHeavyRestThreshold) return 1;
+  return 0;
+}
+
+function siegeDutyScore(state, member, role, distance = 1) {
+  const fatigue = sectFatigueOf(state, member.entity.id);
+  const duty = sectSiegeDutyRecord(state, member.entity.id);
+  const sameRole = duty.lastRole === role || (role === "defense" && duty.lastRole === "garrison");
+  const rotationPenalty = duty.consecutiveDuty >= 2 ? 12000 : duty.consecutiveDuty * 700;
+  const rolePenalty = sameRole ? duty.consecutiveRole * 180 : 0;
+  const longRangeValue = role === "attack" && distance >= 3
+    ? (member.entity.divineSense || 0) * 1.5 + (member.entity.maxMana || 0) * 0.4
+    : 0;
+  const powerValue = effectiveSiegePower(state, member.entity, distance) + longRangeValue;
+  const rotationTieBreak = deterministicUnit(`siege-duty|${state.rebirth || 1}|${state.day}|${role}|${member.entity.id}`) * 25;
+  return fatigueDutyBand(fatigue) * 5000
+    + fatigue * 260
+    + duty.burden * 190
+    + rotationPenalty
+    + rolePenalty
+    - powerValue * 0.28
+    + rotationTieBreak;
+}
+
+function siegeRestPriority(state, member) {
+  const fatigue = sectFatigueOf(state, member.entity.id);
+  const duty = sectSiegeDutyRecord(state, member.entity.id);
+  return duty.consecutiveDuty * 100000
+    + fatigueDutyBand(fatigue) * 3000
+    + fatigue * 220
+    + duty.burden * 160
+    + deterministicUnit(`siege-rest|${state.rebirth || 1}|${state.day}|${member.entity.id}`) * 20;
+}
+
+function defenseRiskScore(state, territory, sectName) {
+  return defenseValueForProvince(state, territory, sectName)
+    + provinceBorderExposure(state, territory, sectName) * 80
+    + recentProvinceWarPressure(state, territory.id) * 55;
+}
+
 function expectedSiegeThreatPower(state, sectName) {
   let threat = 1;
   for (const rivalSect of activeSectNames(state)) {
@@ -5224,14 +5368,25 @@ function defensePlanUtility(state, sectName, assignments) {
   return total;
 }
 
-function buildDefenseAssignments(state, sectName, reservedIds = new Set(), manualDefense = null, mode = "balanced", fillAvailable = true) {
+function buildDefenseAssignments(state, sectName, reservedIds = new Set(), manualDefense = null, mode = "balanced", fillAvailable = true, protectedRestIds = new Set()) {
   const assignments = new Map();
-  const used = new Set(reservedIds);
+  const used = new Set([...reservedIds, ...protectedRestIds]);
   const owned = (state.provinces || [])
     .filter((item) => item.owner === sectName)
-    .sort((a, b) => defenseValueForProvince(state, b, sectName) - defenseValueForProvince(state, a, sectName));
+    .sort((a, b) => defenseRiskScore(state, b, sectName) - defenseRiskScore(state, a, sectName));
   const members = membersForSect(state, sectName).map(({ entity, kind }) => ({ entity, kind }));
   const threat = expectedSiegeThreatPower(state, sectName);
+  const manualIds = new Set(Object.values(manualDefense?.provinceIdToMemberIds || {}).flat());
+  const reserveTarget = siegeRestReserve(members.length, mode, owned.length);
+  const minimumDefenders = Math.min(
+    Math.max(0, members.length - reservedIds.size - protectedRestIds.size),
+    minimumSiegeDefenders(members.length, owned.length)
+  );
+  const strategicDefenseCap = Math.min(
+    Math.max(0, members.length - reservedIds.size - Math.max(reserveTarget, protectedRestIds.size)),
+    minimumDefenders + (mode === "conservative" ? 1 : 0)
+  );
+  const autoDeployLimit = Math.max(minimumDefenders, strategicDefenseCap);
 
   const assign = (territory, entity) => {
     if (!territory || !entity || used.has(entity.id)) return false;
@@ -5256,27 +5411,53 @@ function buildDefenseAssignments(state, sectName, reservedIds = new Set(), manua
     }
   }
 
-  if (!fillAvailable || (manualDefense && manualDefense.autoFill === false)) {
-    return { assignments, used };
+  if (!fillAvailable) {
+    return { assignments, used, manualMemberIds: [...manualIds] };
+  }
+  const fillBeyondCoverage = manualDefense?.autoFill !== false;
+
+  const canAutoAssign = (entity) => {
+    if (!entity || used.has(entity.id)) return false;
+    if (manualIds.has(entity.id)) return true;
+    if (used.size - reservedIds.size - protectedRestIds.size >= autoDeployLimit) return false;
+    return true;
+  };
+
+  const pickCandidate = () => members
+    .filter((item) => canAutoAssign(item.entity))
+    .sort((a, b) => siegeDutyScore(state, a, "defense") - siegeDutyScore(state, b, "defense"))[0];
+
+  // Coverage is non-negotiable: spread one defender to every owned city before
+  // reinforcing valuable or exposed positions.
+  for (const territory of owned) {
+    if ((assignments.get(territory.id) || []).length) continue;
+    const candidate = pickCandidate();
+    if (!candidate || !assign(territory, candidate.entity)) break;
   }
 
-  // First secure a GDP-based garrison floor. This prevents high-value cities from
-  // losing guards to a lower-tier city merely because its resource type scores well.
+  if (!fillBeyondCoverage) return { assignments, used };
+
+  // After full coverage, reinforce high-value cities up to their baseline.
   for (const territory of owned) {
     const province = provinceById(territory.id);
     const minimum = Math.min(defenseBaselineForProvince(province), defenderLimitForProvince(province));
     while ((assignments.get(territory.id) || []).length < minimum) {
-      const candidate = members
-        .filter((item) => !used.has(item.entity.id))
-        .sort((a, b) => effectiveSiegePower(state, b.entity) - effectiveSiegePower(state, a.entity))[0];
+      const candidate = pickCandidate();
       if (!candidate || !assign(territory, candidate.entity)) break;
     }
   }
 
+  while (used.size - reservedIds.size - protectedRestIds.size < minimumDefenders) {
+    const candidate = pickCandidate();
+    if (!candidate) break;
+    const territory = owned
+      .filter((item) => (assignments.get(item.id) || []).length < defenderLimitForProvince(provinceById(item.id)))
+      .sort((a, b) => defenseRiskScore(state, b, sectName) - defenseRiskScore(state, a, sectName))[0];
+    if (!territory || !assign(territory, candidate.entity)) break;
+  }
+
   while (true) {
-    const candidate = members
-      .filter((item) => !used.has(item.entity.id))
-      .sort((a, b) => effectiveSiegePower(state, b.entity) - effectiveSiegePower(state, a.entity))[0];
+    const candidate = pickCandidate();
     if (!candidate) break;
 
     let bestTerritory = null;
@@ -5296,7 +5477,7 @@ function buildDefenseAssignments(state, sectName, reservedIds = new Set(), manua
     }
     if (!bestTerritory || !assign(bestTerritory, candidate.entity)) break;
   }
-  return { assignments, used };
+  return { assignments, used, manualMemberIds: [...manualIds] };
 }
 
 function estimateLineupPower(state, ids, distance = 1) {
@@ -5310,7 +5491,7 @@ function estimateDefenderPower(state, territory) {
   return estimateLineupPower(state, territory?.defenders || [], 1);
 }
 
-function pickAttackTarget(state, sectName, availableMembers, mode = "balanced", manualTargetId = "", targeted = new Set(), requestedCount = maxSiegeTeamSize, attackTeamLimit = maxSiegeTeamSize) {
+function pickAttackTarget(state, sectName, availableMembers, mode = "balanced", manualTargetId = "", targeted = new Set(), requestedCount = maxSiegeTeamSize, attackTeamLimit = maxSiegeTeamSize, forceAttack = false) {
   const ownedIds = provinceIdsForSect(state, sectName);
   const ownedValues = ownedIds.map((id) => provinceResourceValue(provinceById(id), state, sectName));
   const worstOwned = ownedValues.length ? Math.min(...ownedValues) : 0;
@@ -5331,21 +5512,18 @@ function pickAttackTarget(state, sectName, availableMembers, mode = "balanced", 
     const lowValuePenalty = ownedIds.length <= 1 ? Math.max(0, worstOwned * 0.8 - value) * 0.25 : Math.max(0, worstOwned * 0.8 - value) * 0.6;
     const attackLimit = attackerLimitForProvince(province, attackTeamLimit);
     const attackers = [...availableMembers]
-      .sort((a, b) => {
-        const aScore = effectiveSiegePower(state, a.entity, distance) + (distance >= 3 ? (a.entity.divineSense || 0) * 1.5 + (a.entity.maxMana || 0) * 0.4 : 0);
-        const bScore = effectiveSiegePower(state, b.entity, distance) + (distance >= 3 ? (b.entity.divineSense || 0) * 1.5 + (b.entity.maxMana || 0) * 0.4 : 0);
-        return bScore - aScore;
-      })
+      .sort((a, b) => siegeDutyScore(state, a, "attack", distance) - siegeDutyScore(state, b, "attack", distance))
       .slice(0, Math.min(attackLimit, Math.max(1, requestedCount)));
     const attackerPower = attackers.reduce((sum, item) => sum + effectiveSiegePower(state, item.entity, distance), 0);
-    const defenderPower = territory.owner ? Math.max(1, estimateDefenderPower(state, territory)) : 1;
-    const winRate = territory.owner ? attackerPower / Math.max(1, attackerPower + defenderPower) : 0.96;
+    const intel = expectedDefenseProfile(state, territory, sectName);
+    const defenderPressure = territory.owner ? intel.pressure : 1;
+    const winRate = territory.owner ? estimatedWinChance(attackerPower, defenderPressure) : 0.96;
     const aggression = mode === "conservative" ? -20 : mode === "aggressive" ? 18 : 0;
-    const score = value * 1.4 + expansionNeed * 28 + adjacencyBonus + winRate * 80 + aggression - distanceCost - lowValuePenalty - defenderPower * 0.012;
+    const score = value * 1.4 + expansionNeed * 28 + adjacencyBonus + winRate * 80 + aggression - distanceCost - lowValuePenalty - defenderPressure * 0.012;
     if (!attackers.length) continue;
-    if (!manualTarget && winRate < (mode === "aggressive" ? 0.28 : mode === "conservative" ? 0.48 : 0.36)) continue;
+    if (!manualTarget && !forceAttack && winRate < (mode === "aggressive" ? 0.28 : mode === "conservative" ? 0.48 : 0.36)) continue;
     if (!best || score > best.score) {
-      best = { territory, province, distance, attackers, score, winRate, value };
+      best = { territory, province, distance, attackers, score, winRate, value, intel, wasOccupied: Boolean(territory.owner) };
     }
   }
   return best;
@@ -5406,27 +5584,49 @@ function siegeStrategyRoster(state, sectName, selectedIds, { role, targetProvinc
   }
   const targetName = provinceById(targetProvinceId)?.name || "此城";
   const roster = membersForSect(state, sectName)
-    .map(({ entity }) => ({ entity, power: effectiveSiegePower(state, entity, distance), fatigue: sectFatigueOf(state, entity.id) }))
+    .map(({ entity, kind }) => ({
+      entity,
+      kind,
+      power: effectiveSiegePower(state, entity, distance),
+      fatigue: sectFatigueOf(state, entity.id),
+      duty: sectSiegeDutyRecord(state, entity.id)
+    }))
     .sort((a, b) => b.power - a.power || a.entity.name.localeCompare(b.entity.name, "zh-Hans-CN"));
   const selectedNames = roster.filter((entry) => selected.has(entry.entity.id)).map((entry) => entry.entity.name);
+  const rotationRanks = new Map([...roster]
+    .sort((a, b) => siegeDutyScore(state, a, role, distance) - siegeDutyScore(state, b, role, distance))
+    .map((entry, index) => [entry.entity.id, index + 1]));
+  const selectedOrder = new Map((selectedIds || []).map((id, index) => [id, index]));
+
+  const rotationSnapshot = (entry) => {
+    if (entry.duty.consecutiveRest > 0) return `已轮休 ${entry.duty.consecutiveRest} 日`;
+    if (entry.duty.consecutiveDuty > 0) return `已连续执勤 ${entry.duty.consecutiveDuty} 日`;
+    return "昨日无连续执勤";
+  };
 
   return roster.map((entry, index) => {
     const selectedHere = selected.has(entry.entity.id);
     const assignedProvinceId = assignments.get(entry.entity.id);
     const assignedName = provinceById(assignedProvinceId)?.name || "其他城池";
+    const rotationRank = rotationRanks.get(entry.entity.id) || roster.length;
     let reason;
     if (selectedHere && role === "attack") {
       reason = manual.has(entry.entity.id)
         ? "按手动军令指定，列入本次攻城队。"
-        : `攻城战力排第 ${index + 1}，补入本次攻城名额。`;
+        : `并非单按战力选将：综合疲劳、连续出勤、历史负担和远征战力后，攻城轮换顺位第 ${rotationRank}；${rotationSnapshot(entry)}，因此进入本次 ${selected.size} 人攻城队。`;
     } else if (selectedHere) {
-      reason = `守备排第 ${index + 1}，负责驻守${targetName}。`;
+      const coverageReason = (selectedOrder.get(entry.entity.id) || 0) === 0
+        ? `${targetName}必须先落实至少 1 名守军，`
+        : `${targetName}完成保底布防后仍获得增援名额，`;
+      reason = manual.has(entry.entity.id)
+        ? `按手动布防军令，负责驻守${targetName}。`
+        : `${coverageReason}系统再按疲劳、连续出勤、历史负担和守备战力轮换；${entry.entity.name}虽守备战力排第 ${index + 1}，但综合轮换顺位第 ${rotationRank}，${rotationSnapshot(entry)}，因此入选。`;
     } else if (assignedProvinceId && assignedProvinceId !== targetProvinceId) {
       reason = `已编入${assignedName}守城队，不能同日调往${targetName}。`;
     } else if (role === "attack") {
-      reason = `攻城战力排第 ${index + 1}，本次 ${selected.size} 个名额已由${selectedNames.join("、") || "其他成员"}占用。`;
+      reason = `攻城轮换顺位第 ${rotationRank}；先保留各城守军与休整位后，本次 ${selected.size} 个名额已由${selectedNames.join("、") || "其他成员"}占用。`;
     } else {
-      reason = `守备排第 ${index + 1}，${targetName}本次 ${selected.size} 个守城名额已确定。`;
+      reason = `守城轮换顺位第 ${rotationRank}；${targetName}完成保底与增援分配后，本次 ${selected.size} 个名额已确定。`;
     }
     return {
       id: entry.entity.id,
@@ -5455,15 +5655,17 @@ function provinceWarStrategyForPlan(state, plan, target, province, defenderSect)
     manualMemberIds: plan.attack?.manualMemberIds || []
   });
   const defenderRoster = defenderSect
-    ? siegeStrategyRoster(state, defenderSect, defenderIds, { role: "defense", targetProvinceId: target.id })
+    ? siegeStrategyRoster(state, defenderSect, defenderIds, {
+      role: "defense",
+      targetProvinceId: target.id,
+      manualMemberIds: plan.defense?.manualMemberIds || []
+    })
     : [];
-  const defenderPower = defenderSect ? Math.max(1, estimateDefenderPower(state, target)) : 0;
-  const winRate = defenderSect
-    ? Math.round((plan.attack?.winRate ?? (attackers.totalPower / Math.max(1, attackers.totalPower + defenderPower))) * 100)
-    : 96;
+  const intel = plan.attack?.intel || expectedDefenseProfile(state, target, attackerSect);
+  const outlook = !defenderSect ? "优势" : plan.attack?.winRate >= 0.62 ? "优势" : plan.attack?.winRate >= 0.4 ? "均势" : "劣势";
   const modeLabel = strategyModeLabel(plan.mode);
   const attackIntent = plan.attack?.playerDirected
-    ? "按你保存的明日战略出兵，目标优先级高于宗门自行推演。"
+    ? "按你保存的明日军令出兵；所有宗门同时提交计划，目标冲突仍需统一裁决。"
     : ownedIds.length
       ? `${modeLabel}策略下，优先挑选距离 ${distance} 步、资源评分 ${value} 的可攻省份。`
       : `${modeLabel}策略下，本宗尚无据点，先取资源评分 ${value} 的立足之城。`;
@@ -5471,25 +5673,51 @@ function provinceWarStrategyForPlan(state, plan, target, province, defenderSect)
     ? "目标贴近己方疆域，调兵成本低，后续也便于连成防线。"
     : `目标距离己方据点 ${distance} 步，远征会削弱攻城战力，但资源收益足以覆盖成本。`;
   const attackerPoint = plan.attack?.playerDirected
-    ? `攻城队以指定人选为先，再按攻城战力补齐至 ${attackers.count} 人。`
-    : `从未参与守城的成员里，按攻城战力、距离惩罚和疲劳排序，取 ${attackers.count} 人出阵。`;
+    ? `攻城队以指定人选为先，在不挤占每城保底守军的前提下，再按轮换负担与远征战力补齐至 ${attackers.count} 人。`
+    : `先锁定每城保底守军与休整位，再从剩余成员里综合疲劳、连续出勤、历史负担与远征战力，轮换 ${attackers.count} 人出阵。`;
   const defenderPoint = defenderSect
-    ? `守方先按 GDP 档位配置保底守军，再按城市防守价值 ${defenseValueForProvince(state, target, defenderSect)} 分配余下成员；守城队 ${defenders.count} 人，总守备 ${defenders.totalPower}。`
+    ? `战前只能观察到“${intel.label}”，无法获知今日守军人数、名单与疲劳。`
     : "此地暂为无主之地，无守军，只需派人立旗接管。";
 
   return {
-    summary: `${modeLabel}推演：${province.name}是${provinceResourceLabel(province)}，攻方胜算约 ${winRate}%。`,
+    summary: `${modeLabel}研判：${province.name}是${provinceResourceLabel(province)}，战前态势判断为${outlook}。`,
+    preBattle: {
+      title: "战前研判",
+      points: [attackIntent, terrainPoint, defenderPoint],
+      metrics: [
+        { label: "资源评分", value },
+        { label: "距离", value: `${distance} 步` },
+        { label: "守备情报", value: defenderSect ? intel.label.replace("守备迹象", "") : "无主" },
+        { label: "态势", value: outlook }
+      ]
+    },
+    postBattle: {
+      title: "战后查明",
+      points: defenderSect
+        ? [
+            `实际遭遇守军 ${defenders.count} 人，总守备战力 ${defenders.totalPower}。`,
+            defenders.topNames.length ? `守城核心为 ${defenders.topNames.join("、")}。` : "该城实际没有有效守军。",
+            defenders.tiredNames.length ? `${defenders.tiredNames.join("、")}带有较高疲劳参战。` : "守军整体疲劳处于可控范围。"
+          ]
+        : ["实际没有遭遇守军，攻方完成接管。"],
+      metrics: [
+        { label: "攻方人数", value: attackers.count },
+        { label: "守方人数", value: defenders.count },
+        { label: "攻方战力", value: attackers.totalPower },
+        { label: "守方战力", value: defenders.totalPower }
+      ]
+    },
     attack: {
-      title: plan.attack?.playerDirected ? "执行手动战略" : "择城推演",
+      title: plan.attack?.playerDirected ? "执行手动战略" : "择城研判",
       points: [
         attackIntent,
         terrainPoint,
-        defenderSect ? `预估攻城战力 ${attackers.totalPower} 对守备 ${defenderPower}，胜算约 ${winRate}%。` : "无主城默认视为高把握目标，主要考量资源价值与距离。"
+        defenderPoint
       ],
       metrics: [
         { label: "资源评分", value },
         { label: "距离", value: `${distance} 步` },
-        { label: "胜算", value: `${winRate}%` }
+        { label: "态势", value: outlook }
       ]
     },
     attackers: {
@@ -5502,11 +5730,11 @@ function provinceWarStrategyForPlan(state, plan, target, province, defenderSect)
       roster: attackerRoster
     },
     defenders: {
-      title: defenderSect ? "守城布防" : "守方情报",
+      title: defenderSect ? "战后守军" : "守方情报",
       points: [
-        defenderPoint,
+        defenderSect ? `实际守城队 ${defenders.count} 人，总守备 ${defenders.totalPower}。` : defenderPoint,
         defenderSect && defenders.topNames.length ? `守城核心为 ${defenders.topNames.join("、")}，依托城防获得阵地加成。` : "没有守城队列。",
-        defenderSect ? "守城成员不会同时加入本宗攻城队，避免同日两线奔袭。" : "攻下后明日会按新归属重新安排防守。"
+        defenderSect ? "该阵容在结算揭晓前不向攻方公开。" : "攻下后明日会按新归属重新安排防守。"
       ],
       roster: defenderRoster
     }
@@ -5565,14 +5793,30 @@ function buildSectSiegePlan(state, sectName, targeted, options = {}) {
   const owned = (state.provinces || []).filter((item) => item.owner === sectName);
   const manualAttack = options.attack || null;
   const manualAttackTargetId = manualAttack?.targetProvinceId || "";
-  const manualAttackMembers = new Set((manualAttack?.memberIds || []).filter((id) => members.some((member) => member.entity.id === id)));
+  const coverageSafeAttackLimit = Math.max(0, members.length - minimumSiegeDefenders(members.length, owned.length));
+  const manualAttackMembers = new Set((manualAttack?.memberIds || [])
+    .filter((id) => members.some((member) => member.entity.id === id))
+    .slice(0, coverageSafeAttackLimit));
   const manualDefense = options.defense || null;
+  const manualDefenseIds = new Set(Object.values(manualDefense?.provinceIdToMemberIds || {}).flat());
+  const desiredRestCount = siegeRestReserve(members.length, mode, owned.length);
+  const protectedRestCount = Math.min(
+    desiredRestCount,
+    Math.max(0, members.length - minimumSiegeDefenders(members.length, owned.length) - manualAttackMembers.size)
+  );
+  const protectedRestIds = new Set([...members]
+    .filter((member) => !manualAttackMembers.has(member.entity.id) && !manualDefenseIds.has(member.entity.id))
+    .sort((a, b) => siegeRestPriority(state, b) - siegeRestPriority(state, a))
+    .slice(0, protectedRestCount)
+    .map((member) => member.entity.id));
   const attackTeamLimit = Math.max(1, Math.floor(Number(options.attackTeamLimit) || maxSiegeTeamSize));
   const explicitDefense = owned.length
-    ? buildDefenseAssignments(state, sectName, manualAttackMembers, manualDefense, mode, false)
-    : { assignments: new Map(), used: new Set(manualAttackMembers) };
+    ? buildDefenseAssignments(state, sectName, manualAttackMembers, manualDefense, mode, false, protectedRestIds)
+    : { assignments: new Map(), used: new Set([...manualAttackMembers, ...protectedRestIds]) };
   const manualAttackTarget = manualAttackTargetId ? provinceStateById(state, manualAttackTargetId) : null;
   const availableAttackMembers = members.filter((member) => !explicitDefense.used.has(member.entity.id));
+  const automaticAttackPool = [...availableAttackMembers]
+    .sort((a, b) => siegeDutyScore(state, a, "attack") - siegeDutyScore(state, b, "attack"));
 
   if (manualAttackTarget && manualAttackTarget.owner !== sectName) {
     const province = provinceById(manualAttackTarget.id);
@@ -5580,15 +5824,20 @@ function buildSectSiegePlan(state, sectName, targeted, options = {}) {
     const manualMembers = [...manualAttackMembers]
       .map((id) => members.find((member) => member.entity.id === id))
       .filter(Boolean);
-    const fillPool = availableAttackMembers.filter((member) => !manualAttackMembers.has(member.entity.id));
-    const limit = province ? attackerLimitForProvince(province, attackTeamLimit) : attackTeamLimit;
+    const fillPool = automaticAttackPool.filter((member) => !manualAttackMembers.has(member.entity.id));
+    const limit = Math.min(
+      province ? attackerLimitForProvince(province, attackTeamLimit) : attackTeamLimit,
+      coverageSafeAttackLimit
+    );
     const attackers = [
       ...manualMembers,
       ...(manualAttack?.autoFill !== false ? fillPool.sort((a, b) => effectiveSiegePower(state, b.entity, distance) - effectiveSiegePower(state, a.entity, distance)).slice(0, Math.max(0, limit - manualMembers.length)) : [])
     ].slice(0, limit);
     if (attackers.length && !targeted.has(manualAttackTarget.id)) {
+      const intel = expectedDefenseProfile(state, manualAttackTarget, sectName);
+      const attackerPower = attackers.reduce((sum, member) => sum + effectiveSiegePower(state, member.entity, distance), 0);
       const defense = owned.length
-        ? buildDefenseAssignments(state, sectName, new Set(attackers.map((member) => member.entity.id)), manualDefense, mode)
+        ? buildDefenseAssignments(state, sectName, new Set(attackers.map((member) => member.entity.id)), manualDefense, mode, true, protectedRestIds)
         : { assignments: new Map(), used: new Set(attackers.map((member) => member.entity.id)) };
       targeted.add(manualAttackTarget.id);
       return {
@@ -5602,14 +5851,19 @@ function buildSectSiegePlan(state, sectName, targeted, options = {}) {
           attackers,
           attackTeamLimit,
           playerDirected: true,
-          manualMemberIds: [...manualAttackMembers]
+          manualMemberIds: [...manualAttackMembers],
+          value: provinceResourceValue(province, state, sectName),
+          intel,
+          winRate: manualAttackTarget.owner ? estimatedWinChance(attackerPower, intel.pressure) : 0.96,
+          wasOccupied: Boolean(manualAttackTarget.owner),
+          onConflict: manualAttack?.onConflict === "cancel" ? "cancel" : "retarget"
         }
       };
     }
   }
 
   const noAttackDefense = owned.length
-    ? buildDefenseAssignments(state, sectName, new Set(), manualDefense, mode)
+    ? buildDefenseAssignments(state, sectName, new Set(), manualDefense, mode, true, protectedRestIds)
     : { assignments: new Map(), used: new Set() };
   let bestPlan = {
     defense: noAttackDefense,
@@ -5618,21 +5872,107 @@ function buildSectSiegePlan(state, sectName, targeted, options = {}) {
   };
 
   if (manualAttack?.autoFill !== false) {
-    const maxAttackers = Math.min(attackTeamLimit, availableAttackMembers.length);
-    for (let attackerCount = 1; attackerCount <= maxAttackers; attackerCount += 1) {
-      const attack = pickAttackTarget(state, sectName, availableAttackMembers, mode, "", targeted, attackerCount, attackTeamLimit);
-      if (!attack) continue;
-      const reserved = new Set(attack.attackers.map((member) => member.entity.id));
-      const defense = owned.length
-        ? buildDefenseAssignments(state, sectName, reserved, manualDefense, mode)
-        : { assignments: new Map(), used: new Set(reserved) };
-      const utility = defensePlanUtility(state, sectName, defense.assignments) + attackPlanUtility(state, sectName, attack, mode);
-      if (utility > bestPlan.utility) bestPlan = { defense, attack: { ...attack, attackTeamLimit }, utility };
+    const restFloor = siegeRestReserve(members.length, mode, owned.length);
+    const defenseFloor = minimumSiegeDefenders(members.length, owned.length);
+    const maxAttackers = Math.min(
+      attackTeamLimit,
+      automaticAttackPool.length,
+      Math.max(0, members.length - restFloor - defenseFloor)
+    );
+    const minimumAttackers = Math.min(maxAttackers, minimumAutomaticAttackers(members.length, owned.length));
+    if (minimumAttackers > 0) {
+      for (let attackerCount = minimumAttackers; attackerCount <= maxAttackers; attackerCount += 1) {
+        const attack = pickAttackTarget(state, sectName, automaticAttackPool, mode, "", targeted, attackerCount, attackTeamLimit);
+        if (!attack) continue;
+        const reserved = new Set(attack.attackers.map((member) => member.entity.id));
+        const defense = owned.length
+          ? buildDefenseAssignments(state, sectName, reserved, manualDefense, mode, true, protectedRestIds)
+          : { assignments: new Map(), used: new Set(reserved) };
+        const utility = defensePlanUtility(state, sectName, defense.assignments) + attackPlanUtility(state, sectName, attack, mode);
+        if (utility > bestPlan.utility) bestPlan = { defense, attack: { ...attack, attackTeamLimit }, utility };
+      }
+    }
+
+    if (!bestPlan.attack && minimumAttackers > 0) {
+      const attack = pickAttackTarget(state, sectName, automaticAttackPool, "aggressive", "", targeted, minimumAttackers, attackTeamLimit, true);
+      if (attack) {
+        const reserved = new Set(attack.attackers.map((member) => member.entity.id));
+        const defense = owned.length
+          ? buildDefenseAssignments(state, sectName, reserved, manualDefense, mode, true, protectedRestIds)
+          : { assignments: new Map(), used: new Set(reserved) };
+        bestPlan = { defense, attack: { ...attack, attackTeamLimit }, utility: 0 };
+      }
     }
   }
 
   if (bestPlan.attack) targeted.add(bestPlan.attack.territory.id);
   return { sectName, mode, defense: bestPlan.defense, attack: bestPlan.attack };
+}
+
+function retargetSiegePlan(state, plan, blockedTargets = new Set()) {
+  if (!plan?.attack?.attackers?.length) return null;
+  const sectName = plan.sectName;
+  const ownedIds = provinceIdsForSect(state, sectName);
+  const attackers = plan.attack.attackers;
+  let best = null;
+  for (const territory of state.provinces || []) {
+    if (territory.owner === sectName || blockedTargets.has(territory.id)) continue;
+    const province = provinceById(territory.id);
+    if (!province) continue;
+    const distance = ownedIds.length ? provinceDistance(ownedIds, territory.id) : 2;
+    const value = provinceResourceValue(province, state, sectName);
+    const intel = expectedDefenseProfile(state, territory, sectName);
+    const attackerPower = attackers.reduce((sum, member) => sum + effectiveSiegePower(state, member.entity, distance), 0);
+    const winRate = estimatedWinChance(attackerPower, intel.pressure);
+    const score = value * 1.4 + winRate * 80 + (distance === 1 ? 25 : 0) - Math.max(0, distance - 1) * 18;
+    if (!best || score > best.score) best = { territory, province, distance, value, intel, winRate, score };
+  }
+  return best ? { ...plan.attack, ...best, wasOccupied: Boolean(best.territory.owner) } : null;
+}
+
+function siegeConflictPriority(state, plan) {
+  const attack = plan?.attack;
+  if (!attack) return -Infinity;
+  const power = (attack.attackers || []).reduce((sum, member) => sum + effectiveSiegePower(state, member.entity, attack.distance || 1), 0);
+  const variance = deterministicUnit(`siege-conflict|${state.rebirth || 1}|${state.day}|${plan.sectName}|${attack.territory?.id}`) * 120;
+  return power - Math.max(0, (attack.distance || 1) - 1) * 45 + variance;
+}
+
+function resolveSimultaneousSiegeTargets(state, plans, blockedTargets = new Set()) {
+  const claims = new Map();
+  const displaced = [];
+  for (const plan of plans) {
+    const targetId = plan?.attack?.territory?.id;
+    if (!targetId) continue;
+    if (blockedTargets.has(targetId)) {
+      displaced.push(plan);
+      continue;
+    }
+    const list = claims.get(targetId) || [];
+    list.push(plan);
+    claims.set(targetId, list);
+  }
+  const accepted = new Set(blockedTargets);
+  for (const [targetId, contenders] of claims) {
+    contenders.sort((a, b) => siegeConflictPriority(state, b) - siegeConflictPriority(state, a));
+    accepted.add(targetId);
+    displaced.push(...contenders.slice(1));
+  }
+  displaced.sort((a, b) => siegeConflictPriority(state, b) - siegeConflictPriority(state, a));
+  for (const plan of displaced) {
+    const previousAttack = plan.attack;
+    const fallback = previousAttack.onConflict === "cancel" ? null : retargetSiegePlan(state, plan, accepted);
+    if (fallback) {
+      plan.attack = fallback;
+      accepted.add(fallback.territory.id);
+      plan.attack.retargetedFrom = previousAttack.territory.id;
+    } else {
+      plan.attack = null;
+      plan.abortedAttackers = (previousAttack.attackers || []).map((member) => member.entity.id);
+      plan.abortedTargetId = previousAttack.territory.id;
+    }
+  }
+  return plans;
 }
 
 function ensureProvinceState(state) {
@@ -5942,18 +6282,15 @@ function publicSectStrategy(state) {
         .map((id) => cultivatorById(state, id))
         .filter(Boolean)
         .reduce((sum, entity) => sum + effectiveSiegePower(state, entity, distance), 0);
-      const defenderPower = (territory.defenders || [])
-        .map((id) => cultivatorById(state, id))
-        .filter(Boolean)
-        .reduce((sum, entity) => sum + effectiveSiegePower(state, entity, 1), 0);
-      const defenseValue = defenseValueForProvince(state, territory, territory.owner);
-      const winChance = estimatedWinChance(attackerPower, defenderPower + defenseValue * 2);
+      const intel = expectedDefenseProfile(state, territory, playerSect);
+      const winChance = estimatedWinChance(attackerPower, intel.pressure);
       return [territory.id, {
-        winChance,
         attackerPower,
-        defenderPower,
         distance,
-        risk: winChance >= 0.68 ? "稳妥" : winChance >= 0.45 ? "可尝试" : "高风险"
+        outlook: winChance >= 0.62 ? "优势" : winChance >= 0.4 ? "均势" : "劣势",
+        risk: intel.label,
+        intelLevel: intel.level,
+        confidence: intel.confidence
       }];
     }));
   return {
@@ -5976,6 +6313,18 @@ function publicSectStrategy(state) {
     })),
     forecasts: forecastByProvince
   };
+}
+
+function publicProvinceState(state, viewerSect = state.sect.name) {
+  return (state.provinces || []).map((territory) => ({
+    ...territory,
+    defenders: territory.owner === viewerSect ? [...(territory.defenders || [])] : [],
+    defenseIntel: publicProvinceIntel(state, territory, viewerSect)
+  }));
+}
+
+function publicSectFatigue(state, viewerSect = state.sect.name) {
+  return Object.fromEntries(membersForSect(state, viewerSect).map(({ entity }) => [entity.id, sectFatigueOf(state, entity.id)]));
 }
 
 function defaultElixirEffects() {
@@ -6296,24 +6645,60 @@ function applyPlannedDefenders(state, plans) {
   }
 }
 
-function updateSectFatigue(state, plans) {
+function updateSectFatigue(state, plans, wars = []) {
   state.sectFatigue ??= {};
   state.sectFatiguePrevious = { ...state.sectFatigue };
-  const active = new Map();
+  state.sectSiegeDuty ??= {};
+  const attackedProvinceIds = new Set((wars || []).filter((war) => war.ownerBefore).map((war) => war.provinceId));
+  const attackGain = new Map();
+  const garrisonIds = new Set();
+  const battleDefenderIds = new Set();
   for (const plan of plans || []) {
-    for (const ids of plan.defense?.assignments?.values?.() || []) {
-      for (const id of ids) active.set(id, Math.max(active.get(id) || 0, sectDefenseFatigueGain));
+    for (const [provinceId, ids] of plan.defense?.assignments || []) {
+      for (const id of ids) {
+        garrisonIds.add(id);
+        if (attackedProvinceIds.has(provinceId)) battleDefenderIds.add(id);
+      }
     }
     for (const member of plan.attack?.attackers || []) {
       const distance = Math.max(1, plan.attack.distance || 1);
-      const fatigueGain = 3 + Math.max(0, distance - 1);
-      active.set(member.entity.id, Math.max(active.get(member.entity.id) || 0, fatigueGain));
+      const fatigueGain = plan.attack.wasOccupied ? 3 + Math.max(0, distance - 1) : 2;
+      attackGain.set(member.entity.id, Math.max(attackGain.get(member.entity.id) || 0, fatigueGain));
     }
   }
   for (const { entity } of allCultivators(state)) {
     const previous = sectFatigueOf(state, entity.id);
-    if (active.has(entity.id)) state.sectFatigue[entity.id] = clamp(previous + active.get(entity.id), 0, sectFatigueMax);
-    else state.sectFatigue[entity.id] = Math.max(0, previous - sectFatigueRecoveryPerIdleDay);
+    let role = "rest";
+    if (attackGain.has(entity.id)) {
+      state.sectFatigue[entity.id] = clamp(previous + attackGain.get(entity.id), 0, sectFatigueMax);
+      role = "attack";
+    } else if (battleDefenderIds.has(entity.id)) {
+      state.sectFatigue[entity.id] = clamp(previous + sectDefenseFatigueGain, 0, sectFatigueMax);
+      role = "defense";
+    } else if (garrisonIds.has(entity.id)) {
+      state.sectFatigue[entity.id] = Math.max(0, previous - sectFatigueRecoveryPerGarrisonDay);
+      role = "garrison";
+    } else {
+      const recovery = previous >= sectFatigueAutoRestThreshold
+        ? sectFatigueCriticalRestRecovery
+        : previous >= sectFatigueHeavyRestThreshold
+          ? sectFatigueHeavyRestRecovery
+          : sectFatigueRecoveryPerRestDay;
+      state.sectFatigue[entity.id] = Math.max(0, previous - recovery);
+    }
+
+    const duty = sectSiegeDutyRecord(state, entity.id);
+    const burdenDelta = role === "attack" ? 3 : role === "defense" ? 2 : role === "garrison" ? 0.5 : -2;
+    const activeDuty = role !== "rest";
+    const sameRole = duty.lastRole === role || (role === "garrison" && duty.lastRole === "defense") || (role === "defense" && duty.lastRole === "garrison");
+    state.sectSiegeDuty[entity.id] = {
+      burden: clamp(Number((duty.burden + burdenDelta).toFixed(1)), 0, 20),
+      consecutiveDuty: activeDuty ? duty.consecutiveDuty + 1 : 0,
+      consecutiveRest: activeDuty ? 0 : duty.consecutiveRest + 1,
+      consecutiveRole: activeDuty && sameRole ? duty.consecutiveRole + 1 : activeDuty ? 1 : 0,
+      lastRole: role,
+      lastDay: state.day
+    };
   }
 }
 
@@ -6469,7 +6854,7 @@ function pickMonsterSiegeTargets(state, targeted = new Set()) {
   return picks;
 }
 
-function runProvinceSieges(state, settlementDate, settlementTime = timestampKey()) {
+export function runProvinceSieges(state, settlementDate, settlementTime = timestampKey()) {
   state.provinceWars ??= [];
   const targeted = new Set();
   const wars = [];
@@ -6483,21 +6868,18 @@ function runProvinceSieges(state, settlementDate, settlementTime = timestampKey(
   const monsterTargets = pickMonsterSiegeTargets(state, targeted);
   const plans = [];
 
-  // Monster sieges claim cities first. A saved player target then takes priority
-  // over other sect plans, while automatic player plans remain randomly ordered.
-  const hasPriorityPlayerAttack = playerPlan.targetDay === state.day && Boolean(playerPlan.attack.targetProvinceId);
-  const planningOrder = hasPriorityPlayerAttack
-    ? [state.sect.name, ...shuffle(sectNames.filter((sectName) => sectName !== state.sect.name))]
-    : shuffle(sectNames);
-  for (const sectName of planningOrder) {
+  // Every sect plans from the same frozen pre-deployment state. Target conflicts
+  // are resolved only after all intents exist, so no planner can inspect another's plan.
+  for (const sectName of sectNames) {
     const isPlayerSect = sectName === state.sect.name;
     const planOptions = {
       ...(isPlayerSect && playerPlan.targetDay === state.day ? playerPlan : {}),
       attackTeamLimit: attackTeamLimits.get(sectName) || maxSiegeTeamSize
     };
-    plans.push(buildSectSiegePlan(state, sectName, targeted, planOptions));
+    plans.push(buildSectSiegePlan(state, sectName, new Set(), planOptions));
   }
-  applyPlannedDefenders(state, plans.filter(Boolean));
+  const resolvedPlans = resolveSimultaneousSiegeTargets(state, plans.filter(Boolean), targeted);
+  applyPlannedDefenders(state, resolvedPlans);
 
   for (const target of monsterTargets) {
     const province = provinceById(target.id);
@@ -6547,7 +6929,7 @@ function runProvinceSieges(state, settlementDate, settlementTime = timestampKey(
     wars.push(record);
   }
 
-  for (const plan of plans.filter(Boolean)) {
+  for (const plan of resolvedPlans) {
     const target = plan.attack?.territory;
     const attackerSect = plan.sectName;
     if (!target) continue;
@@ -6619,7 +7001,7 @@ function runProvinceSieges(state, settlementDate, settlementTime = timestampKey(
     record.ownerAfter = target.owner || null;
     wars.push(record);
   }
-  updateSectFatigue(state, plans.filter(Boolean));
+  updateSectFatigue(state, resolvedPlans, wars);
   for (const territory of state.provinces || []) {
     territory.heldDays = territory.owner ? Math.max(0, Math.floor(Number(territory.heldDays) || 0)) + 1 : 0;
     if (territory.miasmaUntilDay && territory.miasmaUntilDay < state.day) territory.miasmaUntilDay = 0;
@@ -6629,7 +7011,7 @@ function runProvinceSieges(state, settlementDate, settlementTime = timestampKey(
     state.provinceWars.unshift(...wars);
     state.provinceWars = trimRecordsByDay(state.provinceWars, state.day, battleRecordDays);
     enforceProvinceOccupationLimits(state);
-    applyPlannedDefenders(state, plans.filter(Boolean));
+    applyPlannedDefenders(state, resolvedPlans);
     log(state, `${settlementDate} 九州攻守结算完成，共 ${wars.length} 处省份被挑战。`, "gold");
   }
 }
@@ -8910,6 +9292,7 @@ export function createDefaultState() {
     playerSectPlan: defaultPlayerSectPlan(2),
     sectFatigue: {},
     sectFatiguePrevious: {},
+    sectSiegeDuty: {},
     provinceVersion,
     provinces: createNeutralProvinceState(),
     provinceWars: [],
@@ -9401,6 +9784,7 @@ export function ensureStateShape(state) {
   }
   state.sectFatigue ??= {};
   state.sectFatiguePrevious ??= {};
+  state.sectSiegeDuty ??= {};
   state.shop ??= {};
   state.shop.purchases ??= {};
   state.shop.permanentPurchases ??= {};
@@ -10028,11 +10412,11 @@ export function getPublicState(state, options = {}) {
       bag: state.bag,
       spiritPearls: publicSpiritPearls(state, state.player),
       playerSectPlan: state.playerSectPlan,
-      sectFatigue: state.sectFatigue,
+      sectFatigue: publicSectFatigue(state),
       equipmentTransfers: state.equipmentTransfers,
       // Lite actions update the home dashboard without requiring a follow-up request.
       home: buildHomeSummary(state),
-      provinces: state.provinces,
+      provinces: publicProvinceState(state),
       sectProfiles: publicSectProfiles(state),
       catalog: staticCatalog(),
       derived: derivedBase
@@ -10040,9 +10424,11 @@ export function getPublicState(state, options = {}) {
   }
 
   const combatRatings = buildCombatRatings(state);
-  const { adminProfiles, encounters: _encounterState, relationships: _relationshipState, daoTrial: _daoTrialState, ...publicState } = state;
+  const { adminProfiles, encounters: _encounterState, relationships: _relationshipState, daoTrial: _daoTrialState, provinces: _provinceState, sectFatigue: _sectFatigue, sectFatiguePrevious: _sectFatiguePrevious, sectSiegeDuty: _sectSiegeDuty, ...publicState } = state;
   return {
     ...publicState,
+    provinces: publicProvinceState(state),
+    sectFatigue: publicSectFatigue(state),
     taskProgress: publicTaskProgress(state),
     encounters: publicEncounters(state),
     daoTrial: publicDaoTrial(state),

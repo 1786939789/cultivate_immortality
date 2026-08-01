@@ -2231,7 +2231,7 @@
                     </template>
                   </span>
                 </span>
-                <span v-else>{{ territory.owner ? "暂无参战人员" : "无主无驻守" }}</span>
+                <span v-else class="province-intel-label" :class="provinceBattleRoster(territory).status">{{ provinceBattleRoster(territory).label }}</span>
               </div>
               <div v-if="!filteredProvinceResourceRanking.length" class="empty province-filter-empty">没有符合筛选条件的省份。</div>
             </div>
@@ -2251,15 +2251,15 @@
                 <div class="strategy-mode-options" role="group" aria-label="战略态度">
                   <button type="button" :class="{ active: sectPlanDraft.mode === 'conservative' }" @click="sectPlanDraft.mode = 'conservative'">
                     保守
-                    <span class="strategy-mode-tooltip" role="tooltip">优先稳守城池，仅在预估胜率较高时攻城；扩张较慢，战损更低。</span>
+                    <span class="strategy-mode-tooltip" role="tooltip">优先稳守城池，仅在战前情报较有利时攻城；默认保留更多人员休整。</span>
                   </button>
                   <button type="button" :class="{ active: sectPlanDraft.mode === 'balanced' }" @click="sectPlanDraft.mode = 'balanced'">
                     均衡
-                    <span class="strategy-mode-tooltip" role="tooltip">兼顾守备与扩张，按目标价值、距离和胜率综合安排攻守。</span>
+                    <span class="strategy-mode-tooltip" role="tooltip">兼顾守备与扩张，按目标价值、距离和模糊守备情报安排攻守。</span>
                   </button>
                   <button type="button" :class="{ active: sectPlanDraft.mode === 'aggressive' }" @click="sectPlanDraft.mode = 'aggressive'">
                     激进
-                    <span class="strategy-mode-tooltip" role="tooltip">优先争夺城池，可接受较低胜率的攻势；扩张更快，但战损风险更高。</span>
+                    <span class="strategy-mode-tooltip" role="tooltip">优先争夺城池，可接受守备情报不利的攻势；休整名额更少。</span>
                   </button>
                 </div>
               </div>
@@ -2272,10 +2272,16 @@
                 </select>
               </label>
               <div v-if="selectedAttackForecast" class="strategy-forecast-card" aria-label="攻城预测">
-                <span>推演胜率</span>
-                <strong>{{ formatPercent(selectedAttackForecast.winChance) }}</strong>
+                <span>战前研判</span>
+                <strong>{{ selectedAttackForecast.outlook }}</strong>
                 <small>{{ selectedAttackForecast.risk }} · 远征 {{ selectedAttackForecast.distance }} 格</small>
               </div>
+              <label v-if="sectPlanDraft.attackTarget" class="strategy-target-field"><span class="strategy-field-label">目标冲突</span>
+                <select v-model="sectPlanDraft.onConflict">
+                  <option value="retarget">改攻备选目标</option>
+                  <option value="cancel">取消出征并休整</option>
+                </select>
+              </label>
               <div class="strategy-command-actions">
                 <button class="secondary" type="button" @click="resetSectPlanAuto">恢复自动</button>
                 <button class="primary" type="button" :disabled="isActionPending('/api/sect/plan')" @click="saveSectPlan">
@@ -2325,7 +2331,7 @@
                 <div class="section-head compact strategy-section-heading">
                   <div>
                     <h3>己方布防</h3>
-                    <p>先选择城池再指定守军；已守城成员不能重复守城或参与攻城。</p>
+                    <p>来敌目标与人数在结算前未知；请按城市价值、边境风险和疲劳安排守军与休整。</p>
                   </div>
                   <span class="strategy-count-badge defense">{{ playerOwnedProvinces.length }} 座城池</span>
                 </div>
@@ -2489,14 +2495,32 @@
                 </div>
                 <span class="tag">{{ selectedProvinceWar.captured ? "易主" : "守住" }}</span>
               </div>
-              <section v-if="warStrategySections(selectedProvinceWar).length" class="war-strategy-panel" aria-label="攻守策略推演">
+              <section v-if="warStrategySections(selectedProvinceWar).length" class="war-strategy-panel" aria-label="攻守策略复盘">
                 <header>
                   <span aria-hidden="true">策</span>
                   <div>
-                    <strong>军师札记</strong>
+                    <strong>军师复盘</strong>
                     <small>{{ selectedProvinceWar.strategy?.summary || warStrategyPreview(selectedProvinceWar)[0] }}</small>
                   </div>
                 </header>
+                <div v-if="selectedProvinceWar.strategy?.preBattle || selectedProvinceWar.strategy?.postBattle" class="war-intelligence-review">
+                  <article v-if="selectedProvinceWar.strategy?.preBattle" class="war-strategy-note pre-battle">
+                    <span>战前</span>
+                    <strong>{{ selectedProvinceWar.strategy.preBattle.title }}</strong>
+                    <p v-for="point in strategyPointList(selectedProvinceWar.strategy.preBattle.points)" :key="point">{{ point }}</p>
+                    <div class="war-strategy-metrics">
+                      <em v-for="metric in strategyMetricList(selectedProvinceWar.strategy.preBattle.metrics)" :key="`pre-${metric.label}`">{{ metric.label }}<b>{{ metric.value }}</b></em>
+                    </div>
+                  </article>
+                  <article v-if="selectedProvinceWar.strategy?.postBattle" class="war-strategy-note post-battle">
+                    <span>战后</span>
+                    <strong>{{ selectedProvinceWar.strategy.postBattle.title }}</strong>
+                    <p v-for="point in strategyPointList(selectedProvinceWar.strategy.postBattle.points)" :key="point">{{ point }}</p>
+                    <div class="war-strategy-metrics">
+                      <em v-for="metric in strategyMetricList(selectedProvinceWar.strategy.postBattle.metrics)" :key="`post-${metric.label}`">{{ metric.label }}<b>{{ metric.value }}</b></em>
+                    </div>
+                  </article>
+                </div>
                 <div class="war-strategy-grid">
                   <article v-for="section in warStrategySections(selectedProvinceWar)" :key="section.key" class="war-strategy-note">
                     <span>{{ section.label }}</span>
@@ -4205,7 +4229,9 @@
                       <small class="sect-member-meta">
                         <span>{{ genderLabel(member.gender) }}</span>
                         <i aria-hidden="true">·</i>
-                        <span class="sect-member-fatigue" :class="{ tired: sectMemberFatigue(member) >= 8 }">疲劳 {{ sectMemberFatigue(member) }}</span>
+                        <span class="sect-member-fatigue" :class="{ tired: (sectMemberFatigue(member) ?? 0) >= 8 }">
+                          {{ sectMemberFatigue(member) === null ? "疲劳未知" : `疲劳 ${sectMemberFatigue(member)}` }}
+                        </span>
                       </small>
                     </div>
                     <div class="sect-member-power">
@@ -5175,6 +5201,7 @@ const sectPlanDraft = reactive({
   mode: "balanced",
   attackTarget: "",
   attackMemberIds: [],
+  onConflict: "retarget",
   defense: {}
 });
 const maxSiegeTeamSize = 5;
@@ -5462,12 +5489,14 @@ const adminWikiArticles = [
       {
         title: "明日战略、攻城与守城",
         paragraphs: [
-          "明日战略支持保守、均衡和激进三种风格，并可手动指定目标省份、攻城成员和守军；未指定的名额会自动补位。",
+          "明日战略支持保守、均衡和激进三种风格，并可手动指定目标省份、攻城成员和守军；各宗门基于同一份公开情报同时提交计划，结算前无法获知敌方今日阵容。",
           "常规攻城队最多 5 人；暂无城市的宗门拥有一次破局优势，攻城队最多 6 人，夺得城市后恢复 5 人。距离越远、疲劳越高，实际攻城战力越低；守城方享受城防阵法加成。攻守城战报会记录目标、队伍、距离、疲劳、灵根克制、城防和胜负。"
         ],
         bullets: [
-          "疲劳范围 0–20；每点使战斗五维降低 2.5%，满疲劳另有 50% 降幅。攻城距离每多 1 格再降低 6%，最多降低 25%，攻守修正最低保留 45%。",
-          "守城阵法使守方攻击、防御、血量、神识和法力提高 10%；守城后疲劳 +2，攻城基础疲劳 +3，未参战者每天恢复 3 点。",
+          "疲劳范围 0–20；每点使战斗五维降低 2.5%。实际守城 +2，攻占无主城 +2，正常攻城基础 +3，远征额外增加；驻防未遇袭恢复 1 点。完全休整时，低疲劳恢复 1 点、中疲劳恢复 2 点、高疲劳恢复 3 点。",
+          "自动战略会先锁定轮换休整组，再安排最低攻城与守城编制。疲劳达到 16 后只会提高休整优先级，不会禁止出战；即使全宗门高疲劳，也会分批轮换而不是全员休整。",
+          "布防首先覆盖全部己方城市，每座城至少安排 1 名守军；覆盖完成后才会向高价值、边境暴露或近期受袭的城市增援。若成员数只够守住全部城市，自动战略会暂停攻城和休整。",
+          "攻方只会看到薄弱、寻常、森严等模糊守备迹象；守方也不知道今日会有多少敌人来袭，精确人数、名单与战力只在战后揭晓。",
           "妖潮从第 1–49 日每天 1 场开始，之后每满 50 日增加 1 场，最多 4 场；高档省份会出现更多妖物。",
           "攻守城胜利方有极低概率夺取失败方当天以前穿戴的装备；切磋不会抢装备。"
         ],
@@ -5796,15 +5825,15 @@ const legacyWikiArticles = [
       {
         title: "明日战略与攻城顺序",
         paragraphs: [
-          "可为玩家宗门保存下一日的保守、均衡或激进策略，并手动指定攻城目标、攻城成员和守军；自动补位会在结算时按规则补齐。没有手动目标时，系统为各宗门生成计划。当前版本会随机打乱各宗门的计划处理顺序，不存在“占城更少必定先攻”的固定规则；同一城市一日只会被一个计划锁定。",
+          "可为玩家宗门保存下一日的保守、均衡或激进策略，并手动指定攻城目标、攻城成员和守军。所有宗门基于同一份战前公开情报同时生成计划；多个宗门争夺同一目标时统一裁决，落选方按军令改攻备选目标或取消出征。",
           "常规攻城成员最多 5 人；0 城宗门最多可派 6 人争夺立足之地，取得城市后恢复 5 人。有效攻城战力会扣除疲劳与远征距离；守城成员始终最多 5 人并享受城防加成。攻守城战报会解释择城、选将、布防、疲劳、灵根相克和城防等快照因素。"
         ],
         bullets: [
           "妖潮每天会随机挑选若干已占领城市，优先关注资源高、持有久、领地多的目标，并为刚被袭击的城市提供短暂保护权重。",
           "守城胜利的成员会获得守妖灵珠碎片判定。",
           "装备夺取只可能发生在攻守城战斗胜利方对失败方的极低概率判定；品质越高，夺取率越低。切磋绝不触发装备夺取。",
-          "疲劳范围 0–20；每点使五维降低 2.5%，满疲劳单独造成 50% 降幅。攻城每超过 1 格距离再降低 6%，最多降低 25%；攻守修正最低仍保留 45% 五维。",
-          "守城阵法使守方攻击、防御、血量、神识、法力统一提高 10%。守城后疲劳 +2；攻城基础 +3，远征每多 1 格再 +1；未参与者每天恢复 3 点。",
+          "疲劳范围 0–20；每点使五维降低 2.5%。实际守城 +2；攻占无主城 +2；正常攻城基础 +3，远征每多 1 格再 +1。驻防未遇袭恢复 1 点；完全休整按疲劳分段恢复 1–3 点。",
+          "自动布防会按城市价值、边境暴露和近期受袭风险分配人员，并为宗门保留轮换休整组。疲劳达到 16 后会优先休整，但不是禁战线；即使全宗门高疲劳，也会维持最低攻守编制并分批轮换。",
           "装备抢夺仅从失败者已穿戴且非当天新得的装备中随机抽取一件：凡器 0.4%、法器 0.3%、灵器 0.2%、古宝 0.15%、法宝 0.1%、通天灵宝 0.05%。",
           "妖潮数量随游戏日增长：第 1–49 日每天 1 场，之后每满 50 日增加 1 场，最多 4 场；S/A/B/C/D/E 城每次妖潮为 3–4/3/2–3/2/1–2/1 只妖物。"
         ],
@@ -7481,6 +7510,7 @@ const provinceTerritories = computed(() => {
       ...currentProvince,
       owner: territory.owner || "",
       defenders: territory.defenders || [],
+      defenseIntel: territory.defenseIntel || null,
       heldDays: territory.heldDays || 0,
       miasmaUntilDay: territory.miasmaUntilDay || 0,
       distance: strategy.distances?.[province.id] || 0,
@@ -9507,7 +9537,15 @@ function provinceBattleRoster(territory) {
   if (!territory.owner) return { status: "vacant", label: "无主", participants: [] };
   const war = todayProvinceWarsByProvinceId.value.get(territory.id);
   if (!war) {
-    return { status: "garrison", label: "现驻", participants: defendersFor(territory) };
+    if (territory.owner === playerSectNameForPlan.value) {
+      const participants = defendersFor(territory);
+      return { status: "garrison", label: participants.length ? "己方驻军" : "己方空城", participants };
+    }
+    return {
+      status: `intel-${territory.defenseIntel?.level || "unknown"}`,
+      label: territory.defenseIntel?.label || "守备情报未知",
+      participants: []
+    };
   }
   const attackersWon = Boolean(war.captured);
   const refs = attackersWon ? war.attackerLineup || [] : war.defenderLineup || [];
@@ -9573,6 +9611,7 @@ function syncSectPlanDraft() {
   sectPlanDraft.mode = plan.mode || "balanced";
   sectPlanDraft.attackTarget = plan.attack?.targetProvinceId || "";
   sectPlanDraft.attackMemberIds = Array.isArray(plan.attack?.memberIds) ? [...new Set(plan.attack.memberIds)].slice(0, playerAttackTeamLimit.value) : [];
+  sectPlanDraft.onConflict = plan.attack?.onConflict === "cancel" ? "cancel" : "retarget";
   const unavailableIds = new Set(sectPlanDraft.attackMemberIds);
   sectPlanDraft.defense = Object.fromEntries(Object.entries(plan.defense?.provinceIdToMemberIds || {})
     .map(([provinceId, ids]) => {
@@ -9613,14 +9652,18 @@ function planMemberLabel(member) {
 }
 
 function sectMemberFatigue(member) {
-  return Math.max(0, Number(derived.value.sectStrategy?.fatigue?.[member?.id] ?? gameState.value.sectFatigue?.[member?.id]) || 0);
+  const value = derived.value.sectStrategy?.fatigue?.[member?.id] ?? gameState.value.sectFatigue?.[member?.id];
+  if (value === undefined || value === null) return null;
+  return Math.max(0, Number(value) || 0);
 }
 
 function fatigueDelta(member) {
   const previous = derived.value.sectStrategy?.fatiguePrevious || {};
   if (!member?.id || !Object.hasOwn(previous, member.id)) return { known: false, previous: 0, change: 0, direction: "stable", text: "" };
   const previousValue = Math.max(0, Number(previous[member.id]) || 0);
-  const change = sectMemberFatigue(member) - previousValue;
+  const currentValue = sectMemberFatigue(member);
+  if (currentValue === null) return { known: false, previous: previousValue, change: 0, direction: "stable", text: "" };
+  const change = currentValue - previousValue;
   if (change > 0) return { known: true, previous: previousValue, change, direction: "gain", text: `较昨日 +${change}` };
   if (change < 0) return { known: true, previous: previousValue, change, direction: "loss", text: `较昨日 ${change}` };
   return { known: true, previous: previousValue, change, direction: "stable", text: "较昨日持平" };
@@ -9631,7 +9674,7 @@ function fatigueHelpText(member) {
   const penalty = Math.round(fatigue * 2.5);
   const delta = fatigueDelta(member);
   const comparison = delta.known ? `昨日疲劳 ${delta.previous} 点，${delta.text}` : "昨日疲劳暂无记录";
-  return `疲劳来自连续参与攻守城：守城当日 +2，攻城基础 +3，远征每多 1 格再 +1，最高 20 点；未参战一日恢复 3 点。当前 ${fatigue} 点，使攻守城五维降低约 ${penalty}%；${comparison}。`;
+  return `疲劳来自连续参与攻守城：实际守城 +2，攻占无主城 +2，正常攻城基础 +3，远征每多 1 格再 +1，最高 20 点；驻防未遇袭恢复 1 点。完全休整时，疲劳 0–9 恢复 1 点、10–15 恢复 2 点、16–20 恢复 3 点。疲劳 16 以上优先轮换休整，但宗门仍会维持最低攻守编制。当前 ${fatigue} 点，使攻守城五维降低约 ${penalty}%；${comparison}。`;
 }
 
 function planProvinceLabel(province) {
@@ -9644,7 +9687,8 @@ async function saveSectPlan() {
     attack: {
       targetProvinceId: sectPlanDraft.attackTarget,
       memberIds: sectPlanDraft.attackMemberIds,
-      autoFill: true
+      autoFill: true,
+      onConflict: sectPlanDraft.onConflict
     },
     defense: {
       provinceIdToMemberIds: sectPlanDraft.defense,
@@ -9666,6 +9710,7 @@ async function resetSectPlanAuto() {
   sectPlanDraft.mode = "balanced";
   sectPlanDraft.attackTarget = "";
   sectPlanDraft.attackMemberIds = [];
+  sectPlanDraft.onConflict = "retarget";
   sectPlanDraft.defense = {};
   await saveSectPlan();
 }
@@ -10286,7 +10331,7 @@ function strategyMetricList(metrics) {
     .map((metric) => ({ label: metric.label, value: metric.value }));
 }
 
-function strategyRosterList(roster) {
+function strategyRosterList(roster, role = "") {
   return (Array.isArray(roster) ? roster : [])
     .filter((member) => member?.id && member?.name && member?.reason)
     .map((member) => ({
@@ -10295,7 +10340,24 @@ function strategyRosterList(roster) {
       power: Math.max(0, Number(member.power) || 0),
       fatigue: Math.max(0, Number(member.fatigue) || 0),
       selected: Boolean(member.selected),
-      reason: member.reason
+      reason: (() => {
+        const reason = String(member.reason || "");
+        if (member.selected && role === "defenders" && /^守备排第 \d+，负责驻守/.test(reason)) {
+          const rank = reason.match(/^守备排第 (\d+)/)?.[1] || "-";
+          return `守备战力第 ${rank} 仅作参考；本次先满足每座城至少 1 名守军，再综合疲劳、连续出勤和历史负担轮换，因此战力排名靠后也可能入选。`;
+        }
+        if (member.selected && role === "attackers" && /^攻城战力排第 \d+，补入/.test(reason)) {
+          const rank = reason.match(/^攻城战力排第 (\d+)/)?.[1] || "-";
+          return `攻城战力第 ${rank} 仅作参考；守城覆盖和休整名额先锁定后，再综合疲劳、连续出勤、历史负担与远征战力确定攻城队。`;
+        }
+        if (!member.selected && role === "defenders" && /^守备排第 \d+，/.test(reason)) {
+          return reason.replace(/^守备排第 (\d+)，/, "守备战力第 $1 仅作参考；按覆盖与轮换分配后，");
+        }
+        if (!member.selected && role === "attackers" && /^攻城战力排第 \d+，/.test(reason)) {
+          return reason.replace(/^攻城战力排第 (\d+)，/, "攻城战力第 $1 仅作参考；按守城覆盖、休整与轮换分配后，");
+        }
+        return reason;
+      })()
     }));
 }
 
@@ -10354,12 +10416,21 @@ function warStrategySections(war) {
     .map((key) => {
       const section = strategy[key];
       if (!section) return null;
+      const points = strategyPointList(section.points).map((point) => {
+        if (key === "attackers" && /^从未参与守城的成员里，按攻城战力、距离惩罚和疲劳排序/.test(point)) {
+          return point.replace(
+            /^从未参与守城的成员里，按攻城战力、距离惩罚和疲劳排序，取 (\d+) 人出阵。$/,
+            "先锁定每城保底守军与休整位，再从剩余成员里综合疲劳、连续出勤、历史负担与远征战力，轮换 $1 人出阵。"
+          );
+        }
+        return point;
+      });
       return {
         key,
         label: labels[key],
         title: section.title || labels[key],
-        points: strategyPointList(section.points),
-        roster: strategyRosterList(section.roster),
+        points,
+        roster: strategyRosterList(section.roster, key),
         metrics: strategyMetricList(section.metrics)
       };
     })

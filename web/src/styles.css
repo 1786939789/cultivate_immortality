@@ -7410,6 +7410,32 @@ button.event {
   gap: 10px;
 }
 
+.war-intelligence-review {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.war-intelligence-review .pre-battle {
+  border-left-color: rgba(183, 121, 31, .68);
+  background: rgba(255, 247, 219, .72);
+}
+
+.war-intelligence-review .post-battle {
+  border-left-color: rgba(15, 118, 110, .68);
+  background: rgba(226, 244, 234, .72);
+}
+
+.province-intel-label {
+  color: #765f3d;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.province-intel-label.intel-thin { color: #2f7664; }
+.province-intel-label.intel-strong { color: #9b3e32; }
+.province-intel-label.intel-normal { color: #8a6b2f; }
+
 .war-strategy-note {
   min-width: 0;
   border-left: 3px solid rgba(15, 118, 110, .48);
@@ -7510,7 +7536,7 @@ button.event {
   border-radius: 3px;
   background: rgba(120, 91, 43, .1);
   color: #70583b;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1;
   padding: 3px 4px;
 }
@@ -7522,14 +7548,14 @@ button.event {
 
 .war-strategy-roster strong {
   min-width: 0;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .war-strategy-roster small {
   grid-column: 1 / -1;
   color: #6b4b2b;
-  font-size: 11px;
-  line-height: 1.42;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .sect-territory-rank,
@@ -13247,7 +13273,8 @@ button.defender-chip.person:focus-visible .character-portrait {
 }
 
 @media (max-width: 900px) {
-  .war-strategy-grid {
+  .war-strategy-grid,
+  .war-intelligence-review {
     grid-template-columns: 1fr;
   }
 

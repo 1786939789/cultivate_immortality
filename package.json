@@ -18,6 +18,7 @@
     "auth:create-code": "node --env-file-if-exists=.env scripts/create-registration-code.mjs",
     "check:balance": "node scripts/balance-check.mjs",
     "check:systems": "node scripts/encounter-trial-check.mjs",
+    "check:siege": "node scripts/siege-strategy-check.mjs",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",
     "start": "node --env-file-if-exists=.env server/index.mjs"
