@@ -7,12 +7,30 @@ import {
   dailySettlement,
   effectiveStats,
   ensureStateShape,
+  getCombatSnapshot,
+  getDailyRootFortune,
+  getEffectiveSkillSnapshot,
   generateDailyEncounter,
   getPublicState,
   resolveEncounter,
   startDaoTrial,
   updateEncounterFocus
 } from "../server/gameLogic.mjs";
+
+function setSingleRoot(person, rootKey, catalog) {
+  const root = { ...catalog.find((entry) => entry.key === rootKey), bonus: 0 };
+  person.root = root;
+  person.roots = [root];
+  person.primaryRootKey = rootKey;
+}
+
+function advanceToFortune(rootKey) {
+  const testState = createDefaultState();
+  const targetDay = Array.from({ length: 6 }, (_, day) => day).find((day) => getDailyRootFortune(testState, testState.player, day).rootKey === rootKey);
+  testState.day = targetDay;
+  ensureStateShape(testState);
+  return testState;
+}
 
 assert.equal(encounterDefinitionCount, 240, "首发因缘节点必须为 240 个");
 assert.equal(new Set(encounterDefinitions.map((event) => event.id)).size, 240, "因缘节点 ID 必须唯一");
@@ -76,6 +94,51 @@ assert.ok(longestEmptyRun <= 3, `三日保底失效：连续 ${longestEmptyRun} 
 assert.ok(state.encounters.history.length > 50, "因缘历史应持续积累");
 assert.ok(Object.keys(state.relationships).length > 10, "事件应建立多名修士关系");
 
+const encounterCatalog = getPublicState(createDefaultState()).catalog.roots;
+const encounterFortuneState = advanceToFortune("water");
+setSingleRoot(encounterFortuneState.player, "water", encounterCatalog);
+encounterFortuneState.player.spirit = 10_000;
+const positiveEncounter = encounterDefinitions
+  .flatMap((definition) => definition.choices.map((choice) => ({ definition, choice })))
+  .find(({ choice }) => Number(choice.effects?.xp) >= 5);
+assert.ok(positiveEncounter, "测试数据应包含正修为因缘选择");
+encounterFortuneState.encounters.pending = [{
+  id: "fortune-positive-encounter",
+  definitionId: positiveEncounter.definition.id,
+  actorId: encounterFortuneState.npcs[0].id,
+  title: positiveEncounter.definition.title,
+  familyId: positiveEncounter.definition.familyId,
+  category: positiveEncounter.definition.category
+}];
+const positiveXpBefore = encounterFortuneState.player.xp;
+const positiveResult = resolveEncounter(encounterFortuneState, {
+  eventId: "fortune-positive-encounter",
+  choiceId: positiveEncounter.choice.id
+});
+const rawPositiveXp = Number(positiveEncounter.choice.effects.xp);
+assert.equal(encounterFortuneState.player.xp - positiveXpBefore, Math.round(rawPositiveXp * 1.2), "水灵根幸运日的因缘正修为应提高 20%");
+assert.match(positiveResult.history.impact, new RegExp(`修为 \\+${Math.round(rawPositiveXp * 1.2)}`), "因缘记录应展示实际结算后的幸运修为");
+
+const negativeEncounter = positiveEncounter;
+const originalNegativeTestXp = negativeEncounter.choice.effects.xp;
+negativeEncounter.choice.effects.xp = -5;
+encounterFortuneState.encounters.pending = [{
+  id: "fortune-negative-encounter",
+  definitionId: negativeEncounter.definition.id,
+  actorId: encounterFortuneState.npcs[1].id,
+  title: negativeEncounter.definition.title,
+  familyId: negativeEncounter.definition.familyId,
+  category: negativeEncounter.definition.category
+}];
+encounterFortuneState.player.xp = Math.max(100, encounterFortuneState.player.xp);
+const negativeXpBefore = encounterFortuneState.player.xp;
+resolveEncounter(encounterFortuneState, {
+  eventId: "fortune-negative-encounter",
+  choiceId: negativeEncounter.choice.id
+});
+assert.equal(encounterFortuneState.player.xp - negativeXpBefore, Number(negativeEncounter.choice.effects.xp), "幸运灵根不应放大因缘中的修为损失");
+negativeEncounter.choice.effects.xp = originalNegativeTestXp;
+
 const focusIds = state.npcs.slice(0, 3).map((npc) => npc.id);
 for (const npcId of focusIds) updateEncounterFocus(state, { npcId, focused: true });
 assert.equal(state.encounters.focusedNpcIds.length, 3, "关注修士上限应为三人");
@@ -97,6 +160,12 @@ assert.equal(state.daoTrial.tickets, 0, "正式问道应消耗一枚问道签");
 assert.equal(started.run.taskBoons.length, 4, "当日四类现实任务应装载四种游历助力");
 assert.equal(started.run.freeRerolls, 1, "学习任务应提供一次免费重观");
 assert.equal(started.run.combat.maxHp, Math.floor(effectiveStats(state.player, state).maxHp * 1.12), "运动任务应提高本轮最大血量");
+const trialBaseStats = effectiveStats(state.player, state);
+const trialCombatant = state.daoTrial.activeRun.combatant;
+const trialSnapshot = getCombatSnapshot(trialCombatant, state);
+assert.equal(trialCombatant.attack, trialBaseStats.attack, "问道秘境应锁定进入时的天运攻击");
+assert.equal(trialSnapshot.attack, trialCombatant.attack, "问道战斗不应再次叠加幸运灵根攻击");
+assert.equal(trialSnapshot.divineSense, trialCombatant.divineSense, "问道战斗不应再次叠加幸运灵根神识");
 const actionState = getPublicState(state, { scope: "dao-trial" });
 assert.equal(actionState.__scope, "dao-trial", "问道动作应返回专用局部状态");
 assert.ok(actionState.daoTrial.activeRun, "问道局部状态应包含当前挑战");
@@ -124,6 +193,29 @@ assert.ok(Number.isFinite(state.daoTrial.history[0].rewards.spirit), "问道灵�
 assert.ok(Number.isFinite(state.daoTrial.history[0].rewards.dust), "问道灵尘奖励应为数值");
 assert.ok(Number.isFinite(state.daoTrial.history[0].rewards.xp), "问道修为奖励应为数值");
 assert.doesNotThrow(() => JSON.stringify(getPublicState(state)), "公开状态必须可序列化");
+
+const trialXpFortuneState = advanceToFortune("water");
+setSingleRoot(trialXpFortuneState.player, "water", encounterCatalog);
+startDaoTrial(trialXpFortuneState, { routeId: "golden-pass" });
+trialXpFortuneState.daoTrial.activeRun.nodeIndex = 3;
+trialXpFortuneState.daoTrial.activeRun.pendingSealIds = [];
+trialXpFortuneState.daoTrial.activeRun.rewards.xp = 10;
+const trialXpBefore = trialXpFortuneState.player.xp;
+const trialXpResult = advanceDaoTrial(trialXpFortuneState, { action: "abandon" });
+assert.equal(trialXpResult.summary.rewards.xp, 9, "水灵根幸运日问道离境应按 10 x 80% x 120% 结算修为");
+assert.equal(trialXpResult.summary.rewards.dailyRootFortuneXpMultiplier, 1.2, "问道记录应保存入场时的幸运修为倍率");
+assert.equal(trialXpFortuneState.player.xp - trialXpBefore, 9, "问道幸运修为应实际写入玩家修为");
+
+const heavenTrialState = advanceToFortune("heaven");
+setSingleRoot(heavenTrialState.player, "heaven", encounterCatalog);
+startDaoTrial(heavenTrialState, { routeId: "golden-pass" });
+const heavenCombatant = heavenTrialState.daoTrial.activeRun.combatant;
+assert.ok(heavenCombatant.maxMana > heavenCombatant.skillManaBase, "天灵根幸运日问道应增加可用最大法力");
+assert.equal(
+  getEffectiveSkillSnapshot(heavenCombatant).cost,
+  getEffectiveSkillSnapshot({ ...heavenCombatant, maxMana: heavenCombatant.skillManaBase, skillManaBase: undefined }).cost,
+  "天灵根幸运法力不应同步抬高问道技能耗蓝"
+);
 
 const ticketState = createDefaultState();
 ensureStateShape(ticketState);

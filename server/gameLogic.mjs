@@ -296,6 +296,183 @@ function rootEffectBonus(entity, effect) {
     .reduce((sum, root) => sum + rootBonus(root) / divisor, 0);
 }
 
+const dailyRootFortuneVersion = 1;
+const dailyRootFortuneHistoryLimit = 18;
+const dailyRootFortuneDefinitions = {
+  metal: { stat: "attack", statLabel: "攻击", rate: 0.12, effectText: "攻击提高 12%" },
+  wood: { stat: "maxHp", statLabel: "最大血量", rate: 0.15, effectText: "最大血量提高 15%" },
+  water: { stat: "xp", statLabel: "修为获取", rate: 0.2, breakthroughBonus: 0.03, effectText: "修为获取提高 20%，突破成功率增加 3 个百分点" },
+  fire: { stat: "divineSense", statLabel: "神识", rate: 0.12, effectText: "神识提高 12%" },
+  earth: { stat: "defense", statLabel: "防御", rate: 0.12, effectText: "防御提高 12%" },
+  heaven: { stat: "maxMana", statLabel: "最大法力", rate: 0.15, effectText: "最大法力提高 15%" }
+};
+
+function dailyRootFortuneOrder(state, cycle) {
+  const seedBase = state?.calendarStartDate || state?.lastSettlementDate || "fortune";
+  const shuffle = (targetCycle) => {
+    const order = [...rootCycle];
+    const random = seededBattleRandom(`${seedBase}|daily-root-fortune|${targetCycle}`);
+    for (let index = order.length - 1; index > 0; index -= 1) {
+      const target = Math.floor(random() * (index + 1));
+      [order[index], order[target]] = [order[target], order[index]];
+    }
+    return order;
+  };
+  const order = shuffle(cycle);
+  if (cycle > 1 && order[0] === shuffle(cycle - 1).at(-1)) {
+    [order[0], order[1]] = [order[1], order[0]];
+  }
+  return order;
+}
+
+function dailyRootFortuneSnapshot(state, day = state?.day || 0) {
+  const normalizedDay = Math.max(0, Math.floor(Number(day) || 0));
+  const cycle = Math.floor(normalizedDay / rootCycle.length) + 1;
+  const cycleDay = normalizedDay % rootCycle.length;
+  const rootKey = dailyRootFortuneOrder(state, cycle)[cycleDay] || rootCycle[0];
+  return {
+    version: dailyRootFortuneVersion,
+    day: normalizedDay,
+    date: state ? stateDateForDay(state, normalizedDay) : dateKey(),
+    cycle,
+    cycleDay: cycleDay + 1,
+    rootKey
+  };
+}
+
+function createDailyRootFortuneState(state, day = state?.day || 0) {
+  return { ...dailyRootFortuneSnapshot(state, day), history: [] };
+}
+
+function ensureDailyRootFortuneState(state) {
+  const expected = dailyRootFortuneSnapshot(state, state.day);
+  const previous = state.dailyRootFortune;
+  const previousValid = previous?.version === dailyRootFortuneVersion && rootCycle.includes(previous.rootKey) && Number.isFinite(Number(previous.day));
+  const changedCurrent = !previousValid || previous.day !== expected.day || previous.rootKey !== expected.rootKey || previous.date !== expected.date;
+  let history = Array.isArray(previous?.history) ? previous.history : [];
+  if (changedCurrent && previousValid && previous.day !== expected.day) {
+    history = [{ day: previous.day, date: previous.date || stateDateForDay(state, previous.day), rootKey: previous.rootKey }, ...history];
+  }
+  history = history
+    .filter((entry) => entry && Number.isFinite(Number(entry.day)) && rootCycle.includes(entry.rootKey) && Number(entry.day) !== expected.day)
+    .filter((entry, index, entries) => entries.findIndex((candidate) => Number(candidate.day) === Number(entry.day)) === index)
+    .sort((a, b) => Number(b.day) - Number(a.day))
+    .slice(0, dailyRootFortuneHistoryLimit)
+    .map((entry) => ({ day: Number(entry.day), date: entry.date || stateDateForDay(state, entry.day), rootKey: entry.rootKey }));
+  const next = { ...expected, history };
+  if (JSON.stringify(previous || null) === JSON.stringify(next)) return false;
+  state.dailyRootFortune = next;
+  return true;
+}
+
+export function advanceDailyRootFortuneDay(state) {
+  const previousLimits = new Map(allCultivators(state).map(({ entity }) => [entity.id, {
+    maxHp: effectiveMaxHp(entity, state),
+    maxMana: effectiveMaxMana(entity, state),
+    hp: Number(entity.hp) || 0,
+    mana: Number(entity.mana) || 0
+  }]));
+  state.day += 1;
+  ensureDailyRootFortuneState(state);
+  for (const { entity } of allCultivators(state)) {
+    const previous = previousLimits.get(entity.id);
+    if (!previous) continue;
+    const nextMaxHp = effectiveMaxHp(entity, state);
+    const nextMaxMana = effectiveMaxMana(entity, state);
+    entity.hp = clamp(Math.floor((previous.hp / Math.max(1, previous.maxHp)) * nextMaxHp), entity.id === "player" ? 1 : 0, nextMaxHp);
+    entity.mana = clamp(Math.floor((previous.mana / Math.max(1, previous.maxMana)) * nextMaxMana), 0, nextMaxMana);
+  }
+  return state.dailyRootFortune;
+}
+
+function dailyRootFortuneMatch(state, entity, day = state?.day || 0) {
+  const fortune = dailyRootFortuneSnapshot(state, day);
+  const definition = dailyRootFortuneDefinitions[fortune.rootKey];
+  const rootsOfEntity = normalizeRootSet(entity).roots;
+  const entityId = entity?.id;
+  const eligible = Boolean(entityId && (entityId === state?.player?.id || state?.npcs?.some((npc) => npc.id === entityId)));
+  const matched = eligible && rootsOfEntity.some((root) => root.key === fortune.rootKey);
+  const divisor = Math.max(1, rootsOfEntity.length);
+  return {
+    ...fortune,
+    ...definition,
+    eligible,
+    matched,
+    rootCount: divisor,
+    rate: matched ? definition.rate / divisor : 0,
+    breakthroughBonus: matched ? Number(definition.breakthroughBonus || 0) / divisor : 0
+  };
+}
+
+export function getDailyRootFortune(state, entity = state.player, day = state.day) {
+  ensureDailyRootFortuneState(state);
+  return day === state.day ? publicDailyRootFortune(state, entity) : {
+    ...dailyRootFortuneMatch(state, entity, day),
+    name: rootByKey(dailyRootFortuneSnapshot(state, day).rootKey).name
+  };
+}
+
+function dailyRootFortuneStatBonus(state, entity, stat, day = state?.day || 0) {
+  if (!state) return 0;
+  const match = dailyRootFortuneMatch(state, entity, day);
+  return match.stat === stat ? match.rate : 0;
+}
+
+function dailyRootFortuneXpMultiplier(state, entity, day = state?.day || 0) {
+  if (!state) return 1;
+  return 1 + dailyRootFortuneStatBonus(state, entity, "xp", day);
+}
+
+function fortuneAdjustedXp(state, entity, amount, day = state?.day || 0) {
+  const rawXp = Number(amount) || 0;
+  return rawXp > 0 ? Math.round(rawXp * dailyRootFortuneXpMultiplier(state, entity, day)) : rawXp;
+}
+
+function dailyRootFortuneBreakthroughBonus(state, entity, day = state?.day || 0) {
+  if (!state) return 0;
+  return dailyRootFortuneMatch(state, entity, day).breakthroughBonus;
+}
+
+function publicDailyRootFortune(state, entity = state.player) {
+  const match = dailyRootFortuneMatch(state, entity);
+  const root = rootByKey(match.rootKey);
+  const adjustedEffectText = match.matched
+    ? match.stat === "xp"
+      ? `你的修为获取提高 ${formatPercentText(match.rate)}，突破成功率增加 ${Number((match.breakthroughBonus * 100).toFixed(1))} 个百分点`
+      : `你的${match.statLabel}提高 ${formatPercentText(match.rate)}`
+    : `你未拥有${root.name}，今日不触发属性共鸣`;
+  const recent = Array.from({ length: Math.min(6, Math.max(1, Number(state.day) + 1)) }, (_, index) => {
+    const day = Math.max(0, Number(state.day) - index);
+    const recentMatch = dailyRootFortuneMatch(state, entity, day);
+    return {
+      ...recentMatch,
+      name: rootByKey(recentMatch.rootKey).name,
+      playerMatched: recentMatch.matched,
+      playerRate: recentMatch.rate,
+      playerBreakthroughBonus: recentMatch.breakthroughBonus
+    };
+  });
+  return {
+    ...match,
+    name: root.name,
+    effectText: dailyRootFortuneDefinitions[match.rootKey].effectText,
+    playerMatched: match.matched,
+    playerRate: match.rate,
+    playerBreakthroughBonus: match.breakthroughBonus,
+    playerEffectText: adjustedEffectText,
+    resonantCount: [state.player, ...(state.npcs || [])].filter((person) => dailyRootFortuneMatch(state, person).matched).length,
+    recent
+  };
+}
+
+function compactDailyRootFortune(state, entity) {
+  const match = dailyRootFortuneMatch(state, entity);
+  return {
+    rootKey: match.rootKey,
+    playerMatched: match.matched
+  };
+}
+
 function activeSpecialRoot(entity) {
   const rootKeys = normalizeRootSet(entity).roots.map((root) => root.key);
   const keys = new Set(rootKeys);
@@ -382,39 +559,41 @@ function rootProfile(entity) {
 }
 
 export function effectiveAttack(entity, state) {
-  const bonus = rootEffectBonus(entity, "attack");
+  const bonus = rootEffectBonus(entity, "attack") + dailyRootFortuneStatBonus(state, entity, "attack");
   return Math.floor((entity.attack || 0) * (1 + bonus + equipmentBonusFor(state, entity, "attack") + spiritPearlBonusFor(state, entity, "attack")));
 }
 
 export function effectiveDefense(entity, state) {
-  const bonus = rootEffectBonus(entity, "defense");
+  const bonus = rootEffectBonus(entity, "defense") + dailyRootFortuneStatBonus(state, entity, "defense");
   return Math.floor((entity.defense || 0) * (1 + bonus + equipmentBonusFor(state, entity, "defense") + spiritPearlBonusFor(state, entity, "defense")));
 }
 
 export function effectiveMaxHp(entity, state) {
-  const bonus = rootEffectBonus(entity, "hp");
+  const bonus = rootEffectBonus(entity, "hp") + dailyRootFortuneStatBonus(state, entity, "maxHp");
   return Math.floor((entity.maxHp || 0) * (1 + bonus + equipmentBonusFor(state, entity, "maxHp") + spiritPearlBonusFor(state, entity, "maxHp")));
 }
 
 export function effectiveMaxMana(entity, state) {
-  const bonus = rootEffectBonus(entity, "mana");
+  const bonus = rootEffectBonus(entity, "mana") + dailyRootFortuneStatBonus(state, entity, "maxMana");
   return Math.floor((entity.maxMana || 0) * (1 + bonus + equipmentBonusFor(state, entity, "maxMana") + spiritPearlBonusFor(state, entity, "maxMana")));
 }
 
 export function effectiveDivineSense(entity, state) {
-  const bonus = rootEffectBonus(entity, "divineSense");
+  const bonus = rootEffectBonus(entity, "divineSense") + dailyRootFortuneStatBonus(state, entity, "divineSense");
   return Math.floor((entity.divineSense || 0) * (1 + bonus + equipmentBonusFor(state, entity, "divineSense") + spiritPearlBonusFor(state, entity, "divineSense")));
 }
 
-function effectiveCombatStats(entity, state) {
+function effectiveCombatStats(entity, state, options = {}) {
   const equipmentBonuses = { attack: 0, defense: 0, maxHp: 0, divineSense: 0, maxMana: 0 };
   for (const item of equippedItemsFor(state, entity)) {
     const stat = equipmentSlot(item).stat;
     if (stat in equipmentBonuses) equipmentBonuses[stat] += item.bonus || 0;
   }
   const pearlBonuses = state && entity?.id ? spiritPearlBonusesFor(state, entity) : {};
+  const fortuneDay = options.day ?? state?.day;
+  const fortuneBonus = (stat) => options.includeDailyRootFortune === false ? 0 : dailyRootFortuneStatBonus(state, entity, stat, fortuneDay);
   const effectiveValue = (base, rootStat, stat) => Math.floor(
-    (entity?.[base] || 0) * (1 + rootEffectBonus(entity, rootStat) + equipmentBonuses[stat] + (pearlBonuses[stat] || 0))
+    (entity?.[base] || 0) * (1 + rootEffectBonus(entity, rootStat) + fortuneBonus(stat) + equipmentBonuses[stat] + (pearlBonuses[stat] || 0))
   );
   const attack = effectiveValue("attack", "attack", "attack");
   const defense = effectiveValue("defense", "defense", "defense");
@@ -424,8 +603,8 @@ function effectiveCombatStats(entity, state) {
   return { attack, defense, maxHp, divineSense, maxMana };
 }
 
-export function effectiveStats(entity, state) {
-  const { attack, defense, maxHp, divineSense, maxMana } = effectiveCombatStats(entity, state);
+export function effectiveStats(entity, state, options = {}) {
+  const { attack, defense, maxHp, divineSense, maxMana } = effectiveCombatStats(entity, state, options);
   return {
     attack, defense, maxHp, divineSense, maxMana,
     xpMultiplier: xpGainMultiplier(entity, state) * talentSnapshot(entity).xpMultiplier,
@@ -440,7 +619,7 @@ export function effectiveStats(entity, state) {
 }
 
 export function xpGainMultiplier(entity, state = null) {
-  return (1 + rootEffectBonus(entity, "xp") + spiritPearlBonusFor(state, entity, "xp")) * rootCultivationMultiplier(entity);
+  return (1 + rootEffectBonus(entity, "xp") + spiritPearlBonusFor(state, entity, "xp")) * rootCultivationMultiplier(entity) * dailyRootFortuneXpMultiplier(state, entity);
 }
 
 function applyDamage(entity, amount, state) {
@@ -551,7 +730,8 @@ function effectiveSkill(skill, rank = 1, options = {}) {
 
 function effectiveSkillForEntity(entity) {
   const skill = findSkill(entity?.skillId);
-  const upgraded = effectiveSkill(skill, skillRankOf(entity, skill.id), { maxMana: entity?.maxMana });
+  const skillManaBase = Number(entity?.skillManaBase) || entity?.maxMana;
+  const upgraded = effectiveSkill(skill, skillRankOf(entity, skill.id), { maxMana: skillManaBase });
   const buffs = entity?.trialBuffs || {};
   if (!Object.keys(buffs).length) return upgraded;
   const result = { ...upgraded };
@@ -2374,6 +2554,14 @@ function cultivatorById(state, id) {
   return allCultivators(state).find((item) => item.entity.id === id)?.entity || null;
 }
 
+export function getCombatSnapshot(entity, state) {
+  return combatSnapshot(entity, state);
+}
+
+export function getEffectiveSkillSnapshot(entity) {
+  return effectiveSkillForEntity(entity);
+}
+
 function combatAverage(values) {
   const numbers = (values || []).map(Number).filter(Number.isFinite);
   return numbers.length ? numbers.reduce((sum, value) => sum + value, 0) / numbers.length : 0;
@@ -2677,6 +2865,7 @@ function personRecordForDay(entity, day) {
 }
 
 function estimatedPowerForDay(entity, day, state) {
+  if (Number(day) === Number(state.day)) return powerOf(entity, state);
   const savedPower = Number(personRecordForDay(entity, day)?.power);
   if (Number.isFinite(savedPower) && savedPower > 0) return savedPower;
 
@@ -2692,7 +2881,7 @@ function estimatedPowerForDay(entity, day, state) {
   }
   historical.hp = historical.maxHp;
   historical.mana = historical.maxMana;
-  return powerOf(historical, state);
+  return powerOf(historical, state, { day });
 }
 
 function duelScoreForDay(entity, day) {
@@ -3582,7 +3771,7 @@ function makeStarSeaMonster(state, highestRealm) {
   const monster = makeMonster(`乱星海·${monsterName}`, realm, pick(roots).key, 1.15 + stage * 0.1);
   monster.defense = Math.max(1, Math.floor(monster.defense * 0.52));
   monster.attack = Math.max(1, Math.floor(monster.attack * 0.82));
-  monster.maxHp = Math.max(monster.maxHp * 4, Math.floor(allCultivators(state).reduce((sum, { entity }) => sum + powerOf(entity, state), 0) * 0.34));
+  monster.maxHp = Math.max(monster.maxHp * 4, Math.floor(allCultivators(state).reduce((sum, { entity }) => sum + powerOf(entity, state, { includeDailyRootFortune: false }), 0) * 0.34));
   monster.maxHp = Math.floor(monster.maxHp);
   monster.hp = monster.maxHp;
   return monster;
@@ -5306,9 +5495,8 @@ function siegeDutyScore(state, member, role, distance = 1) {
   const sameRole = duty.lastRole === role || (role === "defense" && duty.lastRole === "garrison");
   const rotationPenalty = duty.consecutiveDuty >= 2 ? 12000 : duty.consecutiveDuty * 700;
   const rolePenalty = sameRole ? duty.consecutiveRole * 180 : 0;
-  const longRangeValue = role === "attack" && distance >= 3
-    ? (member.entity.divineSense || 0) * 1.5 + (member.entity.maxMana || 0) * 0.4
-    : 0;
+  const longRangeStats = role === "attack" && distance >= 3 ? effectiveStats(member.entity, state) : null;
+  const longRangeValue = longRangeStats ? longRangeStats.divineSense * 1.5 + longRangeStats.maxMana * 0.4 : 0;
   const powerValue = effectiveSiegePower(state, member.entity, distance) + longRangeValue;
   const rotationTieBreak = deterministicUnit(`siege-duty|${state.rebirth || 1}|${state.day}|${role}|${member.entity.id}`) * 25;
   return fatigueDutyBand(fatigue) * 5000
@@ -6005,12 +6193,13 @@ function breakthroughChanceFor(state, entity) {
   const sectName = entity.id === "player" ? state.sect.name : entity.sect;
   const potionBonus = entity.id === "player" ? activeBreakthroughBonus(state) : 0;
   const pearlBonus = spiritPearlBonusFor(state, entity, "breakthrough");
+  const fortuneBonus = dailyRootFortuneBreakthroughBonus(state, entity);
   const beforePotion = breakthroughChance(entity) * (1 + sectBreakthroughBonus(state, sectName, entity)) + pearlBonus;
   const championBonus = entity.championDaoRhyme?.active && entity.championDaoRhyme.realm === entity.realm
     ? Number(entity.championDaoRhyme.bonus || 0)
     : 0;
   return clamp(
-    beforePotion + potionBonus + championBonus,
+    beforePotion + potionBonus + championBonus + fortuneBonus,
     minimumBreakthroughChance(entity.realm || 0),
     entity.id === "player" ? 0.95 : 0.82
   );
@@ -6030,6 +6219,7 @@ function breakthroughChanceParts(state, entity) {
   const sectMultiplier = 1 + bonus;
   const potionBonus = entity.id === "player" ? activeBreakthroughBonus(state) : 0;
   const pearlBonus = spiritPearlBonusFor(state, entity, "breakthrough");
+  const fortuneBonus = dailyRootFortuneBreakthroughBonus(state, entity);
   const championBonus = entity.championDaoRhyme?.active && entity.championDaoRhyme.realm === entity.realm
     ? Number(entity.championDaoRhyme.bonus || 0)
     : 0;
@@ -6044,7 +6234,8 @@ function breakthroughChanceParts(state, entity) {
     potionBonus,
     championBonus,
     spiritPearlBonus: pearlBonus,
-    total: clamp(beforePotion + potionBonus + championBonus, minimumBreakthroughChance(entity.realm || 0), entity.id === "player" ? 0.95 : 0.82)
+    dailyRootFortuneBonus: fortuneBonus,
+    total: clamp(beforePotion + potionBonus + championBonus + fortuneBonus, minimumBreakthroughChance(entity.realm || 0), entity.id === "player" ? 0.95 : 0.82)
   };
 }
 
@@ -6071,6 +6262,7 @@ function xpPreviewParts(state, entity, baseXp = entity.id === "player" ? playerD
 function personInsight(state, entity) {
   return {
     rootProfile: rootProfile(entity),
+    dailyRootFortune: publicDailyRootFortune(state, entity),
     effectiveStats: effectiveStats(entity, state),
     talent: talentSnapshot(entity),
     power: powerOf(entity, state),
@@ -6109,6 +6301,7 @@ function staticCatalog() {
     realmStages,
     roots,
     rootRules: rootRulesCatalog(),
+    dailyRootFortunes: dailyRootFortuneDefinitions,
     dungeons,
     taskTemplates,
     itemCatalog,
@@ -8164,7 +8357,7 @@ function settleEncounterPromises(state) {
       relation.lastDay = state.day;
     }
     if (promise.kind === "market" || promise.kind === "dungeon") state.player.spirit += 3;
-    if (promise.kind === "cultivation") state.player.xp += 2;
+    if (promise.kind === "cultivation") state.player.xp += fortuneAdjustedXp(state, state.player, 2);
     promise.status = "resolved";
     promise.resolvedDay = state.day;
     promise.outcome = "旧约如期有了回响，曾经的选择没有被忘记。";
@@ -8281,7 +8474,7 @@ function signedEncounterValue(value) {
   return amount > 0 ? `+${amount}` : `${amount}`;
 }
 
-function encounterChoiceImpact(choice = {}) {
+function encounterChoiceImpact(choice = {}, state = null) {
   const effects = choice.effects || {};
   const parts = [];
   const labels = [
@@ -8296,7 +8489,8 @@ function encounterChoiceImpact(choice = {}) {
     ["heartDemon", "心魔"]
   ];
   for (const [key, label] of labels) {
-    if (Number(effects[key]) !== 0) parts.push(`${label} ${signedEncounterValue(effects[key])}`);
+    const value = key === "xp" && state ? fortuneAdjustedXp(state, state.player, effects[key]) : effects[key];
+    if (Number(value) !== 0) parts.push(`${label} ${signedEncounterValue(value)}`);
   }
   if (Number(effects.affinity) !== 0) parts.push(`亲和 ${signedEncounterValue(effects.affinity)}`);
   if (Number(effects.respect) !== 0) parts.push(`尊重 ${signedEncounterValue(effects.respect)}`);
@@ -8326,7 +8520,7 @@ function publicEncounterEvent(state, event) {
       tone: choice.tone,
       memoryTag: choice.memoryTag || "",
       deferred: choice.deferred || null,
-      impact: encounterChoiceImpact(choice),
+      impact: encounterChoiceImpact(choice, state),
       ...encounterChoiceAvailability(state, choice)
     }))
   };
@@ -8412,12 +8606,13 @@ export function resolveEncounter(state, payload = {}) {
   const actor = state.npcs.find((npc) => npc.id === event.actorId);
   const relation = relationshipEntry(state, event.actorId);
   const effects = choice.effects || {};
-  const impact = encounterChoiceImpact(choice);
+  const encounterXp = fortuneAdjustedXp(state, state.player, effects.xp);
+  const impact = encounterChoiceImpact(choice, state);
   relation.affinity = clamp(relation.affinity + (Number(effects.affinity) || 0), -100, 100);
   relation.respect = clamp(relation.respect + (Number(effects.respect) || 0), 0, 100);
   relation.interactions += 1;
   relation.lastDay = state.day;
-  state.player.xp = Math.max(0, state.player.xp + (Number(effects.xp) || 0));
+  state.player.xp = Math.max(0, state.player.xp + encounterXp);
   state.player.spirit = Math.max(0, state.player.spirit + (Number(effects.spirit) || 0));
   state.player.hp = clamp(state.player.hp + (Number(effects.hp) || 0), 1, effectiveMaxHp(state.player, state));
   state.player.mana = clamp(state.player.mana + (Number(effects.mana) || 0), 0, effectiveMaxMana(state.player, state));
@@ -8672,6 +8867,10 @@ function ensureDaoTrialState(state) {
       activeRun.taskBoons = (activeRun.taskBoons || []).filter((boon) => boon?.id && Object.values(daoTrialTaskBoonDefinitions).some((definition) => definition.id === boon.id));
       activeRun.freeRerolls = Math.max(0, Math.floor(Number(activeRun.freeRerolls) || 0));
       activeRun.lifeHealAvailable = Boolean(activeRun.lifeHealAvailable);
+      activeRun.dailyRootFortuneXpMultiplier = Math.max(1, Number(activeRun.dailyRootFortuneXpMultiplier) || dailyRootFortuneXpMultiplier(state, state.player, activeRun.startedDay || state.day));
+      if (activeRun.combatant && !Number(activeRun.combatant.skillManaBase)) {
+        activeRun.combatant.skillManaBase = effectiveStats(state.player, state, { includeDailyRootFortune: false }).maxMana;
+      }
       if (activeRun.companion) activeRun.companion.supportUsed = Boolean(activeRun.companion.supportUsed);
     }
   }
@@ -8731,6 +8930,7 @@ function availableDaoTrialCompanions(state) {
 
 function createTrialCombatant(state) {
   const stats = effectiveStats(state.player, state);
+  const skillManaBase = effectiveStats(state.player, state, { includeDailyRootFortune: false }).maxMana;
   const rootsSnapshot = normalizeRootSet(state.player);
   const rootsWithoutBonuses = rootsSnapshot.roots.map((root) => ({ ...root, bonus: 0 }));
   return {
@@ -8748,6 +8948,7 @@ function createTrialCombatant(state) {
     divineSense: stats.divineSense,
     maxMana: stats.maxMana,
     mana: stats.maxMana,
+    skillManaBase,
     skillId: state.player.skillId,
     skillRanks: { ...(state.player.skillRanks || {}) },
     trialBuffs: {}
@@ -8814,16 +9015,16 @@ function activeTrialSynergies(run) {
 function trialWorldBaselinePower(state) {
   const nearby = (state.npcs || [])
     .filter((npc) => Math.abs((npc.realm || 0) - state.player.realm) <= 1)
-    .map((npc) => powerOf(npc, state))
+    .map((npc) => powerOf(npc, state, { includeDailyRootFortune: false }))
     .sort((a, b) => a - b);
-  return nearby.length ? nearby[Math.floor(nearby.length / 2)] : powerOf(state.player, state);
+  return nearby.length ? nearby[Math.floor(nearby.length / 2)] : powerOf(state.player, state, { includeDailyRootFortune: false });
 }
 
 function trialMonsterFor(state, run, node, route) {
   const rootKey = roots.some((root) => root.key === route.rootKey) ? route.rootKey : "metal";
   const monster = makeMonster(`${route.name}·${node.monster}`, state.player.realm, rootKey, 0.9 + run.nodeIndex * 0.04);
   const baseline = trialWorldBaselinePower(state);
-  const playerPower = powerOf(state.player, state);
+  const playerPower = powerOf(state.player, state, { includeDailyRootFortune: false });
   const affix = daoTrialCycleAffixes.find((item) => item.id === run.affixId);
   const firstEase = run.nodeIndex === 0 ? Number(affix?.effects?.firstBattleEase || 0) : 0;
   const scaling = Math.max(0, Number(affix?.effects?.scalingEnemy || 0)) * run.nodeIndex;
@@ -8869,13 +9070,15 @@ function settleDaoTrialBag(state, run, success, result) {
   const raw = run.rewards || { xp: 0, spirit: 0, dust: 0, milestones: [] };
   const retention = success ? 1.2 : result === "主动离境" ? 0.8 : 0.4;
   const workMultiplier = run.taskBoons?.some((boon) => boon.id === "work") ? 1.15 : 1;
+  const fortuneXpMultiplier = Math.max(1, Number(run.dailyRootFortuneXpMultiplier) || dailyRootFortuneXpMultiplier(state, state.player, run.startedDay || state.day));
   const settled = {
-    xp: Math.max(0, Math.floor((Number(raw.xp) || 0) * retention)),
+    xp: Math.max(0, Math.floor((Number(raw.xp) || 0) * retention * fortuneXpMultiplier)),
     spirit: Math.max(0, Math.floor((Number(raw.spirit) || 0) * retention * workMultiplier)),
     dust: Math.max(0, Math.floor((Number(raw.dust) || 0) * retention)),
     milestones: [...new Set(raw.milestones || [])],
     retention,
-    workMultiplier
+    workMultiplier,
+    dailyRootFortuneXpMultiplier: fortuneXpMultiplier
   };
   if (!run.practice) {
     state.player.xp += settled.xp;
@@ -9114,6 +9317,7 @@ export function startDaoTrial(state, payload = {}) {
     sealNonce: 0,
     insight: 1 + Math.max(0, Math.floor(Number(affix.effects?.initialInsight) || 0)),
     taskBoons,
+    dailyRootFortuneXpMultiplier: dailyRootFortuneXpMultiplier(state, state.player),
     freeRerolls: taskBoons.some((boon) => boon.id === "study") ? 1 : 0,
     lifeHealAvailable: taskBoons.some((boon) => boon.id === "life"),
     eliteCleared: false,
@@ -9398,6 +9602,7 @@ export function createDefaultState() {
     },
     relationships: {},
     daoTrial: createDaoTrialState(1),
+    dailyRootFortune: createDailyRootFortuneState({ calendarStartDate: openingDate, lastSettlementDate: openingDate, day: 0 }, 0),
     npcs: npcNames.map((name, index) => makeNpc(name, index)),
     sectNameMap: {},
     sect: {
@@ -9480,6 +9685,7 @@ export function clearProgressHistory(state) {
   };
   state.relationships = {};
   state.daoTrial = createDaoTrialState(state.day);
+  state.dailyRootFortune = createDailyRootFortuneState(state, state.day);
   state.player.sect = state.sect?.name || "落云宗";
   state.sect.warWins = 0;
   state.sect.warLosses = 0;
@@ -10074,11 +10280,12 @@ export function ensureStateShape(state) {
   changed = ensureProvinceState(state) || changed;
   changed = ensureEncounterState(state) || changed;
   changed = ensureDaoTrialState(state) || changed;
+  changed = ensureDailyRootFortuneState(state) || changed;
   return changed;
 }
 
-export function powerOf(entity, state) {
-  const stats = effectiveCombatStats(entity, state);
+export function powerOf(entity, state, options = {}) {
+  const stats = effectiveCombatStats(entity, state, options);
   return Math.floor(
     stats.attack * 2.8 +
     stats.defense * 2 +
@@ -10502,6 +10709,7 @@ export function getPublicState(state, options = {}) {
     skillUpgrade: previewSkillUpgradeForState(state, state.player),
     shop: publicShop(state),
     todayPlan: publicTodayPlan(state),
+    dailyRootFortune: publicDailyRootFortune(state),
     spiritPearls: publicSpiritPearls(state, state.player),
     sectStrategy: publicSectStrategy(state),
     sects: options.scope === "lite" ? sectSummaries.map(compactSectSummary) : sectSummaries,
@@ -10658,7 +10866,8 @@ function getHomeState(state) {
       baseBreakChance: currentRealmInfo.baseBreakChance,
       skillUpgrade: previewSkillUpgradeForState(state, state.player),
       shop: publicShop(state),
-      todayPlan: publicTodayPlan(state)
+      todayPlan: publicTodayPlan(state),
+      dailyRootFortune: publicDailyRootFortune(state)
     }
   };
 }
@@ -10680,6 +10889,7 @@ function buildHomeSummary(state) {
       portraitUrl: compactPortraitUrl(item.entity.portraitUrl, item.entity.id),
       value: item.power,
       rank: index + 1,
+      dailyRootFortune: compactDailyRootFortune(state, item.entity),
       isPlayer: item.isPlayer
     }));
   const playerRank = ranking.find((item) => item.id === state.player.id)?.rank || "-";
@@ -10724,7 +10934,13 @@ function buildHomeSummary(state) {
 
 function homeTickerForState(state) {
   const today = state.day || 1;
-  const items = [];
+  const fortune = publicDailyRootFortune(state);
+  const items = [{
+    key: `daily-root-fortune-${today}`,
+    label: "天运",
+    name: fortune.name,
+    text: `${fortune.effectText} · ${fortune.playerMatched ? fortune.playerEffectText : `你今日未共鸣，共 ${fortune.resonantCount} 名修士受益`}`
+  }];
   const drops = (state.equipmentTransfers || [])
     .filter((drop) => drop.day === today && drop.itemName)
     .slice(0, 12);
@@ -10972,6 +11188,7 @@ function compactCultivatorRef(member = {}) {
     realm: member.realm,
     portraitUrl: compactPortraitUrl(member.portraitUrl, member.id),
     power: member.power || 0,
+    dailyRootFortune: member.dailyRootFortune || null,
     isPlayer: Boolean(member.isPlayer)
   };
 }
@@ -11046,6 +11263,7 @@ function publicCultivator(entity, state, options = {}) {
       bestDungeonName: entity.bestDungeonName || "",
       equipmentCount: equipmentForOwner(state, entity.id).length,
       formedPearlCount: formedSpiritPearlCount(state, entity),
+      dailyRootFortune: compactDailyRootFortune(state, entity),
       power: powerOf(entity, state)
     };
   }
@@ -11063,6 +11281,7 @@ function publicCultivator(entity, state, options = {}) {
     duelTournamentAwards: publicDuelTournamentAwards(state, entity.id),
     duelHistory: publicDuelHistory(entity.duelHistory || [], { ...options, currentDay, limit: options.duelHistoryLimit }),
     dungeonHistory: publicDungeonHistory(entity.dungeonHistory || [], { currentDay, limit: dungeonHistoryLimit }),
+    dailyRootFortune: compactDailyRootFortune(state, entity),
     power: powerOf(entity, state)
   };
 }
@@ -11956,7 +12175,7 @@ export function settleIfNeeded(state, options = {}) {
 export function dailySettlement(state, options = {}) {
   const settlementTime = options.settlementTime || timestampKey();
   rememberTaskMultiplierForDay(state, state.day);
-  state.day += 1;
+  advanceDailyRootFortuneDay(state);
   archiveExpiredBattleRecords(state);
   state.player.breakthroughAttemptsToday = 0;
   normalizeElixirEffects(state);
@@ -12079,10 +12298,12 @@ export function dailySettlement(state, options = {}) {
     status.rivalHeat = clamp(status.rivalHeat + Math.floor(Math.random() * 13) - 4, 0, 100);
   }
   const playerSectXpShare = sectXpBonus(state, state.sect.name, state.player);
-  const playerProvinceXp = Math.floor(playerDailyBaseXp * playerSectXpShare);
+  const playerFortuneXpMultiplier = dailyRootFortuneXpMultiplier(state, state.player);
+  const playerBaseCultivationXp = Math.floor(playerDailyBaseXp * playerFortuneXpMultiplier);
+  const playerProvinceXp = Math.floor(playerDailyBaseXp * playerSectXpShare * playerFortuneXpMultiplier);
   const playerTalentXpMultiplier = talentSnapshot(state.player).xpMultiplier;
   const playerCatchup = playerCatchupProfile(state);
-  const playerPassiveXp = Math.floor((playerDailyBaseXp + playerProvinceXp) * playerTalentXpMultiplier * playerCatchup.multiplier);
+  const playerPassiveXp = Math.floor((playerBaseCultivationXp + playerProvinceXp) * playerTalentXpMultiplier * playerCatchup.multiplier);
   state.player.xp += playerPassiveXp;
   runDailyDungeons(state, settlementDate, settlementTime);
   const playerDungeonEntries = (state.player.dungeonHistory || []).filter((record) => record.day === state.day);
@@ -12099,11 +12320,13 @@ export function dailySettlement(state, options = {}) {
     time: settlementTime,
     xp: playerPassiveXp,
     baseXp: playerDailyBaseXp,
+    fortuneBaseXp: playerBaseCultivationXp,
     bonusXp: playerPassiveXp - playerDailyBaseXp,
     passiveXp: playerPassiveXp,
     provinceXp: playerProvinceXp,
     talentXpMultiplier: playerTalentXpMultiplier,
     catchupMultiplier: playerCatchup.multiplier,
+    dailyRootFortuneXpMultiplier: playerFortuneXpMultiplier,
     spirit: playerDungeonSpirit + playerDuelSeasonReward + playerProvinceSpirit,
     provinceSpirit: playerProvinceSpirit,
     provinceDust: playerProvinceDust,
@@ -12128,6 +12351,8 @@ export function dailySettlement(state, options = {}) {
 
   if (options.auto) log(state, "子时已过，天地灵机一转，今日自动结算完成。", "gold");
   if (options.manual) log(state, "你翻过一页札记，手动推进了一天。", "gold");
+  const fortune = publicDailyRootFortune(state);
+  log(state, `今日天运落于${fortune.name}，${fortune.effectText}；共有 ${fortune.resonantCount} 名修士与天运共鸣。`, "gold");
   log(state, pick(events), "gold");
 }
 
@@ -12184,10 +12409,11 @@ export function addTask(state, payload) {
   const sectXpMultiplier = Math.max(1, Number(dayMultiplier.sectXpMultiplier) || 1);
   const taskTalentMultiplier = talentSnapshot(p).xpMultiplier;
   const catchup = playerCatchupProfile(state);
+  const fortuneXpMultiplier = dailyRootFortuneXpMultiplier(state, p, targetDay);
   const afterElixirXp = Math.round(baseXpGain * elixirMultiplier);
   const beforeTalentXp = Math.round(afterElixirXp * sectXpMultiplier);
-  const xpMultiplier = elixirMultiplier * sectXpMultiplier * taskTalentMultiplier * catchup.multiplier;
-  const xpGain = Math.round(beforeTalentXp * taskTalentMultiplier * catchup.multiplier);
+  const xpMultiplier = elixirMultiplier * sectXpMultiplier * taskTalentMultiplier * catchup.multiplier * fortuneXpMultiplier;
+  const xpGain = Math.round(beforeTalentXp * taskTalentMultiplier * catchup.multiplier * fortuneXpMultiplier);
   p.xp += xpGain;
   p.spirit += spiritGain;
   progress.amount = Math.max(progress.amount, completedAmount);
@@ -12215,6 +12441,7 @@ export function addTask(state, payload) {
     sectXpMultiplier,
     talentMultiplier: taskTalentMultiplier,
     catchupMultiplier: catchup.multiplier,
+    dailyRootFortuneXpMultiplier: fortuneXpMultiplier,
     xpMultiplier,
     roundingMode: "round",
     spirit: spiritGain,

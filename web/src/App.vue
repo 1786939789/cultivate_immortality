@@ -153,10 +153,10 @@
               <Meter label="总经验" :value="player.xp" :max="derived.xpNeed" />
               <small>当前经验 {{ Math.floor(player.xp) }} / 总经验 {{ derived.xpNeed }}</small>
             </button>
-            <button class="profile-info-item profile-nav-link profile-root-link" type="button" @click="openRootAttributes" aria-label="查看灵根页面">
+            <button class="profile-info-item profile-nav-link profile-root-link" :class="{ 'fortune-resonant': dailyRootFortune.playerMatched }" type="button" @click="openRootAttributes" :aria-label="dailyRootFortune.playerMatched ? `查看灵根页面，今日${dailyRootFortune.name}天运共鸣` : '查看灵根页面'">
               <component :is="rootIconComponent(player.primaryRootKey || player.root?.key)" :size="17" :stroke-width="2.4" aria-hidden="true" />
               <span>灵根</span>
-              <strong>{{ profileRootText }}</strong>
+              <strong>{{ profileRootText }}<small v-if="dailyRootFortune.playerMatched">天运共鸣</small></strong>
             </button>
           </div>
         </section>
@@ -403,7 +403,7 @@
               <div class="home-rank-list" aria-label="修士榜排行">
                 <button v-for="item in homeRankRows" :key="item.id" type="button" :class="{ self: item.id === 'player' }" @click="openPracticeRankItem(item)">
                   <span>{{ item.rank }}</span>
-                  <b>{{ item.name }}</b>
+                  <b>{{ item.name }}<small v-if="isNpcFortuneResonant(rankPerson(item))" class="npc-fortune-badge">天运共鸣</small></b>
                   <em>{{ realmName(rankPerson(item)?.realm) }}</em>
                   <strong>{{ formatCompact(item.value) }}</strong>
                 </button>
@@ -472,6 +472,27 @@
               </div>
             </div>
 
+            <section class="daily-root-fortune-card" :class="[`fortune-${dailyRootFortune.rootKey || 'metal'}`, { resonant: dailyRootFortune.playerMatched }]">
+              <span class="daily-root-fortune-icon" aria-hidden="true"><img :src="rootIconPath(dailyRootFortune.rootKey)" alt=""></span>
+              <div>
+                <span class="daily-root-fortune-kicker"><Sparkles :size="15" aria-hidden="true" /> 今日幸运灵根</span>
+                <h4>{{ dailyRootFortune.name }}</h4>
+                <p>{{ dailyRootFortune.effectText }}</p>
+              </div>
+              <aside>
+                <strong>{{ dailyRootFortune.playerMatched ? "天运共鸣" : "今日未共鸣" }}</strong>
+                <span>{{ dailyRootFortune.playerEffectText }}</span>
+                <small>今日共有 {{ dailyRootFortune.resonantCount || 0 }} 名修士受益</small>
+              </aside>
+              <div class="daily-root-fortune-history" aria-label="最近六日幸运灵根">
+                <span v-for="entry in dailyRootFortune.recent || []" :key="`fortune-${entry.day}`" :class="{ current: entry.day === gameState.day }">
+                  <img :src="rootIconPath(entry.rootKey)" alt="">
+                  <small>第 {{ entry.day }} 天</small>
+                  <b>{{ entry.name }}</b>
+                </span>
+              </div>
+            </section>
+
             <div class="root-astrolabe-layout">
               <div class="root-astrolabe" aria-label="九灵根星盘">
                 <svg class="root-counter-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
@@ -494,7 +515,7 @@
                   type="button"
                   class="root-counter-node"
                   :class="[
-                    { highlighted: node.highlighted, special: node.special, owned: node.owned, primary: node.primary },
+                    { highlighted: node.highlighted, special: node.special, owned: node.owned, primary: node.primary, fortunate: node.fortunate },
                     `root-icon-${node.key}`
                   ]"
                   :style="{ left: `${node.x}%`, top: `${node.y}%` }"
@@ -525,6 +546,10 @@
                   <div>
                     <span>灵根加成</span>
                     <strong>{{ hoveredRootDetail.effectText }}</strong>
+                  </div>
+                  <div v-if="hoveredRootDetail.fortuneText" class="root-fortune-detail-row">
+                    <span>今日天运</span>
+                    <strong>{{ hoveredRootDetail.fortuneText }}</strong>
                   </div>
                   <div>
                     <span>受制灵根</span>
@@ -1299,7 +1324,7 @@
                   </button>
                   <button v-for="entry in daoTrialState.companions" :key="entry.person.id" type="button" :class="{ active: selectedDaoTrialCompanionId === entry.person.id }" @click="selectedDaoTrialCompanionId = entry.person.id">
                     <CharacterPortrait :person="entry.person" size="sm" />
-                    <span><strong>{{ entry.person.name }}</strong><small>{{ entry.neutral ? "临时同道" : entry.relationship }} · {{ entry.support.text }}</small></span>
+                    <span><strong>{{ entry.person.name }}<small v-if="isNpcFortuneResonant(entry.person)" class="npc-fortune-badge">天运共鸣</small></strong><small>{{ entry.neutral ? "临时同道" : entry.relationship }} · {{ entry.support.text }}</small></span>
                   </button>
                 </div>
                 <div v-if="selectedDaoTrialRoute" class="dao-trial-route-detail">
@@ -3881,7 +3906,7 @@
                 <span v-else class="tag rank-number">#{{ rankPageStart + index + 1 }}</span>
                 <CharacterPortrait v-if="item.kind === 'person'" :person="rankPerson(item)" size="sm" />
                 <div class="rank-copy">
-                  <strong>{{ item.name }}</strong>
+                  <strong>{{ item.name }}<small v-if="isNpcFortuneResonant(rankPerson(item))" class="npc-fortune-badge">天运共鸣</small></strong>
                   <small>{{ item.subtitle }}</small>
                   <span v-if="activeRankBoard === 'combat'" class="combat-rank-components" aria-hidden="true">
                     <i :style="{ '--combat-score': `${item.rating.dungeonScore}%` }">副本 {{ Math.round(item.rating.dungeonScore) }}</i>
@@ -3910,7 +3935,7 @@
               <div class="detail-hero compact dossier-header">
                 <button class="secondary back-button dossier-back-button" @click="returnFromDetail">{{ detailBackLabel }}</button>
                 <div>
-                  <h3>{{ selectedPerson.name }}</h3>
+                  <h3>{{ selectedPerson.name }}<small v-if="isNpcFortuneResonant(selectedPerson)" class="npc-fortune-badge dossier-fortune-badge">天运共鸣</small></h3>
                   <p>
                     <span>宗门：{{ selectedPerson.sect }}</span>
                     <span>性别：{{ genderLabel(selectedPerson.gender) }}</span>
@@ -4354,7 +4379,7 @@
                         <span v-if="sectMemberOffice(selectedSect, member) && member.id !== selectedSect.leaderId && !(selectedSect.elderIds || []).includes(member.id)" class="member-badge office">{{ sectMemberOffice(selectedSect, member) }}</span>
                         <span class="member-badge" :class="{ player: member.isPlayer }">{{ member.isPlayer ? "你" : "NPC" }}</span>
                       </div>
-                      <strong>{{ member.name }}</strong>
+                      <strong>{{ member.name }}<small v-if="isNpcFortuneResonant(member)" class="npc-fortune-badge">天运共鸣</small></strong>
                       <small class="sect-member-meta">
                         <span>{{ genderLabel(member.gender) }}</span>
                         <i aria-hidden="true">·</i>
@@ -6409,6 +6434,16 @@ const taskProgressState = computed(() => {
   return progress.entries ? progress : { entries: progress, baseXp: 0, fullXpBudget: 500, reducedMultiplier: 0.4 };
 });
 const todayPlan = computed(() => derived.value.todayPlan || {});
+const dailyRootFortune = computed(() => derived.value.dailyRootFortune || player.value.dailyRootFortune || {
+  rootKey: "metal",
+  name: "金灵根",
+  effectText: "攻击提高 12%",
+  playerMatched: false,
+  playerRate: 0,
+  playerEffectText: "今日未触发属性共鸣",
+  resonantCount: 0,
+  recent: []
+});
 const encounterState = computed(() => gameState.value.encounters || { pending: [], history: [], relationships: [], focusedNpcIds: [], activeChains: [], definitionCount: 240, minGapDays: 2, maxGapDays: 4, daysUntilNext: 0, collection: { discovered: 0, total: 240 } });
 const pendingEncounters = computed(() => encounterState.value.pending || []);
 const activeEncounter = computed(() => pendingEncounters.value.find((event) => event.id === selectedEncounterId.value) || pendingEncounters.value[0] || null);
@@ -6584,7 +6619,7 @@ const recentTaskDays = computed(() => {
 });
 const taskRewardPreview = computed(() => {
   const task = selectedTaskDefinition.value;
-  if (!task) return { xp: 0, rawXp: 0, baseXp: 0, spirit: 0, multiplier: 0, elixirMultiplier: 1, sectXpMultiplier: 1, talentMultiplier: 1, catchupMultiplier: 1, xpMultiplier: 1 };
+  if (!task) return { xp: 0, rawXp: 0, baseXp: 0, spirit: 0, multiplier: 0, elixirMultiplier: 1, sectXpMultiplier: 1, talentMultiplier: 1, catchupMultiplier: 1, fortuneMultiplier: 1, xpMultiplier: 1 };
   const amount = task.type === "measurable" ? Math.max(0, Number(taskForm.completedAmount) || 0) : 1;
   const target = Math.max(0.01, Number(task.targetAmount) || 1);
   const maxMultiplier = Math.max(0.01, Number(task.maxMultiplier) || 1);
@@ -6601,11 +6636,17 @@ const taskRewardPreview = computed(() => {
   const sectXpMultiplier = Math.max(1, Number(selectedTaskMultiplierRecord.value?.sectXpMultiplier) || 1);
   const talentMultiplier = Math.max(1, Number(talentInfo(player.value).xpMultiplier) || 1);
   const catchupMultiplier = Math.max(1, Number(todayPlan.value.catchup?.multiplier) || 1);
+  const selectedFortune = selectedTaskDay.value === gameState.value.day
+    ? dailyRootFortune.value
+    : dailyRootFortune.value.recent?.find((entry) => Number(entry.day) === Number(selectedTaskDay.value));
+  const fortuneMultiplier = selectedFortune?.stat === "xp" && (selectedFortune.playerMatched ?? selectedFortune.matched)
+    ? 1 + Math.max(0, Number(selectedFortune.playerRate ?? selectedFortune.rate) || 0)
+    : 1;
   const afterElixirXp = Math.round(baseXp * elixirMultiplier);
   const beforeTalentXp = Math.round(afterElixirXp * sectXpMultiplier);
-  const xpMultiplier = elixirMultiplier * sectXpMultiplier * talentMultiplier * catchupMultiplier;
+  const xpMultiplier = elixirMultiplier * sectXpMultiplier * talentMultiplier * catchupMultiplier * fortuneMultiplier;
   return {
-    xp: Math.round(beforeTalentXp * talentMultiplier * catchupMultiplier),
+    xp: Math.round(beforeTalentXp * talentMultiplier * catchupMultiplier * fortuneMultiplier),
     rawXp,
     baseXp,
     spirit: Math.round((Number(task.spiritReward) || 0) * multiplier),
@@ -6617,6 +6658,7 @@ const taskRewardPreview = computed(() => {
     sectXpMultiplier,
     talentMultiplier,
     catchupMultiplier,
+    fortuneMultiplier,
     xpMultiplier
   };
 });
@@ -6631,6 +6673,7 @@ const taskRewardFormulaText = computed(() => {
   parts.push(`宗门 x${formatFormulaMultiplier(preview.sectXpMultiplier)}`);
   parts.push(`天赋 x${formatFormulaMultiplier(preview.talentMultiplier)}`);
   parts.push(`追赶 x${formatFormulaMultiplier(preview.catchupMultiplier)}`);
+  if (preview.fortuneMultiplier > 1) parts.push(`天运 x${formatFormulaMultiplier(preview.fortuneMultiplier)}`);
   const budget = preview.reducedBaseXp ? "；超出有效修行预算部分按 40% 计入" : "";
   return `${dayLabel}修为公式：${parts.join(" × ")} = +${preview.xp}（总加成 ${formatTaskBonusPercent(preview.xpMultiplier)}，各阶段四舍五入）${budget}`;
 });
@@ -12095,11 +12138,12 @@ const rootAstrolabeNodes = computed(() => {
     y: rootPositions[node.key]?.[1] ?? node.y,
     owned: ownedKeys.has(node.key),
     primary: primaryRoot(player.value).key === node.key,
+    fortunate: dailyRootFortune.value.rootKey === node.key,
     special: false,
     highlighted: hoveredRootKey.value === node.key,
     statusText: ownedKeys.has(node.key)
-      ? primaryRoot(player.value).key === node.key ? "主灵根" : "副灵根"
-      : "未拥有"
+      ? `${primaryRoot(player.value).key === node.key ? "主灵根" : "副灵根"}${dailyRootFortune.value.rootKey === node.key ? " · 今日天运" : ""}`
+      : dailyRootFortune.value.rootKey === node.key ? "今日幸运灵根 · 未拥有" : "未拥有"
   }));
 
   const specialNodes = (catalogRootRules.value.specialRoots || []).map((special) => {
@@ -12191,7 +12235,12 @@ const hoveredRootDetail = computed(() => {
     counterText: `${node.name}克${target?.targetName || "未知"}，受${incoming?.name || "未知"}克`,
     counteredByText: incoming?.name || "未知",
     restrainsText: target?.targetName || "未知",
-    statusText: node.statusText || "未拥有"
+    statusText: node.statusText || "未拥有",
+    fortuneText: dailyRootFortune.value.rootKey === node.key
+      ? dailyRootFortune.value.playerMatched
+        ? dailyRootFortune.value.playerEffectText
+        : `今日天运：${dailyRootFortune.value.effectText}`
+      : ""
   };
 });
 
@@ -12257,6 +12306,12 @@ function primaryRoot(person) {
 
 function rootKeys(person) {
   return rootList(person).map((root) => root.key);
+}
+
+function isNpcFortuneResonant(person) {
+  if (!person || person.id === "player" || person.isPlayer) return false;
+  if (typeof person.dailyRootFortune?.playerMatched === "boolean") return person.dailyRootFortune.playerMatched;
+  return rootKeys(person).includes(dailyRootFortune.value.rootKey);
 }
 
 function rootLine(person) {

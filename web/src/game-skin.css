@@ -6505,10 +6505,40 @@ body::before {
 }
 
 .dossier-header h3 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
   color: #2b1a08;
   font-size: clamp(28px, 3.4vw, 42px);
   font-weight: 900;
   line-height: 1;
+}
+
+.npc-fortune-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 7px;
+  padding: 2px 7px;
+  border: 1px solid rgba(247, 203, 92, .72);
+  border-radius: 999px;
+  color: #3d2708 !important;
+  background: linear-gradient(180deg, #ffe68c, #dba93e);
+  box-shadow: inset 0 1px rgba(255, 255, 255, .55), 0 0 9px rgba(236, 186, 67, .32);
+  font-family: "Microsoft YaHei", sans-serif;
+  font-size: 10px !important;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1.35;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.dossier-fortune-badge {
+  margin-left: 0;
+  padding: 4px 10px;
+  font-size: 12px !important;
 }
 
 .dossier-header p {
@@ -14456,6 +14486,170 @@ body::before {
     max-width: 72px;
     font-size: 14px;
   }
+}
+
+/* Daily lucky root: sidebar resonance, fortune card, and astrolabe highlight. */
+.profile-root-link strong {
+  display: grid;
+  justify-items: end;
+  gap: 1px;
+}
+
+.profile-root-link strong small {
+  color: #8cbd8e;
+  font-size: 10px;
+  line-height: 1.15;
+}
+
+.profile-root-link.fortune-resonant {
+  border-color: rgba(240, 197, 92, .78);
+  background:
+    radial-gradient(circle at 18px 50%, rgba(67, 169, 107, .22), transparent 34px),
+    linear-gradient(90deg, rgba(241, 193, 83, .15), rgba(55, 137, 96, .1));
+  box-shadow: inset 0 0 0 1px rgba(255, 235, 168, .12), 0 0 12px rgba(224, 177, 68, .2);
+}
+
+.profile-root-link.fortune-resonant svg,
+.profile-root-link.fortune-resonant > span { color: #f1c969; }
+
+.daily-root-fortune-card {
+  --root-color: #d9bd79;
+  display: grid;
+  grid-template-columns: 84px minmax(260px, 1fr) minmax(280px, .85fr);
+  gap: 18px;
+  align-items: center;
+  margin: 4px 0 18px;
+  padding: 16px 18px;
+  border: 1px solid rgba(205, 163, 78, .62);
+  border-radius: 4px;
+  color: #f4e4bd;
+  background:
+    radial-gradient(circle at 64px 50%, color-mix(in srgb, var(--root-color) 32%, transparent), transparent 150px),
+    linear-gradient(110deg, rgba(41, 44, 35, .97), rgba(17, 23, 20, .96));
+  box-shadow: inset 0 0 0 1px rgba(255, 232, 166, .08), 0 8px 22px rgba(0, 0, 0, .24);
+}
+
+.daily-root-fortune-card.fortune-wood { --root-color: #67b477; }
+.daily-root-fortune-card.fortune-water { --root-color: #65a8cf; }
+.daily-root-fortune-card.fortune-fire { --root-color: #d56b50; }
+.daily-root-fortune-card.fortune-earth { --root-color: #b38a55; }
+.daily-root-fortune-card.fortune-heaven { --root-color: #9a86d0; }
+
+.daily-root-fortune-card.resonant {
+  border-color: color-mix(in srgb, var(--root-color) 78%, #f4ce73);
+  box-shadow: inset 0 0 0 1px rgba(255, 239, 187, .13), 0 0 0 3px color-mix(in srgb, var(--root-color) 16%, transparent), 0 10px 26px rgba(0, 0, 0, .28);
+}
+
+.daily-root-fortune-icon {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border: 2px solid color-mix(in srgb, var(--root-color) 72%, #efd38d);
+  border-radius: 50%;
+  background: rgba(10, 20, 17, .82);
+  box-shadow: 0 0 24px color-mix(in srgb, var(--root-color) 42%, transparent);
+}
+
+.daily-root-fortune-icon img { width: 58px; height: 58px; object-fit: contain; }
+.daily-root-fortune-card > div:nth-child(2) { display: grid; gap: 4px; }
+
+.daily-root-fortune-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #e3bd65;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+
+.daily-root-fortune-card h4 { margin: 0; color: #ffe29a; font: 900 28px/1.15 "KaiTi", "STKaiti", "Microsoft YaHei", serif; }
+.daily-root-fortune-card p { margin: 0; color: #e1d5b9; font-size: 14px; }
+
+.daily-root-fortune-card > aside {
+  display: grid;
+  gap: 4px;
+  padding: 11px 14px;
+  border-left: 3px solid color-mix(in srgb, var(--root-color) 72%, #e8c263);
+  background: rgba(255, 237, 180, .055);
+}
+
+.daily-root-fortune-card > aside strong { color: #f6d884; font-size: 16px; }
+.daily-root-fortune-card > aside span { color: #eee3ca; font-size: 14px; }
+.daily-root-fortune-card > aside small { color: #bcb29d; font-size: 12px; }
+
+.daily-root-fortune-history {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 7px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(208, 168, 87, .22);
+}
+
+.daily-root-fortune-history > span {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 0 7px;
+  align-items: center;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid rgba(194, 158, 85, .18);
+  background: rgba(255, 239, 191, .04);
+}
+
+.daily-root-fortune-history > span.current {
+  border-color: color-mix(in srgb, var(--root-color) 74%, #e8c263);
+  background: color-mix(in srgb, var(--root-color) 17%, transparent);
+}
+
+.daily-root-fortune-history img { grid-row: 1 / 3; width: 28px; height: 28px; object-fit: contain; }
+.daily-root-fortune-history small { color: #a9a08d; font-size: 10px; }
+.daily-root-fortune-history b { overflow: hidden; color: #e5d2a4; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+
+.root-astrolabe .root-counter-node.fortunate .root-ring-art {
+  border-color: #ffd66f;
+  box-shadow: inset 0 0 0 2px rgba(255, 246, 194, .34), 0 0 18px rgba(255, 207, 91, .88), 0 0 0 6px rgba(255, 199, 73, .15);
+  animation: fortune-root-pulse 2.2s ease-in-out infinite;
+}
+
+.root-astrolabe .root-counter-node.fortunate::after {
+  content: "天运";
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  z-index: 4;
+  padding: 4px 7px;
+  border: 1px solid rgba(255, 239, 185, .68);
+  border-radius: 999px;
+  color: #39260e;
+  background: #f1c762;
+  font-size: 11px;
+  font-weight: 900;
+  box-shadow: 0 3px 9px rgba(0, 0, 0, .32);
+}
+
+@keyframes fortune-root-pulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.22); }
+}
+
+.root-detail-stats > .root-fortune-detail-row { border-color: rgba(190, 138, 48, .5); background: rgba(247, 214, 133, .28); }
+.root-detail-stats > .root-fortune-detail-row span { background: linear-gradient(180deg, #8f692c, #59451f); color: #fff0bd; }
+
+@media (max-width: 1040px) {
+  .daily-root-fortune-card { grid-template-columns: 72px minmax(0, 1fr); }
+  .daily-root-fortune-card > aside { grid-column: 1 / -1; }
+  .daily-root-fortune-history { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 720px) {
+  .daily-root-fortune-card { grid-template-columns: 60px minmax(0, 1fr); gap: 12px; padding: 13px; }
+  .daily-root-fortune-icon { width: 54px; height: 54px; }
+  .daily-root-fortune-icon img { width: 44px; height: 44px; }
+  .daily-root-fortune-card h4 { font-size: 23px; }
+  .daily-root-fortune-history { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 /* Dao trial readability pass: stronger hierarchy and contrast on the dense play surface. */
