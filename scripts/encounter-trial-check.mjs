@@ -5,6 +5,7 @@ import {
   advanceDaoTrial,
   createDefaultState,
   dailySettlement,
+  effectiveStats,
   ensureStateShape,
   generateDailyEncounter,
   getPublicState,
@@ -36,6 +37,7 @@ for (const event of encounterDefinitions) {
 
 const calendarState = createDefaultState();
 ensureStateShape(calendarState);
+assert.equal(getPublicState(calendarState).daoTrial.tickets, 1, "新存档应有一枚问道签");
 const openingDate = calendarState.calendarStartDate;
 dailySettlement(calendarState, { manual: true, settlementTime: `${openingDate} 00:01:00` });
 const expectedFirstDayDate = new Date(`${openingDate}T00:00:00`);
@@ -43,6 +45,7 @@ expectedFirstDayDate.setDate(expectedFirstDayDate.getDate() + 1);
 const expectedFirstDayText = `${expectedFirstDayDate.getFullYear()}-${String(expectedFirstDayDate.getMonth() + 1).padStart(2, "0")}-${String(expectedFirstDayDate.getDate()).padStart(2, "0")}`;
 assert.equal(calendarState.day, 1, "首次结算后应进入第 1 天");
 assert.equal(calendarState.player.dailyRecords[0].date, expectedFirstDayText, "第 1 天应对应建档日次日");
+assert.equal(getPublicState(calendarState).daoTrial.tickets, 2, "每日结算应补充问道签并封顶两枚");
 
 const state = createDefaultState();
 ensureStateShape(state);
@@ -81,9 +84,19 @@ assert.throws(() => updateEncounterFocus(state, { npcId: state.npcs[3].id, focus
 state.day = 1;
 state.daoTrial = null;
 ensureStateShape(state);
+state.taskCompletions.unshift(
+  { id: "boon-study", day: state.day, category: "学习" },
+  { id: "boon-exercise", day: state.day, category: "运动" },
+  { id: "boon-work", day: state.day, category: "工作" },
+  { id: "boon-life", day: state.day, category: "生活" }
+);
 const companionId = getPublicState(state).daoTrial.companions[0]?.person?.id || "";
-const started = startDaoTrial(state, { routeId: "golden-pass", companionId });
+const started = startDaoTrial(state, { routeId: "golden-pass" });
 assert.ok(started.run && !started.practice, "首次问道应为正式挑战");
+assert.equal(state.daoTrial.tickets, 0, "正式问道应消耗一枚问道签");
+assert.equal(started.run.taskBoons.length, 4, "当日四类现实任务应装载四种游历助力");
+assert.equal(started.run.freeRerolls, 1, "学习任务应提供一次免费重观");
+assert.equal(started.run.combat.maxHp, Math.floor(effectiveStats(state.player, state).maxHp * 1.12), "运动任务应提高本轮最大血量");
 const actionState = getPublicState(state, { scope: "dao-trial" });
 assert.equal(actionState.__scope, "dao-trial", "问道动作应返回专用局部状态");
 assert.ok(actionState.daoTrial.activeRun, "问道局部状态应包含当前挑战");
@@ -109,7 +122,46 @@ assert.match(state.daoTrial.history[0].date, /^\d{4}-\d{2}-\d{2}$/, "问道记�
 assert.ok(state.daoTrial.history[0].rewards, "问道记录应保存本轮实际奖励");
 assert.ok(Number.isFinite(state.daoTrial.history[0].rewards.spirit), "问道灵石奖励应为数值");
 assert.ok(Number.isFinite(state.daoTrial.history[0].rewards.dust), "问道灵尘奖励应为数值");
+assert.ok(Number.isFinite(state.daoTrial.history[0].rewards.xp), "问道修为奖励应为数值");
 assert.doesNotThrow(() => JSON.stringify(getPublicState(state)), "公开状态必须可序列化");
+
+const ticketState = createDefaultState();
+ensureStateShape(ticketState);
+startDaoTrial(ticketState, { routeId: "golden-pass" });
+assert.equal(getPublicState(ticketState).daoTrial.tickets, 0, "消耗当日问道签后应归零");
+ticketState.daoTrial.activeRun = null;
+assert.equal(startDaoTrial(ticketState, { routeId: "golden-pass" }).practice, true, "无问道签时只能开始演练");
+ticketState.daoTrial.activeRun = null;
+dailySettlement(ticketState, { manual: true });
+assert.equal(getPublicState(ticketState).daoTrial.tickets, 1, "次日应补充一枚问道签");
+dailySettlement(ticketState, { manual: true });
+dailySettlement(ticketState, { manual: true });
+assert.equal(getPublicState(ticketState).daoTrial.tickets, 2, "未使用问道签时最多积存两枚");
+
+const withdrawState = createDefaultState();
+withdrawState.player.maxHp *= 6;
+withdrawState.player.hp = withdrawState.player.maxHp;
+withdrawState.player.attack *= 6;
+withdrawState.player.defense *= 6;
+withdrawState.player.maxMana *= 6;
+withdrawState.player.mana = withdrawState.player.maxMana;
+withdrawState.player.divineSense *= 6;
+ensureStateShape(withdrawState);
+startDaoTrial(withdrawState, { routeId: "golden-pass" });
+assert.throws(() => advanceDaoTrial(withdrawState, { action: "abandon" }), /至少完成前三个节点/);
+let withdrawActions = 0;
+while (withdrawState.daoTrial.activeRun && !getPublicState(withdrawState).daoTrial.activeRun.canWithdraw && withdrawActions < 20) {
+  const run = getPublicState(withdrawState).daoTrial.activeRun;
+  if (run.sealOffer.length) advanceDaoTrial(withdrawState, { action: "seal", sealId: run.sealOffer[0].id });
+  else if (run.currentNode.type === "battle") advanceDaoTrial(withdrawState, { action: "battle" });
+  else advanceDaoTrial(withdrawState, { optionId: run.eventOptions[0].id });
+  withdrawActions += 1;
+}
+const bagBeforeWithdraw = getPublicState(withdrawState).daoTrial.activeRun.bag;
+const spiritBeforeWithdraw = withdrawState.player.spirit;
+const withdrawResult = advanceDaoTrial(withdrawState, { action: "abandon" });
+assert.equal(withdrawResult.summary.rewards.retention, 0.8, "主动离境应按 80% 结算行囊");
+assert.equal(withdrawState.player.spirit - spiritBeforeWithdraw, Math.floor(bagBeforeWithdraw.spirit * 0.8), "离境灵石结算应与行囊一致");
 
 for (const route of daoTrialRoutes) {
   const routeState = createDefaultState();
@@ -121,9 +173,9 @@ for (const route of daoTrialRoutes) {
   routeState.player.mana = routeState.player.maxMana;
   routeState.player.divineSense *= 5;
   ensureStateShape(routeState);
-  for (let attempt = 0; attempt < 4; attempt += 1) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
     const start = startDaoTrial(routeState, { routeId: route.id });
-    assert.equal(start.practice, attempt >= 3, `${route.id} 第四次起应为演练`);
+    assert.equal(start.practice, attempt >= 1, `${route.id} 无签后应进入演练`);
     let routeActions = 0;
     while (routeState.daoTrial.activeRun && routeActions < 40) {
       const run = getPublicState(routeState).daoTrial.activeRun;
@@ -140,9 +192,8 @@ for (const route of daoTrialRoutes) {
     }
     assert.ok(routeActions < 40, `${route.id} 第 ${attempt + 1} 次挑战不应卡死`);
   }
-  assert.equal(routeState.daoTrial.attemptsUsed, 3, `${route.id} 正式次数应封顶三次`);
-  assert.equal(routeState.daoTrial.history.length, 4, `${route.id} 应保存三次正式记录和一次演练`);
-  assert.ok(routeState.daoTrial.claimedMilestones.length <= 3, `${route.id} 里程碑不得重复领取`);
+  assert.equal(routeState.daoTrial.attemptsUsed, 1, `${route.id} 应记录一次正式游历`);
+  assert.equal(routeState.daoTrial.history.length, 2, `${route.id} 应保存一次正式记录和一次演练`);
 }
 
 console.log(`encounter-trial-check: passed (${generated} events, max empty ${longestEmptyRun} days, ${actions} trial actions)`);

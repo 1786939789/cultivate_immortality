@@ -5790,6 +5790,15 @@ body::before {
 .dao-trial-affix-banner span { display: inline-flex; align-items: center; gap: 5px; color: #e5bf68; font-size: 12px; }
 .dao-trial-affix-banner strong { color: #ffe29a; }
 .dao-trial-affix-banner small { color: #d0c7ae; overflow-wrap: anywhere; }
+.dao-trial-boon-panel,
+.dao-trial-boon-strip { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; }
+.dao-trial-boon-panel > div { flex: 1 1 100%; display: grid; gap: 3px; }
+.dao-trial-boon-panel > span,
+.dao-trial-boon-strip > span { display: grid; gap: 2px; min-width: 160px; padding: 7px 9px; border: 1px solid rgba(109, 76, 36, .24); border-radius: 4px; background: rgba(246, 229, 190, .22); }
+.dao-trial-boon-panel b { color: #65461f; }
+.dao-trial-boon-panel small { color: #806747; }
+.dao-trial-boon-strip > span { color: #e9ddb9; border-color: rgba(132, 185, 161, .32); background: rgba(49, 92, 76, .3); }
+.dao-trial-boon-strip small { color: #b9cdbf; }
 .section-kicker { display: inline-flex; align-items: center; gap: 6px; color: #c9ad6f; }
 .dao-trial-surface .section-kicker { color: #886426; }
 
@@ -14446,5 +14455,458 @@ body::before {
   .view.active.rank-surface .rank-row.person-rank-row .rank-value {
     max-width: 72px;
     font-size: 14px;
+  }
+}
+
+/* Dao trial readability pass: stronger hierarchy and contrast on the dense play surface. */
+.view.active .dao-trial-surface {
+  --trial-ink: #392713;
+  --trial-muted: #674b2c;
+  --trial-faint: #806242;
+  gap: 16px;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.view.active .dao-trial-surface > .panel,
+.view.active .dao-trial-surface .dao-trial-lower-grid > .panel {
+  border-color: rgba(112, 76, 31, .38);
+  background:
+    linear-gradient(135deg, rgba(255, 250, 231, .94), rgba(225, 205, 163, .88)),
+    var(--game-paper);
+  box-shadow: inset 0 1px rgba(255, 255, 255, .7), 0 6px 18px rgba(38, 25, 10, .14);
+}
+
+.view.active .dao-trial-header {
+  position: relative;
+  gap: 16px 24px;
+  padding: 20px 22px;
+  overflow: hidden;
+}
+
+.view.active .dao-trial-header::after {
+  content: "问道";
+  position: absolute;
+  right: 28px;
+  bottom: -26px;
+  color: rgba(112, 75, 30, .07);
+  font-family: "STKaiti", "KaiTi", serif;
+  font-size: 92px;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.view.active .dao-trial-header > * {
+  position: relative;
+  z-index: 1;
+}
+
+.view.active .dao-trial-header h3 {
+  margin: 5px 0 7px;
+  color: #4a2f12;
+  font-size: clamp(26px, 2vw, 32px);
+  line-height: 1.2;
+  letter-spacing: .04em;
+}
+
+.view.active .dao-trial-header p,
+.view.active .dao-trial-prepare .section-head p,
+.view.active .dao-trial-seal-catalog .section-head p,
+.view.active .dao-trial-history .section-head p,
+.view.active .dao-trial-year-goals .section-head p {
+  color: var(--trial-muted);
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.view.active .dao-trial-surface .section-kicker {
+  color: #8a5b16;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: .08em;
+}
+
+.view.active .dao-trial-header-stats {
+  gap: 10px;
+}
+
+.view.active .dao-trial-header-stats span {
+  min-width: 104px;
+  padding: 10px 13px;
+  border-color: #98783f;
+  background: linear-gradient(180deg, #403c30, #2d3029);
+  box-shadow: inset 0 1px rgba(255, 236, 181, .13), 0 3px 9px rgba(31, 24, 12, .2);
+}
+
+.view.active .dao-trial-header-stats small {
+  color: #e9dfc4;
+  font-size: 14px;
+}
+
+.view.active .dao-trial-header-stats b {
+  color: #ffe39a;
+  font-size: 21px;
+  line-height: 1.2;
+}
+
+.view.active .dao-trial-affix-banner {
+  margin-top: 2px;
+  padding: 11px 14px;
+  border: 1px solid rgba(205, 166, 82, .34);
+  border-left: 4px solid #d0a749;
+  background: linear-gradient(90deg, rgba(53, 53, 42, .97), rgba(47, 54, 45, .91));
+  box-shadow: inset 0 1px rgba(255, 235, 172, .08);
+}
+
+.view.active .dao-trial-affix-banner span,
+.view.active .dao-trial-affix-banner small {
+  font-size: 14px;
+}
+
+.view.active .dao-trial-affix-banner small {
+  color: #e4dbc5;
+}
+
+.view.active .dao-trial-boon-panel {
+  gap: 10px;
+  padding: 16px 18px;
+}
+
+.view.active .dao-trial-boon-panel > div {
+  gap: 5px;
+}
+
+.view.active .dao-trial-boon-panel > div > strong {
+  color: #44301a;
+  font-size: 17px;
+}
+
+.view.active .dao-trial-boon-panel > div > small,
+.view.active .dao-trial-boon-panel small {
+  color: var(--trial-muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.view.active .dao-trial-boon-panel > span {
+  padding: 10px 12px;
+  border-color: rgba(112, 76, 31, .3);
+  background: rgba(255, 248, 221, .58);
+}
+
+.view.active .dao-trial-boon-panel b {
+  color: #54340f;
+  font-size: 14px;
+}
+
+.view.active .dao-trial-route-grid {
+  gap: 14px;
+}
+
+.view.active .dao-trial-route-grid > button {
+  position: relative;
+  min-height: 164px;
+  padding: 18px;
+  border-color: rgba(205, 166, 86, .42);
+  background:
+    radial-gradient(circle at 12% 18%, rgba(181, 144, 70, .13), transparent 34%),
+    linear-gradient(145deg, #202820, #111918);
+  box-shadow: inset 0 1px rgba(255, 233, 168, .08), 0 5px 14px rgba(20, 18, 12, .18);
+  isolation: isolate;
+}
+
+.view.active .dao-trial-route-grid > button::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(244, 197, 91, .18), transparent 54%);
+  opacity: 0;
+  transition: opacity .2s ease;
+  pointer-events: none;
+}
+
+.view.active .dao-trial-route-grid > button:hover,
+.view.active .dao-trial-route-grid > button:focus-visible {
+  transform: translateY(-2px);
+  border-color: #d6b05b;
+  box-shadow: inset 0 1px rgba(255, 233, 168, .1), 0 10px 24px rgba(20, 18, 12, .28);
+}
+
+.view.active .dao-trial-route-grid > button.active {
+  transform: translateY(-3px);
+  border-width: 2px;
+  border-color: #f0c665;
+  background:
+    radial-gradient(circle at 16% 18%, rgba(239, 193, 89, .27), transparent 38%),
+    linear-gradient(145deg, #344133, #17241e);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 235, 170, .26),
+    inset 0 1px rgba(255, 248, 213, .18),
+    0 0 0 3px rgba(226, 178, 70, .2),
+    0 12px 28px rgba(18, 21, 14, .38);
+}
+
+.view.active .dao-trial-route-grid > button.active::before {
+  content: "✓ 已选择";
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 4px 9px;
+  color: #2a2111;
+  border: 1px solid rgba(255, 239, 189, .58);
+  border-radius: 999px;
+  background: #f0cb71;
+  box-shadow: 0 2px 8px rgba(18, 15, 8, .3);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: .05em;
+}
+
+.view.active .dao-trial-route-grid > button.active::after {
+  opacity: 1;
+}
+
+.view.active .dao-trial-route-grid > button.active .dao-route-root {
+  border-color: #f2cf78;
+  background: rgba(242, 202, 106, .2);
+  box-shadow: 0 0 16px rgba(231, 186, 83, .24);
+}
+
+.view.active .dao-trial-route-grid > button.active strong {
+  color: #fff0b5;
+  text-shadow: 0 1px 8px rgba(235, 188, 82, .3);
+}
+
+.view.active .dao-trial-route-grid > button.route-cyan.active {
+  border-color: #75d8d0;
+  background:
+    radial-gradient(circle at 16% 18%, rgba(81, 195, 188, .26), transparent 38%),
+    linear-gradient(145deg, #274a47, #142725);
+  box-shadow:
+    inset 0 0 0 1px rgba(184, 248, 240, .22),
+    inset 0 1px rgba(224, 255, 251, .16),
+    0 0 0 3px rgba(77, 192, 184, .22),
+    0 12px 28px rgba(12, 35, 33, .42);
+}
+
+.view.active .dao-trial-route-grid > button.route-cyan.active::before {
+  color: #102d2b;
+  border-color: rgba(218, 255, 250, .6);
+  background: #83ddd5;
+}
+
+.view.active .dao-trial-route-grid > button.route-cyan.active::after {
+  background: linear-gradient(135deg, rgba(104, 220, 211, .2), transparent 54%);
+}
+
+.view.active .dao-trial-route-grid > button.route-cyan.active .dao-route-root {
+  border-color: #8ce1d9;
+  background: rgba(83, 195, 187, .2);
+  box-shadow: 0 0 16px rgba(89, 207, 198, .25);
+}
+
+.view.active .dao-trial-route-grid > button.route-violet.active {
+  border-color: #c594d1;
+  background:
+    radial-gradient(circle at 16% 18%, rgba(166, 104, 185, .28), transparent 38%),
+    linear-gradient(145deg, #44334b, #241b29);
+  box-shadow:
+    inset 0 0 0 1px rgba(240, 205, 249, .2),
+    inset 0 1px rgba(251, 230, 255, .15),
+    0 0 0 3px rgba(169, 107, 187, .22),
+    0 12px 28px rgba(35, 18, 40, .42);
+}
+
+.view.active .dao-trial-route-grid > button.route-violet.active::before {
+  color: #301c35;
+  border-color: rgba(250, 226, 255, .58);
+  background: #d1a1dc;
+}
+
+.view.active .dao-trial-route-grid > button.route-violet.active::after {
+  background: linear-gradient(135deg, rgba(190, 124, 207, .2), transparent 54%);
+}
+
+.view.active .dao-trial-route-grid > button.route-violet.active .dao-route-root {
+  border-color: #cca0d6;
+  background: rgba(175, 112, 192, .2);
+  box-shadow: 0 0 16px rgba(177, 117, 194, .26);
+}
+
+.view.active .dao-trial-route-grid strong {
+  color: #ffe29a;
+  font-size: 23px;
+}
+
+.view.active .dao-trial-route-grid small,
+.view.active .dao-trial-route-grid em,
+.view.active .dao-trial-route-grid i {
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.view.active .dao-trial-route-grid small { color: #ddd2b9; }
+.view.active .dao-trial-route-grid em { color: #f0e6d0; }
+.view.active .dao-trial-route-grid i { color: #c8e0d4; }
+
+.view.active .dao-trial-prepare,
+.view.active .dao-trial-year-goals,
+.view.active .dao-trial-history,
+.view.active .dao-trial-seal-catalog {
+  padding: 18px;
+}
+
+.view.active .dao-trial-prepare .section-head h3,
+.view.active .dao-trial-year-goals .section-head h3,
+.view.active .dao-trial-history .section-head h3,
+.view.active .dao-trial-seal-catalog .section-head h3 {
+  color: #4b3013;
+  font-size: 21px;
+}
+
+.view.active .dao-trial-companion-list {
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.view.active .dao-trial-companion-list > button {
+  min-height: 78px;
+  gap: 11px;
+  padding: 11px 13px;
+  border-color: #897548;
+  background: linear-gradient(135deg, #364039, #28312c);
+  box-shadow: inset 0 1px rgba(255, 237, 185, .07), 0 3px 8px rgba(28, 24, 15, .16);
+}
+
+.view.active .dao-trial-companion-list > button:hover,
+.view.active .dao-trial-companion-list > button:focus-visible {
+  border-color: #d0ad62;
+  background: linear-gradient(135deg, #414c40, #303a32);
+}
+
+.view.active .dao-trial-companion-list > button.active {
+  border-color: #9bd0b6;
+  background: linear-gradient(135deg, #376d59, #285343);
+  box-shadow: inset 0 0 0 1px rgba(191, 238, 211, .2), 0 4px 12px rgba(27, 64, 49, .24);
+}
+
+.view.active .dao-trial-companion-list > button strong {
+  color: #ffe3a0;
+  font-size: 16px;
+}
+
+.view.active .dao-trial-companion-list small {
+  color: #e0e7dc;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.view.active .dao-trial-route-detail {
+  gap: 8px;
+  margin-top: 13px;
+  padding: 13px 14px;
+  border-color: rgba(111, 74, 29, .3);
+  background: rgba(255, 246, 215, .52);
+}
+
+.view.active .dao-trial-route-detail > div {
+  gap: 4px;
+  margin-bottom: 2px;
+}
+
+.view.active .dao-trial-route-detail strong {
+  color: #482b0d;
+  font-size: 16px;
+}
+
+.view.active .dao-trial-route-detail small {
+  color: var(--trial-muted);
+  font-size: 14px;
+}
+
+.view.active .dao-trial-route-detail > span {
+  padding: 8px 9px;
+  color: #513719;
+  border-color: rgba(99, 67, 31, .24);
+  background: rgba(255, 251, 234, .66);
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.view.active .dao-trial-goal-grid {
+  gap: 10px;
+}
+
+.view.active .dao-trial-goal-grid > div {
+  padding: 12px 13px;
+  border-color: rgba(109, 76, 36, .28);
+  background: rgba(255, 248, 224, .56);
+}
+
+.view.active .dao-trial-goal-grid b {
+  color: #4c3012;
+  font-size: 15px;
+}
+
+.view.active .dao-trial-goal-grid small {
+  color: var(--trial-muted);
+  font-size: 14px;
+}
+
+.view.active .dao-trial-goal-grid i {
+  height: 8px;
+  border: 1px solid rgba(89, 61, 29, .1);
+}
+
+.view.active .dao-trial-history .event {
+  padding: 11px 13px;
+}
+
+.view.active .dao-trial-history .event strong {
+  color: #493016;
+  font-size: 15px;
+}
+
+.view.active .dao-trial-history .event span,
+.view.active .dao-trial-history .event small,
+.view.active .dao-trial-history .empty {
+  color: var(--trial-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.view.active .dao-trial-history .empty {
+  padding: 18px;
+  border: 1px dashed rgba(109, 76, 36, .28);
+  background: rgba(255, 249, 229, .38);
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  .view.active .dao-trial-surface {
+    font-size: 14px;
+  }
+
+  .view.active .dao-trial-header,
+  .view.active .dao-trial-prepare,
+  .view.active .dao-trial-year-goals,
+  .view.active .dao-trial-history,
+  .view.active .dao-trial-seal-catalog {
+    padding: 15px;
+  }
+
+  .view.active .dao-trial-header::after {
+    right: 8px;
+    font-size: 72px;
+  }
+
+  .view.active .dao-trial-route-grid > button {
+    min-height: 146px;
+    padding: 15px;
   }
 }
