@@ -15,7 +15,7 @@ export async function runPlayerActionIncremental(saveId, action, payload = {}) {
     const sectionSets = {
       rest: ["log","logDays"], breakthrough: ["sect","log","logDays"], skill: ["log","logDays"],
       buy: ["bag","shop","log","logDays"], sell: ["bag","shop","log","logDays"], use: ["bag","shop","log","logDays"],
-      dungeon: ["log","logDays","dungeonDays","equipmentTransfers"], sectMission: ["sect","log","logDays"], sectWar: ["sect","log","logDays"]
+      dungeon: ["log","logDays","dungeonDays","equipmentTransfers","__equipment_inventory"], sectMission: ["sect","log","logDays"], sectWar: ["sect","log","logDays"]
     };
     const inputs = await readActionInputs(saveId, sectionSets[action] || ["log","logDays"], connection);
     if (!inputs) throw new Error("存档不存在");

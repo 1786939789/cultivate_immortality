@@ -25,10 +25,13 @@ export async function readActionInputs(saveId, sectionKeys = [], connection = my
   player.cultivator_json = json(playerJson);
   const [sectionRows] = await connection.query(`SELECT section_key,section_json FROM save_sections WHERE save_id=? AND section_key IN (${sectionKeys.map(() => "?").join(",") || "''"})`, [saveId, ...sectionKeys]);
   const sections = Object.fromEntries(sectionRows.map((row) => [row.section_key, parseMysqlJson(row.section_json, {})]));
-  // Player actions only need the player's equipped items. Unowned inventory is
-  // intentionally excluded: it is not part of combat stats and loading it
-  // would reintroduce an equipment-wide read amplification.
-  const [equipmentRows] = await connection.query("SELECT item_json FROM equipment_items WHERE save_id=? AND (owner_id='player' OR JSON_UNQUOTE(JSON_EXTRACT(item_json,'$.ownerId'))='player') ORDER BY position_no", [saveId]);
+  const needsInventory = sectionKeys.includes("__equipment_inventory");
+  // Most actions only need the player's equipped items. Dungeon loot also
+  // needs the unowned pool to select/transfer drops, so it opts in explicitly.
+  const equipmentSql = needsInventory
+    ? "SELECT item_json FROM equipment_items WHERE save_id=? ORDER BY position_no"
+    : "SELECT item_json FROM equipment_items WHERE save_id=? AND (owner_id='player' OR JSON_UNQUOTE(JSON_EXTRACT(item_json,'$.ownerId'))='player') ORDER BY position_no";
+  const [equipmentRows] = await connection.query(equipmentSql, [saveId]);
   return { save, player, sections, equipment: equipmentRows.map((row) => parseMysqlJson(row.item_json, {})) };
 }
 
