@@ -52,6 +52,7 @@ import {
   deleteTaskIncrementally,
   readCultivatorDetailIncrementally,
   readLiveRanking,
+  runPlayerActionIncrementally,
   publicState,
   readBattleReplay,
   readState,
@@ -294,8 +295,17 @@ async function handleApi(req, res, url) {
     if (usesMysqlBackgroundJobs) {
       const independent = await readCultivatorDetailIncrementally(saveId, id);
       if (independent) {
-        const emptyRating = { id, score: independent.metrics.currentCombatRating, dungeonScore: 50, duelScore: 50, provinceScore: 50, activeDays: 0, sampleEnough: false, daily: [] };
-        sendJson(res, 200, { ...independent, insight: { power: independent.power }, duelRank: independent.person.duelSeason || null, combatRating: emptyRating, rankingTrends: { power: [], duel: [] }, combatRatingMeta: { windowDays: 10, minimumActiveDays: 3, weights: { dungeon: 0.4, duel: 0.3, province: 0.3 } }, relationship: null, encounterHistory: [] });
+        const metrics = independent.metrics || {};
+        sendJson(res, 200, {
+          ...independent,
+          insight: independent.insight || { power: independent.power },
+          duelRank: independent.duelRank || independent.person.duelSeason || null,
+          combatRating: independent.combatRating || { id, score: Number(metrics.currentCombatRating || 500), daily: [] },
+          rankingTrends: independent.rankingTrends || { power: [], duel: [] },
+          combatRatingMeta: independent.combatRatingMeta || { windowDays: 10, minimumActiveDays: 3, weights: { dungeon: 0.4, duel: 0.3, province: 0.3 } },
+          relationship: independent.relationship || null,
+          encounterHistory: independent.encounterHistory || []
+        });
         return;
       }
     }
@@ -393,6 +403,15 @@ async function handleApi(req, res, url) {
   }
   if (req.method === "POST" && url.pathname === "/api/tasks/delete" && usesMysqlBackgroundJobs) {
     sendJson(res, 200, await deleteTaskIncrementally(body, saveId));
+    return;
+  }
+  const incrementalPlayerActions = {
+    "/api/breakthrough": "breakthrough", "/api/skills/upgrade": "skill", "/api/rest": "rest",
+    "/api/dungeons/run": "dungeon", "/api/sect/mission": "sectMission", "/api/sect/war": "sectWar",
+    "/api/items/buy": "buy", "/api/items/use": "use", "/api/items/sell": "sell"
+  };
+  if (usesMysqlBackgroundJobs && incrementalPlayerActions[url.pathname]) {
+    sendJson(res, 200, await runPlayerActionIncrementally(saveId, incrementalPlayerActions[url.pathname], body));
     return;
   }
   const routes = {

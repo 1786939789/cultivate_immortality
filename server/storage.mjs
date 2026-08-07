@@ -27,5 +27,6 @@ export const completeTaskIncrementally = storage.completeTaskIncrementally;
 export const deleteTaskIncrementally = storage.deleteTaskIncrementally;
 export const readCultivatorDetailIncrementally = storage.readCultivatorDetailIncrementally;
 export const readLiveRanking = storage.readLiveRanking;
+export const runPlayerActionIncrementally = storage.runPlayerActionIncrementally;
 export const resetState = storage.resetState;
 export const publicState = storage.publicState;

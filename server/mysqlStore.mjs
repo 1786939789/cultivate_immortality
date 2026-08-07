@@ -574,6 +574,15 @@ export async function readLiveRanking(id, kind, options = {}) {
   return readLiveRankingIncremental(id, kind, options);
 }
 
+export async function runPlayerActionIncrementally(id, action, payload = {}) {
+  const { runPlayerActionIncremental } = await import("./playerActionCommand.mjs");
+  return withSaveLock(id, async () => {
+    const response = await runPlayerActionIncremental(id, action, payload);
+    stateCache.delete(id); stateValidationCache.delete(id); publicStateCache.delete(id);
+    return response;
+  });
+}
+
 export async function testMutationRollback(id = "default") {
   const before = await loadStateFromMysql(id);
   const beforeRevision = Number(before?.__stateRevision || 0);

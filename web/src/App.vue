@@ -13144,6 +13144,21 @@ async function act(path, body = {}, options = {}) {
       error.value = "";
       return response.result;
     }
+    if (response?.kind?.startsWith("action.") && response.patch) {
+      if (state.value) state.value = {
+        ...state.value,
+        player: { ...(state.value.player || {}), ...(response.patch.player || {}) },
+        bag: response.patch.bag || state.value.bag,
+        shop: response.patch.shop || state.value.shop,
+        sect: response.patch.sect || state.value.sect,
+        log: [...(response.patch.log || []), ...(state.value.log || [])].slice(0, 80),
+        stateRevision: response.stateRevision
+      };
+      highestStateRevision = Math.max(highestStateRevision, Number(response.stateRevision || 0));
+      liveRankings.power = []; liveRankings.duel = []; liveRankings.combat = [];
+      error.value = "";
+      return response.result;
+    }
     const nextState = response.state || (response.result !== undefined ? null : response);
     if (nextState) {
       applyState(nextState, options);
