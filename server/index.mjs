@@ -48,6 +48,10 @@ import {
   loginUser,
   logoutSession,
   mutateState,
+  completeTaskIncrementally,
+  deleteTaskIncrementally,
+  readCultivatorDetailIncrementally,
+  readLiveRanking,
   publicState,
   readBattleReplay,
   readState,
@@ -287,9 +291,22 @@ async function handleApi(req, res, url) {
   if (req.method === "GET" && url.pathname === "/api/cultivators/detail") {
     const id = url.searchParams.get("id");
     if (!id) throw new Error("缺少人物 ID");
+    if (usesMysqlBackgroundJobs) {
+      const independent = await readCultivatorDetailIncrementally(saveId, id);
+      if (independent) {
+        const emptyRating = { id, score: independent.metrics.currentCombatRating, dungeonScore: 50, duelScore: 50, provinceScore: 50, activeDays: 0, sampleEnough: false, daily: [] };
+        sendJson(res, 200, { ...independent, insight: { power: independent.power }, duelRank: independent.person.duelSeason || null, combatRating: emptyRating, rankingTrends: { power: [], duel: [] }, combatRatingMeta: { windowDays: 10, minimumActiveDays: 3, weights: { dungeon: 0.4, duel: 0.3, province: 0.3 } }, relationship: null, encounterHistory: [] });
+        return;
+      }
+    }
     const state = await readState(saveId);
     sendJson(res, 200, getPublicCultivatorDetail(state, id));
     return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/rankings/live") {
+    const kind = url.searchParams.get("kind") || "power";
+    if (usesMysqlBackgroundJobs) { sendJson(res, 200, await readLiveRanking(saveId, kind, { limit: url.searchParams.get("limit"), offset: url.searchParams.get("offset") })); return; }
   }
 
   if (req.method === "GET" && url.pathname === "/api/dao-trial/history") {
@@ -370,6 +387,14 @@ async function handleApi(req, res, url) {
 
   const body = await readJson(req);
   if (session.user.isAdmin && body.saveId !== saveId) throw new Error("管理目标已变化，请刷新后重试");
+  if (req.method === "POST" && url.pathname === "/api/tasks" && usesMysqlBackgroundJobs) {
+    sendJson(res, 200, await completeTaskIncrementally(body, saveId));
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/tasks/delete" && usesMysqlBackgroundJobs) {
+    sendJson(res, 200, await deleteTaskIncrementally(body, saveId));
+    return;
+  }
   const routes = {
     "/api/tasks": (state) => addTask(state, body),
     "/api/tasks/delete": (state) => deleteTaskCompletion(state, body),

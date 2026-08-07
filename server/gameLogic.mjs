@@ -2554,6 +2554,10 @@ function cultivatorById(state, id) {
   return allCultivators(state).find((item) => item.entity.id === id)?.entity || null;
 }
 
+export function getPublicSpiritPearls(state, entity = state.player) {
+  return publicSpiritPearls(state, entity);
+}
+
 export function getCombatSnapshot(entity, state) {
   return combatSnapshot(entity, state);
 }
@@ -6206,6 +6210,9 @@ function breakthroughChanceFor(state, entity) {
 }
 
 function breakthroughChanceParts(state, entity) {
+  if (state?.__incrementalBreakthroughParts && entity?.id === state?.player?.id) {
+    return state.__incrementalBreakthroughParts;
+  }
   const realmBase = baseBreakthroughChance(entity.realm || 0);
   const rootMultiplier = rootBreakthroughChanceMultiplier(entity);
   const talentMultiplier = talentSnapshot(entity).breakthroughMultiplier;
@@ -6638,6 +6645,9 @@ function rememberTaskMultiplierForDay(state, day = state.day) {
 
 function taskMultiplierForDay(state, day = state.day) {
   const targetDay = Math.max(1, Math.floor(Number(day) || state.day || 1));
+  if (state.__incrementalTaskMultiplier && Number(state.__incrementalTaskMultiplier.day) === targetDay) {
+    return state.__incrementalTaskMultiplier;
+  }
   normalizeTaskMultiplierRecords(state);
   if (targetDay === Number(state.day || 1)) return rememberTaskMultiplierForDay(state, targetDay);
   const found = state.taskMultiplierRecords.find((record) => record.day === targetDay);
@@ -7967,6 +7977,7 @@ function taskEfficiencyForDay(state, day, requestedBaseXp) {
 }
 
 function playerCatchupProfile(state) {
+  if (state.__incrementalCatchupProfile) return state.__incrementalCatchupProfile;
   const npcRealms = (state.npcs || []).map((npc) => Number(npc.realm) || 0).sort((a, b) => a - b);
   const medianRealm = npcRealms.length ? npcRealms[Math.floor(npcRealms.length / 2)] : state.player.realm || 0;
   const realmGap = Math.max(0, medianRealm - (Number(state.player.realm) || 0));

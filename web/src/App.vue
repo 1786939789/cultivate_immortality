@@ -5096,7 +5096,7 @@ import {
   Minimize2
 } from "lucide-vue-next";
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from "vue";
-import { clearCachedState, getAdminAccounts, getBattleReplay, getCachedState, getCultivatorDetail, getCurrentUser, getDaoTrialHistory, getDuelDayPage, getDuelReplay, getState, login, logout, postAction, register, saveCachedState, setAdminActiveAccount, setAdminManagedAccount } from "./api";
+import { clearCachedState, getAdminAccounts, getBattleReplay, getCachedState, getCultivatorDetail, getLiveRanking, getCurrentUser, getDaoTrialHistory, getDuelDayPage, getDuelReplay, getState, login, logout, postAction, register, saveCachedState, setAdminActiveAccount, setAdminManagedAccount } from "./api";
 import CharacterPortrait from "./components/CharacterPortrait.vue";
 import EquipmentIcon from "./components/EquipmentIcon.vue";
 import Meter from "./components/Meter.vue";
@@ -5292,6 +5292,8 @@ const activeMarketCategory = ref("xp");
 const selectedMarketItemId = ref("");
 const activeSectSubTab = ref("map");
 const activeRankBoard = ref("power");
+const liveRankings = reactive({ power: [], duel: [], combat: [] });
+const liveRankingLoading = ref(false);
 const rankSearch = ref("");
 const rankPage = ref(1);
 const rankPageInput = ref("1");
@@ -10661,11 +10663,11 @@ const activeRankingCandidateCount = computed(() => {
 const activeRanking = computed(() => {
   if (!state.value) return [];
   if (!rankRosterReady.value && activeRankBoard.value !== "sect") return [];
-  if (activeRankBoard.value === "duel") return duelRanking.value;
+  if (activeRankBoard.value === "duel") return liveRankings.duel.length ? liveRankings.duel : duelRanking.value;
   if (activeRankBoard.value === "sect") return sectRanking.value;
-  if (activeRankBoard.value === "combat") return combatRanking.value;
+  if (activeRankBoard.value === "combat") return liveRankings.combat.length ? liveRankings.combat : combatRanking.value;
   if (activeRankBoard.value === "realmStats") return realmStatsRanking.value;
-  return powerRanking.value;
+  return liveRankings.power.length ? liveRankings.power : powerRanking.value;
 });
 
 const normalizedRankSearch = computed(() => rankSearch.value.trim().toLowerCase());
@@ -11954,6 +11956,31 @@ function selectRankBoard(id) {
   activeRankBoard.value = id;
   rankPage.value = 1;
   rankPageInput.value = "1";
+  if (["power", "duel", "combat"].includes(id)) loadLiveRanking(id);
+}
+
+async function loadLiveRanking(kind = activeRankBoard.value) {
+  if (!["power", "duel", "combat"].includes(kind)) return;
+  liveRankingLoading.value = true;
+  try {
+    const result = await getLiveRanking(kind, { limit: 200 });
+    liveRankings[kind] = (result.entries || []).map((item) => ({
+      ...item,
+      id: item.id,
+      name: item.name,
+      kind: "person",
+      sect: item.sect,
+      subtitle: `${item.sect || "无宗门"} · ${realmName(item.realm)}`,
+      value: kind === "power" ? item.power : kind === "combat" ? item.combatRating : `${item.duelScore}分`,
+      score: kind === "combat" ? item.combatRating : item.duelScore,
+      sortValue: item.power,
+      help: kind === "power" ? `实时战力 ${item.power}` : kind === "combat" ? `实时战斗评分 ${item.combatRating}` : `实时切磋积分 ${item.duelScore}`
+    }));
+  } catch {
+    liveRankings[kind] = [];
+  } finally {
+    liveRankingLoading.value = false;
+  }
 }
 
 function changeRankPage(offset) {
@@ -12911,6 +12938,25 @@ function applyState(nextState, options = {}) {
   return true;
 }
 
+function applyTaskPatch(patch, revision) {
+  if (!state.value || !patch) return false;
+  const current = state.value;
+  const nextPlayer = { ...(current.player || {}), ...(patch.player || {}) };
+  state.value = {
+    ...current,
+    player: nextPlayer,
+    tasks: patch.completion ? [patch.completion, ...(current.tasks || []).filter((item) => item.id !== patch.completion.id)].slice(0, 16) : current.tasks,
+    taskCompletions: patch.completion ? [patch.completion, ...(current.taskCompletions || []).filter((item) => item.id !== patch.completion.id)] : current.taskCompletions,
+    taskProgress: patch.taskProgress || current.taskProgress,
+    log: patch.log ? [...patch.log, ...(current.log || [])].slice(0, 80) : current.log,
+    stateRevision: Number(revision ?? current.stateRevision ?? 0),
+    derived: { ...(current.derived || {}), playerPower: Number(nextPlayer.currentPower ?? current.derived?.playerPower ?? 0) }
+  };
+  highestStateRevision = Math.max(highestStateRevision, Number(revision || 0));
+  syncSelectedDays();
+  return true;
+}
+
 function syncSelectedDays() {
   if (!selectedRealmStage.value) {
     selectedRealmStage.value = derived.value.currentRealmInfo?.stage || groupedRealmProgression.value[0]?.stage || "";
@@ -13077,6 +13123,27 @@ async function act(path, body = {}, options = {}) {
     const requestBody = authUser.value?.isAdmin ? { ...body, saveId: adminSelectedAccountId.value } : body;
     const response = await postAction(path, requestBody, options);
     if (generation !== authGeneration) return null;
+    if (response?.kind === "task.completed" && response.patch) {
+      applyTaskPatch(response.patch, response.stateRevision);
+      error.value = "";
+      return response.result;
+    }
+    if (response?.kind === "task.deleted" && response.patch) {
+      if (state.value) {
+        state.value = {
+          ...state.value,
+          player: { ...(state.value.player || {}), ...(response.patch.player || {}) },
+          tasks: (state.value.tasks || []).filter((item) => item.id !== response.patch.deletedCompletionId),
+          taskCompletions: (state.value.taskCompletions || []).filter((item) => item.id !== response.patch.deletedCompletionId),
+          taskProgress: response.patch.taskProgress || state.value.taskProgress,
+          log: [...(response.patch.log || []), ...(state.value.log || [])].slice(0, 80),
+          stateRevision: response.stateRevision
+        };
+      }
+      highestStateRevision = Math.max(highestStateRevision, Number(response.stateRevision || 0));
+      error.value = "";
+      return response.result;
+    }
     const nextState = response.state || (response.result !== undefined ? null : response);
     if (nextState) {
       applyState(nextState, options);

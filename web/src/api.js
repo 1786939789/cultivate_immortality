@@ -91,6 +91,13 @@ export function getCultivatorDetail(id) {
   return request(`/api/cultivators/detail?${params.toString()}`);
 }
 
+export function getLiveRanking(kind = "power", options = {}) {
+  const params = new URLSearchParams({ kind, _: String(Date.now()) });
+  if (options.limit) params.set("limit", String(options.limit));
+  if (options.offset) params.set("offset", String(options.offset));
+  return request(`/api/rankings/live?${params.toString()}`);
+}
+
 export function getDuelReplay(day, matchId) {
   const params = new URLSearchParams({ day: String(day), match: matchId });
   return request(`/api/duels/replay?${params.toString()}`);

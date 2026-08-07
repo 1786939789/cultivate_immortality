@@ -285,6 +285,28 @@ function decodeCultivators(cultivatorRows, historyRows, portraitRows) {
   const npcs = [];
   for (const row of cultivatorRows) {
     const entity = parseMysqlJson(row.cultivator_json, {}) || {};
+    const hasTypedMetrics = Number(row.metrics_revision || 0) > 0;
+    Object.assign(entity, {
+      id: entity.id || row.cultivator_id,
+      name: row.name || entity.name || "",
+      realm: Number(row.realm_no ?? entity.realm ?? 0),
+      xp: Number(row.xp ?? entity.xp ?? 0),
+      hp: Number(row.hp ?? entity.hp ?? 0),
+      maxHp: Number(row.max_hp ?? entity.maxHp ?? 0),
+      mana: Number(row.mana ?? entity.mana ?? 0),
+      maxMana: Number(row.max_mana ?? entity.maxMana ?? 0),
+      sect: row.sect_name || entity.sect || "",
+      spirit: Number(hasTypedMetrics ? row.spirit : entity.spirit ?? 0),
+      reputation: Number(hasTypedMetrics ? row.reputation : entity.reputation ?? 0),
+      body: Number(hasTypedMetrics ? row.body : entity.body ?? 0),
+      wisdom: Number(hasTypedMetrics ? row.wisdom : entity.wisdom ?? 0),
+      attack: Number(hasTypedMetrics ? row.attack : entity.attack ?? 0),
+      defense: Number(hasTypedMetrics ? row.defense : entity.defense ?? 0),
+      divineSense: Number(hasTypedMetrics ? row.divine_sense : entity.divineSense ?? 0),
+      chance: Number(hasTypedMetrics ? row.chance : entity.chance ?? 0),
+      wealth: Number(hasTypedMetrics ? row.wealth : entity.wealth ?? 0),
+      heartDemon: Number(hasTypedMetrics ? row.heart_demon : entity.heartDemon ?? 0)
+    });
     entity.portraitUrl = portraitValue(portraits.get(row.portrait_id));
     for (const field of historyFields) {
       entity[field] = (histories.get(`${row.cultivator_id}|${field}`) || [])

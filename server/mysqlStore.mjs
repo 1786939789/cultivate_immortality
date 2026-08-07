@@ -5,6 +5,7 @@ import { ensureMysqlSchema, mysqlPool, parseMysqlJson, withMysqlTransaction } fr
 import { loadStateFromMysql, pruneBattleReplays, readReplayFromMysql, saveStateWithConnection, upsertBattleReplays } from "./mysqlStateRepository.mjs";
 import { changedPersistenceDomains, trackPersistenceDomains } from "./persistenceDomains.mjs";
 import { cancelPendingJobs, enqueueBackgroundJob } from "./mysqlBackgroundJobs.mjs";
+import { readTaskInputs, writeTaskIncremental, withTaskIncrementalTransaction } from "./taskIncrementalRepository.mjs";
 
 const sessionMaxAgeSeconds = 60 * 60 * 24 * 30;
 const activeSaveSettingKey = "active_save_ids";
@@ -539,6 +540,38 @@ export async function mutateState(mutator, id = "default", options = {}) {
     const nextState = publicStateWithRevision(state, options.publicOptions);
     return result === undefined ? nextState : { state: nextState, result };
   });
+}
+
+export async function completeTaskIncrementally(payload, id = "default") {
+  const { completeTaskIncremental } = await import("./taskCommand.mjs");
+  return withSaveLock(id, async () => {
+    const response = await completeTaskIncremental(id, payload);
+    stateCache.delete(id);
+    stateValidationCache.delete(id);
+    publicStateCache.delete(id);
+    return response;
+  });
+}
+
+export async function deleteTaskIncrementally(payload, id = "default") {
+  const { deleteTaskIncremental } = await import("./taskCommand.mjs");
+  return withSaveLock(id, async () => {
+    const response = await deleteTaskIncremental(id, payload);
+    stateCache.delete(id);
+    stateValidationCache.delete(id);
+    publicStateCache.delete(id);
+    return response;
+  });
+}
+
+export async function readCultivatorDetailIncrementally(id, cultivatorId) {
+  const { readLiveCultivatorDetail } = await import("./rankingIncrementalRepository.mjs");
+  return readLiveCultivatorDetail(id, cultivatorId);
+}
+
+export async function readLiveRanking(id, kind, options = {}) {
+  const { readLiveRankingIncremental } = await import("./rankingIncrementalRepository.mjs");
+  return readLiveRankingIncremental(id, kind, options);
 }
 
 export async function testMutationRollback(id = "default") {

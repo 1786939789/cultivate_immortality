@@ -1,7 +1,8 @@
-import { compactStateForStorage } from "./gameLogic.mjs";
+import { buildCombatRatings, compactStateForStorage, powerOf } from "./gameLogic.mjs";
 import { ensureMysqlSchema, mysqlPool, parseMysqlJson, withMysqlTransaction } from "./mysqlDb.mjs";
 import { contentHash, decodeState, encodeState } from "./mysqlStateCodec.mjs";
 import { normalizePersistenceDomains, persistenceDomains } from "./persistenceDomains.mjs";
+import { syncCultivatorPearls, upsertCultivatorMetrics } from "./cultivatorIncrementalRepository.mjs";
 
 function observedQuery(connection, observer) {
   if (typeof observer !== "function") return connection;
@@ -68,6 +69,77 @@ async function upsertPortraits(connection, portraits) {
   }
 }
 
+async function syncTaskIncrementalTables(connection, state, saveId, domains) {
+  if (domains.has(persistenceDomains.sections)) {
+    const definitions = new Map((state.taskDefinitions || []).map((item) => [String(item.id), item]));
+    for (const [id, item] of definitions) {
+      const text = JSON.stringify(item);
+      await connection.query(`INSERT INTO task_definitions_v2
+        (save_id, task_id, category, enabled, definition_json, content_hash) VALUES (?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE category=VALUES(category), enabled=VALUES(enabled), definition_json=VALUES(definition_json), content_hash=VALUES(content_hash)`,
+      [saveId, id, item.category || "", item.enabled === false ? 0 : 1, text, contentHash(text)]);
+    }
+    await deleteMissing(connection, "task_definitions_v2", saveId, ["task_id"], new Set(definitions.keys()));
+
+    const progress = new Map();
+    for (const [day, entries] of Object.entries(state.taskProgress || {})) for (const [taskId, entry] of Object.entries(entries || {})) {
+      const key = `${day}\u001f${taskId}`;
+      progress.set(key, { day: Number(day), taskId, entry });
+      await connection.query(`INSERT INTO task_progress_v2
+        (save_id, day_no, task_id, completed_amount, awarded_multiplier) VALUES (?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE completed_amount=VALUES(completed_amount), awarded_multiplier=VALUES(awarded_multiplier)`,
+      [saveId, Number(day), taskId, Number(entry.amount || 0), Number(entry.awardedMultiplier || 0)]);
+    }
+    await deleteMissing(connection, "task_progress_v2", saveId, ["day_no", "task_id"], new Set(progress.keys()));
+
+    const snapshots = new Map((state.taskMultiplierRecords || []).map((item) => [String(item.day), item]));
+    for (const [day, item] of snapshots) {
+      const text = JSON.stringify(item);
+      await connection.query(`INSERT INTO task_multiplier_snapshots_v2
+        (save_id, day_no, date_key, elixir_multiplier, sect_xp_multiplier, total_multiplier, snapshot_json, content_hash)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE date_key=VALUES(date_key), elixir_multiplier=VALUES(elixir_multiplier),
+        sect_xp_multiplier=VALUES(sect_xp_multiplier), total_multiplier=VALUES(total_multiplier), snapshot_json=VALUES(snapshot_json), content_hash=VALUES(content_hash)`,
+      [saveId, Number(day), item.date || "", Number(item.elixirMultiplier || 1), Number(item.sectXpMultiplier || 1), Number(item.totalMultiplier || 1), text, contentHash(text)]);
+    }
+    await deleteMissing(connection, "task_multiplier_snapshots_v2", saveId, ["day_no"], new Set(snapshots.keys()));
+
+    const completions = new Map((state.taskCompletions || []).filter((item) => item?.id).map((item) => [String(item.id), item]));
+    for (const [id, item] of completions) {
+      const text = JSON.stringify(item);
+      await connection.query(`INSERT INTO task_completions_v2
+        (save_id, completion_id, day_no, task_id, completed_amount, multiplier, xp, base_xp, spirit, completion_json, content_hash)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE day_no=VALUES(day_no), task_id=VALUES(task_id),
+        completed_amount=VALUES(completed_amount), multiplier=VALUES(multiplier), xp=VALUES(xp), base_xp=VALUES(base_xp), spirit=VALUES(spirit), completion_json=VALUES(completion_json), content_hash=VALUES(content_hash)`,
+      [saveId, id, Number(item.day || state.day || 1), item.taskId || "", Number(item.completedAmount || 0), Number(item.multiplier || 0), Number(item.xp || 0), Number(item.baseXp || 0), Number(item.spirit || 0), text, contentHash(text)]);
+    }
+    await deleteMissing(connection, "task_completions_v2", saveId, ["completion_id"], new Set(completions.keys()));
+
+    const logs = new Map((state.log || []).map((item, index) => [String(item.id || `log-${contentHash(JSON.stringify(item)).slice(0, 24)}-${index}`), item]));
+    for (const [id, item] of logs) {
+      const withId = { ...item, id };
+      const text = JSON.stringify(withId);
+      await connection.query(`INSERT INTO game_logs_v2
+        (save_id, log_id, day_no, log_type, log_text, log_json, content_hash) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE day_no=VALUES(day_no), log_type=VALUES(log_type), log_text=VALUES(log_text), log_json=VALUES(log_json), content_hash=VALUES(content_hash)`,
+      [saveId, id, Number(item.day || state.day || 1), item.type || "", item.text || "", text, contentHash(text)]);
+    }
+    await deleteMissing(connection, "game_logs_v2", saveId, ["log_id"], new Set(logs.keys()));
+  }
+
+  if (domains.has(persistenceDomains.cultivators)) {
+    const records = new Map((state.player?.dailyRecords || []).map((item) => [String(item.day), item]));
+    for (const [day, item] of records) {
+      const text = JSON.stringify(item);
+      await connection.query(`INSERT INTO task_daily_records_v2
+        (save_id, cultivator_id, day_no, record_json, content_hash) VALUES (?, 'player', ?, ?, ?)
+        ON DUPLICATE KEY UPDATE record_json=VALUES(record_json), content_hash=VALUES(content_hash)`,
+      [saveId, Number(day), text, contentHash(text)]);
+    }
+    const keys = new Set([...records.keys()].map((day) => `player\u001f${day}`));
+    await deleteMissing(connection, "task_daily_records_v2", saveId, ["cultivator_id", "day_no"], keys);
+  }
+}
+
 async function writeEncodedState(rawConnection, state, saveId, options = {}) {
   const connection = observedQuery(rawConnection, options.queryObserver);
   const domains = normalizePersistenceDomains(options.domains);
@@ -113,11 +185,19 @@ async function writeEncodedState(rawConnection, state, saveId, options = {}) {
   if (domains.has(persistenceDomains.cultivators)) await syncHashedRows(connection, {
     table: "cultivators", saveId, rows: encoded.cultivators, keyColumns: ["cultivator_id"],
     keyValues: (row) => ({ cultivator_id: row.cultivatorId }),
-    values: (row) => [row.cultivatorId, row.kind, row.position, row.name, row.realm, row.xp, row.hp, row.maxHp, row.mana, row.maxMana, row.sect, row.portraitId || null, row.json, row.hash],
+    values: (row) => {
+      const entity = parseMysqlJson(row.json, {}) || {};
+      return [row.cultivatorId, row.kind, row.position, row.name, row.realm, row.xp, row.hp, row.maxHp, row.mana, row.maxMana, row.sect, row.portraitId || null,
+        Number(entity.spirit || 0), Number(entity.reputation || 0), Number(entity.body || 0), Number(entity.wisdom || 0), Number(entity.attack || 0), Number(entity.defense || 0),
+        Number(entity.divineSense || 0), Number(entity.chance || 0), Number(entity.wealth || 0), Number(entity.heartDemon || 0), row.json, row.hash];
+    },
     upsertSql: `INSERT INTO cultivators
-      (save_id, cultivator_id, cultivator_kind, position_no, name, realm_no, xp, hp, max_hp, mana, max_mana, sect_name, portrait_id, cultivator_json, content_hash)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON DUPLICATE KEY UPDATE cultivator_kind=VALUES(cultivator_kind), position_no=VALUES(position_no), name=VALUES(name), realm_no=VALUES(realm_no), xp=VALUES(xp), hp=VALUES(hp), max_hp=VALUES(max_hp), mana=VALUES(mana), max_mana=VALUES(max_mana), sect_name=VALUES(sect_name), portrait_id=VALUES(portrait_id), cultivator_json=VALUES(cultivator_json), content_hash=VALUES(content_hash), updated_at=CURRENT_TIMESTAMP(3)`
+      (save_id, cultivator_id, cultivator_kind, position_no, name, realm_no, xp, hp, max_hp, mana, max_mana, sect_name, portrait_id,
+       spirit, reputation, body, wisdom, attack, defense, divine_sense, chance, wealth, heart_demon, cultivator_json, content_hash)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE cultivator_kind=VALUES(cultivator_kind), position_no=VALUES(position_no), name=VALUES(name), realm_no=VALUES(realm_no), xp=VALUES(xp), hp=VALUES(hp), max_hp=VALUES(max_hp), mana=VALUES(mana), max_mana=VALUES(max_mana), sect_name=VALUES(sect_name), portrait_id=VALUES(portrait_id), metrics_revision=metrics_revision+1,
+      spirit=VALUES(spirit), reputation=VALUES(reputation), body=VALUES(body), wisdom=VALUES(wisdom), attack=VALUES(attack), defense=VALUES(defense), divine_sense=VALUES(divine_sense), chance=VALUES(chance), wealth=VALUES(wealth), heart_demon=VALUES(heart_demon),
+      cultivator_json=VALUES(cultivator_json), content_hash=VALUES(content_hash), updated_at=CURRENT_TIMESTAMP(3)`
   });
   if (domains.has(persistenceDomains.cultivators)) await syncHashedRows(connection, {
     table: "cultivator_history", saveId, rows: encoded.cultivatorHistory,
@@ -188,6 +268,26 @@ async function writeEncodedState(rawConnection, state, saveId, options = {}) {
       VALUES (?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE position_no=VALUES(position_no), portrait_id=VALUES(portrait_id), profile_json=VALUES(profile_json), content_hash=VALUES(content_hash)`
   });
+  await syncTaskIncrementalTables(connection, state, saveId, domains);
+  if (domains.has(persistenceDomains.cultivators)) {
+    const people = [state.player, ...(state.npcs || [])];
+    const ratings = new Map(buildCombatRatings(state).entries.map((item) => [item.id, item]));
+    const combatRows = [...ratings.values()].sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
+    for (const entity of people) {
+      await syncCultivatorPearls(connection, saveId, entity);
+      const rating = ratings.get(entity.id) || {};
+      await upsertCultivatorMetrics(connection, { saveId, cultivatorId: entity.id, currentPower: powerOf(entity, state), currentCombatRating: rating.score || 500, combatScore: rating.score || 500, duelScore: Number(entity.duelSeason?.score || 0), duelWins: entity.duelWins, duelLosses: entity.duelLosses, dungeonClears: entity.dungeonClears, bestDungeonPower: entity.bestDungeonPower });
+    }
+    const powerRows = people.map((entity) => ({ id: entity.id, value: powerOf(entity, state) })).sort((a, b) => b.value - a.value || a.id.localeCompare(b.id));
+    const duelRows = people.map((entity) => ({ id: entity.id, value: Number(entity.duelSeason?.score || 0) })).sort((a, b) => b.value - a.value || a.id.localeCompare(b.id));
+    for (const entity of people) {
+      const rating = ratings.get(entity.id) || {};
+      const text = JSON.stringify({ day: state.day, power: powerRows.find((row) => row.id === entity.id)?.value || 0 });
+      await connection.query(`INSERT INTO cultivator_rank_snapshots_v2(save_id,cultivator_id,day_no,power,power_rank,duel_score,duel_rank,combat_score,combat_rank,snapshot_json,content_hash)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE power=VALUES(power),power_rank=VALUES(power_rank),duel_score=VALUES(duel_score),duel_rank=VALUES(duel_rank),combat_score=VALUES(combat_score),combat_rank=VALUES(combat_rank),snapshot_json=VALUES(snapshot_json),content_hash=VALUES(content_hash)`,
+      [saveId, entity.id, state.day, powerRows.find((row) => row.id === entity.id)?.value || 0, powerRows.findIndex((row) => row.id === entity.id) + 1, duelRows.find((row) => row.id === entity.id)?.value || 0, duelRows.findIndex((row) => row.id === entity.id) + 1, rating.score || 500, combatRows.findIndex((row) => row.id === entity.id) + 1, text, contentHash(text)]);
+    }
+  }
   return revision;
 }
 
@@ -228,6 +328,29 @@ export async function loadStateFromMysql(saveId) {
     loaded[key] = rows;
   }));
   const state = decodeState(loaded);
+  const [taskDefinitions, taskProgress, taskSnapshots, taskCompletions, dailyRecords, logs] = await Promise.all([
+    mysqlPool.query("SELECT definition_json FROM task_definitions_v2 WHERE save_id = ? ORDER BY updated_at, task_id", [saveId]),
+    mysqlPool.query("SELECT day_no, task_id, completed_amount, awarded_multiplier FROM task_progress_v2 WHERE save_id = ?", [saveId]),
+    mysqlPool.query("SELECT snapshot_json FROM task_multiplier_snapshots_v2 WHERE save_id = ? ORDER BY day_no DESC", [saveId]),
+    mysqlPool.query("SELECT completion_json FROM task_completions_v2 WHERE save_id = ? ORDER BY created_at DESC, completion_id DESC", [saveId]),
+    mysqlPool.query("SELECT record_json FROM task_daily_records_v2 WHERE save_id = ? AND cultivator_id = 'player' ORDER BY day_no DESC", [saveId]),
+    mysqlPool.query("SELECT log_json FROM game_logs_v2 WHERE save_id = ? ORDER BY created_at DESC, log_id DESC LIMIT 80", [saveId])
+  ]);
+  if (taskDefinitions[0].length) state.taskDefinitions = taskDefinitions[0].map((row) => parseMysqlJson(row.definition_json, {}));
+  if (taskProgress[0].length) {
+    state.taskProgress = {};
+    for (const row of taskProgress[0]) {
+      state.taskProgress[row.day_no] ??= {};
+      state.taskProgress[row.day_no][row.task_id] = { amount: Number(row.completed_amount), awardedMultiplier: Number(row.awarded_multiplier) };
+    }
+  }
+  if (taskSnapshots[0].length) state.taskMultiplierRecords = taskSnapshots[0].map((row) => parseMysqlJson(row.snapshot_json, {}));
+  if (taskCompletions[0].length) {
+    state.taskCompletions = taskCompletions[0].map((row) => parseMysqlJson(row.completion_json, {}));
+    state.tasks = state.taskCompletions.slice(0, 16);
+  }
+  if (dailyRecords[0].length) state.player.dailyRecords = dailyRecords[0].map((row) => parseMysqlJson(row.record_json, {}));
+  if (logs[0].length) state.log = logs[0].map((row) => parseMysqlJson(row.log_json, {}));
   state.__stateRevision = Number(saveRows[0].state_revision || 0);
   return state;
 }

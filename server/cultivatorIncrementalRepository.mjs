@@ -1,0 +1,72 @@
+import { createHash } from "node:crypto";
+import { mysqlPool, parseMysqlJson, withMysqlTransaction } from "./mysqlDb.mjs";
+import { spiritPearls } from "./gameData.mjs";
+import { getPublicSpiritPearls } from "./gameLogic.mjs";
+
+const json = (value) => JSON.stringify(value === undefined ? null : value);
+const hash = (value) => createHash("sha256").update(typeof value === "string" ? value : json(value)).digest("hex");
+
+export async function readCultivatorDetailIncremental(saveId, cultivatorId, options = {}) {
+  const connection = options.connection || mysqlPool;
+  const [rows] = await connection.query(`SELECT c.*, m.current_power AS metric_power, m.current_combat_rating AS metric_rating,
+    m.combat_score, m.duel_score, m.duel_wins AS metric_duel_wins, m.duel_losses AS metric_duel_losses,
+    m.power_rank, m.combat_rank, m.metrics_revision
+    FROM cultivators c LEFT JOIN cultivator_metrics_v2 m ON m.save_id=c.save_id AND m.cultivator_id=c.cultivator_id
+    WHERE c.save_id=? AND c.cultivator_id=? LIMIT 1`, [saveId, cultivatorId]);
+  if (!rows.length) return null;
+  const row = rows[0];
+  const [assets] = await connection.query(`SELECT * FROM spirit_pearl_assets_v2 WHERE save_id=? AND cultivator_id=? LIMIT 1`, [saveId, cultivatorId]);
+  const [pearls] = await connection.query(`SELECT * FROM spirit_pearls_v2 WHERE save_id=? AND cultivator_id=? ORDER BY pearl_id`, [saveId, cultivatorId]);
+  const [fragments] = await connection.query(`SELECT * FROM spirit_pearl_fragments_v2 WHERE save_id=? AND cultivator_id=? ORDER BY pearl_id,tier`, [saveId, cultivatorId]);
+  const [pearlHistory] = await connection.query(`SELECT history_json FROM spirit_pearl_history_v2 WHERE save_id=? AND cultivator_id=? ORDER BY day_no DESC,position_no LIMIT ?`, [saveId, cultivatorId, Number(options.historyLimit || 30)]);
+  const [rankSnapshots] = await connection.query(`SELECT * FROM cultivator_rank_snapshots_v2 WHERE save_id=? AND cultivator_id=? ORDER BY day_no DESC LIMIT 10`, [saveId, cultivatorId]);
+  const [equipment] = await connection.query(`SELECT item_json FROM equipment_items WHERE save_id=? AND owner_id=? ORDER BY position_no`, [saveId, cultivatorId]);
+  const [history] = await connection.query(`SELECT history_type,position_no,record_json FROM cultivator_history WHERE save_id=? AND cultivator_id=? ORDER BY history_type,position_no LIMIT 1200`, [saveId, cultivatorId]);
+  const entity = parseMysqlJson(row.cultivator_json, {}) || {};
+  const histories = new Map();
+  for (const item of history) { const list = histories.get(item.history_type) || []; list.push({ position: Number(item.position_no), value: parseMysqlJson(item.record_json, {}) }); histories.set(item.history_type, list); }
+  for (const [type, values] of histories) entity[type] = values.sort((a, b) => a.position - b.position).map((item) => item.value);
+  Object.assign(entity, { id: entity.id || row.cultivator_id, name: row.name || entity.name, realm: Number(row.realm_no), xp: Number(row.xp), hp: Number(row.hp), maxHp: Number(row.max_hp), mana: Number(row.mana), maxMana: Number(row.max_mana), sect: row.sect_name || entity.sect, spirit: Number(row.spirit), reputation: Number(row.reputation), body: Number(row.body), wisdom: Number(row.wisdom), attack: Number(row.attack), defense: Number(row.defense), divineSense: Number(row.divine_sense), chance: Number(row.chance), wealth: Number(row.wealth), heartDemon: Number(row.heart_demon) });
+  const asset = assets[0] || { version: 3, dust: 0 };
+  const pearlMap = new Map(pearls.map((item) => [item.pearl_id, { id: item.pearl_id, tier: Number(item.tier), star: Number(item.star), fragments: {} }]));
+  for (const item of fragments) pearlMap.get(item.pearl_id)?.fragments && (pearlMap.get(item.pearl_id).fragments[String(item.tier)] = Number(item.fragment_count));
+  entity.spiritPearls = { version: Number(asset.version || 3), dust: Number(asset.dust || 0), pearls: Object.fromEntries([...pearlMap.entries()]), history: pearlHistory.map((item) => parseMysqlJson(item.history_json, {})) };
+  const publicPearls = getPublicSpiritPearls({ day: 1, player: entity, spiritPearls: entity.spiritPearls, equipment: [], npcs: [] }, entity);
+  const [[powerRank]] = await connection.query(`SELECT COUNT(*)+1 rank_no FROM cultivator_metrics_v2 WHERE save_id=? AND (current_power > ? OR (current_power=? AND cultivator_id < ?))`, [saveId, Number(row.metric_power || row.current_power || 0), Number(row.metric_power || row.current_power || 0), cultivatorId]);
+  const [[combatRank]] = await connection.query(`SELECT COUNT(*)+1 rank_no FROM cultivator_metrics_v2 WHERE save_id=? AND (current_combat_rating > ? OR (current_combat_rating=? AND cultivator_id < ?))`, [saveId, Number(row.metric_rating || row.current_combat_rating || 500), Number(row.metric_rating || row.current_combat_rating || 500), cultivatorId]);
+  return {
+    person: entity,
+    power: Number(row.metric_power || row.current_power || 0),
+    metrics: { currentPower: Number(row.metric_power || row.current_power || 0), currentCombatRating: Number(row.metric_rating || row.current_combat_rating || 500), combatScore: Number(row.combat_score || 500), duelScore: Number(row.duel_score || 0), powerRank: Number(powerRank.rank_no || row.power_rank || 0), combatRank: Number(combatRank.rank_no || row.combat_rank || 0), revision: Number(row.metrics_revision || 0) },
+    spiritPearls: { ...publicPearls, history: pearlHistory.map((item) => parseMysqlJson(item.history_json, {})) },
+    equippedItems: equipment.map((item) => parseMysqlJson(item.item_json, {})),
+    rankingTrends: { power: rankSnapshots.map((item) => ({ day: Number(item.day_no), rank: Number(item.power_rank), value: Number(item.power) })).reverse(), duel: rankSnapshots.map((item) => ({ day: Number(item.day_no), rank: Number(item.duel_rank), value: Number(item.duel_score) })).reverse() },
+    combatRating: rankSnapshots.length ? { id: cultivatorId, score: Number(row.metric_rating || 500), daily: rankSnapshots.map((item) => ({ day: Number(item.day_no), score: Number(item.combat_score), rank: Number(item.combat_rank) })).reverse() } : null,
+    independent: true
+  };
+}
+
+export async function upsertCultivatorMetrics(connection, options) {
+  await connection.query(`INSERT INTO cultivator_metrics_v2
+    (save_id,cultivator_id,current_power,current_combat_rating,combat_score,duel_score,duel_wins,duel_losses,dungeon_clears,best_dungeon_power,power_rank,combat_rank,metrics_revision)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1) ON DUPLICATE KEY UPDATE current_power=VALUES(current_power),current_combat_rating=VALUES(current_combat_rating),combat_score=VALUES(combat_score),duel_score=VALUES(duel_score),duel_wins=VALUES(duel_wins),duel_losses=VALUES(duel_losses),dungeon_clears=VALUES(dungeon_clears),best_dungeon_power=VALUES(best_dungeon_power),power_rank=VALUES(power_rank),combat_rank=VALUES(combat_rank),metrics_revision=metrics_revision+1`,
+  [options.saveId, options.cultivatorId, options.currentPower || 0, options.currentCombatRating || 500, options.combatScore || 500, options.duelScore || 0, options.duelWins || 0, options.duelLosses || 0, options.dungeonClears || 0, options.bestDungeonPower || 0, options.powerRank || null, options.combatRank || null]);
+}
+
+export async function syncCultivatorPearls(connection, saveId, entity) {
+  const asset = entity?.spiritPearls || { version: 3, dust: 0, pearls: {}, history: [] };
+  const entries = Object.values(asset.pearls || {});
+  await connection.query(`INSERT INTO spirit_pearl_assets_v2(save_id,cultivator_id,version,dust,formed_count,content_hash) VALUES(?,?,?,?,?,?) ON DUPLICATE KEY UPDATE version=VALUES(version),dust=VALUES(dust),formed_count=VALUES(formed_count),content_hash=VALUES(content_hash)`, [saveId, entity.id, Number(asset.version || 3), Number(asset.dust || 0), entries.filter((item) => Number(item.tier) > 0).length, hash(asset)]);
+  for (const item of entries) {
+    await connection.query(`INSERT INTO spirit_pearls_v2(save_id,cultivator_id,pearl_id,tier,star,content_hash) VALUES(?,?,?,?,?,?) ON DUPLICATE KEY UPDATE tier=VALUES(tier),star=VALUES(star),content_hash=VALUES(content_hash)`, [saveId, entity.id, item.id, Number(item.tier || 0), Number(item.star || 0), hash(item)]);
+    for (const [tier, count] of Object.entries(item.fragments || {})) if (Number(count) > 0) await connection.query(`INSERT INTO spirit_pearl_fragments_v2(save_id,cultivator_id,pearl_id,tier,fragment_count,content_hash) VALUES(?,?,?,?,?,?) ON DUPLICATE KEY UPDATE fragment_count=VALUES(fragment_count),content_hash=VALUES(content_hash)`, [saveId, entity.id, item.id, Number(tier), Number(count), hash({ tier, count })]);
+  }
+  const incomingPearls = new Set(entries.map((item) => String(item.id)));
+  const [oldPearls] = await connection.query("SELECT pearl_id FROM spirit_pearls_v2 WHERE save_id=? AND cultivator_id=?", [saveId, entity.id]);
+  for (const row of oldPearls) if (!incomingPearls.has(String(row.pearl_id))) await connection.query("DELETE FROM spirit_pearls_v2 WHERE save_id=? AND cultivator_id=? AND pearl_id=?", [saveId, entity.id, row.pearl_id]);
+  await connection.query("DELETE FROM spirit_pearl_fragments_v2 WHERE save_id=? AND cultivator_id=?", [saveId, entity.id]);
+  for (const item of entries) for (const [tier, count] of Object.entries(item.fragments || {})) if (Number(count) > 0) await connection.query(`INSERT INTO spirit_pearl_fragments_v2(save_id,cultivator_id,pearl_id,tier,fragment_count,content_hash) VALUES(?,?,?,?,?,?) ON DUPLICATE KEY UPDATE fragment_count=VALUES(fragment_count),content_hash=VALUES(content_hash)`, [saveId, entity.id, item.id, Number(tier), Number(count), hash({ tier, count })]);
+  for (const [position, record] of (asset.history || []).entries()) { const text = json(record); const id = String(record.id || `legacy-pearl-${record.day || 0}-${position}-${hash(text).slice(0, 12)}`); await connection.query(`INSERT INTO spirit_pearl_history_v2(save_id,cultivator_id,history_id,day_no,position_no,history_type,pearl_id,history_json,content_hash) VALUES(?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE history_json=VALUES(history_json),content_hash=VALUES(content_hash)`, [saveId, entity.id, id, Number(record.day || 0), position, record.type || "", record.pearlId || "", text, hash(text)]); }
+}
+
+export const withCultivatorTransaction = withMysqlTransaction;
