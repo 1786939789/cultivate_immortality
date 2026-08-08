@@ -1,4 +1,4 @@
-import { advanceDaoTrial, attemptBreakthrough, buildCombatRatings, buyItem, changePlayerPortrait, powerOf, resolveEncounter, rest, runDungeon, sectMission, sectWar, sellItem, startDaoTrial, updateEncounterFocus, updatePlayerSectPlan, updatePlayerSectPlanIncremental, upgradePlayerSkill, useItem, abandonDaoTrial } from "./gameLogic.mjs";
+import { advanceDaoTrial, attemptBreakthrough, buildCombatRatings, buyItem, changePlayerPortrait, getPublicState, powerOf, resolveEncounter, rest, runDungeon, sectMission, sectWar, sellItem, startDaoTrial, updateEncounterFocus, updatePlayerSectPlan, updatePlayerSectPlanIncremental, upgradePlayerSkill, useItem, abandonDaoTrial } from "./gameLogic.mjs";
 import { parseMysqlJson } from "./mysqlDb.mjs";
 import { readActionInputs, withActionTransaction, writeActionIncremental } from "./actionIncrementalRepository.mjs";
 
@@ -77,6 +77,7 @@ export async function runPlayerActionIncremental(saveId, action, payload = {}) {
     const rating = buildCombatRatings(state).entries.find((item) => item.id === state.player.id);
     state.__currentCombatRating = Number(rating?.score || inputs.player.current_combat_rating || 500);
     const revision = await writeActionIncremental(connection, { saveId, inputs, state, changedSections, logEntry, expectedRevision: n(inputs.save.state_revision) });
-    return { kind: `action.${action}`, stateRevision: revision, result, patch: { player: state.player, bag: state.bag, shop: state.shop, sect: state.sect, playerSectPlan: state.playerSectPlan, encounters: state.encounters, relationships: state.relationships, provinces: state.provinces, daoTrial: state.daoTrial, log: logEntry ? [logEntry] : [], stateRevision: revision } };
+    const publicDaoTrial = action.startsWith("dao") ? getPublicState(state, { scope: "dao-trial" }).daoTrial : state.daoTrial;
+    return { kind: `action.${action}`, stateRevision: revision, result, patch: { player: state.player, bag: state.bag, shop: state.shop, sect: state.sect, playerSectPlan: state.playerSectPlan, encounters: state.encounters, relationships: state.relationships, provinces: state.provinces, daoTrial: publicDaoTrial, log: logEntry ? [logEntry] : [], stateRevision: revision } };
   });
 }
