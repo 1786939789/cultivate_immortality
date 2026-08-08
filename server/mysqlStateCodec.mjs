@@ -327,7 +327,7 @@ function decodeCultivators(cultivatorRows, historyRows, portraitRows) {
   return { player: player || {}, npcs: npcs.sort((a, b) => a.position - b.position).map((item) => item.entity) };
 }
 
-function decodeDungeons(dayRows, recordRows) {
+export function decodeDungeons(dayRows, recordRows) {
   const recordsByDay = new Map();
   for (const row of recordRows) {
     const day = Number(row.day_no);
@@ -351,6 +351,11 @@ function decodeDungeons(dayRows, recordRows) {
       public: values("public")[0] || null
     };
   });
+}
+
+export function decodeDungeonDay(dayRow, recordRows = []) {
+  if (!dayRow) return null;
+  return decodeDungeons([dayRow], recordRows)[0] || null;
 }
 
 function decodeAdminProfiles(rows, portraitRows) {

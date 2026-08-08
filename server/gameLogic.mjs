@@ -12367,6 +12367,11 @@ export function dailySettlement(state, options = {}) {
   log(state, pick(events), "gold");
 }
 
+export function publicDungeonDay(record, currentDay = 1, people = null) {
+  if (!record) return null;
+  return publicDungeonDays([record], currentDay, people)[0] || null;
+}
+
 export function addTask(state, payload) {
   ensureTaskSystem(state);
   const taskId = payload.taskId || payload.id;

@@ -116,6 +116,15 @@ export function getBattleReplay(replayId) {
   return request(`/api/battles/replay?${params.toString()}`);
 }
 
+export function getDungeonDays() {
+  return request(`/api/dungeons/days?_=${Date.now()}`);
+}
+
+export function getDungeonDay(day) {
+  const params = new URLSearchParams({ day: String(day), _: String(Date.now()) });
+  return request(`/api/dungeons/day?${params.toString()}`);
+}
+
 export function getDaoTrialHistory(options = {}) {
   const params = new URLSearchParams({ _: String(Date.now()) });
   for (const [key, value] of Object.entries(options)) {

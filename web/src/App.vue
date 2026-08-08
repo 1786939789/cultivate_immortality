@@ -1148,6 +1148,7 @@
               {{ tab.label }}
             </button>
           </div>
+          <div v-if="dungeonDayLoading && !selectedDungeonDay" class="empty">正在翻阅当日副本战报...</div>
           <div v-if="activeDungeonRecordTab !== 'trial'" class="dungeon-loot-toggle">
             <button class="secondary" type="button" @click="showDungeonLoot = !showDungeonLoot">
               {{ showDungeonLoot ? "收起装备池" : "展开装备池" }}
@@ -5096,7 +5097,7 @@ import {
   Minimize2
 } from "lucide-vue-next";
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from "vue";
-import { clearCachedState, getAdminAccounts, getBattleReplay, getCachedState, getCultivatorDetail, getLiveRanking, getCurrentUser, getDaoTrialHistory, getDuelDayPage, getDuelReplay, getState, login, logout, postAction, register, saveCachedState, setAdminActiveAccount, setAdminManagedAccount } from "./api";
+import { clearCachedState, getAdminAccounts, getBattleReplay, getCachedState, getCultivatorDetail, getDungeonDay, getDungeonDays, getLiveRanking, getCurrentUser, getDaoTrialHistory, getDuelDayPage, getDuelReplay, getState, login, logout, postAction, register, saveCachedState, setAdminActiveAccount, setAdminManagedAccount } from "./api";
 import CharacterPortrait from "./components/CharacterPortrait.vue";
 import EquipmentIcon from "./components/EquipmentIcon.vue";
 import Meter from "./components/Meter.vue";
@@ -5305,7 +5306,13 @@ const equipmentSlotFilter = ref("");
 const equipmentOwnedFilter = ref("");
 const equipmentSortMode = ref("tier");
 const equipmentSortDirection = ref("desc");
-const dungeonDayIndexes = reactive({ blood: 0, void: 0, sea: 0 });
+const dungeonDayIndexes = reactive({ blood: 0, void: 0, sea: 0, trial: 0 });
+const dungeonDayCache = reactive({});
+const dungeonDayRequests = new Map();
+const dungeonDayIndexItems = ref([]);
+const dungeonDayLoading = ref(false);
+let dungeonDayIndexRequest = null;
+let dungeonDayRequestSerial = 0;
 const activeDungeonRecordTab = ref("blood");
 const selectedEncounterId = ref("");
 const selectedDaoTrialRouteId = ref("golden-pass");
@@ -6902,12 +6909,20 @@ const dungeonMonsterStages = monsterStageNames.map((stageName, stage) => ({
   name: stageName,
   monsters: monsterImageEntries.filter((monster) => monster.stage === stage)
 }));
-const dungeonDays = computed(() => gameState.value.dungeonDays || []);
+const dungeonDays = computed(() => Object.values(dungeonDayCache)
+  .filter((item) => item?.record)
+  .map((item) => item.record)
+  .sort((a, b) => Number(b.day || 0) - Number(a.day || 0)));
+const dungeonAvailableDays = computed(() => [...dungeonDayIndexItems.value]
+  .sort((a, b) => Number(b.day || 0) - Number(a.day || 0)));
 const battleArchives = computed(() => gameState.value.battleArchives?.summaries || []);
 const latestBattleArchive = computed(() => battleArchives.value[0] || null);
 const activeDungeonDayIndex = computed(() => dungeonDayIndexes[activeDungeonRecordTab.value] || 0);
-const selectedDungeonDay = computed(() => dungeonDays.value[activeDungeonDayIndex.value] || null);
-const canShowPreviousDungeonDay = computed(() => activeDungeonDayIndex.value < dungeonDays.value.length - 1);
+const selectedDungeonDay = computed(() => {
+  const indexItem = dungeonAvailableDays.value[activeDungeonDayIndex.value];
+  return indexItem ? (dungeonDayCache[String(indexItem.day)]?.record || null) : null;
+});
+const canShowPreviousDungeonDay = computed(() => activeDungeonDayIndex.value < dungeonAvailableDays.value.length - 1);
 const canShowNextDungeonDay = computed(() => activeDungeonDayIndex.value > 0);
 const dungeonDateMin = computed(() => dateForDay(recentBattleDayFloor()));
 const dungeonDateMax = computed(() => currentDate.value);
@@ -6915,13 +6930,9 @@ const selectedDungeonCalendarDate = computed({
   get() {
     return selectedDungeonDay.value?.date || dateForDay(selectedDungeonDay.value?.day || gameState.value.day);
   },
-  set(value) {
+  async set(value) {
     const day = clampRecentBattleDay(dayForDate(value));
-    const index = dungeonDays.value.findIndex((record) => Number(record.day) === Number(day));
-    if (index >= 0) {
-      dungeonDayIndexes[activeDungeonRecordTab.value] = index;
-      closeBattleReplay();
-    }
+    await selectDungeonDay(day);
   }
 });
 const bloodTrialClearCount = computed(() => (selectedDungeonDay.value?.bloodTrial?.caves || []).reduce((sum, cave) => sum + bloodCaveClearCount(cave), 0));
@@ -7014,6 +7025,53 @@ async function rerollDaoTrialSeals() {
 
 async function useDaoTrialCompanionSupport() {
   await act("/api/dao-trial/advance", { action: "companion" }, { scope: "dao-trial" });
+}
+
+async function loadDungeonDayIndex() {
+  if (dungeonDayIndexRequest) return dungeonDayIndexRequest;
+  dungeonDayIndexRequest = (async () => {
+    try {
+      const result = await getDungeonDays();
+      dungeonDayIndexItems.value = Array.isArray(result?.items) ? result.items : [];
+      const currentDay = Number(result?.currentDay || gameState.value.day || 1);
+      if (!dungeonDayIndexItems.value.some((item) => Number(item.day) === currentDay)) {
+        dungeonDayIndexItems.value.unshift({ day: currentDay, date: dateForDay(currentDay), hasRecord: false });
+      }
+    } catch (err) {
+      error.value = err.message;
+    } finally {
+      dungeonDayIndexRequest = null;
+    }
+  })();
+  return dungeonDayIndexRequest;
+}
+
+async function ensureDungeonDay(day = gameState.value.day) {
+  const targetDay = clampRecentBattleDay(day);
+  const key = String(targetDay);
+  if (dungeonDayCache[key]) return dungeonDayCache[key];
+  if (dungeonDayRequests.has(key)) return dungeonDayRequests.get(key);
+  const serial = ++dungeonDayRequestSerial;
+  dungeonDayLoading.value = true;
+  const request = getDungeonDay(targetDay).then((result) => {
+    if (serial <= dungeonDayRequestSerial && result) dungeonDayCache[key] = result;
+    return result;
+  }).finally(() => {
+    dungeonDayRequests.delete(key);
+    if (!dungeonDayRequests.size) dungeonDayLoading.value = false;
+  });
+  dungeonDayRequests.set(key, request);
+  return request;
+}
+
+async function selectDungeonDay(day) {
+  const targetDay = clampRecentBattleDay(day);
+  await ensureDungeonDay(targetDay);
+  const index = dungeonAvailableDays.value.findIndex((item) => Number(item.day) === targetDay);
+  if (index < 0) dungeonDayIndexItems.value.push({ day: targetDay, date: dateForDay(targetDay), hasRecord: Boolean(dungeonDayCache[String(targetDay)]?.record) });
+  const resolvedIndex = dungeonAvailableDays.value.findIndex((item) => Number(item.day) === targetDay);
+  if (resolvedIndex >= 0) dungeonDayIndexes[activeDungeonRecordTab.value] = resolvedIndex;
+  closeBattleReplay();
 }
 
 async function useDaoTrialLifeHeal() {
@@ -8424,12 +8482,14 @@ function skillVisualStyle(skill) {
   return image ? { "--skill-image": `url(${image})` } : {};
 }
 
-function showPreviousDungeonDay() {
-  dungeonDayIndexes[activeDungeonRecordTab.value] = Math.min(dungeonDays.value.length - 1, activeDungeonDayIndex.value + 1);
+async function showPreviousDungeonDay() {
+  const nextItem = dungeonAvailableDays.value[activeDungeonDayIndex.value + 1];
+  if (nextItem) await selectDungeonDay(nextItem.day);
 }
 
-function showNextDungeonDay() {
-  dungeonDayIndexes[activeDungeonRecordTab.value] = Math.max(0, activeDungeonDayIndex.value - 1);
+async function showNextDungeonDay() {
+  const nextItem = dungeonAvailableDays.value[Math.max(0, activeDungeonDayIndex.value - 1)];
+  if (nextItem) await selectDungeonDay(nextItem.day);
 }
 
 function dungeonLootPool(id) {
@@ -11621,7 +11681,9 @@ function switchTab(tabId) {
   }
   activeTab.value = tabId;
   resetTabHome(tabId);
-  if (needsHeavyState(tabId) && state.value && (fullStateStale.value || !hasFullCultivatorRoster())) ensureFullState();
+  if (tabId === "dungeon") {
+    void loadDungeonDayIndex().then(() => ensureDungeonDay(gameState.value.day));
+  } else if (needsHeavyState(tabId) && state.value && (fullStateStale.value || !hasFullCultivatorRoster())) ensureFullState();
   if (tabId === "practice" && state.value) refresh("home");
 }
 
@@ -12998,6 +13060,10 @@ function resetClientStateForAuth() {
   detailView.value = "rank";
   activeTab.value = "practice";
   fullStateStale.value = false;
+  for (const key of Object.keys(dungeonDayCache)) delete dungeonDayCache[key];
+  dungeonDayRequests.clear();
+  dungeonDayIndexRequest = null;
+  dungeonDayIndexItems.value = [];
 }
 
 async function loadGameAfterAuth(user) {
@@ -13123,6 +13189,11 @@ async function act(path, body = {}, options = {}) {
     const requestBody = authUser.value?.isAdmin ? { ...body, saveId: adminSelectedAccountId.value } : body;
     const response = await postAction(path, requestBody, options);
     if (generation !== authGeneration) return null;
+    if (["/api/day/advance", "/api/dungeons/run", "/api/reset"].includes(path)) {
+      for (const key of Object.keys(dungeonDayCache)) delete dungeonDayCache[key];
+      dungeonDayIndexItems.value = [];
+      dungeonDayIndexRequest = null;
+    }
     if (response?.kind === "task.completed" && response.patch) {
       applyTaskPatch(response.patch, response.stateRevision);
       error.value = "";
@@ -13746,7 +13817,9 @@ watch([state, activeTab, activeSectSubTab], () => {
 }, { immediate: true });
 
 watch(activeTab, () => {
-  if (needsHeavyState(activeTab.value) && state.value && (fullStateStale.value || !hasFullCultivatorRoster())) {
+  if (activeTab.value === "dungeon") {
+    void loadDungeonDayIndex().then(() => ensureDungeonDay(gameState.value.day));
+  } else if (needsHeavyState(activeTab.value) && state.value && (fullStateStale.value || !hasFullCultivatorRoster())) {
     ensureFullState();
   } else if (needsLiteState(activeTab.value) && state.value && fullStateStale.value) {
     refresh("lite");
@@ -13900,8 +13973,8 @@ watch(rankPage, () => {
   rankPageInput.value = String(rankPage.value);
 });
 
-watch(dungeonDays, () => {
-  const maxIndex = Math.max(0, dungeonDays.value.length - 1);
+watch(dungeonAvailableDays, () => {
+  const maxIndex = Math.max(0, dungeonAvailableDays.value.length - 1);
   for (const tab of dungeonRecordTabs) {
     if (dungeonDayIndexes[tab.id] > maxIndex) dungeonDayIndexes[tab.id] = maxIndex;
   }

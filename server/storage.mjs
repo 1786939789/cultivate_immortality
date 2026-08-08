@@ -30,5 +30,7 @@ export const readLiveRanking = storage.readLiveRanking;
 export const runPlayerActionIncrementally = storage.runPlayerActionIncrementally;
 export const runSettlementBatch = storage.runSettlementBatch;
 export const runDailyDuelBatch = storage.runDailyDuelBatch;
+export const readDungeonDayFromMysql = storage.readDungeonDayFromMysql;
+export const readDungeonDayIndexFromMysql = storage.readDungeonDayIndexFromMysql;
 export const resetState = storage.resetState;
 export const publicState = storage.publicState;

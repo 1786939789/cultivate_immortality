@@ -3,6 +3,7 @@ import { clearProgressHistory, compactStateForStorage, createDefaultState, daily
 import { hashAuthAttemptKey, hashPassword, hashRegistrationCode, verifyPassword } from "./authSecurity.mjs";
 import { ensureMysqlSchema, mysqlPool, parseMysqlJson, withMysqlTransaction } from "./mysqlDb.mjs";
 import { loadBatchStateFromMysql, loadStateFromMysql, pruneBattleReplays, readReplayFromMysql, saveStateWithConnection, upsertBattleReplays } from "./mysqlStateRepository.mjs";
+import { readDungeonDayFromMysql, readDungeonDayIndexFromMysql } from "./dungeonIncrementalRepository.mjs";
 import { changedPersistenceDomains, trackPersistenceDomains } from "./persistenceDomains.mjs";
 import { cancelPendingJobs, enqueueBackgroundJob } from "./mysqlBackgroundJobs.mjs";
 import { readTaskInputs, writeTaskIncremental, withTaskIncrementalTransaction } from "./taskIncrementalRepository.mjs";
@@ -719,3 +720,5 @@ export async function publicState(id = "default", options = {}) {
   publicStateCache.set(id, { ...(cached?.date === dateKey() ? cached : {}), date: dateKey(), [scope]: nextState });
   return nextState;
 }
+
+export { readDungeonDayFromMysql, readDungeonDayIndexFromMysql };

@@ -19,6 +19,7 @@ import {
   getDaoTrialHistoryPage,
   getCultivatorPortrait,
   getPublicCultivatorDetail,
+  publicDungeonDay,
   getPublicReplay,
   assertReplayDayAllowed,
   replayDayFromId,
@@ -52,6 +53,8 @@ import {
   deleteTaskIncrementally,
   readCultivatorDetailIncrementally,
   readLiveRanking,
+  readDungeonDayFromMysql,
+  readDungeonDayIndexFromMysql,
   runPlayerActionIncrementally,
   runSettlementBatch,
   runDailyDuelBatch,
@@ -313,6 +316,43 @@ async function handleApi(req, res, url) {
     }
     const state = await readState(saveId);
     sendJson(res, 200, getPublicCultivatorDetail(state, id));
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/dungeons/days") {
+    if (!usesMysqlBackgroundJobs) {
+      const state = await readState(saveId);
+      sendJson(res, 200, {
+        currentDay: Number(state.day || 1),
+        items: (state.dungeonDays || []).slice(0, 10).map((item) => ({ day: Number(item.day), date: item.date || "", hasRecord: true })),
+        stateRevision: Number(state.__stateRevision || 0)
+      });
+      return;
+    }
+    const result = await readDungeonDayIndexFromMysql(saveId, 10);
+    if (!result) throw new Error("存档不存在");
+    sendJson(res, 200, result);
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/dungeons/day") {
+    const requestedDay = Math.max(1, Number(url.searchParams.get("day")) || 1);
+    if (!usesMysqlBackgroundJobs) {
+      const state = await readState(saveId);
+      const record = (state.dungeonDays || []).find((item) => Number(item.day) === requestedDay) || null;
+      sendJson(res, 200, { kind: "dungeon.day", day: requestedDay, date: record?.date || "", currentDay: Number(state.day || 1), record: publicDungeonDay(record, state.day, new Map()), stateRevision: Number(state.__stateRevision || 0) });
+      return;
+    }
+    const result = await readDungeonDayFromMysql(saveId, requestedDay);
+    if (!result) throw new Error("存档不存在");
+    sendJson(res, 200, {
+      kind: "dungeon.day",
+      day: result.day,
+      date: result.date,
+      currentDay: result.currentDay,
+      record: publicDungeonDay(result.record, result.currentDay, new Map(Object.entries(result.portraits || {}))),
+      stateRevision: result.stateRevision
+    });
     return;
   }
 
