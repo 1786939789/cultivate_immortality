@@ -49,7 +49,12 @@ async function runDailySettlementJob(job) {
 }
 
 export async function runBackgroundWorkerOnce() {
-  const job = await claimBackgroundJob(workerId);
+  // Daily settlement may process a large NPC roster and persist many typed
+  // rows. A 30-second lease can expire while the transaction is still valid,
+  // causing a false "cancelled" result at commit time. Keep the lease long
+  // enough for the batch and let the database lock/optimistic revision guard
+  // provide correctness.
+  const job = await claimBackgroundJob(workerId, Math.max(30_000, Number(process.env.BACKGROUND_JOB_LEASE_MS || 10 * 60_000)));
   if (!job) return null;
   try {
     if (job.job_type === dailySettlementJob) return await runDailySettlementJob(job);
@@ -59,7 +64,14 @@ export async function runBackgroundWorkerOnce() {
       await releaseBackgroundJobWithoutPenalty(job.id, workerId, 50);
       return { released: true, conflict: true };
     }
-    if (error?.code === "BACKGROUND_JOB_LEASE_LOST") return { cancelled: true };
+    if (error?.code === "BACKGROUND_JOB_LEASE_LOST") {
+      // Another worker may have committed the same revision and completed the
+      // job just before this worker reached its lease check. Treat that case
+      // as successful instead of reporting a false cancellation.
+      const settled = await readState(job.save_id, { skipSettlementEnqueue: true });
+      if (settled?.lastSettlementDate >= job.target_key) return { completed: true, recovered: true };
+      return { cancelled: true };
+    }
     await failBackgroundJob(job, workerId, error);
     return { failed: true, error: error.message || String(error) };
   }

@@ -69,4 +69,13 @@ export async function syncCultivatorPearls(connection, saveId, entity) {
   for (const [position, record] of (asset.history || []).entries()) { const text = json(record); const id = String(record.id || `legacy-pearl-${record.day || 0}-${position}-${hash(text).slice(0, 12)}`); await connection.query(`INSERT INTO spirit_pearl_history_v2(save_id,cultivator_id,history_id,day_no,position_no,history_type,pearl_id,history_json,content_hash) VALUES(?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE history_json=VALUES(history_json),content_hash=VALUES(content_hash)`, [saveId, entity.id, id, Number(record.day || 0), position, record.type || "", record.pearlId || "", text, hash(text)]); }
 }
 
+export async function syncCultivatorPearlsIfChanged(connection, saveId, entity) {
+  const asset = entity?.spiritPearls || { version: 3, dust: 0, pearls: {}, history: [] };
+  const expectedHash = hash(asset);
+  const [[row]] = await connection.query("SELECT content_hash FROM spirit_pearl_assets_v2 WHERE save_id=? AND cultivator_id=? LIMIT 1", [saveId, entity.id]);
+  if (row?.content_hash === expectedHash) return false;
+  await syncCultivatorPearls(connection, saveId, entity);
+  return true;
+}
+
 export const withCultivatorTransaction = withMysqlTransaction;

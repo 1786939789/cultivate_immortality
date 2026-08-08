@@ -6,7 +6,7 @@ import { upsertBattleReplays } from "./mysqlStateRepository.mjs";
 const json = (value) => JSON.stringify(value === undefined ? null : value);
 const hash = (value) => createHash("sha256").update(typeof value === "string" ? value : json(value)).digest("hex");
 
-export async function readActionInputs(saveId, sectionKeys = [], connection = mysqlPool) {
+export async function readActionInputs(saveId, sectionKeys = [], connection = mysqlPool, options = {}) {
   const [[save]] = await connection.query("SELECT * FROM game_saves WHERE save_id=? LIMIT 1", [saveId]);
   if (!save) return null;
   const [[player]] = await connection.query(`SELECT c.*, p.content_hash AS pearl_content_hash
@@ -23,8 +23,29 @@ export async function readActionInputs(saveId, sectionKeys = [], connection = my
     playerJson[row.history_type].push(parseMysqlJson(row.record_json, {}));
   }
   player.cultivator_json = json(playerJson);
+  const npcFilter = Array.isArray(options.npcIds) && options.npcIds.length
+    ? ` AND cultivator_id IN (${options.npcIds.map(() => "?").join(",")})`
+    : options.allNpcs ? " AND cultivator_kind='npc'" : " AND 1=0";
+  const npcParams = options.allNpcs ? [saveId] : [saveId, ...(options.npcIds || [])];
+  const [npcRows] = await connection.query(`SELECT * FROM cultivators WHERE save_id=?${npcFilter} ORDER BY position_no`, npcParams);
+  const npcs = npcRows.map((row) => {
+    const entity = parseMysqlJson(row.cultivator_json, {}) || {};
+    Object.assign(entity, {
+      id: entity.id || row.cultivator_id, name: row.name || entity.name || "", realm: Number(row.realm_no ?? entity.realm ?? 0),
+      xp: Number(row.xp ?? entity.xp ?? 0), hp: Number(row.hp ?? entity.hp ?? 0), maxHp: Number(row.max_hp ?? entity.maxHp ?? 0),
+      mana: Number(row.mana ?? entity.mana ?? 0), maxMana: Number(row.max_mana ?? entity.maxMana ?? 0), sect: row.sect_name || entity.sect || "",
+      spirit: Number(row.spirit ?? entity.spirit ?? 0), reputation: Number(row.reputation ?? entity.reputation ?? 0), body: Number(row.body ?? entity.body ?? 0),
+      wisdom: Number(row.wisdom ?? entity.wisdom ?? 0), attack: Number(row.attack ?? entity.attack ?? 0), defense: Number(row.defense ?? entity.defense ?? 0),
+      divineSense: Number(row.divine_sense ?? entity.divineSense ?? 0), chance: Number(row.chance ?? entity.chance ?? 0), wealth: Number(row.wealth ?? entity.wealth ?? 0), heartDemon: Number(row.heart_demon ?? entity.heartDemon ?? 0)
+    });
+    return entity;
+  });
   const [sectionRows] = await connection.query(`SELECT section_key,section_json FROM save_sections WHERE save_id=? AND section_key IN (${sectionKeys.map(() => "?").join(",") || "''"})`, [saveId, ...sectionKeys]);
   const sections = Object.fromEntries(sectionRows.map((row) => [row.section_key, parseMysqlJson(row.section_json, {})]));
+  if (sectionKeys.includes("adminProfiles")) {
+    const [profileRows] = await connection.query("SELECT profile_type,profile_key,profile_json FROM admin_profiles WHERE save_id=? AND profile_type='playerSect'", [saveId]);
+    sections.adminProfiles = { playerSect: parseMysqlJson(profileRows[0]?.profile_json, "") };
+  }
   const needsInventory = sectionKeys.includes("__equipment_inventory");
   // Most actions only need the player's equipped items. Dungeon loot also
   // needs the unowned pool to select/transfer drops, so it opts in explicitly.
@@ -32,7 +53,7 @@ export async function readActionInputs(saveId, sectionKeys = [], connection = my
     ? "SELECT item_json FROM equipment_items WHERE save_id=? ORDER BY position_no"
     : "SELECT item_json FROM equipment_items WHERE save_id=? AND (owner_id='player' OR JSON_UNQUOTE(JSON_EXTRACT(item_json,'$.ownerId'))='player') ORDER BY position_no";
   const [equipmentRows] = await connection.query(equipmentSql, [saveId]);
-  return { save, player, sections, equipment: equipmentRows.map((row) => parseMysqlJson(row.item_json, {})) };
+  return { save, player, npcs, sections, equipment: equipmentRows.map((row) => parseMysqlJson(row.item_json, {})) };
 }
 
 export async function writeActionIncremental(connection, { saveId, inputs, state, changedSections, logEntry, expectedRevision }) {

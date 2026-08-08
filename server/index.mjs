@@ -53,6 +53,8 @@ import {
   readCultivatorDetailIncrementally,
   readLiveRanking,
   runPlayerActionIncrementally,
+  runSettlementBatch,
+  runDailyDuelBatch,
   publicState,
   readBattleReplay,
   readState,
@@ -408,10 +410,21 @@ async function handleApi(req, res, url) {
   const incrementalPlayerActions = {
     "/api/breakthrough": "breakthrough", "/api/skills/upgrade": "skill", "/api/rest": "rest",
     "/api/dungeons/run": "dungeon", "/api/sect/mission": "sectMission", "/api/sect/war": "sectWar",
-    "/api/items/buy": "buy", "/api/items/use": "use", "/api/items/sell": "sell"
+    "/api/items/buy": "buy", "/api/items/use": "use", "/api/items/sell": "sell",
+    "/api/encounters/focus": "encounterFocus", "/api/encounters/choose": "encounterChoose",
+    "/api/sect/plan": "sectPlan", "/api/player/portrait": "portrait",
+    "/api/dao-trial/start": "daoStart", "/api/dao-trial/advance": "daoAdvance", "/api/dao-trial/abandon": "daoAbandon"
   };
   if (usesMysqlBackgroundJobs && incrementalPlayerActions[url.pathname]) {
     sendJson(res, 200, await runPlayerActionIncrementally(saveId, incrementalPlayerActions[url.pathname], body));
+    return;
+  }
+  if (usesMysqlBackgroundJobs && url.pathname === "/api/day/advance") {
+    sendJson(res, 200, await runSettlementBatch(saveId, { manual: true, scope: body.scope || "lite" }));
+    return;
+  }
+  if (usesMysqlBackgroundJobs && url.pathname === "/api/duels/day") {
+    sendJson(res, 200, await runDailyDuelBatch(saveId, { scope: body.scope || "lite" }));
     return;
   }
   const routes = {

@@ -1,8 +1,8 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { clearProgressHistory, compactStateForStorage, createDefaultState, dateKey, ensureStateShape, getPublicState, minReplayDayFor, preserveProfilesForReset, settleIfNeeded } from "./gameLogic.mjs";
+import { clearProgressHistory, compactStateForStorage, createDefaultState, dailySettlement, dateKey, ensureStateShape, getPublicState, minReplayDayFor, preserveProfilesForReset, runDailyDuels, settleIfNeeded } from "./gameLogic.mjs";
 import { hashAuthAttemptKey, hashPassword, hashRegistrationCode, verifyPassword } from "./authSecurity.mjs";
 import { ensureMysqlSchema, mysqlPool, parseMysqlJson, withMysqlTransaction } from "./mysqlDb.mjs";
-import { loadStateFromMysql, pruneBattleReplays, readReplayFromMysql, saveStateWithConnection, upsertBattleReplays } from "./mysqlStateRepository.mjs";
+import { loadBatchStateFromMysql, loadStateFromMysql, pruneBattleReplays, readReplayFromMysql, saveStateWithConnection, upsertBattleReplays } from "./mysqlStateRepository.mjs";
 import { changedPersistenceDomains, trackPersistenceDomains } from "./persistenceDomains.mjs";
 import { cancelPendingJobs, enqueueBackgroundJob } from "./mysqlBackgroundJobs.mjs";
 import { readTaskInputs, writeTaskIncremental, withTaskIncrementalTransaction } from "./taskIncrementalRepository.mjs";
@@ -172,9 +172,12 @@ async function writeStateInternal(state, id, options = {}) {
   const previousState = options.previousState || stateCache.get(id) || null;
   const metadataChanged = !previousState || ["day", "rebirth", "calendarStartDate", "lastSettlementDate", "storageCompactionVersion"]
     .some((key) => previousState[key] !== persistedState[key]);
-  const candidateDomains = metadataChanged && previousState?.day !== persistedState.day
+  // Batch writers explicitly provide the domains they changed even when the
+  // day metadata advances. Preserve that intent; ordinary mutations still
+  // fall back to all domains when no candidate set is available.
+  const candidateDomains = options.domainCandidates || (metadataChanged && previousState?.day !== persistedState.day
     ? undefined
-    : options.domainCandidates;
+    : options.domainCandidates);
   const domains = options.domains || changedPersistenceDomains(previousState, persistedState, candidateDomains);
   if (!metadataChanged && !domains.length && !pending.length) {
     if (typeof options.beforeWrite === "function" || typeof options.beforeCommit === "function") {
@@ -201,8 +204,13 @@ async function writeStateInternal(state, id, options = {}) {
     return nextRevision;
   });
   persistedState.__stateRevision = revision;
-  stateCache.set(id, persistedState);
-  stateValidationCache.set(id, dateKey());
+  if (options.skipCache) {
+    stateCache.delete(id);
+    stateValidationCache.delete(id);
+  } else {
+    stateCache.set(id, persistedState);
+    stateValidationCache.set(id, dateKey());
+  }
   publicStateCache.delete(id);
   return persistedState;
 }
@@ -507,26 +515,32 @@ export async function readBattleReplay(replayId, id = "default") {
 }
 
 export async function mutateState(mutator, id = "default", options = {}) {
-  return withSaveLock(id, async () => {
-    const source = stateCache.get(id) || await loadStateFromMysql(id) || createDefaultState();
-    if (!options.skipAutomaticSettlement && source.lastSettlementDate < dateKey()) {
-      await ensureSettlementJob(source, id);
+  const execute = async () => {
+    const source = options.batchProjection
+      ? await loadBatchStateFromMysql(id)
+      : (stateCache.get(id) || await loadStateFromMysql(id));
+    const baseSource = source || createDefaultState();
+    if (!options.skipAutomaticSettlement && baseSource.lastSettlementDate < dateKey()) {
+      await ensureSettlementJob(baseSource, id);
       const error = new Error("存档正在补做每日结算，请稍后重试");
       error.statusCode = 409;
       throw error;
     }
-    const draft = structuredClone(source);
+    const draft = structuredClone(baseSource);
     const shapeChanged = ensureStateShape(draft);
     const tracked = options.trackPersistenceDomains === false || shapeChanged
-      ? { state: draft, domains: null }
+      ? { state: draft, domains: null, cultivatorIds: null }
       : trackPersistenceDomains(draft);
     const result = mutator(tracked.state);
     let state;
     try {
       state = await writeStateInternal(draft, id, {
         ...options.storageOptions,
-        previousState: source,
-        domainCandidates: tracked.domains ? [...tracked.domains] : undefined
+        skipCache: options.skipCache,
+        cultivatorIds: tracked.cultivatorIds ? new Set(tracked.cultivatorIds) : undefined,
+        previousState: baseSource,
+        domainCandidates: tracked.domains ? [...tracked.domains] : undefined,
+        cultivatorIds: tracked.cultivatorIds ? [...tracked.cultivatorIds] : undefined
       });
     } catch (error) {
       if (error?.code === "STATE_REVISION_CONFLICT") {
@@ -536,10 +550,11 @@ export async function mutateState(mutator, id = "default", options = {}) {
       publicStateCache.delete(id);
       throw error;
     }
-    if (options.resultOnly) return { result };
+    if (options.resultOnly) return { result, stateRevision: Number(state.__stateRevision || 0) };
     const nextState = publicStateWithRevision(state, options.publicOptions);
     return result === undefined ? nextState : { state: nextState, result };
-  });
+  };
+  return options.skipSaveLock ? execute() : withSaveLock(id, execute);
 }
 
 export async function completeTaskIncrementally(payload, id = "default") {
@@ -580,6 +595,77 @@ export async function runPlayerActionIncrementally(id, action, payload = {}) {
     const response = await runPlayerActionIncremental(id, action, payload);
     stateCache.delete(id); stateValidationCache.delete(id); publicStateCache.delete(id);
     return response;
+  });
+}
+
+/**
+ * Batch-only entry points. Unlike player commands these are intentionally
+ * allowed to touch the complete roster, but they have their own idempotency
+ * records so a repeated HTTP request cannot run a second settlement or duel
+ * round for the same day.
+ */
+export async function runSettlementBatch(id = "default", options = {}) {
+  return withSaveLock(id, async () => {
+    await bootstrapMysqlStore();
+    const current = stateCache.get(id) || await loadStateFromMysql(id);
+    if (!current) throw new Error("存档不存在");
+    const targetDay = Number(current.day || 0) + 1;
+    const [[existing]] = await mysqlPool.query("SELECT * FROM settlement_runs_v2 WHERE save_id=? AND to_day=? LIMIT 1", [id, targetDay]);
+    if (existing?.status === "completed") return { kind: "batch.settlement", idempotent: true, stateRevision: Number(current.__stateRevision || 0), result: parseMysqlJson(existing.result_json, {}) };
+    if (existing?.status === "running") {
+      const stale = existing.locked_until && new Date(existing.locked_until).getTime() < Date.now();
+      if (!stale) { const error = new Error("每日结算正在进行，请稍后重试"); error.statusCode = 409; throw error; }
+      await mysqlPool.query("UPDATE settlement_runs_v2 SET status='failed',phase='expired',error_message='批处理锁超时，允许恢复',finished_at=CURRENT_TIMESTAMP(3) WHERE save_id=? AND settlement_id=? AND status='running'", [id, existing.settlement_id]);
+    }
+    const settlementId = `settlement-${targetDay}-${randomUUID()}`;
+    await mysqlPool.query("INSERT INTO settlement_runs_v2(save_id,settlement_id,from_day,to_day,status,phase,expected_revision,heartbeat_at,locked_until) VALUES(?,?,?,?,?,?,?,?,DATE_ADD(CURRENT_TIMESTAMP(3), INTERVAL 10 MINUTE))", [id, settlementId, Number(current.day || 0), targetDay, "running", "started", Number(current.__stateRevision || 0), new Date()]);
+    try {
+      const response = await mutateState((state) => {
+        const result = dailySettlement(state, { manual: Boolean(options.manual) });
+        return { settled: true, day: state.day, result };
+      }, id, { skipAutomaticSettlement: true, skipSaveLock: true, batchProjection: true, skipCache: true, publicOptions: { scope: options.scope || "lite" }, trackPersistenceDomains: true,
+        storageOptions: { ...(options.storageOptions || {}), queryObserver: options.queryObserver, skipReplayExtraction: true } });
+      const settledDay = Number(response?.result?.day || targetDay);
+      const [[duelCount]] = await mysqlPool.query("SELECT COUNT(*) AS count FROM duel_matches WHERE save_id=? AND day_no=?", [id, settledDay]);
+      await mysqlPool.query(`INSERT INTO duel_batch_runs_v2(save_id,day_no,batch_id,status,expected_revision,match_count,completed_count,result_json,finished_at)
+        VALUES(?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP(3)) ON DUPLICATE KEY UPDATE status='completed',match_count=VALUES(match_count),completed_count=VALUES(completed_count),result_json=VALUES(result_json),finished_at=CURRENT_TIMESTAMP(3)`,
+      [id, settledDay, `settlement-duel-${settledDay}`, "completed", Number(response?.state?.stateRevision || 0), Number(duelCount.count || 0), Number(duelCount.count || 0), JSON.stringify({ source: "settlement", day: settledDay })]);
+      await mysqlPool.query("UPDATE settlement_runs_v2 SET status='completed',phase='committed',result_json=?,heartbeat_at=CURRENT_TIMESTAMP(3),locked_until=NULL,finished_at=CURRENT_TIMESTAMP(3) WHERE save_id=? AND settlement_id=?", [JSON.stringify(response?.result || {}), id, settlementId]);
+      return { kind: "batch.settlement", batchId: settlementId, stateRevision: Number(response?.state?.stateRevision || response?.stateRevision || 0), result: response?.result || null };
+    } catch (error) {
+      await mysqlPool.query("UPDATE settlement_runs_v2 SET status='failed',phase='failed',error_message=?,finished_at=CURRENT_TIMESTAMP(3) WHERE save_id=? AND settlement_id=?", [String(error.stack || error.message || error).slice(0, 6000), id, settlementId]);
+      throw error;
+    }
+  });
+}
+
+export async function runDailyDuelBatch(id = "default", options = {}) {
+  return withSaveLock(id, async () => {
+    await bootstrapMysqlStore();
+    const current = stateCache.get(id) || await loadStateFromMysql(id);
+    if (!current) throw new Error("存档不存在");
+    const day = Number(current.day || 0);
+    const [[existingDay]] = await mysqlPool.query("SELECT day_no FROM duel_days WHERE save_id=? AND day_no=? LIMIT 1", [id, day]);
+    if (existingDay) return { kind: "batch.duels", idempotent: true, day, stateRevision: Number(current.__stateRevision || 0) };
+    const [[existingBatch]] = await mysqlPool.query("SELECT * FROM duel_batch_runs_v2 WHERE save_id=? AND day_no=? LIMIT 1", [id, day]);
+    if (existingBatch?.status === "running") {
+      const stale = existingBatch.locked_until && new Date(existingBatch.locked_until).getTime() < Date.now();
+      if (!stale) { const error = new Error("全员切磋正在进行，请稍后重试"); error.statusCode = 409; throw error; }
+      await mysqlPool.query("UPDATE duel_batch_runs_v2 SET status='failed',error_message='批处理锁超时，允许恢复',finished_at=CURRENT_TIMESTAMP(3) WHERE save_id=? AND day_no=? AND status='running'", [id, day]);
+    }
+    const batchId = `duel-${day}-${randomUUID()}`;
+    await mysqlPool.query("INSERT INTO duel_batch_runs_v2(save_id,day_no,batch_id,status,expected_revision,heartbeat_at,locked_until) VALUES(?,?,?,?,?,?,DATE_ADD(CURRENT_TIMESTAMP(3), INTERVAL 10 MINUTE))", [id, day, batchId, "running", Number(current.__stateRevision || 0), new Date()]);
+    try {
+      const response = await mutateState((state) => runDailyDuels(state), id, { skipAutomaticSettlement: true, skipSaveLock: true, batchProjection: true, skipCache: true, resultOnly: true, trackPersistenceDomains: true,
+        storageOptions: { ...(options.storageOptions || {}), queryObserver: options.queryObserver, skipReplayExtraction: true } });
+      const record = response?.result || null;
+      const matchCount = Number(record?.matches?.length || 0);
+      await mysqlPool.query("UPDATE duel_batch_runs_v2 SET status='completed',match_count=?,completed_count=?,result_json=?,finished_at=CURRENT_TIMESTAMP(3) WHERE save_id=? AND day_no=?", [matchCount, matchCount, JSON.stringify(record || {}), id, day]);
+      return { kind: "batch.duels", batchId, day, matchCount, stateRevision: Number(response?.stateRevision || 0), result: record };
+    } catch (error) {
+      await mysqlPool.query("UPDATE duel_batch_runs_v2 SET status='failed',error_message=?,finished_at=CURRENT_TIMESTAMP(3) WHERE save_id=? AND day_no=?", [String(error.stack || error.message || error).slice(0, 6000), id, day]);
+      throw error;
+    }
   });
 }
 

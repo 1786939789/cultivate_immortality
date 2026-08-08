@@ -178,6 +178,7 @@ function encodeAdminProfiles(encoded, adminProfiles = {}) {
 
 export function encodeState(state, options = {}) {
   const domains = normalizePersistenceDomains(options.domains);
+  const cultivatorIds = options.cultivatorIds ? new Set([...options.cultivatorIds].map(String)) : null;
   const encoded = {
     metadata: {
       day: Number(state.day || 1),
@@ -207,8 +208,10 @@ export function encodeState(state, options = {}) {
   }
 
   if (domains.has(persistenceDomains.cultivators)) {
-    encodeCultivator(encoded, state.player || {}, "player", 0);
-    (state.npcs || []).forEach((npc, position) => encodeCultivator(encoded, npc, "npc", position));
+    if (!cultivatorIds || cultivatorIds.has("player")) encodeCultivator(encoded, state.player || {}, "player", 0);
+    (state.npcs || []).forEach((npc, position) => {
+      if (!cultivatorIds || cultivatorIds.has(String(npc.id))) encodeCultivator(encoded, npc, "npc", position);
+    });
   }
 
   if (domains.has(persistenceDomains.equipment)) (state.equipment || []).forEach((item, position) => {

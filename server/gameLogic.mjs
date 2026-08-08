@@ -13488,6 +13488,36 @@ export function updatePlayerSectPlan(state, payload = {}) {
   return state.playerSectPlan;
 }
 
+// Incremental command variant: validates only the player's sect, province
+// projection and plan payload. It intentionally avoids ensureStateShape(),
+// which would rebuild the complete province roster and NPC world for a
+// single-player settings update.
+export function updatePlayerSectPlanIncremental(state, payload = {}) {
+  const sectName = String(state.sect?.name || state.player?.sect || "").trim();
+  if (!sectName) throw new Error("玩家尚未加入宗门");
+  const ownedProvinceIds = new Set((state.provinces || [])
+    .filter((item) => item?.owner === sectName)
+    .map((item) => String(item.id)));
+  const attackLimit = Math.max(0, ownedProvinceIds.size ? maxSiegeTeamSize : zeroTerritorySiegeTeamSize);
+  const plan = normalizePlayerSectPlan(payload, Number(state.day || 1) + 1, attackLimit);
+  const target = plan.attack.targetProvinceId
+    ? (state.provinces || []).find((item) => String(item.id) === String(plan.attack.targetProvinceId))
+    : null;
+  if (target && (!target.owner || target.owner === sectName)) {
+    throw new Error("明日战略只能指定其他宗门占领的城市。");
+  }
+  state.playerSectPlan = plan;
+  state.log ??= [];
+  state.log.unshift({
+    id: `sect-plan-${Date.now().toString(36)}`,
+    day: Number(state.day || 1),
+    text: `已保存${sectName}第 ${Number(state.day || 1) + 1} 天明日战略。`,
+    type: "gold"
+  });
+  state.log = state.log.slice(0, 80);
+  return state.playerSectPlan;
+}
+
 export function useItem(state, kind) {
   ensureStateShape(state);
   if (!itemCatalog[kind]) throw new Error("未知物品");

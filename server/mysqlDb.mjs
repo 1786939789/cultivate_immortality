@@ -431,6 +431,42 @@ async function createSchema() {
         INDEX idx_rank_snapshot_day (save_id, day_no, power_rank),
         CONSTRAINT fk_rank_snapshots_save FOREIGN KEY (save_id) REFERENCES game_saves(save_id) ON DELETE CASCADE
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`
+      ,`CREATE TABLE IF NOT EXISTS settlement_runs_v2 (
+        save_id VARCHAR(64) NOT NULL,
+        settlement_id VARCHAR(160) NOT NULL,
+        from_day INT NOT NULL DEFAULT 0,
+        to_day INT NOT NULL DEFAULT 0,
+        status ENUM('running','completed','failed') NOT NULL DEFAULT 'running',
+        phase VARCHAR(48) NOT NULL DEFAULT 'started',
+        expected_revision BIGINT NOT NULL DEFAULT 0,
+        result_json LONGTEXT NULL,
+        error_message TEXT NULL,
+        heartbeat_at DATETIME(3) NULL,
+        locked_until DATETIME(3) NULL,
+        started_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        finished_at DATETIME(3) NULL,
+        PRIMARY KEY (save_id, settlement_id),
+        UNIQUE KEY uq_settlement_target (save_id, to_day),
+        CONSTRAINT fk_settlement_runs_save FOREIGN KEY (save_id) REFERENCES game_saves(save_id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`
+      ,`CREATE TABLE IF NOT EXISTS duel_batch_runs_v2 (
+        save_id VARCHAR(64) NOT NULL,
+        day_no INT NOT NULL,
+        batch_id VARCHAR(160) NOT NULL,
+        status ENUM('running','completed','failed') NOT NULL DEFAULT 'running',
+        expected_revision BIGINT NOT NULL DEFAULT 0,
+        match_count INT NOT NULL DEFAULT 0,
+        completed_count INT NOT NULL DEFAULT 0,
+        result_json LONGTEXT NULL,
+        error_message TEXT NULL,
+        heartbeat_at DATETIME(3) NULL,
+        locked_until DATETIME(3) NULL,
+        started_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        finished_at DATETIME(3) NULL,
+        PRIMARY KEY (save_id, day_no),
+        UNIQUE KEY uq_duel_batch_id (save_id, batch_id),
+        CONSTRAINT fk_duel_batch_runs_save FOREIGN KEY (save_id) REFERENCES game_saves(save_id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`
     ];
     for (const statement of statements) await connection.query(statement);
     const additiveColumns = [
@@ -451,6 +487,10 @@ async function createSchema() {
       ["cultivators", "equipment_count", "INT NOT NULL DEFAULT 0"],
       ["cultivators", "formed_pearl_count", "INT NOT NULL DEFAULT 0"],
       ["cultivators", "metrics_revision", "BIGINT NOT NULL DEFAULT 0"]
+      , ["settlement_runs_v2", "heartbeat_at", "DATETIME(3) NULL"]
+      , ["settlement_runs_v2", "locked_until", "DATETIME(3) NULL"]
+      , ["duel_batch_runs_v2", "heartbeat_at", "DATETIME(3) NULL"]
+      , ["duel_batch_runs_v2", "locked_until", "DATETIME(3) NULL"]
     ];
     for (const [table, column, definition] of additiveColumns) {
       const [columns] = await connection.query(`

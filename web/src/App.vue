@@ -13151,6 +13151,11 @@ async function act(path, body = {}, options = {}) {
         bag: response.patch.bag || state.value.bag,
         shop: response.patch.shop || state.value.shop,
         sect: response.patch.sect || state.value.sect,
+        playerSectPlan: response.patch.playerSectPlan || state.value.playerSectPlan,
+        encounters: response.patch.encounters || state.value.encounters,
+        relationships: response.patch.relationships || state.value.relationships,
+        provinces: response.patch.provinces || state.value.provinces,
+        daoTrial: response.patch.daoTrial || state.value.daoTrial,
         log: [...(response.patch.log || []), ...(state.value.log || [])].slice(0, 80),
         stateRevision: response.stateRevision
       };

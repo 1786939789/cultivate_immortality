@@ -38,27 +38,37 @@ function trackable(value) {
 
 export function trackPersistenceDomains(state) {
   const changed = new Set();
+  const changedCultivatorIds = new Set();
   const proxies = new WeakMap();
   const targets = new WeakMap();
 
   const unwrap = (value) => targets.get(value) || value;
 
-  const wrap = (value, domain = null, root = false) => {
+  const wrap = (value, domain = null, root = false, ownerId = null) => {
     if (!trackable(value)) return value;
     if (proxies.has(value)) return proxies.get(value);
     const proxy = new Proxy(value, {
       get(target, property, receiver) {
         const childDomain = root && typeof property === "string" ? topLevelPersistenceDomain(property) : domain;
-        return wrap(Reflect.get(target, property, receiver), childDomain);
+        const child = Reflect.get(target, property, receiver);
+        const nextOwner = root && (property === "player" || property === "npcs")
+          ? (property === "player" ? String(child?.id || "player") : null)
+          : ownerId;
+        if (property === "npcs" && Array.isArray(child)) {
+          return child.map((item) => wrap(item, persistenceDomains.cultivators, false, String(item?.id || "")));
+        }
+        return wrap(child, childDomain, false, nextOwner);
       },
       set(target, property, nextValue, receiver) {
         const changedDomain = root && typeof property === "string" ? topLevelPersistenceDomain(property) : domain;
         if (changedDomain) changed.add(changedDomain);
+        if (changedDomain === persistenceDomains.cultivators && ownerId) changedCultivatorIds.add(String(ownerId));
         return Reflect.set(target, property, unwrap(nextValue), receiver);
       },
       deleteProperty(target, property) {
         const changedDomain = root && typeof property === "string" ? topLevelPersistenceDomain(property) : domain;
         if (changedDomain) changed.add(changedDomain);
+        if (changedDomain === persistenceDomains.cultivators && ownerId) changedCultivatorIds.add(String(ownerId));
         return Reflect.deleteProperty(target, property);
       }
     });
@@ -67,7 +77,7 @@ export function trackPersistenceDomains(state) {
     return proxy;
   };
 
-  return { state: wrap(state, null, true), domains: changed };
+  return { state: wrap(state, null, true), domains: changed, cultivatorIds: changedCultivatorIds };
 }
 
 export function persistenceDomainHashes(state, domains = allPersistenceDomains) {

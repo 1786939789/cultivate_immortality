@@ -2,7 +2,7 @@ import { buildCombatRatings, compactStateForStorage, powerOf } from "./gameLogic
 import { ensureMysqlSchema, mysqlPool, parseMysqlJson, withMysqlTransaction } from "./mysqlDb.mjs";
 import { contentHash, decodeState, encodeState } from "./mysqlStateCodec.mjs";
 import { normalizePersistenceDomains, persistenceDomains } from "./persistenceDomains.mjs";
-import { syncCultivatorPearls, upsertCultivatorMetrics } from "./cultivatorIncrementalRepository.mjs";
+import { syncCultivatorPearlsIfChanged, upsertCultivatorMetrics } from "./cultivatorIncrementalRepository.mjs";
 
 function observedQuery(connection, observer) {
   if (typeof observer !== "function") return connection;
@@ -42,7 +42,7 @@ async function syncHashedRows(connection, config) {
     const values = config.values(row);
     await connection.query(config.upsertSql, [config.saveId, ...values]);
   }
-  await deleteMissing(connection, config.table, config.saveId, config.keyColumns, incomingKeys);
+  if (!config.preserveMissing) await deleteMissing(connection, config.table, config.saveId, config.keyColumns, incomingKeys);
 }
 
 async function syncSimpleRows(connection, table, saveId, keyColumn, rows, keyValue, values, upsertSql) {
@@ -143,7 +143,7 @@ async function syncTaskIncrementalTables(connection, state, saveId, domains) {
 async function writeEncodedState(rawConnection, state, saveId, options = {}) {
   const connection = observedQuery(rawConnection, options.queryObserver);
   const domains = normalizePersistenceDomains(options.domains);
-  const encoded = encodeState(state, { domains: [...domains] });
+  const encoded = encodeState(state, { domains: [...domains], cultivatorIds: options.cultivatorIds });
   const metadata = encoded.metadata;
   let revision;
   if (Number.isFinite(options.expectedRevision)) {
@@ -183,7 +183,7 @@ async function writeEncodedState(rawConnection, state, saveId, options = {}) {
       ON DUPLICATE KEY UPDATE section_json = VALUES(section_json), content_hash = VALUES(content_hash), updated_at = CURRENT_TIMESTAMP(3)`
   });
   if (domains.has(persistenceDomains.cultivators)) await syncHashedRows(connection, {
-    table: "cultivators", saveId, rows: encoded.cultivators, keyColumns: ["cultivator_id"],
+    table: "cultivators", saveId, rows: encoded.cultivators, keyColumns: ["cultivator_id"], preserveMissing: Boolean(options.cultivatorIds),
     keyValues: (row) => ({ cultivator_id: row.cultivatorId }),
     values: (row) => {
       const entity = parseMysqlJson(row.json, {}) || {};
@@ -200,7 +200,7 @@ async function writeEncodedState(rawConnection, state, saveId, options = {}) {
       cultivator_json=VALUES(cultivator_json), content_hash=VALUES(content_hash), updated_at=CURRENT_TIMESTAMP(3)`
   });
   if (domains.has(persistenceDomains.cultivators)) await syncHashedRows(connection, {
-    table: "cultivator_history", saveId, rows: encoded.cultivatorHistory,
+    table: "cultivator_history", saveId, rows: encoded.cultivatorHistory, preserveMissing: Boolean(options.cultivatorIds),
     keyColumns: ["cultivator_id", "history_type", "record_key"],
     keyValues: (row) => ({ cultivator_id: row.cultivatorId, history_type: row.historyType, record_key: row.recordKey }),
     values: (row) => [row.cultivatorId, row.historyType, row.recordKey, row.day, row.position, row.json, row.hash],
@@ -271,16 +271,21 @@ async function writeEncodedState(rawConnection, state, saveId, options = {}) {
   await syncTaskIncrementalTables(connection, state, saveId, domains);
   if (domains.has(persistenceDomains.cultivators)) {
     const people = [state.player, ...(state.npcs || [])];
+    const selectedIds = options.cultivatorIds ? new Set([...options.cultivatorIds].map(String)) : null;
+    const selectedPeople = selectedIds ? people.filter((entity) => selectedIds.has(String(entity.id))) : people;
     const ratings = new Map(buildCombatRatings(state).entries.map((item) => [item.id, item]));
     const combatRows = [...ratings.values()].sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
-    for (const entity of people) {
-      await syncCultivatorPearls(connection, saveId, entity);
+    for (const entity of selectedPeople) {
+      // Settlement and duel batches frequently touch cultivator rows without
+      // changing pearl assets. Compare the asset hash first so those batches
+      // do not rewrite every pearl/fragment/history row.
+      await syncCultivatorPearlsIfChanged(connection, saveId, entity);
       const rating = ratings.get(entity.id) || {};
       await upsertCultivatorMetrics(connection, { saveId, cultivatorId: entity.id, currentPower: powerOf(entity, state), currentCombatRating: rating.score || 500, combatScore: rating.score || 500, duelScore: Number(entity.duelSeason?.score || 0), duelWins: entity.duelWins, duelLosses: entity.duelLosses, dungeonClears: entity.dungeonClears, bestDungeonPower: entity.bestDungeonPower });
     }
     const powerRows = people.map((entity) => ({ id: entity.id, value: powerOf(entity, state) })).sort((a, b) => b.value - a.value || a.id.localeCompare(b.id));
     const duelRows = people.map((entity) => ({ id: entity.id, value: Number(entity.duelSeason?.score || 0) })).sort((a, b) => b.value - a.value || a.id.localeCompare(b.id));
-    for (const entity of people) {
+    for (const entity of selectedPeople) {
       const rating = ratings.get(entity.id) || {};
       const text = JSON.stringify({ day: state.day, power: powerRows.find((row) => row.id === entity.id)?.value || 0 });
       await connection.query(`INSERT INTO cultivator_rank_snapshots_v2(save_id,cultivator_id,day_no,power,power_rank,duel_score,duel_rank,combat_score,combat_rank,snapshot_json,content_hash)
@@ -352,6 +357,33 @@ export async function loadStateFromMysql(saveId) {
   if (dailyRecords[0].length) state.player.dailyRecords = dailyRecords[0].map((row) => parseMysqlJson(row.record_json, {}));
   if (logs[0].length) state.log = logs[0].map((row) => parseMysqlJson(row.log_json, {}));
   state.__stateRevision = Number(saveRows[0].state_revision || 0);
+  return state;
+}
+
+// Batch projection: settlement/duel jobs do not need the complete detail
+// archive. Keep the live roster and active sections, but fetch only recent
+// history/day records; incremental writers preserve older rows in MySQL.
+export async function loadBatchStateFromMysql(saveId, options = {}) {
+  await ensureMysqlSchema();
+  const [[save]] = await mysqlPool.query("SELECT * FROM game_saves WHERE save_id=? LIMIT 1", [saveId]);
+  if (!save) return null;
+  const day = Number(save.day_no || 1);
+  const historyDays = Math.max(14, Number(options.historyDays || 21));
+  const [sections, cultivators, history, equipment, duelDays, duelMatches, dungeonDays, dungeonRecords, provinceWars, adminProfiles, portraits] = await Promise.all([
+    mysqlPool.query("SELECT * FROM save_sections WHERE save_id=? ORDER BY section_key", [saveId]),
+    mysqlPool.query("SELECT * FROM cultivators WHERE save_id=? ORDER BY cultivator_kind='player' DESC,position_no", [saveId]),
+    mysqlPool.query("SELECT * FROM cultivator_history WHERE save_id=? AND (day_no IS NULL OR day_no>=?) ORDER BY cultivator_id,history_type,position_no", [saveId, Math.max(0, day - historyDays)]),
+    mysqlPool.query("SELECT * FROM equipment_items WHERE save_id=? ORDER BY position_no", [saveId]),
+    mysqlPool.query("SELECT * FROM duel_days WHERE save_id=? AND day_no>=? ORDER BY day_no DESC", [saveId, Math.max(0, day - 16)]),
+    mysqlPool.query("SELECT * FROM duel_matches WHERE save_id=? AND day_no>=? ORDER BY day_no DESC,position_no", [saveId, Math.max(0, day - 16)]),
+    mysqlPool.query("SELECT * FROM dungeon_days WHERE save_id=? AND day_no>=? ORDER BY day_no DESC", [saveId, Math.max(0, day - 16)]),
+    mysqlPool.query("SELECT * FROM dungeon_records WHERE save_id=? AND day_no>=? ORDER BY day_no DESC,record_type,position_no", [saveId, Math.max(0, day - 16)]),
+    mysqlPool.query("SELECT * FROM province_wars WHERE save_id=? AND (day_no IS NULL OR day_no>=?) ORDER BY position_no", [saveId, Math.max(0, day - 32)]),
+    mysqlPool.query("SELECT * FROM admin_profiles WHERE save_id=? AND profile_type IN ('sectNameMap','playerSect','sect') ORDER BY profile_type,position_no", [saveId]),
+    mysqlPool.query(`SELECT DISTINCT p.* FROM portraits p JOIN (SELECT portrait_id FROM cultivators WHERE save_id=? AND portrait_id IS NOT NULL UNION SELECT portrait_id FROM admin_profiles WHERE save_id=? AND portrait_id IS NOT NULL) refs ON refs.portrait_id=p.portrait_id`, [saveId, saveId])
+  ]);
+  const state = decodeState({ save, sections: sections[0], cultivators: cultivators[0], cultivatorHistory: history[0], equipment: equipment[0], duelDays: duelDays[0], duelMatches: duelMatches[0], dungeonDays: dungeonDays[0], dungeonRecords: dungeonRecords[0], provinceWars: provinceWars[0], adminProfiles: adminProfiles[0], portraits: portraits[0] });
+  state.__stateRevision = Number(save.state_revision || 0);
   return state;
 }
 
