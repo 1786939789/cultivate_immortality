@@ -10739,11 +10739,13 @@ export function getPublicState(state, options = {}) {
   const breakChance = breakthroughChanceFor(state, state.player);
   const includeHeavyDerived = options.scope !== "lite";
   const sectSummaries = buildSectSummaries(state);
+  const combatRatings = buildCombatRatings(state);
   const derivedBase = {
     xpNeed: xpNeed(state.player.realm),
     currentRealmInfo,
     realmProgression: buildRealmProgression(state.player),
     playerPower: powerOf(state.player, state),
+    combatRatings,
     effectiveStats: effectiveStats(state.player, state),
     duelSeason: {
       season: duelSeasonOfDay(state.day),
@@ -10806,7 +10808,6 @@ export function getPublicState(state, options = {}) {
     };
   }
 
-  const combatRatings = buildCombatRatings(state);
   const { adminProfiles, encounters: _encounterState, relationships: _relationshipState, daoTrial: _daoTrialState, provinces: _provinceState, sectFatigue: _sectFatigue, sectFatiguePrevious: _sectFatiguePrevious, sectSiegeDuty: _sectSiegeDuty, ...publicState } = state;
   return {
     ...publicState,
@@ -10875,6 +10876,7 @@ function getHomeState(state) {
   const nextRealm = realms[Math.min(state.player.realm + 1, realms.length - 1)];
   const currentRealmInfo = realmInfo(state.player.realm);
   const people = publicCultivatorRefMap(state);
+  const combatRatings = buildCombatRatings(state);
   return {
     __scope: "home",
     day: state.day,
@@ -10903,6 +10905,7 @@ function getHomeState(state) {
       xpNeed: xpNeed(state.player.realm),
       currentRealmInfo,
       playerPower: powerOf(state.player, state),
+      combatRatings,
       effectiveStats: effectiveStats(state.player, state),
       duelSeason: {
         season: duelSeasonOfDay(state.day),
