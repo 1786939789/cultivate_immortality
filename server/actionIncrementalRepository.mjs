@@ -30,13 +30,18 @@ export async function readActionInputs(saveId, sectionKeys = [], connection = my
   const [npcRows] = await connection.query(`SELECT * FROM cultivators WHERE save_id=?${npcFilter} ORDER BY position_no`, npcParams);
   const npcs = npcRows.map((row) => {
     const entity = parseMysqlJson(row.cultivator_json, {}) || {};
+    const metric = (typed, legacy) => {
+      const typedValue = Number(typed ?? 0);
+      const legacyValue = Number(legacy ?? 0);
+      return typedValue !== 0 || legacyValue === 0 ? typedValue : legacyValue;
+    };
     Object.assign(entity, {
       id: entity.id || row.cultivator_id, name: row.name || entity.name || "", realm: Number(row.realm_no ?? entity.realm ?? 0),
       xp: Number(row.xp ?? entity.xp ?? 0), hp: Number(row.hp ?? entity.hp ?? 0), maxHp: Number(row.max_hp ?? entity.maxHp ?? 0),
       mana: Number(row.mana ?? entity.mana ?? 0), maxMana: Number(row.max_mana ?? entity.maxMana ?? 0), sect: row.sect_name || entity.sect || "",
-      spirit: Number(row.spirit ?? entity.spirit ?? 0), reputation: Number(row.reputation ?? entity.reputation ?? 0), body: Number(row.body ?? entity.body ?? 0),
-      wisdom: Number(row.wisdom ?? entity.wisdom ?? 0), attack: Number(row.attack ?? entity.attack ?? 0), defense: Number(row.defense ?? entity.defense ?? 0),
-      divineSense: Number(row.divine_sense ?? entity.divineSense ?? 0), chance: Number(row.chance ?? entity.chance ?? 0), wealth: Number(row.wealth ?? entity.wealth ?? 0), heartDemon: Number(row.heart_demon ?? entity.heartDemon ?? 0)
+      spirit: metric(row.spirit, entity.spirit), reputation: metric(row.reputation, entity.reputation), body: metric(row.body, entity.body),
+      wisdom: metric(row.wisdom, entity.wisdom), attack: metric(row.attack, entity.attack), defense: metric(row.defense, entity.defense),
+      divineSense: metric(row.divine_sense, entity.divineSense), chance: metric(row.chance, entity.chance), wealth: metric(row.wealth, entity.wealth), heartDemon: metric(row.heart_demon, entity.heartDemon)
     });
     return entity;
   });

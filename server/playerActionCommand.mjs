@@ -6,7 +6,23 @@ function n(value, fallback = 0) { const result = Number(value); return Number.is
 
 function minimalState(inputs) {
   const player = { ...(parseMysqlJson(inputs.player.cultivator_json, {}) || {}) };
-  Object.assign(player, { id: player.id || "player", realm: n(inputs.player.realm_no, n(player.realm)), xp: n(inputs.player.xp, n(player.xp)), spirit: n(inputs.player.spirit, n(player.spirit)), hp: n(inputs.player.hp, n(player.hp)), maxHp: n(inputs.player.max_hp, n(player.maxHp)), mana: n(inputs.player.mana, n(player.mana)), maxMana: n(inputs.player.max_mana, n(player.maxMana)), sect: inputs.player.sect_name || player.sect || "" });
+  const metric = (typed, legacy) => {
+    const typedValue = n(typed);
+    const legacyValue = n(legacy);
+    return typedValue !== 0 || legacyValue === 0 ? typedValue : legacyValue;
+  };
+  Object.assign(player, {
+    id: player.id || "player", realm: n(inputs.player.realm_no, n(player.realm)),
+    xp: n(inputs.player.xp, n(player.xp)), spirit: metric(inputs.player.spirit, player.spirit),
+    hp: n(inputs.player.hp, n(player.hp)), maxHp: n(inputs.player.max_hp, n(player.maxHp)),
+    mana: n(inputs.player.mana, n(player.mana)), maxMana: n(inputs.player.max_mana, n(player.maxMana)),
+    sect: inputs.player.sect_name || player.sect || "",
+    reputation: metric(inputs.player.reputation, player.reputation), body: metric(inputs.player.body, player.body),
+    wisdom: metric(inputs.player.wisdom, player.wisdom), attack: metric(inputs.player.attack, player.attack),
+    defense: metric(inputs.player.defense, player.defense), divineSense: metric(inputs.player.divine_sense, player.divineSense),
+    chance: metric(inputs.player.chance, player.chance), wealth: metric(inputs.player.wealth, player.wealth),
+    heartDemon: metric(inputs.player.heart_demon, player.heartDemon)
+  });
   const sections = Object.fromEntries(Object.entries(inputs.sections || {}).map(([key, value]) => [key, structuredClone(value)]));
   const npcs = (inputs.npcs || []).map((npc) => structuredClone(npc));
   const equipment = (inputs.equipment || []).map((item) => structuredClone(item));

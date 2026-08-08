@@ -154,16 +154,28 @@ export async function writeTaskIncremental(connection, {
     currentPower: Number(currentPower || 0),
     currentCombatRating: Number(currentCombatRating || 500)
   };
+  const preserveMetric = (camel, snake) => {
+    const typed = Number(player[snake] ?? 0);
+    const legacy = Number(mergedPlayer[camel] ?? 0);
+    return typed !== 0 || legacy === 0 ? typed : legacy;
+  };
+  Object.assign(mergedPlayer, {
+    reputation: preserveMetric("reputation", "reputation"), body: preserveMetric("body", "body"),
+    wisdom: preserveMetric("wisdom", "wisdom"), attack: preserveMetric("attack", "attack"),
+    defense: preserveMetric("defense", "defense"), divineSense: preserveMetric("divineSense", "divine_sense"),
+    chance: preserveMetric("chance", "chance"), wealth: preserveMetric("wealth", "wealth"),
+    heartDemon: preserveMetric("heartDemon", "heart_demon")
+  });
   const playerText = json(mergedPlayer);
   await connection.query(`
     UPDATE cultivators
-    SET xp = ?, spirit = ?, current_power = ?, current_combat_rating = ?,
+    SET xp = ?, spirit = ?, reputation = ?, body = ?, wisdom = ?, attack = ?, defense = ?, divine_sense = ?, chance = ?, wealth = ?, heart_demon = ?, current_power = ?, current_combat_rating = ?,
         cultivator_json = ?, content_hash = ?, metrics_revision = metrics_revision + 1,
         updated_at = CURRENT_TIMESTAMP(3)
     WHERE save_id = ? AND cultivator_id = 'player'
   `, [
-    mergedPlayer.xp,
-    mergedPlayer.spirit,
+    mergedPlayer.xp, mergedPlayer.spirit, mergedPlayer.reputation, mergedPlayer.body, mergedPlayer.wisdom,
+    mergedPlayer.attack, mergedPlayer.defense, mergedPlayer.divineSense, mergedPlayer.chance, mergedPlayer.wealth, mergedPlayer.heartDemon,
     Number(currentPower || 0),
     Number(currentCombatRating || 500),
     playerText,
@@ -262,10 +274,22 @@ export async function writeTaskDeleteIncremental(connection, {
   }
   const playerJson = parseMysqlJson(player.cultivator_json, {}) || {};
   const merged = { ...playerJson, xp: Number(player.xp ?? playerJson.xp ?? 0), spirit: Number(player.spirit ?? playerJson.spirit ?? 0) };
+  const preserveMetric = (camel, snake) => {
+    const typed = Number(player[snake] ?? 0);
+    const legacy = Number(merged[camel] ?? 0);
+    return typed !== 0 || legacy === 0 ? typed : legacy;
+  };
+  Object.assign(merged, {
+    reputation: preserveMetric("reputation", "reputation"), body: preserveMetric("body", "body"),
+    wisdom: preserveMetric("wisdom", "wisdom"), attack: preserveMetric("attack", "attack"),
+    defense: preserveMetric("defense", "defense"), divineSense: preserveMetric("divineSense", "divine_sense"),
+    chance: preserveMetric("chance", "chance"), wealth: preserveMetric("wealth", "wealth"),
+    heartDemon: preserveMetric("heartDemon", "heart_demon")
+  });
   const playerText = json(merged);
-  await connection.query(`UPDATE cultivators SET xp=?, spirit=?, cultivator_json=?, content_hash=?,
+  await connection.query(`UPDATE cultivators SET xp=?, spirit=?, reputation=?, body=?, wisdom=?, attack=?, defense=?, divine_sense=?, chance=?, wealth=?, heart_demon=?, cultivator_json=?, content_hash=?,
     metrics_revision=metrics_revision+1, updated_at=CURRENT_TIMESTAMP(3)
-    WHERE save_id=? AND cultivator_id='player'`, [merged.xp, merged.spirit, playerText, hash(playerText), saveId]);
+    WHERE save_id=? AND cultivator_id='player'`, [merged.xp, merged.spirit, merged.reputation, merged.body, merged.wisdom, merged.attack, merged.defense, merged.divineSense, merged.chance, merged.wealth, merged.heartDemon, playerText, hash(playerText), saveId]);
   await connection.query("DELETE FROM task_completions_v2 WHERE save_id=? AND completion_id=?", [saveId, completion.id]);
   await connection.query("DELETE FROM task_progress_v2 WHERE save_id=? AND day_no=? AND task_id=?", [saveId, dayNo, taskId]);
 

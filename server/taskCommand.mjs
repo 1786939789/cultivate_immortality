@@ -13,7 +13,11 @@ function hydrateRowPlayer(row) {
     xp: "xp", spirit: "spirit", reputation: "reputation", body: "body", wisdom: "wisdom",
     attack: "attack", defense: "defense", divineSense: "divine_sense", chance: "chance",
     wealth: "wealth", heartDemon: "heart_demon"
-  })) player[field] = number(row[column], number(player[field]));
+  })) {
+    const typed = number(row[column]);
+    const legacy = number(player[field]);
+    player[field] = typed !== 0 || legacy === 0 ? typed : legacy;
+  }
   player.realm = number(row.realm_no, number(player.realm));
   player.hp = number(row.hp, number(player.hp));
   player.maxHp = number(row.max_hp, number(player.maxHp));

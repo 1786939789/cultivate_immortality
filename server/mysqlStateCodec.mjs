@@ -289,6 +289,15 @@ function decodeCultivators(cultivatorRows, historyRows, portraitRows) {
   for (const row of cultivatorRows) {
     const entity = parseMysqlJson(row.cultivator_json, {}) || {};
     const hasTypedMetrics = Number(row.metrics_revision || 0) > 0;
+    // Typed columns were introduced during the incremental migration. Some
+    // legacy rows have metrics_revision > 0 even though attack/defense/sense
+    // were never backfilled and therefore contain zero. Preserve a valid
+    // non-zero value from the canonical JSON in that case.
+    const metric = (typed, legacy) => {
+      const typedValue = Number(typed ?? 0);
+      const legacyValue = Number(legacy ?? 0);
+      return hasTypedMetrics && (typedValue !== 0 || legacyValue === 0) ? typedValue : legacyValue;
+    };
     Object.assign(entity, {
       id: entity.id || row.cultivator_id,
       name: row.name || entity.name || "",
@@ -299,16 +308,16 @@ function decodeCultivators(cultivatorRows, historyRows, portraitRows) {
       mana: Number(row.mana ?? entity.mana ?? 0),
       maxMana: Number(row.max_mana ?? entity.maxMana ?? 0),
       sect: row.sect_name || entity.sect || "",
-      spirit: Number(hasTypedMetrics ? row.spirit : entity.spirit ?? 0),
-      reputation: Number(hasTypedMetrics ? row.reputation : entity.reputation ?? 0),
-      body: Number(hasTypedMetrics ? row.body : entity.body ?? 0),
-      wisdom: Number(hasTypedMetrics ? row.wisdom : entity.wisdom ?? 0),
-      attack: Number(hasTypedMetrics ? row.attack : entity.attack ?? 0),
-      defense: Number(hasTypedMetrics ? row.defense : entity.defense ?? 0),
-      divineSense: Number(hasTypedMetrics ? row.divine_sense : entity.divineSense ?? 0),
-      chance: Number(hasTypedMetrics ? row.chance : entity.chance ?? 0),
-      wealth: Number(hasTypedMetrics ? row.wealth : entity.wealth ?? 0),
-      heartDemon: Number(hasTypedMetrics ? row.heart_demon : entity.heartDemon ?? 0)
+      spirit: metric(row.spirit, entity.spirit),
+      reputation: metric(row.reputation, entity.reputation),
+      body: metric(row.body, entity.body),
+      wisdom: metric(row.wisdom, entity.wisdom),
+      attack: metric(row.attack, entity.attack),
+      defense: metric(row.defense, entity.defense),
+      divineSense: metric(row.divine_sense, entity.divineSense),
+      chance: metric(row.chance, entity.chance),
+      wealth: metric(row.wealth, entity.wealth),
+      heartDemon: metric(row.heart_demon, entity.heartDemon)
     });
     entity.portraitUrl = portraitValue(portraits.get(row.portrait_id));
     for (const field of historyFields) {
