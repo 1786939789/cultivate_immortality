@@ -17,6 +17,7 @@ const stateCache = new Map();
 const stateValidationCache = new Map();
 const publicStateCache = new Map();
 const saveLocks = new Map();
+const metricHistoryValidationCache = new Set();
 let bootstrapPromise;
 
 function mysqlDate(value = new Date()) {
@@ -214,6 +215,26 @@ async function writeStateInternal(state, id, options = {}) {
   }
   publicStateCache.delete(id);
   return persistedState;
+}
+
+async function ensureMetricHistoryBackfilled(state, id) {
+  if (!state || metricHistoryValidationCache.has(id)) return state;
+  const expectedDays = Math.min(10, Math.max(1, Number(state.day || 1)));
+  const expectedSnapshots = (1 + (state.npcs || []).length) * expectedDays;
+  const [[coverage]] = await mysqlPool.query(`SELECT COUNT(*) snapshots,
+    SUM(snapshot_json LIKE '{"version":2,%') versioned
+    FROM cultivator_rank_snapshots_v2 WHERE save_id=? AND day_no BETWEEN ? AND ?`,
+  [id, Math.max(1, Number(state.day || 1) - expectedDays + 1), Number(state.day || 1)]);
+  if (Number(coverage.snapshots || 0) < expectedSnapshots || Number(coverage.versioned || 0) < expectedSnapshots) {
+    state = await writeStateInternal(state, id, {
+      previousState: state,
+      domains: ["cultivators"],
+      backfillMetricHistory: true,
+      skipReplayExtraction: true
+    });
+  }
+  metricHistoryValidationCache.add(id);
+  return state;
 }
 
 export async function getAdminAccounts() {
@@ -467,10 +488,12 @@ export async function readState(id = "default", options = {}) {
   const draft = structuredClone(state);
   const changed = ensureStateShape(draft);
   if (changed) {
-    const nextState = await writeState(draft, id, { previousState: state });
+    let nextState = await writeState(draft, id, { previousState: state });
+    nextState = await ensureMetricHistoryBackfilled(nextState, id);
     if (!options.skipSettlementEnqueue) await ensureSettlementJob(nextState, id);
     return nextState;
   }
+  state = await ensureMetricHistoryBackfilled(state, id);
   stateCache.set(id, state);
   stateValidationCache.set(id, dateKey());
   if (!options.skipSettlementEnqueue) await ensureSettlementJob(state, id);

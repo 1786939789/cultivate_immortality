@@ -1,10 +1,63 @@
 import { createHash } from "node:crypto";
 import { mysqlPool, parseMysqlJson, withMysqlTransaction } from "./mysqlDb.mjs";
-import { spiritPearls } from "./gameData.mjs";
+import { duelRankForScore, spiritPearls } from "./gameData.mjs";
 import { getPublicSpiritPearls } from "./gameLogic.mjs";
 
 const json = (value) => JSON.stringify(value === undefined ? null : value);
 const hash = (value) => createHash("sha256").update(typeof value === "string" ? value : json(value)).digest("hex");
+const rankPoints = (rank, participantCount) => participantCount <= 1 ? 200 : Math.round(200 - (rank - 1) * 199 / (participantCount - 1));
+
+function publicMetricHistory(rankSnapshots, cultivatorId, row, participantCount) {
+  const decoded = rankSnapshots.map((item) => ({ row: item, data: parseMysqlJson(item.snapshot_json, {}) || {} }));
+  const power = decoded.map(({ row: item, data }) => data.power || {
+    day: Number(item.day_no),
+    rank: Number(item.power_rank),
+    participantCount,
+    rankPoints: rankPoints(Number(item.power_rank), participantCount),
+    value: Number(item.power)
+  }).sort((left, right) => Number(left.day) - Number(right.day));
+  const duel = decoded.map(({ row: item, data }) => data.duel || {
+    day: Number(item.day_no),
+    rank: Number(item.duel_rank),
+    participantCount,
+    rankPoints: rankPoints(Number(item.duel_rank), participantCount),
+    value: Number(item.duel_score),
+    rankName: duelRankForScore(Number(item.duel_score)).name
+  }).sort((left, right) => Number(left.day) - Number(right.day));
+  const daily = decoded.map(({ row: item, data }) => Object.hasOwn(data, "combat") ? data.combat : {
+    day: Number(item.day_no),
+    score: Number(item.combat_score),
+    rank: Number(item.combat_rank),
+    participantCount,
+    rankPoints: rankPoints(Number(item.combat_rank), participantCount)
+  }).filter(Boolean).sort((left, right) => Number(right.day) - Number(left.day));
+  const latestPayload = decoded.find(({ data }) => data.rating)?.data || {};
+  const rating = latestPayload.rating || {};
+  const meta = latestPayload.meta || {};
+  return {
+    rankingTrends: { power, duel },
+    combatRating: {
+      id: cultivatorId,
+      score: Number(rating.score ?? row.metric_rating ?? 500),
+      dungeonScore: Number(rating.dungeonScore ?? 50),
+      duelScore: Number(rating.duelScore ?? 50),
+      provinceScore: Number(rating.provinceScore ?? 50),
+      activeDays: Number(rating.activeDays ?? daily.length),
+      dungeonDays: Number(rating.dungeonDays ?? 0),
+      duelDays: Number(rating.duelDays ?? 0),
+      provinceDays: Number(rating.provinceDays ?? 0),
+      sampleEnough: Boolean(rating.sampleEnough ?? daily.length >= 3),
+      daily
+    },
+    combatRatingMeta: {
+      windowDays: Number(meta.windowDays || 10),
+      windowStartDay: Number(meta.windowStartDay || power[0]?.day || 1),
+      windowEndDay: Number(meta.windowEndDay || power.at(-1)?.day || 1),
+      minimumActiveDays: Number(meta.minimumActiveDays || 3),
+      weights: meta.weights || { dungeon: 0.4, duel: 0.3, province: 0.3 }
+    }
+  };
+}
 
 export async function readCultivatorDetailIncremental(saveId, cultivatorId, options = {}) {
   const connection = options.connection || mysqlPool;
@@ -34,14 +87,17 @@ export async function readCultivatorDetailIncremental(saveId, cultivatorId, opti
   const publicPearls = getPublicSpiritPearls({ day: 1, player: entity, spiritPearls: entity.spiritPearls, equipment: [], npcs: [] }, entity);
   const [[powerRank]] = await connection.query(`SELECT COUNT(*)+1 rank_no FROM cultivator_metrics_v2 WHERE save_id=? AND (current_power > ? OR (current_power=? AND cultivator_id < ?))`, [saveId, Number(row.metric_power || row.current_power || 0), Number(row.metric_power || row.current_power || 0), cultivatorId]);
   const [[combatRank]] = await connection.query(`SELECT COUNT(*)+1 rank_no FROM cultivator_metrics_v2 WHERE save_id=? AND (current_combat_rating > ? OR (current_combat_rating=? AND cultivator_id < ?))`, [saveId, Number(row.metric_rating || row.current_combat_rating || 500), Number(row.metric_rating || row.current_combat_rating || 500), cultivatorId]);
+  const [[participant]] = await connection.query("SELECT COUNT(*) participant_count FROM cultivator_metrics_v2 WHERE save_id=?", [saveId]);
+  const metricHistory = publicMetricHistory(rankSnapshots, cultivatorId, row, Number(participant.participant_count || 1));
   return {
     person: entity,
     power: Number(row.metric_power || row.current_power || 0),
     metrics: { currentPower: Number(row.metric_power || row.current_power || 0), currentCombatRating: Number(row.metric_rating || row.current_combat_rating || 500), combatScore: Number(row.combat_score || 500), duelScore: Number(row.duel_score || 0), powerRank: Number(powerRank.rank_no || row.power_rank || 0), combatRank: Number(combatRank.rank_no || row.combat_rank || 0), revision: Number(row.metrics_revision || 0) },
     spiritPearls: { ...publicPearls, history: pearlHistory.map((item) => parseMysqlJson(item.history_json, {})) },
     equippedItems: equipment.map((item) => parseMysqlJson(item.item_json, {})),
-    rankingTrends: { power: rankSnapshots.map((item) => ({ day: Number(item.day_no), rank: Number(item.power_rank), value: Number(item.power) })).reverse(), duel: rankSnapshots.map((item) => ({ day: Number(item.day_no), rank: Number(item.duel_rank), value: Number(item.duel_score) })).reverse() },
-    combatRating: rankSnapshots.length ? { id: cultivatorId, score: Number(row.metric_rating || 500), daily: rankSnapshots.map((item) => ({ day: Number(item.day_no), score: Number(item.combat_score), rank: Number(item.combat_rank) })).reverse() } : null,
+    rankingTrends: metricHistory.rankingTrends,
+    combatRating: metricHistory.combatRating,
+    combatRatingMeta: metricHistory.combatRatingMeta,
     independent: true
   };
 }

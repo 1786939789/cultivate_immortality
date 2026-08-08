@@ -2905,11 +2905,11 @@ function duelScoreForDay(entity, day) {
   return clamp(Math.round(score), 0, duelSeasonMaxScore);
 }
 
-function buildDailyRankingTrends(state, id) {
+function buildDailyRankingTrendMap(state) {
   const currentDay = Math.max(1, Number(state.day || 1));
   const startDay = Math.max(1, currentDay - battleRecordDays + 1);
   const roster = allCultivators(state).map(({ entity }) => entity);
-  const trends = { power: [], duel: [] };
+  const trendsById = new Map(roster.map((entity) => [entity.id, { power: [], duel: [] }]));
 
   for (let day = startDay; day <= currentDay; day += 1) {
     const powerRows = roster
@@ -2921,22 +2921,20 @@ function buildDailyRankingTrends(state, id) {
         || estimatedPowerForDay(right.entity, day, state) - estimatedPowerForDay(left.entity, day, state)
         || left.entity.id.localeCompare(right.entity.id));
     const participantCount = roster.length;
-    const powerIndex = powerRows.findIndex((row) => row.entity.id === id);
-    const duelIndex = duelRows.findIndex((row) => row.entity.id === id);
-    if (powerIndex >= 0) {
-      const rank = powerIndex + 1;
-      trends.power.push({
+    powerRows.forEach((row, index) => {
+      const rank = index + 1;
+      trendsById.get(row.entity.id).power.push({
         day,
         rank,
         participantCount,
         rankPoints: dailyRankingRankPoints(rank, participantCount),
-        value: powerRows[powerIndex].value
+        value: row.value
       });
-    }
-    if (duelIndex >= 0) {
-      const rank = duelIndex + 1;
-      const score = duelRows[duelIndex].value;
-      trends.duel.push({
+    });
+    duelRows.forEach((row, index) => {
+      const rank = index + 1;
+      const score = row.value;
+      trendsById.get(row.entity.id).duel.push({
         day,
         rank,
         participantCount,
@@ -2944,9 +2942,54 @@ function buildDailyRankingTrends(state, id) {
         value: score,
         rankName: duelRankForScore(score).name
       });
-    }
+    });
   }
-  return trends;
+  return trendsById;
+}
+
+function buildDailyRankingTrends(state, id) {
+  return buildDailyRankingTrendMap(state).get(id) || { power: [], duel: [] };
+}
+
+export function buildCultivatorMetricSnapshotHistory(state) {
+  ensureStateShape(state);
+  const combatRatings = buildCombatRatings(state);
+  const combatById = new Map(combatRatings.entries.map((entry) => [entry.id, entry]));
+  const rankingById = buildDailyRankingTrendMap(state);
+  const snapshotsById = new Map();
+
+  for (const { entity } of allCultivators(state)) {
+    const rating = combatById.get(entity.id) || null;
+    const rankings = rankingById.get(entity.id) || { power: [], duel: [] };
+    const combatByDay = new Map((rating?.daily || []).map((entry) => [Number(entry.day), entry]));
+    const duelByDay = new Map(rankings.duel.map((entry) => [Number(entry.day), entry]));
+    snapshotsById.set(entity.id, rankings.power.map((power) => ({
+      day: Number(power.day),
+      power,
+      duel: duelByDay.get(Number(power.day)) || null,
+      combat: combatByDay.get(Number(power.day)) || null,
+      rating: rating ? {
+        score: rating.score,
+        dungeonScore: rating.dungeonScore,
+        duelScore: rating.duelScore,
+        provinceScore: rating.provinceScore,
+        activeDays: rating.activeDays,
+        dungeonDays: rating.dungeonDays,
+        duelDays: rating.duelDays,
+        provinceDays: rating.provinceDays,
+        sampleEnough: rating.sampleEnough
+      } : null
+    })));
+  }
+  return {
+    version: 2,
+    windowDays: combatRatings.windowDays,
+    windowStartDay: combatRatings.windowStartDay,
+    windowEndDay: combatRatings.windowEndDay,
+    minimumActiveDays: combatRatings.minimumActiveDays,
+    weights: combatRatings.weights,
+    snapshotsById
+  };
 }
 
 function captureDailyRankSnapshots(state) {

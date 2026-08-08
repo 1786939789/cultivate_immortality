@@ -1,4 +1,4 @@
-import { buildCombatRatings, compactStateForStorage, powerOf } from "./gameLogic.mjs";
+import { buildCultivatorMetricSnapshotHistory, compactStateForStorage, powerOf } from "./gameLogic.mjs";
 import { ensureMysqlSchema, mysqlPool, parseMysqlJson, withMysqlTransaction } from "./mysqlDb.mjs";
 import { contentHash, decodeState, encodeState } from "./mysqlStateCodec.mjs";
 import { normalizePersistenceDomains, persistenceDomains } from "./persistenceDomains.mjs";
@@ -273,24 +273,41 @@ async function writeEncodedState(rawConnection, state, saveId, options = {}) {
     const people = [state.player, ...(state.npcs || [])];
     const selectedIds = options.cultivatorIds ? new Set([...options.cultivatorIds].map(String)) : null;
     const selectedPeople = selectedIds ? people.filter((entity) => selectedIds.has(String(entity.id))) : people;
-    const ratings = new Map(buildCombatRatings(state).entries.map((item) => [item.id, item]));
-    const combatRows = [...ratings.values()].sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
+    const metricHistory = buildCultivatorMetricSnapshotHistory(state);
     for (const entity of selectedPeople) {
       // Settlement and duel batches frequently touch cultivator rows without
       // changing pearl assets. Compare the asset hash first so those batches
       // do not rewrite every pearl/fragment/history row.
       await syncCultivatorPearlsIfChanged(connection, saveId, entity);
-      const rating = ratings.get(entity.id) || {};
+      const snapshots = metricHistory.snapshotsById.get(entity.id) || [];
+      const rating = snapshots.at(-1)?.rating || {};
       await upsertCultivatorMetrics(connection, { saveId, cultivatorId: entity.id, currentPower: powerOf(entity, state), currentCombatRating: rating.score || 500, combatScore: rating.score || 500, duelScore: Number(entity.duelSeason?.score || 0), duelWins: entity.duelWins, duelLosses: entity.duelLosses, dungeonClears: entity.dungeonClears, bestDungeonPower: entity.bestDungeonPower });
     }
-    const powerRows = people.map((entity) => ({ id: entity.id, value: powerOf(entity, state) })).sort((a, b) => b.value - a.value || a.id.localeCompare(b.id));
-    const duelRows = people.map((entity) => ({ id: entity.id, value: Number(entity.duelSeason?.score || 0) })).sort((a, b) => b.value - a.value || a.id.localeCompare(b.id));
     for (const entity of selectedPeople) {
-      const rating = ratings.get(entity.id) || {};
-      const text = JSON.stringify({ day: state.day, power: powerRows.find((row) => row.id === entity.id)?.value || 0 });
-      await connection.query(`INSERT INTO cultivator_rank_snapshots_v2(save_id,cultivator_id,day_no,power,power_rank,duel_score,duel_rank,combat_score,combat_rank,snapshot_json,content_hash)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE power=VALUES(power),power_rank=VALUES(power_rank),duel_score=VALUES(duel_score),duel_rank=VALUES(duel_rank),combat_score=VALUES(combat_score),combat_rank=VALUES(combat_rank),snapshot_json=VALUES(snapshot_json),content_hash=VALUES(content_hash)`,
-      [saveId, entity.id, state.day, powerRows.find((row) => row.id === entity.id)?.value || 0, powerRows.findIndex((row) => row.id === entity.id) + 1, duelRows.find((row) => row.id === entity.id)?.value || 0, duelRows.findIndex((row) => row.id === entity.id) + 1, rating.score || 500, combatRows.findIndex((row) => row.id === entity.id) + 1, text, contentHash(text)]);
+      const snapshots = metricHistory.snapshotsById.get(entity.id) || [];
+      const snapshotsToWrite = options.backfillMetricHistory
+        ? snapshots
+        : snapshots.filter((snapshot) => Number(snapshot.day) === Number(state.day));
+      for (const snapshot of snapshotsToWrite) {
+        const text = JSON.stringify({
+          version: metricHistory.version,
+          day: snapshot.day,
+          power: snapshot.power,
+          duel: snapshot.duel,
+          combat: snapshot.combat,
+          rating: snapshot.rating,
+          meta: {
+            windowDays: metricHistory.windowDays,
+            windowStartDay: metricHistory.windowStartDay,
+            windowEndDay: metricHistory.windowEndDay,
+            minimumActiveDays: metricHistory.minimumActiveDays,
+            weights: metricHistory.weights
+          }
+        });
+        await connection.query(`INSERT INTO cultivator_rank_snapshots_v2(save_id,cultivator_id,day_no,power,power_rank,duel_score,duel_rank,combat_score,combat_rank,snapshot_json,content_hash)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE power=VALUES(power),power_rank=VALUES(power_rank),duel_score=VALUES(duel_score),duel_rank=VALUES(duel_rank),combat_score=VALUES(combat_score),combat_rank=VALUES(combat_rank),snapshot_json=VALUES(snapshot_json),content_hash=VALUES(content_hash)`,
+        [saveId, entity.id, snapshot.day, snapshot.power?.value || 0, snapshot.power?.rank || 0, snapshot.duel?.value || 0, snapshot.duel?.rank || 0, snapshot.combat?.score ?? 500, snapshot.combat?.rank || 0, text, contentHash(text)]);
+      }
     }
   }
   return revision;
