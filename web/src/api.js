@@ -82,6 +82,10 @@ export function setAdminActiveAccount(saveId, active = true, scope = "full") {
   return request("/api/admin/accounts/active", { method: "POST", body: { saveId, active, scope } });
 }
 
+export function getHome(signal) {
+  return request(`/api/home?_=${Date.now()}`, { signal });
+}
+
 export function setAdminManagedAccount(saveId, scope = "full") {
   return request("/api/admin/accounts/managed", { method: "POST", body: { saveId, scope } });
 }

@@ -31,3 +31,4 @@ export const readDungeonDayFromMysql = storage.readDungeonDayFromMysql;
 export const readDungeonDayIndexFromMysql = storage.readDungeonDayIndexFromMysql;
 export const resetState = storage.resetState;
 export const publicState = storage.publicState;
+export const readHomeProjection = storage.readHomeProjection;

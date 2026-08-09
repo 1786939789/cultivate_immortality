@@ -6,6 +6,7 @@ import { generateDailyEncounter } from "../server/gameLogic.mjs";
 import { encounterDefinitionMap } from "../server/encounterData.mjs";
 import { runDailyDuelBatch, runSettlementBatch } from "../server/mysqlStore.mjs";
 import { cleanupFixture, createFixture } from "./mysql-test-fixture.mjs";
+import { readHomeProjectionFromMysql } from "../server/homeIncrementalRepository.mjs";
 
 const fixture = await createFixture({ prefix: "verify-new-", cleanTransientRuns: true });
 const saveId = fixture.saveId;
@@ -47,6 +48,9 @@ try {
   const [[npcAfterActions]] = await mysqlPool.query("SELECT content_hash,metrics_revision FROM cultivators WHERE save_id=? AND cultivator_id=?", [saveId, npcId]);
   report.npcUnrelatedToPlayerActionsStable = npcBefore?.content_hash === npcAfterActions?.content_hash && Number(npcBefore?.metrics_revision || 0) === Number(npcAfterActions?.metrics_revision || 0);
   const afterActions = await loadStateFromMysql(saveId);
+  const homeQueries = [];
+  const home = await readHomeProjectionFromMysql(saveId, { queryObserver: (sql) => homeQueries.push(sql) });
+  report.homeProjection = { scope: home.__scope, revision: home.stateRevision, queries: homeQueries.length, noFullWorldQuery: !homeQueries.some((sql) => /FROM battle_replays|FROM equipment_items|FROM duel_matches|FROM dungeon_records/i.test(sql)) };
   report.daoRunPersisted = Boolean(afterActions.daoTrial?.activeRun);
   const duelStarted = performance.now();
   const duel = await runDailyDuelBatch(saveId);
@@ -65,7 +69,7 @@ try {
   report.npcCountPreserved = after.npcs.length === sourceState.npcs.length;
   report.portraitPersisted = Number(after.player.portraitVariant) === 2;
   report.focusPersisted = after.encounters?.focusedNpcIds?.includes(npcId) === true;
-  report.passed = report.npcCountPreserved && report.daoRunPersisted && report.portraitPersisted && report.focusPersisted && report.npcUnrelatedToPlayerActionsStable && report.duelBatch.matchCount >= 0 && after.day === sourceState.day + 1;
+  report.passed = report.npcCountPreserved && report.daoRunPersisted && report.portraitPersisted && report.focusPersisted && report.npcUnrelatedToPlayerActionsStable && report.duelBatch.matchCount >= 0 && after.day === sourceState.day + 1 && report.homeProjection.noFullWorldQuery;
   console.log(JSON.stringify(report));
 } finally {
   await cleanupFixture(saveId);

@@ -5098,7 +5098,7 @@ import {
 } from "lucide-vue-next";
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from "vue";
 import { ACTION_PATCH_VERSION, mergeActionPatch } from "./actionPatch.js";
-import { clearCachedState, getAdminAccounts, getBattleReplay, getCachedState, getCultivatorDetail, getDungeonDay, getDungeonDays, getLiveRanking, getCurrentUser, getDaoTrialHistory, getDuelDayPage, getDuelReplay, getState, login, logout, postAction, register, saveCachedState, setAdminActiveAccount, setAdminManagedAccount } from "./api";
+import { clearCachedState, getAdminAccounts, getBattleReplay, getCachedState, getCultivatorDetail, getDungeonDay, getDungeonDays, getLiveRanking, getCurrentUser, getDaoTrialHistory, getDuelDayPage, getDuelReplay, getHome, getState, login, logout, postAction, register, saveCachedState, setAdminActiveAccount, setAdminManagedAccount } from "./api";
 import CharacterPortrait from "./components/CharacterPortrait.vue";
 import EquipmentIcon from "./components/EquipmentIcon.vue";
 import Meter from "./components/Meter.vue";
@@ -13154,7 +13154,7 @@ async function refreshStateNow(scope = "full") {
   if (scope === "full") fullStateRefreshing.value = true;
   if (scope === "home") homeStateRefreshing.value = true;
   try {
-    const nextState = await getState(scope, controller.signal);
+    const nextState = scope === "home" ? await getHome(controller.signal) : await getState(scope, controller.signal);
     if (generation !== authGeneration) return;
     if (!applyState(nextState)) return;
     syncSelectedDays();
@@ -13204,6 +13204,7 @@ async function act(path, body = {}, options = {}) {
     if (response?.patch) {
       const applied = applyActionPatch(response);
       if (!applied && Number(response.patchVersion || 1) <= ACTION_PATCH_VERSION) return null;
+      if (options.refreshHome !== false && shouldRefreshHomeState(path)) await refresh("home");
       error.value = "";
       return response.result;
     }

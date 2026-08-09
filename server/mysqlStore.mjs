@@ -764,4 +764,9 @@ export async function publicState(id = "default", options = {}) {
   return nextState;
 }
 
+export async function readHomeProjection(id = "default") {
+  const { readHomeProjectionFromMysql } = await import("./homeIncrementalRepository.mjs");
+  return readHomeProjectionFromMysql(id);
+}
+
 export { readDungeonDayFromMysql, readDungeonDayIndexFromMysql };

@@ -12473,6 +12473,42 @@ export function dailySettlement(state, options = {}) {
   log(state, pick(events), "gold");
 }
 
+export function getPublicHomeProjection(state, options = {}) {
+  if (!options.metrics) return getHomeState(state);
+  const metrics = options.metrics || [];
+  const player = publicCultivator(state.player, state, { kind: "player", dungeonHistoryLimit: 6, duelHistoryLimit: 12 });
+  const playerMetric = metrics.find((item) => item.id === state.player.id) || {};
+  player.power = Number(playerMetric.power || 0);
+  const ranking = metrics.slice(0, 5).map((item, index) => ({
+    id: item.id, name: item.name, sect: item.sect, realm: item.realm, value: item.power, rank: index + 1,
+    isPlayer: item.id === state.player.id, gender: "", portraitUrl: ""
+  }));
+  const duelRanking = [...metrics].sort((a, b) => b.duelScore - a.duelScore || b.power - a.power);
+  const combatRanking = [...metrics].sort((a, b) => b.combatRating - a.combatRating || b.power - a.power);
+  const playerDuel = duelRanking.find((item) => item.id === state.player.id) || playerMetric;
+  const playerRank = metrics.findIndex((item) => item.id === state.player.id) + 1;
+  const playerDuelRankPosition = duelRanking.findIndex((item) => item.id === state.player.id) + 1;
+  const playerCombatRankPosition = combatRanking.findIndex((item) => item.id === state.player.id) + 1;
+  const home = {
+    ranking, playerRank: playerRank > 0 ? playerRank : "-", playerDuelRank: { score: playerDuel.duelScore || 0, rankName: "黑铁", rankId: "iron", wins: playerDuel.wins || 0, losses: playerDuel.losses || 0 },
+    playerDuelRankPosition: playerDuelRankPosition > 0 ? playerDuelRankPosition : 0,
+    playerPowerRank: playerRank > 0 ? playerRank : 0,
+    playerCombatRank: playerCombatRankPosition > 0 ? playerCombatRankPosition : 0,
+    playerDuelRankText: `黑铁 ${playerDuel.duelScore || 0}分`, todayDuelCount: 0,
+    rankingSource: "metrics", logs: (state.log || []).slice(0, 30), logDays: state.logDays || []
+  };
+  return {
+    __scope: "home", day: state.day, calendarStartDate: state.calendarStartDate, lastSettlementDate: state.lastSettlementDate,
+    player, sect: state.sect, tasks: state.tasks || [], taskDefinitions: state.taskDefinitions || [], taskCompletions: state.taskCompletions || [],
+    taskProgress: publicTaskProgress(state), gameSettings: state.gameSettings || {}, taskMultiplierRecords: state.taskMultiplierRecords || [],
+    encounters: publicEncounters(state), daoTrial: publicDaoTrial(state), log: state.log || [], logDays: state.logDays || [],
+    bag: state.bag || {}, equipmentTransfers: state.equipmentTransfers || [], home, catalog: staticCatalog(), stateRevision: state.__stateRevision || 0,
+    derived: { xpNeed: xpNeed(player.realm), currentRealmInfo: realmInfo(player.realm), playerPower: playerMetric.power || 0,
+      playerCombatRating: playerMetric.combatRating || 500, combatRatings: { entries: metrics.map((item) => ({ id: item.id, score: item.combatRating })) },
+      effectiveStats: effectiveStats(player, state), nextRealm: realms[Math.min(player.realm + 1, realms.length - 1)], breakChance: breakthroughChanceFor(state, player) }
+  };
+}
+
 export function publicDungeonDay(record, currentDay = 1, people = null) {
   if (!record) return null;
   return publicDungeonDays([record], currentDay, people)[0] || null;

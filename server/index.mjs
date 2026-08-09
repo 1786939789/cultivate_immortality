@@ -59,6 +59,7 @@ import {
   runSettlementBatch,
   runDailyDuelBatch,
   publicState,
+  readHomeProjection,
   readBattleReplay,
   readState,
   registerUser,
@@ -256,6 +257,7 @@ async function handleApi(req, res, url) {
   }
   if (session.user.isAdmin && !url.pathname.startsWith("/api/admin/") && ![
     "/api/state",
+    "/api/home",
     "/api/cultivators/detail",
     "/api/cultivators/portrait",
     "/api/day/advance",
@@ -316,6 +318,13 @@ async function handleApi(req, res, url) {
     }
     const state = await readState(saveId);
     sendJson(res, 200, getPublicCultivatorDetail(state, id));
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/home") {
+    const home = await readHomeProjection(saveId);
+    if (!home) throw new Error("存档不存在");
+    sendJson(res, 200, home);
     return;
   }
 
