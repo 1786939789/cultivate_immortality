@@ -12476,6 +12476,7 @@ export function dailySettlement(state, options = {}) {
 export function getPublicHomeProjection(state, options = {}) {
   if (!options.metrics) return getHomeState(state);
   const metrics = options.metrics || [];
+  const logDays = publicLogDays(state);
   const player = publicCultivator(state.player, state, { kind: "player", dungeonHistoryLimit: 6, duelHistoryLimit: 12 });
   const playerMetric = metrics.find((item) => item.id === state.player.id) || {};
   player.power = Number(playerMetric.power || 0);
@@ -12495,13 +12496,17 @@ export function getPublicHomeProjection(state, options = {}) {
     playerPowerRank: playerRank > 0 ? playerRank : 0,
     playerCombatRank: playerCombatRankPosition > 0 ? playerCombatRankPosition : 0,
     playerDuelRankText: `黑铁 ${playerDuel.duelScore || 0}分`, todayDuelCount: 0,
-    rankingSource: "metrics", logs: (state.log || []).slice(0, 30), logDays: state.logDays || []
+    rankingSource: "metrics",
+    sectTerritorySummary: homeSectTerritorySummaryForState(state),
+    dungeonSummary: homeDungeonSummaryForState(state),
+    logs: (logDays[0]?.logs || state.log || []).slice(0, 30), logDays
   };
   return {
     __scope: "home", day: state.day, calendarStartDate: state.calendarStartDate, lastSettlementDate: state.lastSettlementDate,
     player, sect: state.sect, tasks: state.tasks || [], taskDefinitions: state.taskDefinitions || [], taskCompletions: state.taskCompletions || [],
     taskProgress: publicTaskProgress(state), gameSettings: state.gameSettings || {}, taskMultiplierRecords: state.taskMultiplierRecords || [],
-    encounters: publicEncounters(state), daoTrial: publicDaoTrial(state), log: state.log || [], logDays: state.logDays || [],
+    encounters: publicEncounters(state), daoTrial: publicDaoTrial(state), log: state.log || [], logDays,
+    provinces: publicProvinceState(state),
     bag: state.bag || {}, equipmentTransfers: state.equipmentTransfers || [], home, catalog: staticCatalog(), stateRevision: state.__stateRevision || 0,
     derived: { xpNeed: xpNeed(player.realm), currentRealmInfo: realmInfo(player.realm), playerPower: playerMetric.power || 0,
       playerCombatRating: playerMetric.combatRating || 500, combatRatings: { entries: metrics.map((item) => ({ id: item.id, score: item.combatRating })) },

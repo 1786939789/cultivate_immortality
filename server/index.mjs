@@ -72,6 +72,10 @@ import {
 import { stateActionResponse } from "./actionResponseContract.mjs";
 const backgroundWorker = await import("./backgroundWorker.mjs");
 
+// MySQL is the only supported storage backend. Keep this capability flag
+// explicit for the incremental and batch route branches.
+const usesMysqlBackgroundJobs = true;
+
 const port = Number(process.env.PORT || 8787);
 const rootDir = fileURLToPath(new URL("../", import.meta.url));
 const distDir = join(rootDir, "dist");

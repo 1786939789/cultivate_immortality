@@ -7650,6 +7650,7 @@ const homeLogDayRecords = computed(() => {
   const records = [];
   for (let day = currentDay; day >= firstDay; day -= 1) {
     const logs = uniqueHomeLogs([
+      ...persistedHomeLogs(day),
       ...playerDailyProgressHomeLogs(day),
       ...playerBreakthroughHomeLogs(day),
       ...playerDungeonHomeLogs(day),
@@ -9898,6 +9899,33 @@ function sectMemberFatigue(member) {
   return Math.max(0, Number(value) || 0);
 }
 
+function persistedHomeLogs(day) {
+  const records = [
+    ...(gameState.value.logDays || []),
+    ...(homeSummary.value.logDays || [])
+  ].filter((record) => Number(record?.day) === Number(day));
+  if (!records.length) return [];
+  const seen = new Set();
+  const entries = [];
+  for (const record of records) {
+    for (const entry of record.logs || []) {
+      const text = String(entry?.text || "").trim();
+      if (!text) continue;
+      const key = [entry?.day || day, entry?.time || "", text].join("|");
+      if (seen.has(key)) continue;
+      seen.add(key);
+      entries.push({
+        ...entry,
+        day: entry.day || day,
+        date: entry.date || record.date || dateForDay(day),
+        category: entry.category || logCategory(entry).id,
+        order: 2400 + entries.length
+      });
+    }
+  }
+  return entries;
+}
+
 function fatigueDelta(member) {
   const previous = derived.value.sectStrategy?.fatiguePrevious || {};
   if (!member?.id || !Object.hasOwn(previous, member.id)) return { known: false, previous: 0, change: 0, direction: "stable", text: "" };
@@ -11060,11 +11088,11 @@ function logTone(entry) {
 function logCategory(entry) {
   const text = entry?.text || "";
   const category = entry?.category || "";
-  if (category === "duel" || text.startsWith("切磋")) return { id: "duel", mark: "斗", label: "切磋" };
-  if (category === "siege" || text.includes("攻城") || text.includes("守城")) return { id: "siege", mark: "城", label: "攻守城" };
-  if (category === "dungeon" || text.startsWith("副本") || text.startsWith("你通关")) return { id: "dungeon", mark: "副", label: "副本" };
+  if (category === "duel" || text.startsWith("切磋") || text.includes("全员切磋")) return { id: "duel", mark: "斗", label: "切磋" };
+  if (category === "siege" || text.includes("攻城") || text.includes("守城") || text.includes("九州攻守")) return { id: "siege", mark: "城", label: "攻守城" };
+  if (category === "dungeon" || text.startsWith("副本") || text.startsWith("今日副本结算") || text.startsWith("你通关")) return { id: "dungeon", mark: "副", label: "副本" };
   if (category === "breakthrough" || text.startsWith("突破") || text.startsWith("经验圆满")) return { id: "breakthrough", mark: "破", label: "突破" };
-  if (category === "equipment" || text.startsWith("装备掉落")) return { id: "equipment", mark: "装", label: "装备" };
+  if (category === "equipment" || text.startsWith("装备掉落") || text.includes("竞拍") && text.includes("灵器")) return { id: "equipment", mark: "装", label: "装备" };
   if (category === "progress" || text.startsWith("修行入账")) return { id: "progress", mark: "修", label: "修行收益" };
   if (category === "task" || text.startsWith("完成「")) return { id: "task", mark: "务", label: "现实任务" };
   if (category === "elixir" || text.startsWith("在坊市购得「") || text.startsWith("售出「") || text.startsWith("服下「")) return { id: "elixir", mark: "丹", label: "丹药买卖服用" };

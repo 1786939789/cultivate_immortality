@@ -207,7 +207,11 @@ const portraitMap = {
 
 export function portraitFor(person) {
   if (!person?.name) return "";
-  if (person.id === "player" || person.isPlayer) return "/portraits/generated/han-li-web.webp";
+  if (person.id === "player" || person.isPlayer) {
+    return Number(person.portraitVariant || 0) === 1
+      ? "/portraits/custom/lixinshu-web.webp"
+      : "/portraits/generated/han-li-web.webp";
+  }
   if (portraitMap[person.name]) return portraitMap[person.name];
   return dicebearPortraitFor(person);
 }

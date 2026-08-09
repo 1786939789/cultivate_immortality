@@ -80,7 +80,19 @@ export async function readCultivatorDetailIncremental(saveId, cultivatorId, opti
   for (const item of history) { const list = histories.get(item.history_type) || []; list.push({ position: Number(item.position_no), value: parseMysqlJson(item.record_json, {}) }); histories.set(item.history_type, list); }
   for (const [type, values] of histories) entity[type] = values.sort((a, b) => a.position - b.position).map((item) => item.value);
   const metric = (typed, legacy) => Number(typed || 0) !== 0 || Number(legacy || 0) === 0 ? Number(typed || 0) : Number(legacy || 0);
-  Object.assign(entity, { id: entity.id || row.cultivator_id, name: row.name || entity.name, realm: Number(row.realm_no), xp: Number(row.xp), hp: Number(row.hp), maxHp: Number(row.max_hp), mana: Number(row.mana), maxMana: Number(row.max_mana), sect: row.sect_name || entity.sect, spirit: metric(row.spirit, entity.spirit), reputation: metric(row.reputation, entity.reputation), body: metric(row.body, entity.body), wisdom: metric(row.wisdom, entity.wisdom), attack: metric(row.attack, entity.attack), defense: metric(row.defense, entity.defense), divineSense: metric(row.divine_sense, entity.divineSense), chance: metric(row.chance, entity.chance), wealth: metric(row.wealth, entity.wealth), heartDemon: metric(row.heart_demon, entity.heartDemon) });
+  Object.assign(entity, {
+    id: entity.id || row.cultivator_id,
+    name: row.name || entity.name,
+    portraitUrl: row.portrait_id && row.cultivator_id !== "player"
+      ? `/api/cultivators/portrait?id=${encodeURIComponent(row.cultivator_id)}&v=${Math.max(0, Number(entity.portraitVariant) || 0)}`
+      : entity.portraitUrl || "",
+    realm: Number(row.realm_no), xp: Number(row.xp), hp: Number(row.hp), maxHp: Number(row.max_hp),
+    mana: Number(row.mana), maxMana: Number(row.max_mana), sect: row.sect_name || entity.sect,
+    spirit: metric(row.spirit, entity.spirit), reputation: metric(row.reputation, entity.reputation),
+    body: metric(row.body, entity.body), wisdom: metric(row.wisdom, entity.wisdom), attack: metric(row.attack, entity.attack),
+    defense: metric(row.defense, entity.defense), divineSense: metric(row.divine_sense, entity.divineSense),
+    chance: metric(row.chance, entity.chance), wealth: metric(row.wealth, entity.wealth), heartDemon: metric(row.heart_demon, entity.heartDemon)
+  });
   const asset = assets[0] || { version: 3, dust: 0 };
   const pearlMap = new Map(pearls.map((item) => [item.pearl_id, { id: item.pearl_id, tier: Number(item.tier), star: Number(item.star), fragments: {} }]));
   for (const item of fragments) pearlMap.get(item.pearl_id)?.fragments && (pearlMap.get(item.pearl_id).fragments[String(item.tier)] = Number(item.fragment_count));

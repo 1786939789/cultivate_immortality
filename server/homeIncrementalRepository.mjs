@@ -1,5 +1,6 @@
 import { mysqlPool, parseMysqlJson } from "./mysqlDb.mjs";
 import { getPublicHomeProjection } from "./gameLogic.mjs";
+import { decodeDungeonDay } from "./mysqlStateCodec.mjs";
 
 const homeSections = [
   "sect", "tasks", "taskDefinitions", "taskCompletions", "taskProgress", "taskMultiplierRecords",
@@ -17,6 +18,9 @@ function hydratePlayer(row) {
   const metric = (typed, legacy) => number(typed) !== 0 || number(legacy) === 0 ? number(typed) : number(legacy);
   Object.assign(player, {
     id: player.id || "player", name: row.name || player.name || "",
+    portraitUrl: row.portrait_id && (player.id || "player") !== "player"
+      ? `/api/cultivators/portrait?id=${encodeURIComponent(player.id || "player")}&v=${Math.max(0, number(player.portraitVariant))}`
+      : player.portraitUrl || "",
     realm: number(row.realm_no, number(player.realm)), xp: number(row.xp, number(player.xp)),
     hp: number(row.hp, number(player.hp)), maxHp: number(row.max_hp, number(player.maxHp)),
     mana: number(row.mana, number(player.mana)), maxMana: number(row.max_mana, number(player.maxMana)),
@@ -49,6 +53,19 @@ export async function readHomeProjectionFromMysql(saveId, options = {}) {
     [saveId, ...homeSections]
   );
   const sections = Object.fromEntries(sectionRows.map((row) => [row.section_key, parseMysqlJson(row.section_json, null)]));
+  const currentDay = number(save.day_no, 1);
+  const [[dungeonDayRow]] = await connection.query(
+    "SELECT day_no, date_key FROM dungeon_days WHERE save_id=? AND day_no=? LIMIT 1",
+    [saveId, currentDay]
+  );
+  let dungeonDays = [];
+  if (dungeonDayRow) {
+    const [dungeonRecordRows] = await connection.query(
+      "SELECT day_no, record_type, record_key, position_no, record_json FROM dungeon_records WHERE save_id=? AND day_no=? ORDER BY record_type, position_no, record_key",
+      [saveId, currentDay]
+    );
+    dungeonDays = [decodeDungeonDay(dungeonDayRow, dungeonRecordRows)];
+  }
   const player = hydratePlayer(playerRow);
   const metrics = metricRows.map((row) => ({
     id: row.cultivator_id, kind: row.cultivator_kind, name: row.name || "", realm: number(row.realm_no),
@@ -60,6 +77,7 @@ export async function readHomeProjectionFromMysql(saveId, options = {}) {
     day: number(save.day_no, 1), rebirth: number(save.rebirth_no, 1), calendarStartDate: save.calendar_start_date || "",
     lastSettlementDate: save.last_settlement_date || "", stateRevision: number(save.state_revision), __stateRevision: number(save.state_revision),
     player, npcs: [], equipment: [], ...sections,
+    provinces: sections.provinces || [], dungeonDays,
     sect: sections.sect || { name: player.sect || "" }, bag: sections.bag || {}, log: sections.log || [],
     tasks: sections.tasks || [], taskDefinitions: sections.taskDefinitions || [], taskCompletions: sections.taskCompletions || [],
     taskProgress: sections.taskProgress || {}, taskMultiplierRecords: sections.taskMultiplierRecords || [],
