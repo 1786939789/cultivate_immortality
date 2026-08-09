@@ -10840,6 +10840,66 @@ export function getPublicState(state, options = {}) {
   };
 }
 
+// Versioned, action-scoped response projection.  Actions may pass their
+// changed internal sections, but callers always receive the same public shape
+// and never receive cultivator JSON or other persistence-only fields.
+export function getPublicActionPatch(state, changed = {}, options = {}) {
+  const patch = {};
+  const keys = Object.keys(changed || {});
+  const has = (key) => keys.includes(key);
+  const player = publicCultivator(state.player, state, { kind: "player", dungeonHistoryLimit: 6, duelHistoryLimit: 12 });
+  player.power = Number(state.__currentPower ?? player.power ?? powerOf(state.player, state));
+  if (has("player") || options.includePlayer !== false) patch.player = player;
+  const publicFields = [
+    "bag", "shop", "sect", "playerSectPlan", "encounters",
+    "provinces", "provinceVersion", "taskProgress", "taskCompletions", "tasks",
+    "equipmentTransfers", "dungeonDays", "duelDays", "provinceWars", "logDays",
+    "gameSettings", "spiritPearls", "dailyRootFortune"
+  ];
+  for (const key of publicFields) if (has(key)) patch[key] = state[key];
+  if (has("shop")) patch.shop = publicShop(state);
+  if (has("spiritPearls")) patch.spiritPearls = publicSpiritPearls(state, state.player);
+  if (has("logDays")) patch.logDays = publicLogDays(state);
+  if (has("dungeonDays")) patch.dungeonDays = publicDungeonDays(state.dungeonDays || [], state.day, publicCultivatorRefMap(state));
+  if (has("duelDays")) patch.duelDays = publicDuelDays(state.duelDays || [], state.day, publicCultivatorRefMap(state));
+  if (has("provinceWars")) patch.provinceWars = publicProvinceWars(state.provinceWars || [], state.day, publicCultivatorRefMap(state));
+  if (has("encounters")) {
+    patch.encounters = publicEncounters(state);
+    if (has("relationships")) patch.relationships = patch.encounters.relationships || [];
+  }
+  if (has("provinces")) patch.provinces = publicProvinceState(state);
+  if (has("taskProgress") && !Object.prototype.hasOwnProperty.call(changed.taskProgress || {}, "day")) patch.taskProgress = publicTaskProgress(state);
+  if (has("daoTrial") || options.includeDaoTrial) patch.daoTrial = publicDaoTrial(state);
+  if (has("log")) patch.log = Array.isArray(changed.log) ? changed.log.slice(0, 1) : [];
+  for (const key of ["completion", "deletedCompletionId", "dailyRecord", "taskProgress"]) {
+    if (Object.prototype.hasOwnProperty.call(changed, key) && patch[key] === undefined) patch[key] = changed[key];
+  }
+  if (changed.taskProgress && typeof changed.taskProgress === "object" && Object.prototype.hasOwnProperty.call(changed.taskProgress, "day")) {
+    patch.taskProgress = changed.taskProgress;
+  }
+  const currentRealmInfo = realmInfo(state.player.realm);
+  const playerPower = Number(state.__currentPower ?? powerOf(state.player, state));
+  const playerCombatRating = Number(state.__currentCombatRating ?? 500);
+  patch.derived = {
+    playerPower,
+    playerCombatRating,
+    combatRating: { id: state.player.id, score: playerCombatRating },
+    currentRealmInfo,
+    xpNeed: xpNeed(state.player.realm),
+    nextRealm: realms[Math.min(state.player.realm + 1, realms.length - 1)],
+    breakChance: breakthroughChanceFor(state, state.player),
+    effectiveStats: effectiveStats(state.player, state)
+  };
+  patch.home = {
+    playerPower,
+    playerCombatRating,
+    playerRealm: state.player.realm,
+    playerXp: state.player.xp,
+    latestLog: patch.log?.[0] || null
+  };
+  return patch;
+}
+
 export function getPublicCultivatorDetail(state, id) {
   ensureStateShape(state);
   const match = allCultivators(state).find((item) => item.entity.id === id);

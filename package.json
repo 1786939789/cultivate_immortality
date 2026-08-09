@@ -22,6 +22,7 @@
     "check:balance": "node scripts/balance-check.mjs",
     "check:systems": "node scripts/encounter-trial-check.mjs",
     "check:siege": "node scripts/siege-strategy-check.mjs",
+    "test:action-patch": "node scripts/test-action-patch-contract.mjs",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",
     "start": "node --env-file-if-exists=.env server/index.mjs"

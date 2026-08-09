@@ -22,6 +22,9 @@ try {
   for (const [action, payload] of actions) {
     const started = performance.now();
     const response = await runPlayerActionIncremental(saveId, action, payload);
+    if (response.patchVersion !== 2 || !response.patch || response.patch.stateRevision !== undefined || response.patch.player?.cultivator_json !== undefined) {
+      throw new Error(`action ${action} did not satisfy patch v2 public contract`);
+    }
     report.actions[action] = { ms: Number((performance.now() - started).toFixed(2)), revision: response.stateRevision, kind: response.kind };
   }
   // Exercise a legal encounter choice in the isolated copy. If the source
@@ -37,6 +40,7 @@ try {
     const choiceId = encounterDefinitionMap[generated.definitionId]?.choices?.[0]?.id || undefined;
     if (choiceId) {
       const encounterResponse = await runPlayerActionIncremental(saveId, "encounterChoose", { eventId: generated.id, choiceId });
+      if (encounterResponse.patchVersion !== 2 || !encounterResponse.patch) throw new Error("encounterChoose patch contract failed");
       report.actions.encounterChoose = { revision: encounterResponse.stateRevision, resolved: true };
     }
   }

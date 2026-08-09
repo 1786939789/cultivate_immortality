@@ -5097,6 +5097,7 @@ import {
   Minimize2
 } from "lucide-vue-next";
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from "vue";
+import { ACTION_PATCH_VERSION, mergeActionPatch } from "./actionPatch.js";
 import { clearCachedState, getAdminAccounts, getBattleReplay, getCachedState, getCultivatorDetail, getDungeonDay, getDungeonDays, getLiveRanking, getCurrentUser, getDaoTrialHistory, getDuelDayPage, getDuelReplay, getState, login, logout, postAction, register, saveCachedState, setAdminActiveAccount, setAdminManagedAccount } from "./api";
 import CharacterPortrait from "./components/CharacterPortrait.vue";
 import EquipmentIcon from "./components/EquipmentIcon.vue";
@@ -13000,21 +13001,27 @@ function applyState(nextState, options = {}) {
   return true;
 }
 
-function applyTaskPatch(patch, revision) {
-  if (!state.value || !patch) return false;
-  const current = state.value;
-  const nextPlayer = { ...(current.player || {}), ...(patch.player || {}) };
-  state.value = {
-    ...current,
-    player: nextPlayer,
-    tasks: patch.completion ? [patch.completion, ...(current.tasks || []).filter((item) => item.id !== patch.completion.id)].slice(0, 16) : current.tasks,
-    taskCompletions: patch.completion ? [patch.completion, ...(current.taskCompletions || []).filter((item) => item.id !== patch.completion.id)] : current.taskCompletions,
-    taskProgress: patch.taskProgress || current.taskProgress,
-    log: patch.log ? [...patch.log, ...(current.log || [])].slice(0, 80) : current.log,
-    stateRevision: Number(revision ?? current.stateRevision ?? 0),
-    derived: { ...(current.derived || {}), playerPower: Number(nextPlayer.currentPower ?? current.derived?.playerPower ?? 0) }
-  };
-  highestStateRevision = Math.max(highestStateRevision, Number(revision || 0));
+function applyActionPatch(response) {
+  const merged = mergeActionPatch(state.value, response, highestStateRevision);
+  if (!merged.applied) {
+    if (merged.reason === "future-version") {
+      fullStateStale.value = true;
+      void refresh("home");
+    }
+    return false;
+  }
+  if (merged.replace) {
+    highestStateRevision = merged.highestRevision;
+    const applied = applyState(merged.state, { replace: true, force: true });
+    // Reset patches intentionally carry only the lite public projection; load
+    // the roster asynchronously so the dashboard never stays without NPCs.
+    void ensureFullState();
+    return applied;
+  }
+  state.value = merged.state;
+  highestStateRevision = merged.highestRevision;
+  fullStateStale.value = true;
+  liveRankings.power = []; liveRankings.duel = []; liveRankings.combat = [];
   syncSelectedDays();
   return true;
 }
@@ -13194,44 +13201,9 @@ async function act(path, body = {}, options = {}) {
       dungeonDayIndexItems.value = [];
       dungeonDayIndexRequest = null;
     }
-    if (response?.kind === "task.completed" && response.patch) {
-      applyTaskPatch(response.patch, response.stateRevision);
-      error.value = "";
-      return response.result;
-    }
-    if (response?.kind === "task.deleted" && response.patch) {
-      if (state.value) {
-        state.value = {
-          ...state.value,
-          player: { ...(state.value.player || {}), ...(response.patch.player || {}) },
-          tasks: (state.value.tasks || []).filter((item) => item.id !== response.patch.deletedCompletionId),
-          taskCompletions: (state.value.taskCompletions || []).filter((item) => item.id !== response.patch.deletedCompletionId),
-          taskProgress: response.patch.taskProgress || state.value.taskProgress,
-          log: [...(response.patch.log || []), ...(state.value.log || [])].slice(0, 80),
-          stateRevision: response.stateRevision
-        };
-      }
-      highestStateRevision = Math.max(highestStateRevision, Number(response.stateRevision || 0));
-      error.value = "";
-      return response.result;
-    }
-    if (response?.kind?.startsWith("action.") && response.patch) {
-      if (state.value) state.value = {
-        ...state.value,
-        player: { ...(state.value.player || {}), ...(response.patch.player || {}) },
-        bag: response.patch.bag || state.value.bag,
-        shop: response.patch.shop || state.value.shop,
-        sect: response.patch.sect || state.value.sect,
-        playerSectPlan: response.patch.playerSectPlan || state.value.playerSectPlan,
-        encounters: response.patch.encounters || state.value.encounters,
-        relationships: response.patch.relationships || state.value.relationships,
-        provinces: response.patch.provinces || state.value.provinces,
-        daoTrial: response.patch.daoTrial || state.value.daoTrial,
-        log: [...(response.patch.log || []), ...(state.value.log || [])].slice(0, 80),
-        stateRevision: response.stateRevision
-      };
-      highestStateRevision = Math.max(highestStateRevision, Number(response.stateRevision || 0));
-      liveRankings.power = []; liveRankings.duel = []; liveRankings.combat = [];
+    if (response?.patch) {
+      const applied = applyActionPatch(response);
+      if (!applied && Number(response.patchVersion || 1) <= ACTION_PATCH_VERSION) return null;
       error.value = "";
       return response.result;
     }

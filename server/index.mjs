@@ -68,6 +68,7 @@ import {
   settleAllStates,
   sessionCookie
 } from "./storage.mjs";
+import { stateActionResponse } from "./actionResponseContract.mjs";
 const backgroundWorker = await import("./backgroundWorker.mjs");
 
 const port = Number(process.env.PORT || 8787);
@@ -427,7 +428,8 @@ async function handleApi(req, res, url) {
     const body = await readJson(req);
     if (session.user.isAdmin && body.saveId !== saveId) throw new Error("管理目标已变化，请刷新后重试");
     const scope = body.scope === "lite" ? "lite" : "full";
-    sendJson(res, 200, await resetState(saveId, { publicOptions: { scope } }));
+    const reset = await resetState(saveId, { publicOptions: { scope } });
+    sendJson(res, 200, stateActionResponse({ kind: "action.reset", publicState: reset, stateRevision: reset.stateRevision, result: { reset: true }, replace: true }));
     return;
   }
 
@@ -517,7 +519,7 @@ async function handleApi(req, res, url) {
       : undefined;
   const resultOnly = url.pathname === "/api/duels/day";
   const trackPersistenceDomains = ["/api/day/advance", "/api/duels/day"].includes(url.pathname) ? false : undefined;
-  sendJson(res, 200, await mutateState(mutator, saveId, { publicOptions: { scope }, storageOptions, resultOnly, trackPersistenceDomains }));
+  sendJson(res, 200, await mutateState(mutator, saveId, { publicOptions: { scope }, storageOptions, resultOnly, trackPersistenceDomains, actionResponse: !resultOnly, actionKind: `action.${url.pathname.replace(/^\/api\//, "").replaceAll("/", ".")}` }));
 }
 
 async function serveStatic(req, res, url) {

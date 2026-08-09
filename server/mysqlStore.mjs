@@ -7,6 +7,7 @@ import { readDungeonDayFromMysql, readDungeonDayIndexFromMysql } from "./dungeon
 import { changedPersistenceDomains, trackPersistenceDomains } from "./persistenceDomains.mjs";
 import { cancelPendingJobs, enqueueBackgroundJob } from "./mysqlBackgroundJobs.mjs";
 import { readTaskInputs, writeTaskIncremental, withTaskIncrementalTransaction } from "./taskIncrementalRepository.mjs";
+import { stateActionResponse } from "./actionResponseContract.mjs";
 
 const sessionMaxAgeSeconds = 60 * 60 * 24 * 30;
 const activeSaveSettingKey = "active_save_ids";
@@ -590,6 +591,9 @@ export async function mutateState(mutator, id = "default", options = {}) {
     }
     if (options.resultOnly) return { result, stateRevision: Number(state.__stateRevision || 0) };
     const nextState = publicStateWithRevision(state, options.publicOptions);
+    if (options.actionResponse) {
+      return stateActionResponse({ kind: options.actionKind || "action.update", publicState: nextState, stateRevision: state.__stateRevision, result });
+    }
     return result === undefined ? nextState : { state: nextState, result };
   };
   return options.skipSaveLock ? execute() : withSaveLock(id, execute);
@@ -649,7 +653,7 @@ export async function runSettlementBatch(id = "default", options = {}) {
     if (!current) throw new Error("存档不存在");
     const targetDay = Number(current.day || 0) + 1;
     const [[existing]] = await mysqlPool.query("SELECT * FROM settlement_runs_v2 WHERE save_id=? AND to_day=? LIMIT 1", [id, targetDay]);
-    if (existing?.status === "completed") return { kind: "batch.settlement", idempotent: true, stateRevision: Number(current.__stateRevision || 0), result: parseMysqlJson(existing.result_json, {}) };
+    if (existing?.status === "completed") return stateActionResponse({ kind: "batch.settlement", publicState: publicStateWithRevision(current, { scope: options.scope || "lite" }), result: parseMysqlJson(existing.result_json, {}), meta: { idempotent: true, batchId: existing.settlement_id } });
     if (existing?.status === "running") {
       const stale = existing.locked_until && new Date(existing.locked_until).getTime() < Date.now();
       if (!stale) { const error = new Error("每日结算正在进行，请稍后重试"); error.statusCode = 409; throw error; }
@@ -669,7 +673,8 @@ export async function runSettlementBatch(id = "default", options = {}) {
         VALUES(?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP(3)) ON DUPLICATE KEY UPDATE status='completed',match_count=VALUES(match_count),completed_count=VALUES(completed_count),result_json=VALUES(result_json),finished_at=CURRENT_TIMESTAMP(3)`,
       [id, settledDay, `settlement-duel-${settledDay}`, "completed", Number(response?.state?.stateRevision || 0), Number(duelCount.count || 0), Number(duelCount.count || 0), JSON.stringify({ source: "settlement", day: settledDay })]);
       await mysqlPool.query("UPDATE settlement_runs_v2 SET status='completed',phase='committed',result_json=?,heartbeat_at=CURRENT_TIMESTAMP(3),locked_until=NULL,finished_at=CURRENT_TIMESTAMP(3) WHERE save_id=? AND settlement_id=?", [JSON.stringify(response?.result || {}), id, settlementId]);
-      return { kind: "batch.settlement", batchId: settlementId, stateRevision: Number(response?.state?.stateRevision || response?.stateRevision || 0), result: response?.result || null };
+      const next = response?.state || publicStateWithRevision(await loadStateFromMysql(id), { scope: options.scope || "lite" });
+      return stateActionResponse({ kind: "batch.settlement", publicState: next, stateRevision: response?.stateRevision, result: response?.result || null, meta: { batchId: settlementId } });
     } catch (error) {
       await mysqlPool.query("UPDATE settlement_runs_v2 SET status='failed',phase='failed',error_message=?,finished_at=CURRENT_TIMESTAMP(3) WHERE save_id=? AND settlement_id=?", [String(error.stack || error.message || error).slice(0, 6000), id, settlementId]);
       throw error;
@@ -684,7 +689,7 @@ export async function runDailyDuelBatch(id = "default", options = {}) {
     if (!current) throw new Error("存档不存在");
     const day = Number(current.day || 0);
     const [[existingDay]] = await mysqlPool.query("SELECT day_no FROM duel_days WHERE save_id=? AND day_no=? LIMIT 1", [id, day]);
-    if (existingDay) return { kind: "batch.duels", idempotent: true, day, stateRevision: Number(current.__stateRevision || 0) };
+    if (existingDay) return stateActionResponse({ kind: "batch.duels", publicState: publicStateWithRevision(current, { scope: options.scope || "lite" }), result: null, meta: { idempotent: true, day } });
     const [[existingBatch]] = await mysqlPool.query("SELECT * FROM duel_batch_runs_v2 WHERE save_id=? AND day_no=? LIMIT 1", [id, day]);
     if (existingBatch?.status === "running") {
       const stale = existingBatch.locked_until && new Date(existingBatch.locked_until).getTime() < Date.now();
@@ -694,12 +699,13 @@ export async function runDailyDuelBatch(id = "default", options = {}) {
     const batchId = `duel-${day}-${randomUUID()}`;
     await mysqlPool.query("INSERT INTO duel_batch_runs_v2(save_id,day_no,batch_id,status,expected_revision,heartbeat_at,locked_until) VALUES(?,?,?,?,?,?,DATE_ADD(CURRENT_TIMESTAMP(3), INTERVAL 10 MINUTE))", [id, day, batchId, "running", Number(current.__stateRevision || 0), new Date()]);
     try {
-      const response = await mutateState((state) => runDailyDuels(state), id, { skipAutomaticSettlement: true, skipSaveLock: true, batchProjection: true, skipCache: true, resultOnly: true, trackPersistenceDomains: true,
+      const response = await mutateState((state) => runDailyDuels(state), id, { skipAutomaticSettlement: true, skipSaveLock: true, batchProjection: true, skipCache: true, trackPersistenceDomains: true, publicOptions: { scope: options.scope || "lite" },
         storageOptions: { ...(options.storageOptions || {}), queryObserver: options.queryObserver, skipReplayExtraction: true } });
       const record = response?.result || null;
       const matchCount = Number(record?.matches?.length || 0);
       await mysqlPool.query("UPDATE duel_batch_runs_v2 SET status='completed',match_count=?,completed_count=?,result_json=?,finished_at=CURRENT_TIMESTAMP(3) WHERE save_id=? AND day_no=?", [matchCount, matchCount, JSON.stringify(record || {}), id, day]);
-      return { kind: "batch.duels", batchId, day, matchCount, stateRevision: Number(response?.stateRevision || 0), result: record };
+      const next = publicStateWithRevision(await loadStateFromMysql(id), { scope: options.scope || "lite" });
+      return stateActionResponse({ kind: "batch.duels", publicState: next, stateRevision: response?.stateRevision, result: record, meta: { batchId, day, matchCount } });
     } catch (error) {
       await mysqlPool.query("UPDATE duel_batch_runs_v2 SET status='failed',error_message=?,finished_at=CURRENT_TIMESTAMP(3) WHERE save_id=? AND day_no=?", [String(error.stack || error.message || error).slice(0, 6000), id, day]);
       throw error;

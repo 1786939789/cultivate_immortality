@@ -134,6 +134,8 @@ npm run start
 - 初始化并校验 MySQL schema 和连接池。
 - 读取、写入、重置账号对应的游戏世界。
 - 使用事务、版本号和持久化域（domains）处理增量保存。
+- 所有增量 action（任务、普通玩家动作、每日结算和全员切磋）统一返回 `patchVersion: 2`、外层 `stateRevision`、`result` 和公开 `patch`；patch 通过 `server/actionResponseContract.mjs` 与 `getPublicActionPatch` 格式化，禁止返回内部 `cultivator_json`。
+- 前端通过 `web/src/actionPatch.js` 统一合并 patch，按 `stateRevision` 丢弃乱序旧响应；未来 patch 版本会触发局部刷新，重置动作使用替换 patch 并随后补齐 full state。
 - 保存账号、会话、游戏状态、背景任务和战斗回放。
 - 调用 `ensureStateShape` 补齐旧状态字段，并调用 `settleIfNeeded` 做跨日结算。
 

@@ -1,6 +1,7 @@
 import { addTask, deleteTaskCompletion } from "./gameLogic.mjs";
 import { parseMysqlJson } from "./mysqlDb.mjs";
 import { readTaskInputs, withTaskIncrementalTransaction, writeTaskDeleteIncremental, writeTaskIncremental } from "./taskIncrementalRepository.mjs";
+import { actionResponse } from "./actionResponseContract.mjs";
 
 function number(value, fallback = 0) {
   const parsed = Number(value);
@@ -72,6 +73,8 @@ function makeMicroState(inputs, dayNo) {
     __incrementalTaskMultiplier: snapshot,
     __incrementalCatchupProfile: { medianRealm, realmGap, activeDays, multiplier: activeDays > 0 && realmGap > 0
       ? 1 + Math.min(0.2, realmGap * 0.04 + Math.max(0, 3 - activeDays) * 0.015) : 1 },
+    __currentPower: number(inputs.player.current_power),
+    __currentCombatRating: number(inputs.player.current_combat_rating, 500),
     __incrementalBreakthroughParts: {
       realmBase: 0.05, rootMultiplier: 1, talentMultiplier: 1, sectMultiplier: 1,
       base: 0.05, bonus: 0, potionBonus: 0, championBonus: 0, spiritPearlBonus: 0,
@@ -80,7 +83,7 @@ function makeMicroState(inputs, dayNo) {
   };
 }
 
-function publicPatch(state, completion, dailyRecord, revision, priorBaseXp = 0) {
+function taskPatch(state, completion, dailyRecord, priorBaseXp = 0) {
   const progress = state.taskProgress?.[completion.day]?.[completion.taskId] || { amount: 0, awardedMultiplier: 0 };
   const log = state.log?.[0] || null;
   return {
@@ -95,7 +98,6 @@ function publicPatch(state, completion, dailyRecord, revision, priorBaseXp = 0) 
     },
     dailyRecord,
     log: log ? [log] : [],
-    stateRevision: revision
   };
 }
 
@@ -134,7 +136,7 @@ export async function completeTaskIncremental(saveId, payload = {}) {
       currentCombatRating: number(inputs.player.current_combat_rating, 500),
       expectedRevision: number(inputs.save.state_revision)
     });
-    return { kind: "task.completed", stateRevision: revision.revision, result, patch: publicPatch(state, completion, dailyRecord, revision.revision, inputs.priorBaseXp) };
+    return actionResponse({ kind: "task.completed", state, stateRevision: revision.revision, result, changed: taskPatch(state, completion, dailyRecord, inputs.priorBaseXp) });
   });
 }
 
@@ -171,9 +173,9 @@ export async function deleteTaskIncremental(saveId, payload = {}) {
       logEntry,
       expectedRevision: Number(row.state_revision)
     });
-    return { kind: "task.deleted", stateRevision: revision.revision, result: { completion }, patch: {
+    return actionResponse({ kind: "task.deleted", state, stateRevision: revision.revision, result: { completion }, changed: {
       player: state.player, deletedCompletionId: id, taskProgress: { day: dayNo, entries: {}, baseXp: Math.max(0, inputs.priorBaseXp - number(completion.baseXp)), fullXpBudget: number(state.gameSettings?.taskDailyFullXpBudget, 500), reducedMultiplier: 0.4 },
-      dailyRecord, log: [logEntry], stateRevision: revision.revision
-    } };
+      dailyRecord, log: [logEntry]
+    } });
   });
 }
