@@ -48,13 +48,13 @@ async function runDailySettlementJob(job) {
   return { completed: true, settled: result.result.settled };
 }
 
-export async function runBackgroundWorkerOnce() {
+export async function runBackgroundWorkerOnce(options = {}) {
   // Daily settlement may process a large NPC roster and persist many typed
   // rows. A 30-second lease can expire while the transaction is still valid,
   // causing a false "cancelled" result at commit time. Keep the lease long
   // enough for the batch and let the database lock/optimistic revision guard
   // provide correctness.
-  const job = await claimBackgroundJob(workerId, Math.max(30_000, Number(process.env.BACKGROUND_JOB_LEASE_MS || 10 * 60_000)));
+  const job = await claimBackgroundJob(workerId, Math.max(30_000, Number(process.env.BACKGROUND_JOB_LEASE_MS || 10 * 60_000)), options);
   if (!job) return null;
   try {
     if (job.job_type === dailySettlementJob) return await runDailySettlementJob(job);
@@ -68,9 +68,14 @@ export async function runBackgroundWorkerOnce() {
       // Another worker may have committed the same revision and completed the
       // job just before this worker reached its lease check. Treat that case
       // as successful instead of reporting a false cancellation.
+      // Drop the local read cache first; another worker may have committed
+      // newer day metadata while this process still considers today's cache
+      // valid.
+      const storageModule = await import("./storage.mjs");
+      storageModule.invalidateStateCache?.(job.save_id);
       const settled = await readState(job.save_id, { skipSettlementEnqueue: true });
       if (settled?.lastSettlementDate >= job.target_key) return { completed: true, recovered: true };
-      return { cancelled: true };
+      return { cancelled: true, lease: error.lease || null };
     }
     await failBackgroundJob(job, workerId, error);
     return { failed: true, error: error.message || String(error) };

@@ -236,11 +236,12 @@ export async function writeTaskIncremental(connection, {
   `, [saveId, dayNo, dailyText, hash(dailyText)]);
 
   const logText = json(logEntry || {});
+  const [[nextLogPosition]] = await connection.query("SELECT COALESCE(MAX(position_no), 0) + 1 AS next_position FROM game_logs_v2 WHERE save_id=?", [saveId]);
   await connection.query(`
-    INSERT INTO game_logs_v2 (save_id, log_id, day_no, log_type, log_text, log_json, content_hash)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-    ON DUPLICATE KEY UPDATE log_text = VALUES(log_text), log_json = VALUES(log_json), content_hash = VALUES(content_hash)
-  `, [saveId, safeId(logEntry?.id), dayNo, logEntry?.type || "", logEntry?.text || "", logText, hash(logText)]);
+    INSERT INTO game_logs_v2 (save_id, log_id, day_no, position_no, log_type, log_text, log_json, content_hash)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON DUPLICATE KEY UPDATE day_no=VALUES(day_no), log_type = VALUES(log_type), log_text = VALUES(log_text), log_json = VALUES(log_json), content_hash = VALUES(content_hash)
+  `, [saveId, safeId(logEntry?.id), dayNo, Number(nextLogPosition.next_position || 0), logEntry?.type || "", logEntry?.text || "", logText, hash(logText)]);
 
   const [sectionRows] = await connection.query(`SELECT section_key, section_json FROM save_sections
     WHERE save_id = ? AND section_key IN ('taskProgress', 'taskCompletions', 'tasks', 'log')`, [saveId]);
@@ -304,9 +305,10 @@ export async function writeTaskDeleteIncremental(connection, {
   [dailyText, hash(dailyText), saveId, historyRows[0].record_key]);
 
   const logText = json(logEntry);
-  await connection.query(`INSERT INTO game_logs_v2 (save_id,log_id,day_no,log_type,log_text,log_json,content_hash)
-    VALUES (?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE log_text=VALUES(log_text),log_json=VALUES(log_json),content_hash=VALUES(content_hash)`,
-  [saveId, safeId(logEntry.id), dayNo, logEntry.type || "", logEntry.text || "", logText, hash(logText)]);
+  const [[nextLogPosition]] = await connection.query("SELECT COALESCE(MAX(position_no), 0) + 1 AS next_position FROM game_logs_v2 WHERE save_id=?", [saveId]);
+  await connection.query(`INSERT INTO game_logs_v2 (save_id,log_id,day_no,position_no,log_type,log_text,log_json,content_hash)
+    VALUES (?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE day_no=VALUES(day_no),log_type=VALUES(log_type),log_text=VALUES(log_text),log_json=VALUES(log_json),content_hash=VALUES(content_hash)`,
+  [saveId, safeId(logEntry.id), dayNo, Number(nextLogPosition.next_position || 0), logEntry.type || "", logEntry.text || "", logText, hash(logText)]);
 
   const [sectionRows] = await connection.query(`SELECT section_key,section_json FROM save_sections
     WHERE save_id=? AND section_key IN ('taskProgress','taskCompletions','tasks','log')`, [saveId]);

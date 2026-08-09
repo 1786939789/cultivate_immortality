@@ -1,10 +1,6 @@
-const driver = String(process.env.STORAGE_DRIVER || "sqlite").trim().toLowerCase();
-
-if (!new Set(["sqlite", "mysql"]).has(driver)) {
-  throw new Error(`Unsupported STORAGE_DRIVER: ${driver}`);
-}
-
-const storage = await import(driver === "mysql" ? "./mysqlStore.mjs" : "./store.mjs");
+// MySQL is the sole persistence backend. Keep this module as the stable
+// application-facing storage boundary so API and worker imports stay simple.
+const storage = await import("./mysqlStore.mjs");
 
 export const getAdminAccounts = storage.getAdminAccounts;
 export const setActiveAccount = storage.setActiveAccount;
@@ -18,6 +14,7 @@ export const loginUser = storage.loginUser;
 export const getAdminManagedSaveId = storage.getAdminManagedSaveId;
 export const logoutSession = storage.logoutSession;
 export const readState = storage.readState;
+export const invalidateStateCache = storage.invalidateStateCache;
 export const activeSettlementSaveIds = storage.activeSettlementSaveIds;
 export const settleAllStates = storage.settleAllStates;
 export const writeState = storage.writeState;

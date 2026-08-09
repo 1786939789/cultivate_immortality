@@ -69,7 +69,11 @@ export async function writeActionIncremental(connection, { saveId, inputs, state
   const text = json(merged);
   await connection.query(`UPDATE cultivators SET xp=?,spirit=?,realm_no=?,hp=?,max_hp=?,mana=?,max_mana=?,sect_name=?,reputation=?,body=?,wisdom=?,attack=?,defense=?,divine_sense=?,chance=?,wealth=?,heart_demon=?,cultivator_json=?,content_hash=?,metrics_revision=metrics_revision+1,updated_at=CURRENT_TIMESTAMP(3) WHERE save_id=? AND cultivator_id='player'`, [merged.xp||0,merged.spirit||0,merged.realm||0,merged.hp||0,merged.maxHp||0,merged.mana||0,merged.maxMana||0,merged.sect||inputs.player.sect_name||"",merged.reputation||0,merged.body||0,merged.wisdom||0,merged.attack||0,merged.defense||0,merged.divineSense||0,merged.chance||0,merged.wealth||0,merged.heartDemon||0,text,hash(text),saveId]);
   for (const [key, value] of Object.entries(changedSections || {})) { const valueText = json(value); await connection.query(`INSERT INTO save_sections(save_id,section_key,section_json,content_hash) VALUES(?,?,?,?) ON DUPLICATE KEY UPDATE section_json=VALUES(section_json),content_hash=VALUES(content_hash)`, [saveId,key,valueText,hash(valueText)]); }
-  if (logEntry) { const logText = json(logEntry); await connection.query(`INSERT INTO game_logs_v2(save_id,log_id,day_no,log_type,log_text,log_json,content_hash) VALUES(?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE log_text=VALUES(log_text),log_json=VALUES(log_json),content_hash=VALUES(content_hash)`, [saveId,logEntry.id,Number(state.day||inputs.save.day_no),logEntry.type||"",logEntry.text||"",logText,hash(logText)]); }
+  if (logEntry) {
+    const logText = json(logEntry);
+    const [[nextLogPosition]] = await connection.query("SELECT COALESCE(MAX(position_no), 0) + 1 AS next_position FROM game_logs_v2 WHERE save_id=?", [saveId]);
+    await connection.query(`INSERT INTO game_logs_v2(save_id,log_id,day_no,position_no,log_type,log_text,log_json,content_hash) VALUES(?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE day_no=VALUES(day_no),log_type=VALUES(log_type),log_text=VALUES(log_text),log_json=VALUES(log_json),content_hash=VALUES(content_hash)`, [saveId,logEntry.id,Number(state.day||inputs.save.day_no),Number(nextLogPosition.next_position||0),logEntry.type||"",logEntry.text||"",logText,hash(logText)]);
+  }
   if (Array.isArray(state.__pendingBattleReplays) && state.__pendingBattleReplays.length) {
     await upsertBattleReplays(connection, saveId, state.__pendingBattleReplays);
   }

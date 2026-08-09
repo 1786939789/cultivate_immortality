@@ -8,7 +8,7 @@
 
 - 前端：Vue 3 + Vite，源码在 `web/`。
 - 后端：Node.js 原生 HTTP 服务，源码在 `server/`。
-- 存储：当前运行时默认使用 MySQL（由 `.env` 的 `STORAGE_DRIVER=mysql` 选择），通过 `mysql2/promise` 连接 `cultivate_immortality` 数据库；仓库仍保留 `sql.js`/SQLite 兼容实现和迁移工具。
+- 存储：统一使用 MySQL，通过 `mysql2/promise` 连接 `cultivate_immortality` 数据库。
 - 构建产物：Vite 输出到根目录 `dist/`。
 
 ## 常用命令
@@ -68,7 +68,7 @@ npm run start
 │           ├── Meter.vue
 │           └── LogPanel.vue
 ├── data/
-│   └── game.sqlite                 # SQLite 兼容/迁移来源，当前默认运行时不使用
+│   └── (运行时数据仅存于 MySQL，不在仓库保存本地存档)
 └── dist/
 ```
 
@@ -80,13 +80,13 @@ npm run start
 
 - `node_modules/`
 - `dist/`
-- `data/*.sqlite` 和相关 SQLite 临时文件
+- 本地数据库和运行时存档文件
 - `.env` / `.env.*`
 - 日志文件
 - 缓存目录
 - 系统和编辑器文件
 
-注意不要提交本地存档 `data/game.sqlite` 或其他本地数据库文件。当前默认运行时的正式存档在 MySQL 中，SQLite 文件仅用于兼容、迁移或回退场景。
+注意不要提交本地数据库文件或任何用户存档。正式存档统一保存在 MySQL 中。
 
 ## 后端说明
 
@@ -118,12 +118,11 @@ npm run start
 
 ### `server/storage.mjs`
 
-存储适配层。根据 `STORAGE_DRIVER` 选择后端；当前 `.env` 默认值为 `mysql`，因此开发和启动命令实际加载 `mysqlStore.mjs`。
+存储适配层，统一加载 `mysqlStore.mjs`，为 API 和后台 worker 提供稳定出口。
 
 职责：
 
-- `STORAGE_DRIVER=mysql`：加载 `mysqlStore.mjs`，通过 `mysqlDb.mjs` 的 `mysql2/promise` 连接池访问 MySQL。
-- `STORAGE_DRIVER=sqlite`：兼容加载 `store.mjs`，通过 `sql.js` 读写 `data/game.sqlite`。
+- MySQL：通过 `mysqlDb.mjs` 的 `mysql2/promise` 连接池访问 MySQL。
 - 对上层统一导出读取、写入、变更、重置、公开状态和战斗回放接口。
 
 ### `server/mysqlDb.mjs` / `server/mysqlStore.mjs` / `server/mysqlStateRepository.mjs`
@@ -140,7 +139,7 @@ npm run start
 
 ### `server/store.mjs`
 
-SQLite 兼容/迁移存储实现，仅在明确设置 `STORAGE_DRIVER=sqlite` 时使用；不要把它误认为当前默认运行时的数据库实现。
+所有运行时存储实现均位于 MySQL 存储层；历史 SQLite 迁移代码已移除。
 
 存档表结构：
 
@@ -154,7 +153,7 @@ CREATE TABLE IF NOT EXISTS saves (
 
 目前只使用默认存档 ID：`default`。
 
-SQLite 兼容实现仍依赖 `node_modules/sql.js/dist/sql-wasm.wasm`。如果调整 SQLite 回退、迁移或依赖安装方式，要同步检查这里；MySQL 运行路径不依赖该 wasm 文件。
+MySQL 运行路径依赖 `mysql2` 和有效的数据库连接配置。
 
 ### `server/gameData.mjs`
 
@@ -230,7 +229,7 @@ Vue 应用入口，挂载 `App.vue` 并引入全局样式。
 - 顶部品牌区和当前状态摘要。
 - 倒计时卡片，显示距离下一次跨日结算的时间。
 - “推进一天”按钮，手动调用 `/api/day/advance`。
-- “重开一世”按钮，调用 `/api/reset` 重置当前账号对应的 MySQL 存档（SQLite 回退模式下才会操作 `data/game.sqlite`）。
+- “重开一世”按钮，调用 `/api/reset` 重置当前账号对应的 MySQL 存档。
 - 左侧角色信息、修为/气血/心境进度条、核心属性。
 - 核心属性 hover/focus 提示，解释灵石、声望、根骨、悟性、攻伐、守御、机缘、心魔。
 - 右侧 Tab 视图：
@@ -294,7 +293,7 @@ Vue 应用入口，挂载 `App.vue` 并引入全局样式。
 ## 数据流
 
 1. 前端加载页面，请求 `GET /api/state`。
-2. `storage.mjs` 根据 `STORAGE_DRIVER` 选择 `mysqlStore.mjs`（当前默认）或 `store.mjs`（SQLite 兼容模式）。
+2. `storage.mjs` 加载 `mysqlStore.mjs`。
 3. 如果没有存档，`gameLogic.mjs` 生成默认状态并写库。
 4. 如果已有旧存档，`ensureStateShape` 补齐新增字段。
 5. 如果日期已变化，`settleIfNeeded` 自动推进一天并写库。
@@ -308,7 +307,7 @@ Vue 应用入口，挂载 `App.vue` 并引入全局样式。
 
 - 游戏规则应尽量留在后端 `gameLogic.mjs`，前端只负责展示和发起动作。
 - 静态配置应优先放在 `gameData.mjs`，不要散落到组件里。
-- 前端不使用浏览器本地存储。当前默认模式下唯一可信存档是 MySQL；只有 `STORAGE_DRIVER=sqlite` 时才以 `data/game.sqlite` 作为存档。
+- 前端不使用浏览器本地存储。唯一可信存档是 MySQL。
 - 新增存档字段时，要同步更新 `createDefaultState` 和 `ensureStateShape`，否则旧存档可能缺字段。
 - 增加新 API 时，需要同时更新 `server/index.mjs` 的路由表和前端调用入口。
 - 增加新物品时，要检查 `createDefaultState` 中的 `bag` 是否需要默认数量。
@@ -326,6 +325,6 @@ Vue 应用入口，挂载 `App.vue` 并引入全局样式。
 - 手动推进一天不会改变真实日期，但会推进游戏内天数并覆盖 `lastSettlementDate` 为当前日期。
 - 后端服务只绑定 `127.0.0.1`，默认不是局域网公开服务。
 - 生产静态文件来自 `dist/`，没有构建时不能直接用 `npm run start` 提供完整前端页面。
-- MySQL 模式部署前需要确保 MySQL 数据库、账号权限和 `.env` 连接配置可用；SQLite 兼容模式仍依赖 `node_modules/sql.js` 的 wasm 文件。
+- 部署前需要确保 MySQL 数据库、账号权限和 `.env` 连接配置可用。
 - 宗门汇总中非玩家宗门的声望、物资、敌意和战绩目前由派生逻辑随机生成，刷新状态时可能变化；只有玩家宗门 `云麓盟` 的这些数值来自存档。
 - 前端 NPC 战力展示存在本地简化计算，与后端 `powerOf`/`derived.npcPowers` 不完全一致；若要严谨排行，需要统一这一处。

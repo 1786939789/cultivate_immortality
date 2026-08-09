@@ -21,6 +21,14 @@ export const mysqlPool = mysql.createPool({
   supportBigNumbers: true
 });
 
+// MySQL's CURRENT_TIMESTAMP follows the session time zone, while the
+// application serializes DATETIME values in UTC.  Keep every pooled
+// connection on UTC so background-job leases and availability checks use the
+// same clock as mysqlDate()/parseMysqlDate().
+mysqlPool.on("connection", (connection) => {
+  connection.query("SET time_zone = '+00:00'");
+});
+
 let schemaPromise;
 
 export function ensureMysqlSchema() {
@@ -338,13 +346,14 @@ async function createSchema() {
         save_id VARCHAR(64) NOT NULL,
         log_id VARCHAR(160) NOT NULL,
         day_no INT NOT NULL,
+        position_no BIGINT NOT NULL DEFAULT 0,
         log_type VARCHAR(40) NOT NULL DEFAULT '',
         log_text TEXT NOT NULL,
         log_json LONGTEXT NOT NULL,
         content_hash CHAR(64) NOT NULL,
         created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
         PRIMARY KEY (save_id, log_id),
-        INDEX idx_game_logs_v2_day (save_id, day_no, created_at),
+        INDEX idx_game_logs_v2_day (save_id, day_no, position_no),
         CONSTRAINT fk_game_logs_v2_save FOREIGN KEY (save_id) REFERENCES game_saves(save_id) ON DELETE CASCADE
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
       `CREATE TABLE IF NOT EXISTS cultivator_metrics_v2 (
@@ -487,6 +496,7 @@ async function createSchema() {
       ["cultivators", "equipment_count", "INT NOT NULL DEFAULT 0"],
       ["cultivators", "formed_pearl_count", "INT NOT NULL DEFAULT 0"],
       ["cultivators", "metrics_revision", "BIGINT NOT NULL DEFAULT 0"]
+      , ["game_logs_v2", "position_no", "BIGINT NOT NULL DEFAULT 0"]
       , ["settlement_runs_v2", "heartbeat_at", "DATETIME(3) NULL"]
       , ["settlement_runs_v2", "locked_until", "DATETIME(3) NULL"]
       , ["duel_batch_runs_v2", "heartbeat_at", "DATETIME(3) NULL"]

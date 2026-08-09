@@ -20,6 +20,14 @@ const saveLocks = new Map();
 const metricHistoryValidationCache = new Set();
 let bootstrapPromise;
 
+export function invalidateStateCache(id) {
+  const saveId = String(id || "");
+  if (!saveId) return;
+  stateCache.delete(saveId);
+  stateValidationCache.delete(saveId);
+  publicStateCache.delete(saveId);
+}
+
 function mysqlDate(value = new Date()) {
   return new Date(value).toISOString().slice(0, 23).replace("T", " ");
 }
@@ -69,10 +77,16 @@ function publicStateWithRevision(state, options = {}) {
   return { ...getPublicState(state, options), stateRevision: Number(state.__stateRevision || 0) };
 }
 
-async function ensureSettlementJob(state, id) {
+async function ensureSettlementJob(state, id, options = {}) {
   if (!state || state.lastSettlementDate >= dateKey()) return false;
   if (!(await ensureActiveSaveIds()).includes(id)) return false;
-  await enqueueBackgroundJob({ jobType: "daily_settlement", saveId: id, targetKey: dateKey(), reopenCompleted: true });
+  await enqueueBackgroundJob({
+    jobType: "daily_settlement",
+    saveId: id,
+    targetKey: dateKey(),
+    reopenCompleted: true,
+    availableAt: options.settlementJobAvailableAt || null
+  });
   return true;
 }
 
@@ -279,7 +293,7 @@ export async function setAdminManagedSaveId(saveId) {
   return getAdminAccounts();
 }
 
-export async function setActiveAccount(saveId, active = true) {
+export async function setActiveAccount(saveId, active = true, options = {}) {
   await bootstrapMysqlStore();
   const id = String(saveId || "").trim();
   const players = new Set(await playerUserIds());
@@ -293,7 +307,7 @@ export async function setActiveAccount(saveId, active = true) {
   });
   stateValidationCache.delete(id);
   publicStateCache.clear();
-  if (active) await readState(id);
+  if (active) await readState(id, options);
   return getAdminAccounts();
 }
 
@@ -465,17 +479,17 @@ export async function readState(id = "default", options = {}) {
   const cached = stateCache.get(id);
   if (cached) {
     if (stateValidationCache.get(id) === dateKey()) {
-      if (!options.skipSettlementEnqueue) await ensureSettlementJob(cached, id);
+      if (!options.skipSettlementEnqueue) await ensureSettlementJob(cached, id, options);
       return cached;
     }
     const draft = structuredClone(cached);
     const changed = ensureStateShape(draft);
     if (changed) {
       const nextState = await writeState(draft, id, { previousState: cached });
-      if (!options.skipSettlementEnqueue) await ensureSettlementJob(nextState, id);
+      if (!options.skipSettlementEnqueue) await ensureSettlementJob(nextState, id, options);
       return nextState;
     }
-    if (!options.skipSettlementEnqueue) await ensureSettlementJob(cached, id);
+    if (!options.skipSettlementEnqueue) await ensureSettlementJob(cached, id, options);
     stateValidationCache.set(id, dateKey());
     return cached;
   }
@@ -490,13 +504,13 @@ export async function readState(id = "default", options = {}) {
   if (changed) {
     let nextState = await writeState(draft, id, { previousState: state });
     nextState = await ensureMetricHistoryBackfilled(nextState, id);
-    if (!options.skipSettlementEnqueue) await ensureSettlementJob(nextState, id);
+    if (!options.skipSettlementEnqueue) await ensureSettlementJob(nextState, id, options);
     return nextState;
   }
   state = await ensureMetricHistoryBackfilled(state, id);
   stateCache.set(id, state);
   stateValidationCache.set(id, dateKey());
-  if (!options.skipSettlementEnqueue) await ensureSettlementJob(state, id);
+  if (!options.skipSettlementEnqueue) await ensureSettlementJob(state, id, options);
   return state;
 }
 

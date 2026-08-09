@@ -98,14 +98,15 @@ try {
         LIMIT 1
       `, [saveId]);
       const logs = logSection.length ? parseMysqlJson(logSection[0].section_json, []) : [];
-      for (const [index, entry] of (Array.isArray(logs) ? logs : []).entries()) {
+      const logList = Array.isArray(logs) ? logs : [];
+      for (const [index, entry] of logList.entries()) {
         const entryText = json(entry);
         const id = String(entry.id || `legacy-log-${entry.day || 0}-${index}-${hash(entryText).slice(0, 12)}`);
         await connection.query(`
-          INSERT INTO game_logs_v2 (save_id, log_id, day_no, log_type, log_text, log_json, content_hash)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-          ON DUPLICATE KEY UPDATE log_text = VALUES(log_text), log_json = VALUES(log_json), content_hash = VALUES(content_hash)
-        `, [saveId, id, asNumber(entry.day), entry.type || "", entry.text || "", entryText, hash(entryText)]);
+          INSERT INTO game_logs_v2 (save_id, log_id, day_no, position_no, log_type, log_text, log_json, content_hash)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          ON DUPLICATE KEY UPDATE day_no=VALUES(day_no), position_no=VALUES(position_no), log_text = VALUES(log_text), log_json = VALUES(log_json), content_hash = VALUES(content_hash)
+        `, [saveId, id, asNumber(entry.day), logList.length - index, entry.type || "", entry.text || "", entryText, hash(entryText)]);
         logRows += 1;
       }
     });

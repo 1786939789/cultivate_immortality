@@ -68,8 +68,7 @@ import {
   settleAllStates,
   sessionCookie
 } from "./storage.mjs";
-const usesMysqlBackgroundJobs = String(process.env.STORAGE_DRIVER || "sqlite").trim().toLowerCase() === "mysql";
-const backgroundWorker = usesMysqlBackgroundJobs ? await import("./backgroundWorker.mjs") : null;
+const backgroundWorker = await import("./backgroundWorker.mjs");
 
 const port = Number(process.env.PORT || 8787);
 const rootDir = fileURLToPath(new URL("../", import.meta.url));

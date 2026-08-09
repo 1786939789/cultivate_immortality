@@ -115,13 +115,14 @@ async function syncTaskIncrementalTables(connection, state, saveId, domains) {
     await deleteMissing(connection, "task_completions_v2", saveId, ["completion_id"], new Set(completions.keys()));
 
     const logs = new Map((state.log || []).map((item, index) => [String(item.id || `log-${contentHash(JSON.stringify(item)).slice(0, 24)}-${index}`), item]));
-    for (const [id, item] of logs) {
+    const logCount = logs.size;
+    for (const [index, [id, item]] of [...logs.entries()].entries()) {
       const withId = { ...item, id };
       const text = JSON.stringify(withId);
       await connection.query(`INSERT INTO game_logs_v2
-        (save_id, log_id, day_no, log_type, log_text, log_json, content_hash) VALUES (?, ?, ?, ?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE day_no=VALUES(day_no), log_type=VALUES(log_type), log_text=VALUES(log_text), log_json=VALUES(log_json), content_hash=VALUES(content_hash)`,
-      [saveId, id, Number(item.day || state.day || 1), item.type || "", item.text || "", text, contentHash(text)]);
+        (save_id, log_id, day_no, position_no, log_type, log_text, log_json, content_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE day_no=VALUES(day_no), position_no=VALUES(position_no), log_type=VALUES(log_type), log_text=VALUES(log_text), log_json=VALUES(log_json), content_hash=VALUES(content_hash)`,
+      [saveId, id, Number(item.day || state.day || 1), logCount - index, item.type || "", item.text || "", text, contentHash(text)]);
     }
     await deleteMissing(connection, "game_logs_v2", saveId, ["log_id"], new Set(logs.keys()));
   }
@@ -281,7 +282,14 @@ async function writeEncodedState(rawConnection, state, saveId, options = {}) {
       await syncCultivatorPearlsIfChanged(connection, saveId, entity);
       const snapshots = metricHistory.snapshotsById.get(entity.id) || [];
       const rating = snapshots.at(-1)?.rating || {};
-      await upsertCultivatorMetrics(connection, { saveId, cultivatorId: entity.id, currentPower: powerOf(entity, state), currentCombatRating: rating.score || 500, combatScore: rating.score || 500, duelScore: Number(entity.duelSeason?.score || 0), duelWins: entity.duelWins, duelLosses: entity.duelLosses, dungeonClears: entity.dungeonClears, bestDungeonPower: entity.bestDungeonPower });
+      await upsertCultivatorMetrics(connection, { saveId, cultivatorId: entity.id, currentPower: powerOf(entity, state), currentCombatRating: rating.score || 500, combatScore: rating.score || 500, duelScore: Number(entity.duelSeason?.score || 0), duelWins: entity.duelWins, duelLosses: entity.duelLosses, dungeonClears: entity.dungeonClears, bestDungeonPower: entity.bestDungeonPower, syncCompatibility: false });
+    }
+    if (selectedPeople.length) {
+      const ids = selectedPeople.map((entity) => String(entity.id));
+      await connection.query(`UPDATE cultivators c
+        JOIN cultivator_metrics_v2 m ON m.save_id=c.save_id AND m.cultivator_id=c.cultivator_id
+        SET c.current_power=m.current_power, c.current_combat_rating=m.current_combat_rating, c.updated_at=CURRENT_TIMESTAMP(3)
+        WHERE c.save_id=? AND c.cultivator_id IN (${ids.map(() => "?").join(",")})`, [saveId, ...ids]);
     }
     for (const entity of selectedPeople) {
       const snapshots = metricHistory.snapshotsById.get(entity.id) || [];
@@ -356,7 +364,7 @@ export async function loadStateFromMysql(saveId) {
     mysqlPool.query("SELECT snapshot_json FROM task_multiplier_snapshots_v2 WHERE save_id = ? ORDER BY day_no DESC", [saveId]),
     mysqlPool.query("SELECT completion_json FROM task_completions_v2 WHERE save_id = ? ORDER BY created_at DESC, completion_id DESC", [saveId]),
     mysqlPool.query("SELECT record_json FROM task_daily_records_v2 WHERE save_id = ? AND cultivator_id = 'player' ORDER BY day_no DESC", [saveId]),
-    mysqlPool.query("SELECT log_json FROM game_logs_v2 WHERE save_id = ? ORDER BY created_at DESC, log_id DESC LIMIT 80", [saveId])
+    mysqlPool.query("SELECT log_json FROM game_logs_v2 WHERE save_id = ? ORDER BY position_no DESC, created_at DESC, log_id DESC LIMIT 80", [saveId])
   ]);
   if (taskDefinitions[0].length) state.taskDefinitions = taskDefinitions[0].map((row) => parseMysqlJson(row.definition_json, {}));
   if (taskProgress[0].length) {

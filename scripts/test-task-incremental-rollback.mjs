@@ -1,14 +1,11 @@
-import { randomUUID } from "node:crypto";
-import { mysqlPool, withMysqlTransaction } from "../server/mysqlDb.mjs";
-import { loadStateFromMysql, saveStateWithConnection } from "../server/mysqlStateRepository.mjs";
+import { mysqlPool } from "../server/mysqlDb.mjs";
+import { loadStateFromMysql } from "../server/mysqlStateRepository.mjs";
 import { completeTaskIncremental, deleteTaskIncremental } from "../server/taskCommand.mjs";
+import { cleanupFixture, createFixture } from "./mysql-test-fixture.mjs";
 
-const [[source]] = await mysqlPool.query("SELECT save_id FROM game_saves ORDER BY save_id LIMIT 1");
-if (!source) throw new Error("缺少可用于事务回滚测试的本地存档");
-const testId = `task-test-${randomUUID()}`;
+const fixture = await createFixture({ prefix: "task-test-" });
+const testId = fixture.saveId;
 try {
-  const original = await loadStateFromMysql(source.save_id);
-  await withMysqlTransaction((connection) => saveStateWithConnection(connection, structuredClone(original), testId));
   const target = { id: "incremental-smoke-task", value: { id: "incremental-smoke-task", name: "增量链路测试", detail: "", type: "complete", category: "生活", xpReward: 100, spiritReward: 3, enabled: true } };
   const definitionText = JSON.stringify(target.value);
   await mysqlPool.query(`INSERT INTO task_definitions_v2
@@ -42,6 +39,6 @@ try {
     ,deleteKind: deleted.kind
   }));
 } finally {
-  await mysqlPool.query("DELETE FROM game_saves WHERE save_id = ?", [testId]);
+  await cleanupFixture(testId);
   await mysqlPool.end();
 }

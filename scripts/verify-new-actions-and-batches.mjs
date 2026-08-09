@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import { mysqlPool, withMysqlTransaction } from "../server/mysqlDb.mjs";
 import { loadStateFromMysql, saveStateWithConnection } from "../server/mysqlStateRepository.mjs";
@@ -6,14 +5,13 @@ import { runPlayerActionIncremental } from "../server/playerActionCommand.mjs";
 import { generateDailyEncounter } from "../server/gameLogic.mjs";
 import { encounterDefinitionMap } from "../server/encounterData.mjs";
 import { runDailyDuelBatch, runSettlementBatch } from "../server/mysqlStore.mjs";
+import { cleanupFixture, createFixture } from "./mysql-test-fixture.mjs";
 
-const [[source]] = await mysqlPool.query("SELECT save_id FROM game_saves ORDER BY save_id LIMIT 1");
-if (!source) throw new Error("缺少本地验证存档");
-const saveId = `verify-new-${randomUUID()}`;
+const fixture = await createFixture({ prefix: "verify-new-", cleanTransientRuns: true });
+const saveId = fixture.saveId;
 const report = { actions: {}, duelBatch: null, settlementBatch: null, passed: false };
 try {
-  const sourceState = await loadStateFromMysql(source.save_id);
-  await withMysqlTransaction((connection) => saveStateWithConnection(connection, structuredClone(sourceState), saveId));
+  const sourceState = await loadStateFromMysql(fixture.sourceSaveId);
   const npcId = sourceState.npcs[0]?.id;
   const [[npcBefore]] = await mysqlPool.query("SELECT content_hash,metrics_revision,updated_at FROM cultivators WHERE save_id=? AND cultivator_id=?", [saveId, npcId]);
   const actions = [
@@ -44,6 +42,8 @@ try {
   }
   const [[npcAfterActions]] = await mysqlPool.query("SELECT content_hash,metrics_revision FROM cultivators WHERE save_id=? AND cultivator_id=?", [saveId, npcId]);
   report.npcUnrelatedToPlayerActionsStable = npcBefore?.content_hash === npcAfterActions?.content_hash && Number(npcBefore?.metrics_revision || 0) === Number(npcAfterActions?.metrics_revision || 0);
+  const afterActions = await loadStateFromMysql(saveId);
+  report.daoRunPersisted = Boolean(afterActions.daoTrial?.activeRun);
   const duelStarted = performance.now();
   const duel = await runDailyDuelBatch(saveId);
   const duelRepeat = await runDailyDuelBatch(saveId);
@@ -59,13 +59,12 @@ try {
   report.settlementBatch = { ms: Number((performance.now() - settlementStarted).toFixed(2)), revision: settlement.stateRevision, targetDay };
   const after = await loadStateFromMysql(saveId);
   report.npcCountPreserved = after.npcs.length === sourceState.npcs.length;
-  report.daoRunPersisted = Boolean(after.daoTrial?.activeRun);
   report.portraitPersisted = Number(after.player.portraitVariant) === 2;
   report.focusPersisted = after.encounters?.focusedNpcIds?.includes(npcId) === true;
   report.passed = report.npcCountPreserved && report.daoRunPersisted && report.portraitPersisted && report.focusPersisted && report.npcUnrelatedToPlayerActionsStable && report.duelBatch.matchCount >= 0 && after.day === sourceState.day + 1;
   console.log(JSON.stringify(report));
 } finally {
-  await mysqlPool.query("DELETE FROM game_saves WHERE save_id=?", [saveId]);
+  await cleanupFixture(saveId);
   await mysqlPool.end();
 }
 

@@ -11,33 +11,37 @@ export async function cleanupCompletedBackgroundJobs(retentionDays = 90) {
   return Number(result.affectedRows || 0);
 }
 
-export async function enqueueBackgroundJob({ jobType, saveId, targetKey, maxAttempts = 8, reopenCompleted = false }) {
+export async function enqueueBackgroundJob({ jobType, saveId, targetKey, maxAttempts = 8, reopenCompleted = false, availableAt = null }) {
   await ensureMysqlSchema();
   const reopen = reopenCompleted ? 1 : 0;
+  const available = availableAt ? mysqlDate(availableAt) : mysqlDate();
   await mysqlPool.query(`
-    INSERT INTO background_jobs (job_type, save_id, target_key, max_attempts)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO background_jobs (job_type, save_id, target_key, max_attempts, available_at)
+    VALUES (?, ?, ?, ?, ?)
     ON DUPLICATE KEY UPDATE
       max_attempts = VALUES(max_attempts),
       attempts = IF(status IN ('failed','cancelled') OR (? = 1 AND status = 'completed'), 0, attempts),
-      available_at = IF(status IN ('failed','cancelled') OR (? = 1 AND status = 'completed'), CURRENT_TIMESTAMP(3), available_at),
+      available_at = IF(status IN ('failed','cancelled') OR (? = 1 AND status = 'completed'), VALUES(available_at), available_at),
       last_error = IF(status IN ('failed','cancelled') OR (? = 1 AND status = 'completed'), NULL, last_error),
       completed_at = IF(? = 1 AND status = 'completed', NULL, completed_at),
       locked_by = IF(status IN ('failed','cancelled') OR (? = 1 AND status = 'completed'), NULL, locked_by),
       locked_until = IF(status IN ('failed','cancelled') OR (? = 1 AND status = 'completed'), NULL, locked_until),
       status = IF(status IN ('failed','cancelled') OR (? = 1 AND status = 'completed'), 'pending', status)
-  `, [jobType, saveId, targetKey, maxAttempts, reopen, reopen, reopen, reopen, reopen, reopen, reopen]);
+  `, [jobType, saveId, targetKey, maxAttempts, available, reopen, reopen, reopen, reopen, reopen, reopen, reopen]);
 }
 
-export async function claimBackgroundJob(workerId, leaseMs = 30_000) {
+export async function claimBackgroundJob(workerId, leaseMs = 30_000, options = {}) {
+  const jobId = Number.isFinite(Number(options.jobId)) ? Number(options.jobId) : null;
+  const ignoreAvailability = options.ignoreAvailability ? 1 : 0;
   return withMysqlTransaction(async (connection) => {
     const [rows] = await connection.query(`
       SELECT * FROM background_jobs
-      WHERE (status = 'pending' AND available_at <= CURRENT_TIMESTAMP(3))
-        OR (status = 'running' AND locked_until < CURRENT_TIMESTAMP(3))
+      WHERE (? IS NULL OR id = ?)
+        AND ((status = 'pending' AND (? = 1 OR available_at <= CURRENT_TIMESTAMP(3)))
+          OR (status = 'running' AND locked_until < CURRENT_TIMESTAMP(3)))
       ORDER BY available_at, id
       LIMIT 1 FOR UPDATE SKIP LOCKED
-    `);
+    `, [jobId, jobId, ignoreAvailability]);
     if (!rows.length) return null;
     const job = rows[0];
     const lockedUntil = mysqlDate(new Date(Date.now() + leaseMs));
@@ -84,6 +88,11 @@ export async function assertBackgroundJobLease(connection, jobId, workerId) {
   if (rows[0]?.status !== "running" || rows[0]?.locked_by !== workerId) {
     const error = new Error("后台任务已取消或租约已转移");
     error.code = "BACKGROUND_JOB_LEASE_LOST";
+    error.lease = {
+      expectedWorkerId: workerId,
+      status: rows[0]?.status || "missing",
+      lockedBy: rows[0]?.locked_by || null
+    };
     throw error;
   }
 }

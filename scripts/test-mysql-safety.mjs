@@ -1,8 +1,6 @@
-import { randomUUID } from "node:crypto";
-import { hashPassword } from "../server/authSecurity.mjs";
 import { mysqlPool } from "../server/mysqlDb.mjs";
-import { loadStateFromMysql, saveStateToMysql } from "../server/mysqlStateRepository.mjs";
 import { getAdminAccounts, setActiveAccount, setAdminManagedSaveId, testMutationRollback } from "../server/mysqlStore.mjs";
+import { cleanupFixture, createFixture } from "./mysql-test-fixture.mjs";
 
 const accounts = await getAdminAccounts();
 const target = accounts.accounts.find((account) => account.hasSave) || accounts.accounts[0];
@@ -15,14 +13,9 @@ if (!rollback.failed || !rollback.databaseUnchanged || !rollback.cacheUnchanged)
 
 const originalManaged = accounts.managedSaveId;
 const originalActive = new Set(accounts.activeSaveIds);
-const temporaryUserId = `user-safety-${randomUUID()}`;
+const fixture = await createFixture({ prefix: "user-safety-" });
+const temporaryUserId = fixture.saveId;
 try {
-  const { hash, salt } = await hashPassword(randomUUID());
-  await mysqlPool.query(`
-    INSERT INTO auth_users (id, username, username_normalized, password_hash, password_salt, role)
-    VALUES (?, ?, ?, ?, ?, 'user')
-  `, [temporaryUserId, temporaryUserId, temporaryUserId, hash, salt]);
-  await saveStateToMysql(structuredClone(await loadStateFromMysql(target.id)), temporaryUserId);
   await setAdminManagedSaveId(temporaryUserId);
   const afterManaged = await getAdminAccounts();
   if (afterManaged.managedSaveId !== temporaryUserId) {
@@ -36,8 +29,7 @@ try {
     const shouldBeActive = originalActive.has(account.id);
     if (account.active !== shouldBeActive) await setActiveAccount(account.id, shouldBeActive);
   }
-  await mysqlPool.query("DELETE FROM game_saves WHERE save_id = ?", [temporaryUserId]);
-  await mysqlPool.query("DELETE FROM auth_users WHERE id = ?", [temporaryUserId]);
+  await cleanupFixture(temporaryUserId);
 }
 
 console.log(JSON.stringify({ rollback, managedTargetSeparated: true }));

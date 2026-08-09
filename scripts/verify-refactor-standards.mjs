@@ -1,17 +1,15 @@
 import { performance } from "node:perf_hooks";
-import { randomUUID } from "node:crypto";
 import { mysqlPool, withMysqlTransaction } from "../server/mysqlDb.mjs";
-import { loadStateFromMysql, saveStateWithConnection } from "../server/mysqlStateRepository.mjs";
+import { loadStateFromMysql } from "../server/mysqlStateRepository.mjs";
 import { runPlayerActionIncremental } from "../server/playerActionCommand.mjs";
 import { completeTaskIncremental } from "../server/taskCommand.mjs";
+import { cleanupFixture, createFixture } from "./mysql-test-fixture.mjs";
 
-const [[source]] = await mysqlPool.query("SELECT save_id FROM game_saves ORDER BY save_id LIMIT 1");
-if (!source) throw new Error("缺少本地验证存档");
-const testId = `refactor-standard-${randomUUID()}`;
+const fixture = await createFixture({ prefix: "refactor-standard-" });
+const testId = fixture.saveId;
 const report = {};
 try {
-  const sourceState = await loadStateFromMysql(source.save_id);
-  await withMysqlTransaction((connection) => saveStateWithConnection(connection, structuredClone(sourceState), testId));
+  const sourceState = await loadStateFromMysql(fixture.sourceSaveId);
   const beforeCounts = await mysqlPool.query(`SELECT
     (SELECT COUNT(*) FROM cultivators WHERE save_id=?) cultivators,
     (SELECT COUNT(*) FROM battle_replays WHERE save_id=?) replays`, [testId, testId]);
@@ -39,4 +37,4 @@ try {
   report.transactionRollback = rolledBack && Number(xpDb.xp) === Number((await loadStateFromMysql(testId)).player.xp);
   report.revisionStableAfterRollback = Number(rollbackBefore[0][0].state_revision) === Number((await mysqlPool.query("SELECT state_revision FROM game_saves WHERE save_id=?", [testId]))[0][0].state_revision);
   console.log(JSON.stringify(report));
-} finally { await mysqlPool.query("DELETE FROM game_saves WHERE save_id=?", [testId]); await mysqlPool.end(); }
+} finally { await cleanupFixture(testId); await mysqlPool.end(); }

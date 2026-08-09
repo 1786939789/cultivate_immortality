@@ -1,16 +1,14 @@
-import { randomUUID } from "node:crypto";
 import { mysqlPool, withMysqlTransaction } from "../server/mysqlDb.mjs";
-import { loadStateFromMysql, saveStateWithConnection } from "../server/mysqlStateRepository.mjs";
+import { loadStateFromMysql } from "../server/mysqlStateRepository.mjs";
 import { readCultivatorDetailIncremental, syncCultivatorPearls, upsertCultivatorMetrics } from "../server/cultivatorIncrementalRepository.mjs";
 import { readLiveRankingIncremental } from "../server/rankingIncrementalRepository.mjs";
 import { powerOf } from "../server/gameLogic.mjs";
+import { cleanupFixture, createFixture } from "./mysql-test-fixture.mjs";
 
-const [[source]] = await mysqlPool.query("SELECT save_id FROM game_saves ORDER BY save_id LIMIT 1");
-if (!source) throw new Error("缺少本地测试存档");
-const testId = `cultivator-v2-test-${randomUUID()}`;
+const fixture = await createFixture({ prefix: "cultivator-v2-test-" });
+const testId = fixture.saveId;
 try {
-  const state = await loadStateFromMysql(source.save_id);
-  await withMysqlTransaction((connection) => saveStateWithConnection(connection, structuredClone(state), testId));
+  const state = await loadStateFromMysql(fixture.sourceSaveId);
   await withMysqlTransaction(async (connection) => {
     for (const entity of [state.player, ...state.npcs]) {
       await syncCultivatorPearls(connection, testId, entity);
@@ -28,4 +26,4 @@ try {
   if (ranking.entries.length !== state.npcs.length + 1) throw new Error("实时排行榜人数不一致");
   if (Number(counts[0].cultivators) !== Number(counts[0].metrics) || Number(counts[0].cultivators) !== Number(counts[0].assets)) throw new Error("人物、指标、灵珠资产数量不一致");
   console.log(JSON.stringify({ detailIndependent: true, cultivators: Number(counts[0].cultivators), metrics: Number(counts[0].metrics), pearlAssets: Number(counts[0].assets), pearlKinds: detail.spiritPearls.pearls.length, rankingEntries: ranking.entries.length, replayRowsPreserved: Number(counts[0].replays) }));
-} finally { await mysqlPool.query("DELETE FROM game_saves WHERE save_id=?", [testId]); await mysqlPool.end(); }
+} finally { await cleanupFixture(testId); await mysqlPool.end(); }

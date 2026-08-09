@@ -86,14 +86,16 @@ export async function readCultivatorDetailIncremental(saveId, cultivatorId, opti
   for (const item of fragments) pearlMap.get(item.pearl_id)?.fragments && (pearlMap.get(item.pearl_id).fragments[String(item.tier)] = Number(item.fragment_count));
   entity.spiritPearls = { version: Number(asset.version || 3), dust: Number(asset.dust || 0), pearls: Object.fromEntries([...pearlMap.entries()]), history: pearlHistory.map((item) => parseMysqlJson(item.history_json, {})) };
   const publicPearls = getPublicSpiritPearls({ day: 1, player: entity, spiritPearls: entity.spiritPearls, equipment: [], npcs: [] }, entity);
-  const [[powerRank]] = await connection.query(`SELECT COUNT(*)+1 rank_no FROM cultivator_metrics_v2 WHERE save_id=? AND (current_power > ? OR (current_power=? AND cultivator_id < ?))`, [saveId, Number(row.metric_power || row.current_power || 0), Number(row.metric_power || row.current_power || 0), cultivatorId]);
-  const [[combatRank]] = await connection.query(`SELECT COUNT(*)+1 rank_no FROM cultivator_metrics_v2 WHERE save_id=? AND (current_combat_rating > ? OR (current_combat_rating=? AND cultivator_id < ?))`, [saveId, Number(row.metric_rating || row.current_combat_rating || 500), Number(row.metric_rating || row.current_combat_rating || 500), cultivatorId]);
+  const powerValue = Number(row.metric_power ?? 0);
+  const ratingValue = Number(row.metric_rating ?? 500);
+  const [[powerRank]] = await connection.query(`SELECT COUNT(*)+1 rank_no FROM cultivator_metrics_v2 WHERE save_id=? AND (current_power > ? OR (current_power=? AND cultivator_id < ?))`, [saveId, powerValue, powerValue, cultivatorId]);
+  const [[combatRank]] = await connection.query(`SELECT COUNT(*)+1 rank_no FROM cultivator_metrics_v2 WHERE save_id=? AND (current_combat_rating > ? OR (current_combat_rating=? AND cultivator_id < ?))`, [saveId, ratingValue, ratingValue, cultivatorId]);
   const [[participant]] = await connection.query("SELECT COUNT(*) participant_count FROM cultivator_metrics_v2 WHERE save_id=?", [saveId]);
   const metricHistory = publicMetricHistory(rankSnapshots, cultivatorId, row, Number(participant.participant_count || 1));
   return {
     person: entity,
-    power: Number(row.metric_power || row.current_power || 0),
-    metrics: { currentPower: Number(row.metric_power || row.current_power || 0), currentCombatRating: Number(row.metric_rating || row.current_combat_rating || 500), combatScore: Number(row.combat_score || 500), duelScore: Number(row.duel_score || 0), powerRank: Number(powerRank.rank_no || row.power_rank || 0), combatRank: Number(combatRank.rank_no || row.combat_rank || 0), revision: Number(row.metrics_revision || 0) },
+    power: powerValue,
+    metrics: { currentPower: powerValue, currentCombatRating: ratingValue, combatScore: Number(row.combat_score ?? 500), duelScore: Number(row.duel_score ?? 0), powerRank: Number(powerRank.rank_no || 0), combatRank: Number(combatRank.rank_no || 0), revision: Number(row.metrics_revision || 0) },
     spiritPearls: { ...publicPearls, history: pearlHistory.map((item) => parseMysqlJson(item.history_json, {})) },
     equippedItems: equipment.map((item) => parseMysqlJson(item.item_json, {})),
     rankingTrends: metricHistory.rankingTrends,
@@ -108,6 +110,16 @@ export async function upsertCultivatorMetrics(connection, options) {
     (save_id,cultivator_id,current_power,current_combat_rating,combat_score,duel_score,duel_wins,duel_losses,dungeon_clears,best_dungeon_power,power_rank,combat_rank,metrics_revision)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1) ON DUPLICATE KEY UPDATE current_power=VALUES(current_power),current_combat_rating=VALUES(current_combat_rating),combat_score=VALUES(combat_score),duel_score=VALUES(duel_score),duel_wins=VALUES(duel_wins),duel_losses=VALUES(duel_losses),dungeon_clears=VALUES(dungeon_clears),best_dungeon_power=VALUES(best_dungeon_power),power_rank=VALUES(power_rank),combat_rank=VALUES(combat_rank),metrics_revision=metrics_revision+1`,
   [options.saveId, options.cultivatorId, options.currentPower || 0, options.currentCombatRating || 500, options.combatScore || 500, options.duelScore || 0, options.duelWins || 0, options.duelLosses || 0, options.dungeonClears || 0, options.bestDungeonPower || 0, options.powerRank || null, options.combatRank || null]);
+  // `cultivators.current_*` is retained as a compatibility mirror for older
+  // readers.  The metrics table remains authoritative; keep the mirror in
+  // sync whenever the authoritative row is updated.
+  if (options.syncCompatibility !== false) {
+    await connection.query(`UPDATE cultivators
+      SET current_power=?, current_combat_rating=?, updated_at=CURRENT_TIMESTAMP(3)
+      WHERE save_id=? AND cultivator_id=?`, [
+      Number(options.currentPower || 0), Number(options.currentCombatRating ?? 500), options.saveId, options.cultivatorId
+    ]);
+  }
 }
 
 export async function syncCultivatorPearls(connection, saveId, entity) {

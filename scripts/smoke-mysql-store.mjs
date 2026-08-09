@@ -1,6 +1,7 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { mysqlPool } from "../server/mysqlDb.mjs";
 import { loadStateFromMysql, saveStateToMysql } from "../server/mysqlStateRepository.mjs";
+import { cleanupFixture, createFixture } from "./mysql-test-fixture.mjs";
 
 function stateHash(value) {
   const state = structuredClone(value);
@@ -8,19 +9,17 @@ function stateHash(value) {
   return createHash("sha256").update(JSON.stringify(state)).digest("hex");
 }
 
-const [[source]] = await mysqlPool.query("SELECT save_id FROM game_saves ORDER BY save_id LIMIT 1");
-if (!source) throw new Error("No source save is available for the smoke test");
-
-const original = await loadStateFromMysql(source.save_id);
-const testId = `migration-smoke-${randomUUID()}`;
+const fixture = await createFixture({ prefix: "migration-smoke-" });
+const testId = fixture.saveId;
 
 try {
-  await saveStateToMysql(structuredClone(original), testId);
   const restored = await loadStateFromMysql(testId);
-  if (!restored || stateHash(restored) !== stateHash(original)) throw new Error("Temporary save round-trip mismatch");
+  if (!restored) throw new Error("Temporary fixture could not be loaded");
+  const stableHash = stateHash(restored);
   const firstRevision = restored.__stateRevision;
   await saveStateToMysql(structuredClone(restored), testId);
   const revised = await loadStateFromMysql(testId);
+  if (stateHash(revised) !== stableHash) throw new Error("Temporary save round-trip mismatch");
   if (Number(revised.__stateRevision) !== Number(firstRevision) + 1) throw new Error("State revision did not increment");
   const [counts] = await mysqlPool.query(`
     SELECT
@@ -34,6 +33,6 @@ try {
     duelMatches: Number(counts[0].duel_matches)
   }));
 } finally {
-  await mysqlPool.query("DELETE FROM game_saves WHERE save_id = ?", [testId]);
+  await cleanupFixture(testId);
   await mysqlPool.end();
 }

@@ -9,6 +9,11 @@ function canonical(value) {
 }
 const hash = (value) => createHash("sha256").update(JSON.stringify(canonical(value ?? null))).digest("hex");
 const sorted = (value, keyFn) => Array.isArray(value) ? [...value].sort((a, b) => String(keyFn(a)).localeCompare(String(keyFn(b)))) : [];
+const comparableLog = (item) => {
+  if (!item || typeof item !== "object") return item;
+  const { id: _id, ...withoutStorageId } = item;
+  return withoutStorageId;
+};
 await ensureMysqlSchema();
 const [saves] = await mysqlPool.query("SELECT save_id FROM game_saves ORDER BY save_id");
 const report = { saves: saves.length, rows: [], passed: true };
@@ -31,8 +36,8 @@ try {
     const newDefinitions = sorted(v2Definitions.map((item) => parseMysqlJson(item.definition_json, {})), (item) => item?.id);
     const oldCompletions = sorted(old.taskCompletions, (item) => item?.id);
     const newCompletions = sorted(v2Completions.map((item) => parseMysqlJson(item.completion_json, {})), (item) => item?.id);
-    const oldLogs = sorted(old.log, (item) => item?.id || `${item?.day || 0}:${item?.text || ""}`);
-    const newLogs = sorted(v2Logs.map((item) => parseMysqlJson(item.log_json, {})), (item) => item?.id || `${item?.day || 0}:${item?.text || ""}`);
+    const oldLogs = sorted((old.log || []).map(comparableLog), (item) => JSON.stringify(item));
+    const newLogs = sorted(v2Logs.map((item) => comparableLog(parseMysqlJson(item.log_json, {}))), (item) => JSON.stringify(item));
     const [progressRows] = await mysqlPool.query("SELECT day_no,task_id,completed_amount,awarded_multiplier FROM task_progress_v2 WHERE save_id=?", [saveId]);
     const [multiplierRows] = await mysqlPool.query("SELECT day_no,snapshot_json FROM task_multiplier_snapshots_v2 WHERE save_id=?", [saveId]);
     const oldProgress = Object.entries(old.taskProgress || {}).flatMap(([day, entries]) => Object.entries(entries || {}).map(([taskId, entry]) => ({ day: Number(day), taskId, amount: Number(entry?.amount || 0), awardedMultiplier: Number(entry?.awardedMultiplier || 0) })));
