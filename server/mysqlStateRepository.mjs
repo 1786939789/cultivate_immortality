@@ -172,7 +172,7 @@ async function writeEncodedState(rawConnection, state, saveId, options = {}) {
     revision = Number(revisionRows[0]?.state_revision || 0);
   }
 
-  if (domains.has(persistenceDomains.cultivators) || domains.has(persistenceDomains.adminProfiles)) {
+  if (!options.skipPortraitUpsert && (domains.has(persistenceDomains.cultivators) || domains.has(persistenceDomains.adminProfiles))) {
     await upsertPortraits(connection, encoded.portraits);
   }
 
