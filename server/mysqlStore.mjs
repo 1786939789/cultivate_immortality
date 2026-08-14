@@ -163,10 +163,15 @@ async function managedUserId() {
 
 async function writeStateInternal(state, id, options = {}) {
   const pending = Array.isArray(state.__pendingBattleReplays) ? [...state.__pendingBattleReplays] : [];
-  const persistedState = structuredClone(state);
+  // mutateState already owns a private draft. Reuse it on hot action paths to
+  // avoid cloning the full save a second time before persistence.
+  const persistedState = options.reuseState ? state : structuredClone(state);
   delete persistedState.__pendingBattleReplays;
   if (!options.skipCompaction) {
-    compactStateForStorage(persistedState, { skipReplayCompaction: options.skipReplayExtraction });
+    compactStateForStorage(persistedState, {
+      skipReplayCompaction: options.skipReplayExtraction,
+      skipBattleReplayCompaction: options.skipBattleReplayCompaction
+    });
   }
   const previousState = options.previousState || stateCache.get(id) || null;
   const metadataChanged = !previousState || ["day", "rebirth", "calendarStartDate", "lastSettlementDate", "storageCompactionVersion"]
@@ -195,7 +200,9 @@ async function writeStateInternal(state, id, options = {}) {
         : Number.isFinite(previousState?.__stateRevision) ? Number(previousState.__stateRevision) : undefined
     });
     await upsertBattleReplays(connection, id, pending);
-    await pruneBattleReplays(connection, id, minReplayDayFor(persistedState.day || 1));
+    if (!options.skipReplayPrune) {
+      await pruneBattleReplays(connection, id, minReplayDayFor(persistedState.day || 1));
+    }
     if (typeof options.beforeCommit === "function") await options.beforeCommit(connection);
     return nextRevision;
   });

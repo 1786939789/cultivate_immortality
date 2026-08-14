@@ -10296,9 +10296,11 @@ export function powerOf(entity, state, options = {}) {
 }
 
 export function compactStateForStorage(state, options = {}) {
-  if (!options.skipReplayCompaction) compactReplayFields(state);
-  compactNonPlayerReplays(state);
-  archiveExpiredBattleRecords(state);
+  if (!options.skipBattleReplayCompaction) {
+    if (!options.skipReplayCompaction) compactReplayFields(state);
+    compactNonPlayerReplays(state);
+    archiveExpiredBattleRecords(state);
+  }
   for (const { entity, kind } of allCultivators(state)) {
     entity.dailyRecords = trimRecordsByDay(entity.dailyRecords || [], state.day, growthRecordDays, growthRecordLimit);
     entity.breakthroughs = trimRecordsByDay(entity.breakthroughs || [], state.day, growthRecordDays, growthRecordLimit);

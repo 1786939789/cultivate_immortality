@@ -95,6 +95,7 @@ const daoTrialActionRoutes = new Set([
   "/api/dao-trial/advance",
   "/api/dao-trial/abandon"
 ]);
+const taskActionRoutes = new Set(["/api/tasks", "/api/tasks/delete"]);
 
 function sendJson(res, status, data, headers = {}) {
   const body = JSON.stringify(data);
@@ -414,7 +415,9 @@ async function handleApi(req, res, url) {
   const scope = daoTrialActionRoutes.has(url.pathname)
     ? "dao-trial"
     : requestedScope || (liteActionRoutes.has(url.pathname) ? "lite" : "full");
-  const storageOptions = daoTrialActionRoutes.has(url.pathname)
+  const storageOptions = taskActionRoutes.has(url.pathname)
+    ? { reuseState: true, skipPortraitUpsert: true, skipReplayPrune: true, skipBattleReplayCompaction: true }
+    : daoTrialActionRoutes.has(url.pathname)
     ? { skipReplayExtraction: true, deferPersist: true, deferStateWrite: true }
     : ["/api/day/advance", "/api/duels/day"].includes(url.pathname)
       ? { skipReplayExtraction: true, deferPersist: true }
