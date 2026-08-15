@@ -86,8 +86,8 @@ export function setAdminManagedAccount(saveId, scope = "full") {
   return request("/api/admin/accounts/managed", { method: "POST", body: { saveId, scope } });
 }
 
-export function getCultivatorDetail(id) {
-  const params = new URLSearchParams({ id, _: String(Date.now()) });
+export function getCultivatorDetail(id, scope = "full") {
+  const params = new URLSearchParams({ id, scope, _: String(Date.now()) });
   return request(`/api/cultivators/detail?${params.toString()}`);
 }
 

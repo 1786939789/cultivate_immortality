@@ -2072,14 +2072,13 @@ function spiritPearlBonusFor(state, entity, stat) {
   return spiritPearlBonusesFor(state, entity)[stat] || 0;
 }
 
-function publicSpiritPearls(state, entity = state.player) {
+function publicSpiritPearls(state, entity = state.player, options = {}) {
   ensureSpiritPearls(state, entity);
   const asset = entity?.spiritPearls || state.spiritPearls;
   const bonuses = spiritPearlBonusesFor(state, entity);
-  return {
+  const result = {
     dust: asset.dust || 0,
     bonuses,
-    history: asset.history || [],
     pearls: spiritPearls.map((config) => {
       const entry = asset.pearls[config.id];
       const nextTier = entry.tier <= 0 ? 1 : Math.min(9, entry.tier + (entry.star >= 5 ? 1 : 0));
@@ -2096,6 +2095,8 @@ function publicSpiritPearls(state, entity = state.player) {
       };
     })
   };
+  if (options.includeHistory !== false) result.history = asset.history || [];
+  return result;
 }
 
 function addSpiritPearlReward(state, pearlId, tier, amount, context, receiver = state.player) {
@@ -10812,10 +10813,74 @@ function getTaskActionState(state, options = {}) {
   };
 }
 
-export function getPublicCultivatorDetail(state, id) {
+function publicCultivatorDetailSummary(state, match) {
+  const person = publicCultivator(match.entity, state, {
+    kind: match.kind,
+    compact: true
+  });
+  return {
+    __scope: "summary",
+    person: {
+      ...person,
+      sect: match.kind === "player" ? state.sect?.name || "" : person.sect,
+      effectiveSkill: effectiveSkillForEntity(match.entity)
+    },
+    insight: personInsight(state, match.entity),
+    equippedItems: equippedItemsFor(state, match.entity).map((item) => publicEquipment(item, state)),
+    spiritPearls: publicSpiritPearls(state, match.entity, { includeHistory: false }),
+    duelRank: duelRankSnapshot(match.entity),
+    power: powerOf(match.entity, state)
+  };
+}
+
+function publicCultivatorDetailHistory(state, match) {
+  const currentDay = state.day || 1;
+  const entity = match.entity;
+  const combatRatings = buildCombatRatings(state);
+  ensureSpiritPearls(state, entity);
+  const pearlAsset = entity?.spiritPearls || state.spiritPearls;
+  return {
+    __scope: "history",
+    person: {
+      id: entity.id,
+      dailyRecords: trimRecordsByDay(entity.dailyRecords || [], currentDay, growthRecordDays, growthRecordLimit),
+      breakthroughs: trimRecordsByDay(entity.breakthroughs || [], currentDay, growthRecordDays, growthRecordLimit),
+      skillUpgrades: trimRecordsByDay(entity.skillUpgrades || [], currentDay, growthRecordDays, growthRecordLimit),
+      duelSeasonHistory: entity.duelSeasonHistory || [],
+      duelTournamentAwards: publicDuelTournamentAwards(state, entity.id),
+      duelHistory: publicDuelHistory(entity.duelHistory || [], {
+        currentDay,
+        includeRecentReplays: true,
+        limit: detailRecordLimit
+      }),
+      dungeonHistory: publicDungeonHistory(entity.dungeonHistory || [], {
+        currentDay,
+        limit: match.kind === "player" ? detailRecordLimit : npcDungeonHistoryLimit
+      })
+    },
+    spiritPearls: { history: pearlAsset.history || [] },
+    combatRating: combatRatings.entries.find((entry) => entry.id === entity.id) || null,
+    rankingTrends: buildDailyRankingTrends(state, entity.id),
+    combatRatingMeta: {
+      windowDays: combatRatings.windowDays,
+      windowStartDay: combatRatings.windowStartDay,
+      windowEndDay: combatRatings.windowEndDay,
+      minimumActiveDays: combatRatings.minimumActiveDays,
+      weights: combatRatings.weights
+    },
+    relationship: match.kind === "npc" ? publicRelationship(state, entity.id) : null,
+    encounterHistory: match.kind === "npc"
+      ? state.encounters.history.filter((event) => event.actorId === entity.id).slice(0, 30)
+      : state.encounters.history.slice(0, 30)
+  };
+}
+
+export function getPublicCultivatorDetail(state, id, options = {}) {
   ensureStateShape(state);
   const match = allCultivators(state).find((item) => item.entity.id === id);
   if (!match) throw new Error("未找到该人物");
+  if (options.scope === "summary") return publicCultivatorDetailSummary(state, match);
+  if (options.scope === "history") return publicCultivatorDetailHistory(state, match);
   const combatRatings = buildCombatRatings(state);
   const person = publicCultivator(match.entity, state, {
     includeRecentReplays: true,

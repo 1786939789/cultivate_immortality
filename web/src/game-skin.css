@@ -12966,8 +12966,7 @@ body::before {
   box-shadow: 0 2px 5px rgba(52, 48, 41, .2), inset 0 0 0 3px rgba(241, 237, 220, .18);
 }
 
-.rank-surface.view.active > .character-dossier .dossier-pearl-item img,
-.rank-surface.view.active > .character-dossier .dossier-pearl-tooltip-head img {
+.rank-surface.view.active > .character-dossier .dossier-pearl-item img {
   position: relative;
   width: 37px;
   height: 37px;
@@ -13172,6 +13171,83 @@ body::before {
   box-shadow: 0 0 7px var(--pearl-shadow);
 }
 
+.rank-surface.view.active > .character-dossier .dossier-pearl-skeleton {
+  cursor: default;
+  pointer-events: none;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-pearl-skeleton .dossier-pearl-orb,
+.rank-surface.view.active > .character-dossier .dossier-pearl-skeleton > small,
+.rank-surface.view.active > .character-dossier .dossier-pearl-skeleton > b,
+.rank-surface.view.active > .character-dossier .dossier-pearl-skeleton .dossier-pearl-progress {
+  border-color: transparent;
+  background: rgba(76, 66, 48, .16);
+  box-shadow: none;
+  animation: dossier-pearl-skeleton-pulse 1.2s ease-in-out infinite alternate;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-pearl-skeleton > small {
+  width: 42px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-pearl-skeleton > b {
+  width: 54px;
+  height: 11px;
+  border-radius: 2px;
+}
+
+@keyframes dossier-pearl-skeleton-pulse {
+  from { opacity: .45; }
+  to { opacity: .82; }
+}
+
+.rank-surface.view.active > .character-dossier .dossier-combat-panel.dossier-history-pending > :not(.dossier-section-banner):not(.dossier-history-loader),
+.rank-surface.view.active > .character-dossier .dossier-records.dossier-history-pending > :not(.dossier-root-panel):not(.dossier-forecast-panel):not(.dossier-history-loader) {
+  display: none;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-history-loader {
+  grid-column: 1 / -1;
+  display: grid;
+  min-height: 142px;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  color: rgba(73, 53, 30, .76);
+}
+
+.rank-surface.view.active > .character-dossier .dossier-history-loader > span {
+  display: grid;
+  grid-template-columns: repeat(3, 34px);
+  align-items: end;
+  gap: 6px;
+  height: 48px;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-history-loader i {
+  display: block;
+  height: 55%;
+  border-radius: 2px;
+  background: rgba(47, 100, 86, .2);
+  animation: dossier-pearl-skeleton-pulse 1s ease-in-out infinite alternate;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-history-loader i:nth-child(2) {
+  height: 100%;
+  animation-delay: .15s;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-history-loader i:nth-child(3) {
+  height: 72%;
+  animation-delay: .3s;
+}
+
+.rank-surface.view.active > .character-dossier .dossier-history-loader strong {
+  font-size: 12px;
+}
+
 .rank-surface.view.active > .character-dossier .dossier-pearl-tooltip {
   position: absolute;
   left: 50%;
@@ -13215,18 +13291,9 @@ body::before {
 }
 
 .rank-surface.view.active > .character-dossier .dossier-pearl-tooltip-head {
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
+  display: block;
   padding-bottom: 7px;
   border-bottom: 1px solid rgba(247, 218, 137, .18);
-}
-
-.rank-surface.view.active > .character-dossier .dossier-pearl-tooltip-head img {
-  width: 32px;
-  height: 32px;
-  filter: none;
 }
 
 .rank-surface.view.active > .character-dossier .dossier-pearl-tooltip-head strong {

@@ -4086,8 +4086,7 @@
                     <span><small>已凝成</small><b>{{ personFormedPearlCount(selectedPerson) }} / 9</b></span>
                   </div>
                 </div>
-                <div v-if="personDetailLoading.has(selectedPerson.id)" class="empty">灵珠档案读取中...</div>
-                <div v-else class="dossier-pearl-grid">
+                <div v-if="hasPersonSpiritPearlSnapshot(selectedPerson)" class="dossier-pearl-grid">
                   <span
                     v-for="pearl in personSpiritPearls(selectedPerson).pearls || []"
                     :key="`${selectedPerson.id}-pearl-${pearl.id}`"
@@ -4099,14 +4098,13 @@
                     tabindex="0"
                   >
                     <span class="dossier-pearl-orb">
-                      <img :src="rootIconPath(pearl.config?.rootKey || pearl.id)" alt="">
+                      <img :src="rootIconPath(pearl.config?.rootKey || pearl.id)" alt="" width="96" height="96" decoding="async">
                     </span>
                     <small>{{ pearl.config?.name || pearl.name }}</small>
                     <b>{{ personPearlStatusText(pearl) }}</b>
                     <span class="dossier-pearl-progress" aria-hidden="true"><i :style="{ width: `${personPearlProgressInfo(pearl).percent}%` }"></i></span>
                     <span class="dossier-pearl-tooltip" role="tooltip">
                       <span class="dossier-pearl-tooltip-head">
-                        <img :src="rootIconPath(pearl.config?.rootKey || pearl.id)" alt="">
                         <span><strong>{{ pearl.config?.name || pearl.name }}</strong><small>{{ personPearlStatusText(pearl) }}</small></span>
                       </span>
                       <span><small>材料分阶</small><b>{{ personPearlFragmentBreakdown(pearl) }}</b></span>
@@ -4116,12 +4114,25 @@
                     </span>
                   </span>
                 </div>
+                <div v-else-if="personDetailLoading.has(selectedPerson.id)" class="dossier-pearl-grid dossier-pearl-loading" aria-label="灵珠档案读取中" aria-busy="true">
+                  <span v-for="index in 9" :key="`${selectedPerson.id}-pearl-skeleton-${index}`" class="dossier-pearl-item dossier-pearl-skeleton" aria-hidden="true">
+                    <span class="dossier-pearl-orb"></span>
+                    <small></small>
+                    <b></b>
+                    <span class="dossier-pearl-progress"></span>
+                  </span>
+                </div>
+                <div v-else class="empty">暂无灵珠档案。</div>
             </div>
 
-            <div class="panel flat dossier-combat-panel dossier-combat-summary dossier-ranking-vault">
+            <div class="panel flat dossier-combat-panel dossier-combat-summary dossier-ranking-vault" :class="{ 'dossier-history-pending': isPersonDetailHistoryPending(selectedPerson) }">
               <div class="dossier-section-banner">
                 <span aria-hidden="true">榜</span>
                 <div><small>战绩卷轴</small><strong>排名与战斗走势</strong></div>
+              </div>
+              <div v-if="isPersonDetailHistoryPending(selectedPerson)" class="dossier-history-loader" aria-label="战绩档案读取中" aria-busy="true">
+                <span aria-hidden="true"><i></i><i></i><i></i></span>
+                <strong>战绩档案读取中...</strong>
               </div>
               <div class="dossier-ranking-tabs" role="tablist" aria-label="每日排名走势类型">
                 <button
@@ -4188,7 +4199,7 @@
               </template>
             </div>
 
-            <div class="grid detail-sections record-sections dossier-records">
+            <div class="grid detail-sections record-sections dossier-records" :class="{ 'dossier-history-pending': isPersonDetailHistoryPending(selectedPerson) }">
               <div class="panel flat dossier-record-panel dossier-root-panel">
                 <h3>根盘</h3>
                 <div class="root-chip-list">
@@ -4214,6 +4225,10 @@
                     <small>{{ breakthroughPartsText(selectedPerson) }}</small>
                   </div>
                 </div>
+              </div>
+              <div v-if="isPersonDetailHistoryPending(selectedPerson)" class="panel flat dossier-record-panel dossier-history-loader" aria-label="人物历史读取中" aria-busy="true">
+                <span aria-hidden="true"><i></i><i></i><i></i></span>
+                <strong>人物历史读取中...</strong>
               </div>
               <div class="panel flat dossier-record-panel dossier-growth-panel">
                 <h3>每日成长</h3>
@@ -5297,6 +5312,7 @@ let authGeneration = 0;
 let highestStateRevision = -1;
 const personDetails = ref({});
 const personDetailLoading = ref(new Set());
+const personDetailHistoryLoading = ref(new Set());
 const activeTab = ref("practice");
 const cultivationSubTab = ref("attributes");
 const marketSubTab = ref("shop");
@@ -10074,6 +10090,15 @@ function personSpiritPearls(person) {
     || { dust: 0, pearls: [], history: [], bonuses: {} };
 }
 
+function hasPersonSpiritPearlSnapshot(person) {
+  return (personSpiritPearls(person).pearls || []).length > 0;
+}
+
+function isPersonDetailHistoryPending(person) {
+  const id = person?.id;
+  return Boolean(id && (personDetailLoading.value.has(id) || personDetailHistoryLoading.value.has(id)));
+}
+
 function personPearlFragmentCount(pearl) {
   return Object.values(pearl?.fragments || {}).reduce((sum, value) => sum + Math.max(0, Number(value) || 0), 0);
 }
@@ -12795,65 +12820,110 @@ function setActionPending(path, value) {
 function mergeCultivatorDetail(detail) {
   const id = detail?.person?.id;
   if (!id) return;
+  const previous = personDetails.value[id] || {};
+  const scope = detail.__scope || "full";
+  const mergedDetail = {
+    ...previous,
+    ...detail,
+    person: {
+      ...(previous.person || {}),
+      ...(detail.person || {})
+    },
+    spiritPearls: detail.spiritPearls
+      ? {
+        ...(previous.spiritPearls || {}),
+        ...detail.spiritPearls
+      }
+      : previous.spiritPearls,
+    __summaryLoaded: previous.__summaryLoaded || scope === "summary" || scope === "full",
+    __historyLoaded: previous.__historyLoaded || scope === "history" || scope === "full"
+  };
   personDetails.value = {
     ...personDetails.value,
-    [id]: detail
+    [id]: mergedDetail
   };
   if (!state.value) return;
-  const nextDerived = {
-    ...(state.value.derived || {}),
-    personInsights: {
+  const nextDerived = { ...(state.value.derived || {}) };
+  if (Object.prototype.hasOwnProperty.call(detail, "insight")) {
+    nextDerived.personInsights = {
       ...(state.value.derived?.personInsights || {}),
       [id]: detail.insight
-    },
-    equippedItems: {
+    };
+  }
+  if (Object.prototype.hasOwnProperty.call(detail, "equippedItems")) {
+    nextDerived.equippedItems = {
       ...(state.value.derived?.equippedItems || {}),
       [id]: detail.equippedItems || []
-    },
-    duelRanks: {
+    };
+  }
+  if (Object.prototype.hasOwnProperty.call(detail, "duelRank")) {
+    nextDerived.duelRanks = {
       ...(state.value.derived?.duelRanks || {}),
-      [id]: detail.duelRank || detail.person.duelSeason
-    },
-    npcPowers: id === "player"
-      ? (state.value.derived?.npcPowers || {})
-      : {
+      [id]: detail.duelRank || detail.person?.duelSeason
+    };
+  }
+  if (Object.prototype.hasOwnProperty.call(detail, "power")) {
+    if (id === "player") nextDerived.playerPower = detail.power ?? detail.person?.power ?? state.value.derived?.playerPower;
+    else {
+      nextDerived.npcPowers = {
         ...(state.value.derived?.npcPowers || {}),
-        [id]: detail.power ?? detail.person.power
-      },
-    playerPower: id === "player" ? (detail.power ?? detail.person.power ?? state.value.derived?.playerPower) : state.value.derived?.playerPower
-  };
+        [id]: detail.power ?? detail.person?.power
+      };
+    }
+  }
   state.value = {
     ...state.value,
-    player: id === "player" ? { ...(state.value.player || {}), ...detail.person } : state.value.player,
+    player: id === "player" ? { ...(state.value.player || {}), ...(detail.person || {}) } : state.value.player,
     npcs: id === "player"
       ? (state.value.npcs || [])
-      : (state.value.npcs || []).map((npc) => npc.id === id ? { ...npc, ...detail.person } : npc),
+      : (state.value.npcs || []).map((npc) => npc.id === id ? { ...npc, ...(detail.person || {}) } : npc),
     derived: nextDerived
   };
 }
 
 async function ensurePersonDetail(id, force = false) {
-  if (!id || personDetailLoading.value.has(id)) return;
-  if (!force && personDetails.value[id]) return;
+  if (!id) return;
   if (force && personDetails.value[id]) {
     const nextDetails = { ...personDetails.value };
     delete nextDetails[id];
     personDetails.value = nextDetails;
   }
-  const nextLoading = new Set(personDetailLoading.value);
-  nextLoading.add(id);
-  personDetailLoading.value = nextLoading;
   const generation = authGeneration;
+  if (!personDetails.value[id]?.__summaryLoaded) {
+    if (personDetailLoading.value.has(id)) return;
+    const nextLoading = new Set(personDetailLoading.value);
+    nextLoading.add(id);
+    personDetailLoading.value = nextLoading;
+    try {
+      const detail = await getCultivatorDetail(id, "summary");
+      if (generation !== authGeneration) return;
+      mergeCultivatorDetail(detail);
+    } catch (err) {
+      error.value = err.message;
+      return;
+    } finally {
+      const doneLoading = new Set(personDetailLoading.value);
+      doneLoading.delete(id);
+      personDetailLoading.value = doneLoading;
+    }
+  }
+  if (generation !== authGeneration || personDetails.value[id]?.__historyLoaded || personDetailHistoryLoading.value.has(id)) return;
+  await nextTick();
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  if (generation !== authGeneration || personDetails.value[id]?.__historyLoaded) return;
+  const nextHistoryLoading = new Set(personDetailHistoryLoading.value);
+  nextHistoryLoading.add(id);
+  personDetailHistoryLoading.value = nextHistoryLoading;
   try {
-    const detail = await getCultivatorDetail(id);
+    const detail = await getCultivatorDetail(id, "history");
     if (generation !== authGeneration) return;
     mergeCultivatorDetail(detail);
   } catch (err) {
     error.value = err.message;
   } finally {
-    const doneLoading = new Set(personDetailLoading.value);
+    const doneLoading = new Set(personDetailHistoryLoading.value);
     doneLoading.delete(id);
-    personDetailLoading.value = doneLoading;
+    personDetailHistoryLoading.value = doneLoading;
   }
 }
 

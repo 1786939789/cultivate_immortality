@@ -287,8 +287,10 @@ async function handleApi(req, res, url) {
   if (req.method === "GET" && url.pathname === "/api/cultivators/detail") {
     const id = url.searchParams.get("id");
     if (!id) throw new Error("缺少人物 ID");
+    const requestedScope = url.searchParams.get("scope");
+    const scope = ["summary", "history"].includes(requestedScope) ? requestedScope : "full";
     const state = await readState(saveId);
-    sendJson(res, 200, getPublicCultivatorDetail(state, id));
+    sendJson(res, 200, getPublicCultivatorDetail(state, id, { scope }));
     return;
   }
 
