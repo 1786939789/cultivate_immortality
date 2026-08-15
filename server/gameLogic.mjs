@@ -3565,19 +3565,29 @@ function runSoloDungeonFor(state, entity, date, caves, foughtAt = timestampKey()
   return entry;
 }
 
-function runSectDungeon(state, sectName, members, date, foughtAt = timestampKey()) {
+function createVoidHallMonster(state, monsterRealm) {
+  const targetStage = stageIndexOfRealm(monsterRealm);
+  const seed = `void_hall|${state.calendarStartDate || ""}|${state.day || 1}|${monsterRealm}`;
+  const monsterName = monsterNameForStage(targetStage, seed);
+  const rootKey = roots[stableHash(`${seed}|root`) % roots.length]?.key;
+  return makeMonster(`虚天殿·${monsterName}王`, monsterRealm, rootKey, 1.2 + targetStage * 0.14);
+}
+
+function runSectDungeon(state, sectName, members, date, foughtAt = timestampKey(), sharedMonster = null) {
   if (!members.length) return null;
   const highestRealm = Math.max(...members.map(({ entity }) => entity.realm || 0));
   const monsterRealm = voidHallMonsterRealmForHighestRealm(highestRealm);
   const targetStage = stageIndexOfRealm(monsterRealm);
-  const monsterName = monsterNameForStage(targetStage, `void_hall|${state.day || 1}|${sectName}|${monsterRealm}`);
-  const monster = makeMonster(`虚天殿·${monsterName}王`, monsterRealm, pick(roots).key, 1.2 + targetStage * 0.14);
+  const monster = sharedMonster?.realm === monsterRealm ? sharedMonster : createVoidHallMonster(state, monsterRealm);
   const monsterPower = powerOf(monster, state);
   const contributions = [];
   const battles = [];
   let monsterHp = monster.maxHp;
   let monsterMana = monster.maxMana;
-  for (const { entity } of members) {
+  const orderedMembers = [...members].sort((a, b) => (
+    powerOf(a.entity, state) - powerOf(b.entity, state) || String(a.entity.id).localeCompare(String(b.entity.id))
+  ));
+  for (const { entity } of orderedMembers) {
     if (monsterHp <= 0) break;
     const beforeMonsterHp = monsterHp;
     const beforeMonsterMana = monsterMana;
@@ -4918,7 +4928,7 @@ function runStarSeaDungeon(state, roster, date, foughtAt = timestampKey()) {
   return publicRecord;
 }
 
-function runDailyDungeons(state, date, foughtAt = timestampKey()) {
+export function runDailyDungeons(state, date, foughtAt = timestampKey()) {
   ensureDungeonState(state);
   if (state.dungeonDays.some((record) => record.day === state.day)) return state.dungeonDays.find((record) => record.day === state.day);
   const roster = allCultivators(state);
@@ -4955,8 +4965,22 @@ function runDailyDungeons(state, date, foughtAt = timestampKey()) {
       if (entry.replay) queueBattleReplay(state, entry.replay, `blood-trial-${cave.cave}-${entry.id}`);
     }
   }
-  const sectRecords = activeSectNames(state)
-    .map((sectName) => runSectDungeon(state, sectName, membersForSect(state, sectName), date, foughtAt))
+  const sectChallenges = activeSectNames(state)
+    .map((sectName) => {
+      const members = membersForSect(state, sectName);
+      if (!members.length) return null;
+      const highestRealm = Math.max(...members.map(({ entity }) => entity.realm || 0));
+      return { sectName, members, monsterRealm: voidHallMonsterRealmForHighestRealm(highestRealm) };
+    })
+    .filter(Boolean);
+  const monstersByRealm = new Map(
+    [...new Set(sectChallenges.map((challenge) => challenge.monsterRealm))]
+      .map((monsterRealm) => [monsterRealm, createVoidHallMonster(state, monsterRealm)])
+  );
+  const sectRecords = sectChallenges
+    .map(({ sectName, members, monsterRealm }) => (
+      runSectDungeon(state, sectName, members, date, foughtAt, monstersByRealm.get(monsterRealm))
+    ))
     .filter(Boolean);
   settleVoidHallRewards(state, sectRecords);
   const voidHallSpiritPools = buildVoidHallSpiritPools(state);

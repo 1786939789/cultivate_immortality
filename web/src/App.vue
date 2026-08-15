@@ -6953,8 +6953,8 @@ const selectedDungeonCalendarDate = computed({
 const bloodTrialClearCount = computed(() => (selectedDungeonDay.value?.bloodTrial?.caves || []).reduce((sum, cave) => sum + bloodCaveClearCount(cave), 0));
 const sortedVoidHallRecords = computed(() => [...(selectedDungeonDay.value?.sects || [])].sort((a, b) => (
   Number(b.success) - Number(a.success) ||
-  voidHallMonsterPower(a) - voidHallMonsterPower(b) ||
-  b.totalDamage - a.totalDamage
+  Number(b.totalDamage || 0) - Number(a.totalDamage || 0) ||
+  String(a.sect || "").localeCompare(String(b.sect || ""), "zh-Hans-CN")
 )));
 const selectedVoidHallRecord = computed(() => sortedVoidHallRecords.value.find((record) => record.sect === selectedVoidHallSect.value));
 function switchDungeonRecordTab(tabId) {
