@@ -839,6 +839,19 @@
                         <strong>{{ day.isToday ? `第 ${day.day} 天` : day.day >= 1 ? `第 ${day.day} 天` : "开局前" }}</strong>
                         <span>{{ shortTaskDate(day.date) }}</span>
                       </div>
+                      <span
+                        class="task-day-totals"
+                        :aria-label="`当日经验 ${day.xp}，当日灵石 ${day.spirit}`"
+                      >
+                        <span class="task-day-total xp">
+                          <Sprout :size="15" :stroke-width="2.4" aria-hidden="true" />
+                          <span>经验 <strong>+{{ day.xp }}</strong></span>
+                        </span>
+                        <span class="task-day-total spirit">
+                          <Gem :size="15" :stroke-width="2.4" aria-hidden="true" />
+                          <span>灵石 <strong>+{{ day.spirit }}</strong></span>
+                        </span>
+                      </span>
                       <em v-if="day.tasks.length">已完成</em>
                       <em v-else>未记录</em>
                       <component :is="ChevronDown" class="task-day-chevron" :size="18" :stroke-width="2.4" aria-hidden="true" />
