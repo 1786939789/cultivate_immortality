@@ -1,6 +1,6 @@
 # MySQL storage
 
-The production service uses `STORAGE_DRIVER=mysql`. SQLite remains available as a rollback driver and as the source format for one-time migrations.
+MySQL is the only supported runtime storage. The service does not provide an alternate storage driver or database rollback implementation.
 
 ## Layout
 
@@ -21,7 +21,7 @@ Daily settlement uses the persistent `background_jobs` table. The scheduler enqu
 ## Required environment
 
 Use `.env.example` as the key reference. Keep the real password outside the repository.
-Local `npm run dev`, `npm run start`, and the MySQL migration commands automatically load an ignored root-level `.env` file when it exists.
+Local `npm run dev` and `npm run start` automatically load an ignored root-level `.env` file when it exists.
 
 ## Account bootstrap
 
@@ -34,22 +34,6 @@ NEW_REGISTRATION_CODE=replace-me REGISTRATION_CODE_MAX_USES=10 npm run auth:crea
 
 In PowerShell, set the same environment variables before running the command. Keep real passwords and registration codes in ignored local environment configuration only.
 
-## Migration
+## Backup and recovery
 
-The migration is destructive only to the target MySQL database. It never edits or deletes the SQLite source files.
-
-```bash
-MIGRATION_CONFIRM=replace-mysql npm run db:migrate:mysql
-npm run db:verify:mysql
-```
-
-Stop the application before the final production migration so no SQLite writes occur between migration and cutover.
-
-## Rollback
-
-1. Stop the service.
-2. Set `STORAGE_DRIVER=sqlite` in the production environment.
-3. Restore `data/game.sqlite` and `data/battle.sqlite` from the cutover backup if post-cutover MySQL writes must be discarded.
-4. Start the service.
-
-Do not run the SQLite and MySQL drivers as active writers at the same time.
+Use MySQL-native logical or physical backups. Test restores against a separate database before relying on a backup for production recovery. The repository does not contain runtime save data or database rollback files.

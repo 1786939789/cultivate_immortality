@@ -55,11 +55,9 @@ import {
   resetState,
   setAdminManagedSaveId,
   setActiveAccount,
-  settleAllStates,
   sessionCookie
 } from "./storage.mjs";
-const usesMysqlBackgroundJobs = String(process.env.STORAGE_DRIVER || "sqlite").trim().toLowerCase() === "mysql";
-const backgroundWorker = usesMysqlBackgroundJobs ? await import("./backgroundWorker.mjs") : null;
+import * as backgroundWorker from "./backgroundWorker.mjs";
 
 const port = Number(process.env.PORT || 8787);
 const rootDir = fileURLToPath(new URL("../", import.meta.url));
@@ -482,14 +480,8 @@ function millisecondsUntilNextMidnight() {
 
 async function runScheduledSettlement(reason) {
   try {
-    if (backgroundWorker) {
-      const result = await backgroundWorker.enqueueDailySettlementJobs();
-      console.log(`[daily-settlement] ${reason}: queued ${result.queuedSaves}/${result.totalSaves} saves for ${result.targetDate}`);
-    } else {
-      const result = await settleAllStates();
-      console.log(`[daily-settlement] ${reason}: ${result.settledSaves}/${result.totalSaves} saves settled`);
-      for (const failure of result.failures) console.error(`[daily-settlement] save ${failure.id} failed: ${failure.error}`);
-    }
+    const result = await backgroundWorker.enqueueDailySettlementJobs();
+    console.log(`[daily-settlement] ${reason}: queued ${result.queuedSaves}/${result.totalSaves} saves for ${result.targetDate}`);
   } catch (error) {
     console.error(`[daily-settlement] ${reason} failed:`, error);
   }
@@ -507,13 +499,13 @@ const host = process.env.HOST || "127.0.0.1";
 
 server.listen(port, host, () => {
   console.log(`API server: http://${host}:${port}`);
-  backgroundWorker?.startBackgroundWorker();
+  backgroundWorker.startBackgroundWorker();
   scheduleNextDailySettlement();
   void runScheduledSettlement("startup");
 });
 
 function shutdown(signal) {
-  backgroundWorker?.stopBackgroundWorker();
+  backgroundWorker.stopBackgroundWorker();
   clearTimeout(dailySettlementTimer);
   server.close(() => process.exit(signal === "SIGINT" ? 130 : 0));
   setTimeout(() => process.exit(signal === "SIGINT" ? 130 : 0), 5000).unref();

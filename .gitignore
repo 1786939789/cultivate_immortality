@@ -4,13 +4,9 @@ node_modules/
 # Build output
 dist/
 
-# Local database and runtime data
-data/*.sqlite
-data/*.sqlite-*
-data/backups/
-data/*.sqlite.*
+# Local runtime data and backups
+data/
 *.db
-*.sqlite
 
 # Environment files
 .env
@@ -29,6 +25,8 @@ pnpm-debug.log*
 .vite/
 .cache/
 .eslintcache
+tmp/
+test-results/
 
 # Generated image source sheets
 web/public/assets/duel-ranks/duel-rank-sheet-source.png
