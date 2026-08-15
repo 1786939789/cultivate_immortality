@@ -8016,8 +8016,14 @@ function publicDungeonForecasts(state) {
 }
 
 function publicTodayPlan(state) {
+  return {
+    ...publicTaskPlan(state),
+    dungeonForecasts: publicDungeonForecasts(state)
+  };
+}
+
+function publicTaskPlan(state, progress = publicTaskProgress(state)) {
   const catchup = playerCatchupProfile(state);
-  const progress = publicTaskProgress(state);
   const remainingXp = Math.max(0, xpNeed(state.player.realm) - (Number(state.player.xp) || 0));
   const taskDefinitions = (state.taskDefinitions || []).filter((task) => task.enabled !== false);
   const suggestedTask = taskDefinitions
@@ -8028,8 +8034,7 @@ function publicTodayPlan(state) {
     effectiveTaskXp: progress.baseXp,
     fullTaskXpBudget: progress.fullXpBudget,
     catchup,
-    suggestedTask: suggestedTask ? { id: suggestedTask.id, name: suggestedTask.name, xpReward: suggestedTask.xpReward } : null,
-    dungeonForecasts: publicDungeonForecasts(state)
+    suggestedTask: suggestedTask ? { id: suggestedTask.id, name: suggestedTask.name, xpReward: suggestedTask.xpReward } : null
   };
 }
 
@@ -10679,9 +10684,10 @@ function compactReplayFields(value) {
 }
 
 export function getPublicState(state, options = {}) {
-  ensureStateShape(state);
+  if (!options.skipEnsureStateShape) ensureStateShape(state);
   if (options.scope === "home") return getHomeState(state);
   if (options.scope === "dao-trial") return getDaoTrialActionState(state);
+  if (options.scope === "task") return getTaskActionState(state, options);
   const nextRealm = realms[Math.min(state.player.realm + 1, realms.length - 1)];
   const currentRealmInfo = realmInfo(state.player.realm);
   const breakChance = breakthroughChanceFor(state, state.player);
@@ -10783,6 +10789,36 @@ export function getPublicState(state, options = {}) {
       duelTournament: publicDuelTournament(state),
       npcPowers: Object.fromEntries(state.npcs.map((npc) => [npc.id, powerOf(npc, state)])),
       combatRatings,
+    }
+  };
+}
+
+function getTaskActionState(state, options = {}) {
+  const taskDay = Math.max(1, Math.floor(Number(options.taskDay) || state.day || 1));
+  const logDays = publicLogDays(state);
+  const taskProgress = publicTaskProgress(state, taskDay);
+  const todayProgress = taskDay === Number(state.day) ? taskProgress : publicTaskProgress(state);
+  return {
+    __scope: "task",
+    day: state.day,
+    player: {
+      xp: state.player.xp,
+      spirit: state.player.spirit,
+      dailyRecords: trimRecordsByDay(state.player.dailyRecords || [], state.day, growthRecordDays, growthRecordLimit)
+    },
+    tasks: state.tasks,
+    taskCompletions: state.taskCompletions,
+    taskProgress,
+    taskMultiplierRecords: state.taskMultiplierRecords,
+    log: state.log,
+    logDays,
+    home: {
+      logDays,
+      logs: (logDays[0]?.logs || state.log || []).slice(0, 30)
+    },
+    derived: {
+      xpNeed: xpNeed(state.player.realm),
+      todayPlan: publicTaskPlan(state, todayProgress)
     }
   };
 }

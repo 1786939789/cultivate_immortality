@@ -410,7 +410,9 @@ async function handleApi(req, res, url) {
   }
 
   const requestedScope = ["lite", "full"].includes(body.scope) ? body.scope : "";
-  const scope = daoTrialActionRoutes.has(url.pathname)
+  const scope = taskActionRoutes.has(url.pathname)
+    ? "task"
+    : daoTrialActionRoutes.has(url.pathname)
     ? "dao-trial"
     : requestedScope || (liteActionRoutes.has(url.pathname) ? "lite" : "full");
   const storageOptions = taskActionRoutes.has(url.pathname)
@@ -422,7 +424,10 @@ async function handleApi(req, res, url) {
       : undefined;
   const resultOnly = url.pathname === "/api/duels/day";
   const trackPersistenceDomains = ["/api/day/advance", "/api/duels/day"].includes(url.pathname) ? false : undefined;
-  sendJson(res, 200, await mutateState(mutator, saveId, { publicOptions: { scope }, storageOptions, resultOnly, trackPersistenceDomains }));
+  const publicOptions = scope === "task"
+    ? { scope, taskDay: body.day ?? body.targetDay, skipEnsureStateShape: true }
+    : { scope };
+  sendJson(res, 200, await mutateState(mutator, saveId, { publicOptions, storageOptions, resultOnly, trackPersistenceDomains }));
 }
 
 async function serveStatic(req, res, url) {

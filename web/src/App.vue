@@ -12856,11 +12856,21 @@ function mergeGameState(current, incoming, options = {}) {
       derived: incomingState.derived || {}
     };
   }
-  if (!["home", "lite", "dao-trial"].includes(incoming.__scope) || !current) {
+  if (!["home", "lite", "dao-trial", "task"].includes(incoming.__scope) || !current) {
     const { __scope, ...fullState } = incoming;
     return fullState;
   }
   const { __scope, derived: incomingDerived, catalog: incomingCatalog, ...hotState } = incoming;
+  const mergedDerived = {
+    ...(current.derived || {}),
+    ...(incomingDerived || {})
+  };
+  if (__scope === "task" && incomingDerived?.todayPlan) {
+    mergedDerived.todayPlan = {
+      ...(current.derived?.todayPlan || {}),
+      ...incomingDerived.todayPlan
+    };
+  }
   return {
     ...current,
     ...hotState,
@@ -12881,10 +12891,7 @@ function mergeGameState(current, incoming, options = {}) {
       ...(incoming.home || {})
     },
     catalog: incomingCatalog || current.catalog || {},
-    derived: {
-      ...(current.derived || {}),
-      ...(incomingDerived || {})
-    }
+    derived: mergedDerived
   };
 }
 
@@ -12892,12 +12899,24 @@ function applyState(nextState, options = {}) {
   const incomingRevision = Number(nextState?.stateRevision);
   if (!options.force && Number.isFinite(incomingRevision) && incomingRevision < highestStateRevision) return false;
   if (Number.isFinite(incomingRevision)) highestStateRevision = Math.max(highestStateRevision, incomingRevision);
-  const shouldClearPersonDetails = options.replace || !["home", "dao-trial"].includes(nextState?.__scope);
+  const shouldClearPersonDetails = options.replace || !["home", "dao-trial", "task"].includes(nextState?.__scope);
   if (shouldClearPersonDetails) personDetails.value = {};
+  else if (nextState?.__scope === "task" && personDetails.value.player?.person) {
+    personDetails.value = {
+      ...personDetails.value,
+      player: {
+        ...personDetails.value.player,
+        person: {
+          ...personDetails.value.player.person,
+          ...(nextState.player || {})
+        }
+      }
+    };
+  }
   state.value = mergeGameState(state.value, nextState, options);
   if (state.value && nextState?.__scope === "home") saveCachedState(state.value);
   if (!nextState?.__scope) fullStateStale.value = false;
-  else if (["home", "lite"].includes(nextState.__scope)) fullStateStale.value = true;
+  else if (["home", "lite", "task"].includes(nextState.__scope)) fullStateStale.value = true;
   if (
     nextState?.__scope === "home"
     && typeof nextState.home?.playerDuelRankPosition !== "number"
@@ -13081,7 +13100,7 @@ async function act(path, body = {}, options = {}) {
     if (nextState) {
       applyState(nextState, options);
       syncSelectedDays();
-      if (nextState?.__scope === "lite" && (options.markStale || shouldMarkFullStateStale(path))) {
+      if (["lite", "task"].includes(nextState?.__scope) && (options.markStale || shouldMarkFullStateStale(path))) {
         fullStateStale.value = true;
         if (!options.deferFullRefresh && needsHeavyState(activeTab.value)) ensureFullState();
       }
