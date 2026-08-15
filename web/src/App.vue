@@ -12822,9 +12822,19 @@ function mergeCultivatorDetail(detail) {
   if (!id) return;
   const previous = personDetails.value[id] || {};
   const scope = detail.__scope || "full";
+  const previousCombatDaily = previous.combatRating?.daily;
+  const preserveCombatDaily = scope === "summary"
+    && Array.isArray(previousCombatDaily)
+    && previousCombatDaily.length > 0;
+  const combatRating = Object.prototype.hasOwnProperty.call(detail, "combatRating")
+    ? (preserveCombatDaily
+      ? { ...(previous.combatRating || {}), ...(detail.combatRating || {}), daily: previousCombatDaily }
+      : detail.combatRating)
+    : previous.combatRating;
   const mergedDetail = {
     ...previous,
     ...detail,
+    combatRating,
     person: {
       ...(previous.person || {}),
       ...(detail.person || {})
@@ -12991,7 +13001,11 @@ function applyState(nextState, options = {}) {
   const incomingRevision = Number(nextState?.stateRevision);
   if (!options.force && Number.isFinite(incomingRevision) && incomingRevision < highestStateRevision) return false;
   if (Number.isFinite(incomingRevision)) highestStateRevision = Math.max(highestStateRevision, incomingRevision);
-  const shouldClearPersonDetails = options.replace || !["home", "dao-trial", "task"].includes(nextState?.__scope);
+  const activePersonDetailInFlight = detailView.value === "person"
+    && selectedPersonId.value
+    && (personDetailLoading.value.has(selectedPersonId.value) || personDetailHistoryLoading.value.has(selectedPersonId.value));
+  const shouldClearPersonDetails = options.replace
+    || (!activePersonDetailInFlight && !["home", "dao-trial", "task"].includes(nextState?.__scope));
   if (shouldClearPersonDetails) personDetails.value = {};
   else if (nextState?.__scope === "task" && personDetails.value.player?.person) {
     personDetails.value = {
