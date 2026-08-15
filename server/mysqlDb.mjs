@@ -97,6 +97,30 @@ async function createSchema() {
         PRIMARY KEY (save_id, section_key),
         CONSTRAINT fk_save_sections_save FOREIGN KEY (save_id) REFERENCES game_saves(save_id) ON DELETE CASCADE
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
+      `CREATE TABLE IF NOT EXISTS task_completions (
+        save_id VARCHAR(64) NOT NULL,
+        completion_id VARCHAR(160) NOT NULL,
+        position_no INT NOT NULL DEFAULT 0,
+        task_id VARCHAR(96) NOT NULL DEFAULT '',
+        day_no INT NOT NULL,
+        date_key VARCHAR(32) NOT NULL DEFAULT '',
+        xp BIGINT NOT NULL DEFAULT 0,
+        spirit BIGINT NOT NULL DEFAULT 0,
+        completion_json LONGTEXT NOT NULL,
+        content_hash CHAR(64) NOT NULL,
+        created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+        PRIMARY KEY (save_id, completion_id),
+        INDEX idx_task_completions_day (save_id, day_no, position_no),
+        CONSTRAINT fk_task_completions_save FOREIGN KEY (save_id) REFERENCES game_saves(save_id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
+      `CREATE TABLE IF NOT EXISTS player_hot_state (
+        save_id VARCHAR(64) PRIMARY KEY,
+        xp BIGINT NOT NULL DEFAULT 0,
+        spirit BIGINT NOT NULL DEFAULT 0,
+        updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+        CONSTRAINT fk_player_hot_state_save FOREIGN KEY (save_id) REFERENCES game_saves(save_id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
       `CREATE TABLE IF NOT EXISTS portraits (
         portrait_id CHAR(64) PRIMARY KEY,
         content_type VARCHAR(96) NULL,
@@ -288,6 +312,7 @@ async function createSchema() {
     }
     const textColumns = [
       ["save_sections", "section_json", "LONGTEXT"],
+      ["task_completions", "completion_json", "LONGTEXT"],
       ["cultivators", "cultivator_json", "LONGTEXT"],
       ["cultivator_history", "record_json", "LONGTEXT"],
       ["equipment_items", "item_json", "LONGTEXT"],
@@ -308,6 +333,47 @@ async function createSchema() {
         await connection.query(`ALTER TABLE ${table} MODIFY ${column} ${type} NOT NULL`);
       }
     }
+    await connection.query(`
+      INSERT IGNORE INTO player_hot_state (save_id, xp, spirit)
+      SELECT save_id, xp,
+        CASE WHEN JSON_VALID(cultivator_json)
+          THEN COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(cultivator_json, '$.spirit')) AS SIGNED), 0)
+          ELSE 0
+        END
+      FROM cultivators
+      WHERE cultivator_kind = 'player'
+    `);
+    const [legacyTaskRows] = await connection.query(`
+      SELECT save_id, section_key, section_json
+      FROM save_sections
+      WHERE section_key IN ('taskCompletions', 'tasks')
+      ORDER BY save_id, section_key = 'taskCompletions' DESC
+    `);
+    const legacyBySave = new Map();
+    for (const row of legacyTaskRows) {
+      const records = parseMysqlJson(row.section_json, []);
+      const current = legacyBySave.get(row.save_id);
+      if (row.section_key === "taskCompletions" || !current?.length) {
+        legacyBySave.set(row.save_id, Array.isArray(records) ? records : []);
+      }
+    }
+    for (const [saveId, records] of legacyBySave) {
+      const [countRows] = await connection.query("SELECT COUNT(*) AS total FROM task_completions WHERE save_id = ?", [saveId]);
+      if (!Number(countRows[0]?.total || 0)) {
+        for (const [position, completion] of records.entries()) {
+          if (!completion?.id) continue;
+          const completionJson = JSON.stringify(completion);
+          await connection.query(`
+            INSERT INTO task_completions
+              (save_id, completion_id, position_no, task_id, day_no, date_key, xp, spirit, completion_json, content_hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, SHA2(?, 256))
+            ON DUPLICATE KEY UPDATE completion_id = completion_id
+          `, [saveId, String(completion.id), position, String(completion.taskId || ""), Math.max(1, Number(completion.day || 1)), String(completion.date || ""), Math.max(0, Number(completion.xp || 0)), Math.max(0, Number(completion.spirit || 0)), completionJson, completionJson]);
+        }
+      }
+      await connection.query("DELETE FROM save_sections WHERE save_id = ? AND section_key IN ('taskCompletions', 'tasks')", [saveId]);
+    }
+    await connection.query("DELETE FROM save_sections WHERE section_key = 'taskProgress'");
   } finally {
     connection.release();
   }

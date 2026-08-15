@@ -37,7 +37,7 @@ async function syncHashedRows(connection, config) {
   for (const row of config.rows.values()) {
     const key = config.keyColumns.map((column) => config.keyValues(row)[column]).join("\u001f");
     incomingKeys.add(key);
-    if (existing.get(key) === row.hash) continue;
+    if (!config.alwaysUpsert && existing.get(key) === row.hash) continue;
     const values = config.values(row);
     await connection.query(config.upsertSql, [config.saveId, ...values]);
   }
@@ -110,6 +110,16 @@ async function writeEncodedState(rawConnection, state, saveId, options = {}) {
     upsertSql: `INSERT INTO save_sections (save_id, section_key, section_json, content_hash) VALUES (?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE section_json = VALUES(section_json), content_hash = VALUES(content_hash), updated_at = CURRENT_TIMESTAMP(3)`
   });
+  if (domains.has(persistenceDomains.taskCompletions)) await syncHashedRows(connection, {
+    table: "task_completions", saveId, rows: encoded.taskCompletions, keyColumns: ["completion_id"],
+    alwaysUpsert: true,
+    keyValues: (row) => ({ completion_id: row.completionId }),
+    values: (row) => [row.completionId, row.position, row.taskId, row.day, row.date, row.xp, row.spirit, row.json, row.hash],
+    upsertSql: `INSERT INTO task_completions
+      (save_id, completion_id, position_no, task_id, day_no, date_key, xp, spirit, completion_json, content_hash)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE position_no=VALUES(position_no), task_id=VALUES(task_id), day_no=VALUES(day_no), date_key=VALUES(date_key), xp=VALUES(xp), spirit=VALUES(spirit), completion_json=VALUES(completion_json), content_hash=VALUES(content_hash)`
+  });
   if (domains.has(persistenceDomains.cultivators)) await syncHashedRows(connection, {
     table: "cultivators", saveId, rows: encoded.cultivators, keyColumns: ["cultivator_id"],
     keyValues: (row) => ({ cultivator_id: row.cultivatorId }),
@@ -119,6 +129,11 @@ async function writeEncodedState(rawConnection, state, saveId, options = {}) {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE cultivator_kind=VALUES(cultivator_kind), position_no=VALUES(position_no), name=VALUES(name), realm_no=VALUES(realm_no), xp=VALUES(xp), hp=VALUES(hp), max_hp=VALUES(max_hp), mana=VALUES(mana), max_mana=VALUES(max_mana), sect_name=VALUES(sect_name), portrait_id=VALUES(portrait_id), cultivator_json=VALUES(cultivator_json), content_hash=VALUES(content_hash), updated_at=CURRENT_TIMESTAMP(3)`
   });
+  if (domains.has(persistenceDomains.cultivators)) await connection.query(`
+    INSERT INTO player_hot_state (save_id, xp, spirit)
+    VALUES (?, ?, ?)
+    ON DUPLICATE KEY UPDATE xp=VALUES(xp), spirit=VALUES(spirit), updated_at=CURRENT_TIMESTAMP(3)
+  `, [saveId, encoded.playerHot.xp, encoded.playerHot.spirit]);
   if (domains.has(persistenceDomains.cultivators)) await syncHashedRows(connection, {
     table: "cultivator_history", saveId, rows: encoded.cultivatorHistory,
     keyColumns: ["cultivator_id", "history_type", "record_key"],
@@ -207,6 +222,8 @@ export async function loadStateFromMysql(saveId) {
   if (!saveRows.length) return null;
   const queries = [
     ["sections", "SELECT * FROM save_sections WHERE save_id = ? ORDER BY section_key"],
+    ["taskCompletions", "SELECT * FROM task_completions WHERE save_id = ? ORDER BY position_no"],
+    ["playerHot", "SELECT * FROM player_hot_state WHERE save_id = ? LIMIT 1"],
     ["cultivators", "SELECT * FROM cultivators WHERE save_id = ? ORDER BY cultivator_kind = 'player' DESC, position_no"],
     ["cultivatorHistory", "SELECT * FROM cultivator_history WHERE save_id = ? ORDER BY cultivator_id, history_type, position_no"],
     ["equipment", "SELECT * FROM equipment_items WHERE save_id = ? ORDER BY position_no"],

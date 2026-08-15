@@ -5192,7 +5192,6 @@ const emptyState = {
   },
   sect: { reputation: 0 },
   npcs: [],
-  tasks: [],
   gameSettings: { taskDailyFullXpBudget: 500, battleReplaySpeed: 1, dailyTickerSpeed: 1 },
   taskDefinitions: [],
   taskCompletions: [],
@@ -6579,7 +6578,7 @@ const taskCategoryCounts = computed(() => enabledTaskDefinitions.value.reduce((c
   counts[category] = (counts[category] || 0) + 1;
   return counts;
 }, {}));
-const taskCompletions = computed(() => gameState.value.taskCompletions?.length ? gameState.value.taskCompletions : gameState.value.tasks || []);
+const taskCompletions = computed(() => gameState.value.taskCompletions || []);
 const todayTaskCompletions = computed(() => taskCompletions.value.filter((task) => task.day === gameState.value.day));
 const todayTaskSummary = computed(() => todayTaskCompletions.value.reduce((summary, task) => ({
   count: summary.count + 1,
@@ -12860,7 +12859,16 @@ function mergeGameState(current, incoming, options = {}) {
     const { __scope, ...fullState } = incoming;
     return fullState;
   }
-  const { __scope, derived: incomingDerived, catalog: incomingCatalog, ...hotState } = incoming;
+  const { __scope, derived: incomingDerived, catalog: incomingCatalog, taskDelta, ...hotState } = incoming;
+  const taskCompletion = taskDelta?.completion;
+  const deletedCompletionId = taskDelta?.deletedCompletionId;
+  const mergeTaskRecords = (records = [], limit = 120) => {
+    const remaining = deletedCompletionId
+      ? records.filter((record) => record.id !== deletedCompletionId)
+      : records;
+    if (!taskCompletion) return remaining;
+    return [taskCompletion, ...remaining.filter((record) => record.id !== taskCompletion.id)].slice(0, limit);
+  };
   const mergedDerived = {
     ...(current.derived || {}),
     ...(incomingDerived || {})
@@ -12882,14 +12890,15 @@ function mergeGameState(current, incoming, options = {}) {
       ...(current.sect || {}),
       ...(incoming.sect || {})
     },
-    tasks: incoming.tasks || current.tasks || [],
     taskDefinitions: incoming.taskDefinitions || current.taskDefinitions || [],
-    taskCompletions: incoming.taskCompletions || current.taskCompletions || [],
+    taskCompletions: __scope === "task" ? mergeTaskRecords(current.taskCompletions || []) : incoming.taskCompletions || current.taskCompletions || [],
     taskMultiplierRecords: incoming.taskMultiplierRecords || current.taskMultiplierRecords || [],
     home: {
       ...(current.home || {}),
       ...(incoming.home || {})
     },
+    log: incoming.log || current.log || [],
+    logDays: incoming.logDays || current.logDays || [],
     catalog: incomingCatalog || current.catalog || {},
     derived: mergedDerived
   };

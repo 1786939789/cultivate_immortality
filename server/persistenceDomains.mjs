@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 export const persistenceDomains = Object.freeze({
   sections: "sections",
+  taskCompletions: "taskCompletions",
   cultivators: "cultivators",
   equipment: "equipment",
   duels: "duels",
@@ -13,7 +14,7 @@ export const persistenceDomains = Object.freeze({
 export const allPersistenceDomains = Object.freeze(Object.values(persistenceDomains));
 
 const metadataKeys = new Set(["day", "rebirth", "calendarStartDate", "lastSettlementDate"]);
-const extractedKeys = new Set(["player", "npcs", "equipment", "duelDays", "dungeonDays", "provinceWars", "adminProfiles"]);
+const extractedKeys = new Set(["player", "npcs", "tasks", "taskCompletions", "taskProgress", "equipment", "duelDays", "dungeonDays", "provinceWars", "adminProfiles"]);
 
 function digest(value) {
   return createHash("sha256").update(JSON.stringify(value ?? null)).digest("hex");
@@ -22,6 +23,8 @@ function digest(value) {
 function topLevelPersistenceDomain(key) {
   if (metadataKeys.has(key) || key.startsWith("__")) return null;
   if (key === "player" || key === "npcs") return persistenceDomains.cultivators;
+  if (key === "taskCompletions") return persistenceDomains.taskCompletions;
+  if (key === "tasks" || key === "taskProgress") return null;
   if (key === "equipment") return persistenceDomains.equipment;
   if (key === "duelDays") return persistenceDomains.duels;
   if (key === "dungeonDays") return persistenceDomains.dungeons;
@@ -81,6 +84,7 @@ export function persistenceDomainHashes(state, domains = allPersistenceDomains) 
   }
   const hashes = {};
   if (requested.has(persistenceDomains.sections)) hashes.sections = digest(sections);
+  if (requested.has(persistenceDomains.taskCompletions)) hashes.taskCompletions = digest(state?.taskCompletions || []);
   if (requested.has(persistenceDomains.cultivators)) hashes.cultivators = digest({ player: state?.player || {}, npcs: state?.npcs || [] });
   if (requested.has(persistenceDomains.equipment)) hashes.equipment = digest(state?.equipment || []);
   if (requested.has(persistenceDomains.duels)) hashes.duels = digest(state?.duelDays || []);

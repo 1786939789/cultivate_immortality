@@ -6639,9 +6639,9 @@ function rememberTaskMultiplierForDay(state, day = state.day) {
 function taskMultiplierForDay(state, day = state.day) {
   const targetDay = Math.max(1, Math.floor(Number(day) || state.day || 1));
   normalizeTaskMultiplierRecords(state);
-  if (targetDay === Number(state.day || 1)) return rememberTaskMultiplierForDay(state, targetDay);
   const found = state.taskMultiplierRecords.find((record) => record.day === targetDay);
   if (found) return found;
+  if (targetDay === Number(state.day || 1)) return rememberTaskMultiplierForDay(state, targetDay);
   return {
     day: targetDay,
     date: stateDateForDay(state, targetDay),
@@ -7764,6 +7764,7 @@ function log(state, text, type = "") {
   state.log.unshift(entry);
   state.log = state.log.slice(0, flatLogLimit);
   addLogDayEntry(state, entry);
+  return entry;
 }
 
 function normalizeLogEntry(state, entry = {}) {
@@ -7880,6 +7881,7 @@ function normalizeTaskDefinition(definition = {}, fallback = {}) {
 }
 
 function normalizeTaskProgress(state) {
+  const hadStoredProgress = Object.prototype.hasOwnProperty.call(state, "taskProgress");
   const source = state.taskProgress && typeof state.taskProgress === "object" ? state.taskProgress : {};
   const minDay = Math.max(1, Number(state.day || 1) - taskProgressRecordDays + 1);
   const normalized = {};
@@ -7906,12 +7908,12 @@ function normalizeTaskProgress(state) {
     const amount = Number(record.completedAmount) || target * Math.max(0, Number(record.multiplier) || 1);
     normalized[day][taskId] = {
       amount: Math.max(previous.amount, amount),
-      awardedMultiplier: Math.max(previous.awardedMultiplier, Number(record.multiplier) || 1)
+      awardedMultiplier: Math.max(previous.awardedMultiplier, Number(record.completedMultiplier ?? record.multiplier) || 1)
     };
   }
   const before = JSON.stringify(state.taskProgress || {});
   state.taskProgress = normalized;
-  return before !== JSON.stringify(normalized);
+  return hadStoredProgress && before !== JSON.stringify(normalized);
 }
 
 function taskProgressEntry(state, day, taskId) {
@@ -8056,8 +8058,11 @@ function ensureTaskSystem(state) {
     state.taskCompletions = Array.isArray(state.tasks) ? [...state.tasks] : [];
     changed = true;
   }
+  if (Object.prototype.hasOwnProperty.call(state, "tasks")) {
+    delete state.tasks;
+    changed = true;
+  }
   changed = normalizeTaskProgress(state) || changed;
-  state.tasks ??= [];
   const beforeRecords = JSON.stringify(state.taskMultiplierRecords || []);
   normalizeTaskMultiplierRecords(state);
   if (!state.taskMultiplierRecords.some((record) => record.day === state.day)) {
@@ -9584,7 +9589,6 @@ export function createDefaultState() {
     starSeaCycle: null,
     starSeaCycleHistory: [],
     rosterVersion,
-    tasks: [],
     taskDefinitions: defaultRealityTasks(),
     taskCompletions: [],
     taskProgress: {},
@@ -9674,7 +9678,6 @@ export function clearProgressHistory(state) {
   state.dungeonDays = [];
   state.starSeaCycle = null;
   state.starSeaCycleHistory = [];
-  state.tasks = [];
   state.taskDefinitions = defaultRealityTasks();
   state.taskCompletions = [];
   state.taskMultiplierRecords = [taskMultiplierSnapshot(state, state.day)];
@@ -9987,9 +9990,6 @@ export function ensureStateShape(state) {
   }
   changed = ensureBattleArchiveState(state) || changed;
   changed = archiveExpiredBattleRecords(state) || changed;
-  if (Array.isArray(state.tasks)) {
-    for (const task of state.tasks) changed = ensureDatedRecord(task) || changed;
-  }
   changed = ensureTaskSystem(state) || changed;
   const gameSettingsBefore = JSON.stringify(state.gameSettings || {});
   state.gameSettings = {
@@ -10337,7 +10337,7 @@ export function compactStateForStorage(state, options = {}) {
   state.equipmentTransfers = trimRecordsByDay(state.equipmentTransfers || [], state.day || 1, recentRecordDays);
   state.log = (state.log || []).map((entry) => normalizeLogEntry(state, entry)).slice(0, flatLogLimit);
   state.logDays = trimLogDays(state.logDays?.length ? state.logDays : buildLogDaysFromFlatLog(state), state);
-  state.tasks = (state.tasks || []).slice(0, 16);
+  delete state.tasks;
   state.taskCompletions = (state.taskCompletions || []).slice(0, taskCompletionLimit);
   state.taskDefinitions = (state.taskDefinitions || []).slice(0, taskDefinitionLimit);
   if (state.encounters) {
@@ -10735,7 +10735,6 @@ export function getPublicState(state, options = {}) {
       lastSettlementDate: state.lastSettlementDate,
       player: publicCultivator(state.player, state, { includeRecentReplays: true, kind: "player" }),
       sect: state.sect,
-      tasks: state.tasks,
       taskDefinitions: state.taskDefinitions,
       taskCompletions: state.taskCompletions,
       taskProgress: publicTaskProgress(state),
@@ -10795,7 +10794,6 @@ export function getPublicState(state, options = {}) {
 
 function getTaskActionState(state, options = {}) {
   const taskDay = Math.max(1, Math.floor(Number(options.taskDay) || state.day || 1));
-  const logDays = publicLogDays(state);
   const taskProgress = publicTaskProgress(state, taskDay);
   const todayProgress = taskDay === Number(state.day) ? taskProgress : publicTaskProgress(state);
   return {
@@ -10803,19 +10801,10 @@ function getTaskActionState(state, options = {}) {
     day: state.day,
     player: {
       xp: state.player.xp,
-      spirit: state.player.spirit,
-      dailyRecords: trimRecordsByDay(state.player.dailyRecords || [], state.day, growthRecordDays, growthRecordLimit)
+      spirit: state.player.spirit
     },
-    tasks: state.tasks,
-    taskCompletions: state.taskCompletions,
+    taskDelta: options.actionResult || null,
     taskProgress,
-    taskMultiplierRecords: state.taskMultiplierRecords,
-    log: state.log,
-    logDays,
-    home: {
-      logDays,
-      logs: (logDays[0]?.logs || state.log || []).slice(0, 30)
-    },
     derived: {
       xpNeed: xpNeed(state.player.realm),
       todayPlan: publicTaskPlan(state, todayProgress)
@@ -10866,7 +10855,6 @@ function getHomeState(state) {
     lastSettlementDate: state.lastSettlementDate,
     player: publicCultivator(state.player, state, { kind: "player", dungeonHistoryLimit: 6, duelHistoryLimit: 12 }),
     sect: state.sect,
-    tasks: state.tasks,
     taskDefinitions: state.taskDefinitions,
     taskCompletions: state.taskCompletions,
     taskProgress: publicTaskProgress(state),
@@ -12386,6 +12374,7 @@ export function dailySettlement(state, options = {}) {
   ensureDaoTrialState(state);
   generateDailyEncounter(state);
   state.lastSettlementDate = options.settlementDate || dateKey();
+  rememberTaskMultiplierForDay(state, state.day);
 
   if (options.auto) log(state, "子时已过，天地灵机一转，今日自动结算完成。", "gold");
   if (options.manual) log(state, "你翻过一页札记，手动推进了一天。", "gold");
@@ -12488,56 +12477,10 @@ export function addTask(state, payload) {
   };
   state.taskCompletions.unshift(completion);
   state.taskCompletions = state.taskCompletions.slice(0, taskCompletionLimit);
-  state.tasks.unshift(completion);
-  state.tasks = state.tasks.slice(0, 16);
-  addTaskXpToDailyRecord(state, {
-    xpGain,
-    baseXpGain,
-    beforeTalentXp,
-    talentMultiplier: taskTalentMultiplier,
-    taskName: definition.name,
-    taskType: definition.category,
-    spiritGain,
-    day: targetDay,
-    date: completion.date
-  });
-  const bonusText = xpGain > baseXpGain ? `（加成 +${xpGain - baseXpGain}）` : "";
-  const reducedText = efficiency.reducedBaseXp ? "，超出今日有效修行预算的部分按 40% 结算" : "";
-  log(state, `完成「${definition.name}」，获得 ${xpGain} 经验${bonusText}与 ${spiritGain} 灵石${reducedText}。`, "gold");
-}
-
-function removeTaskContributionFromDailyRecord(state, completion) {
-  const player = state.player;
-  const day = Math.max(1, Math.floor(Number(completion.day) || state.day || 1));
-  const record = player.dailyRecords?.find((item) => Number(item.day) === day);
-  if (!record) return;
-
-  const xpGain = Math.max(0, Number(completion.xp) || 0);
-  const baseXpGain = Math.max(0, Number(completion.baseXp) || 0);
-  const beforeTalentXp = Math.max(0, Number(completion.beforeTalentXp)
-    || Math.round(
-      Math.round(baseXpGain * Math.max(1, Number(completion.elixirMultiplier) || 1))
-      * Math.max(1, Number(completion.sectXpMultiplier) || 1)
-    ));
-  const bonusXp = Math.max(0, xpGain - baseXpGain);
-  const spiritGain = Math.max(0, Number(completion.spirit) || 0);
-  const subtract = (value, amount) => Math.max(0, (Number(value) || 0) - amount);
-
-  record.xp = subtract(record.xp, xpGain);
-  record.baseXp = subtract(record.baseXp, baseXpGain);
-  record.bonusXp = subtract(record.bonusXp, bonusXp);
-  record.spirit = subtract(record.spirit, spiritGain);
-  record.taskXp = subtract(record.taskXp, xpGain);
-  record.taskBaseXp = subtract(record.taskBaseXp, baseXpGain);
-  record.taskBeforeTalentXp = subtract(record.taskBeforeTalentXp, beforeTalentXp);
-  record.taskBonusXp = subtract(record.taskBonusXp, bonusXp);
-  record.taskSpirit = subtract(record.taskSpirit, spiritGain);
-
-  const remaining = (state.taskCompletions || []).filter((item) => Number(item.day) === day);
-  record.taskCount = remaining.length;
-  record.taskNames = remaining.map((item) => item.name).filter(Boolean).slice(0, 5);
-  record.taskTypes = Array.from(new Set(remaining.map((item) => item.category).filter(Boolean))).slice(0, 5);
-  record.taskTalentMultiplier = remaining[0]?.talentMultiplier || 1;
+  return {
+    operation: "add",
+    completion
+  };
 }
 
 export function deleteTaskCompletion(state, payload = {}) {
@@ -12560,65 +12503,16 @@ export function deleteTaskCompletion(state, payload = {}) {
   state.player.xp -= xpGain;
   state.player.spirit -= spiritGain;
   state.taskCompletions.splice(index, 1);
-  state.tasks = (state.tasks || []).filter((item) => item.id !== completion.id);
   const day = Math.max(1, Math.floor(Number(completion.day) || state.day || 1));
   if (state.taskProgress?.[day]) {
     delete state.taskProgress[day][completion.taskId];
     if (!Object.keys(state.taskProgress[day]).length) delete state.taskProgress[day];
   }
   normalizeTaskProgress(state);
-  removeTaskContributionFromDailyRecord(state, completion);
-  log(state, `撤回「${completion.name}」，扣除 ${xpGain} 经验与 ${spiritGain} 灵石。`, "bad");
-}
-
-function addTaskXpToDailyRecord(state, { xpGain, baseXpGain, beforeTalentXp = xpGain, talentMultiplier = 1, taskName, taskType, spiritGain = 0, day = state.day, date }) {
-  const player = state.player;
-  const today = Math.max(1, Math.floor(Number(day) || state.day || 1));
-  const todayDate = date || stateDateForDay(state, today);
-  player.dailyRecords ??= [];
-  let record = player.dailyRecords.find((item) => item.day === today);
-  if (!record) {
-    const chanceParts = breakthroughChanceParts(state, player);
-    record = {
-      day: today,
-      date: todayDate,
-      xp: 0,
-      baseXp: 0,
-      bonusXp: 0,
-      spirit: 0,
-      realm: realms[player.realm],
-      breakChance: chanceParts.total,
-      realmBaseBreakChance: chanceParts.realmBase,
-      rootBreakMultiplier: chanceParts.rootMultiplier,
-      talentBreakMultiplier: chanceParts.talentMultiplier,
-      sectBreakMultiplier: chanceParts.sectMultiplier,
-      baseBreakChance: chanceParts.base,
-      bonusBreakChance: chanceParts.bonus,
-      note: "现实任务"
-    };
-    player.dailyRecords.unshift(record);
-  }
-
-  const bonusXp = Math.max(0, xpGain - baseXpGain);
-  record.xp = (Number(record.xp) || 0) + xpGain;
-  record.baseXp = (Number(record.baseXp) || 0) + baseXpGain;
-  record.bonusXp = (Number(record.bonusXp) || 0) + bonusXp;
-  record.spirit = (Number(record.spirit) || 0) + spiritGain;
-  record.taskXp = (Number(record.taskXp) || 0) + xpGain;
-  record.taskBaseXp = (Number(record.taskBaseXp) || 0) + baseXpGain;
-  record.taskBeforeTalentXp = (Number(record.taskBeforeTalentXp) || 0) + beforeTalentXp;
-  record.taskTalentMultiplier = talentMultiplier;
-  record.taskBonusXp = (Number(record.taskBonusXp) || 0) + bonusXp;
-  record.taskSpirit = (Number(record.taskSpirit) || 0) + spiritGain;
-  record.taskCount = (Number(record.taskCount) || 0) + 1;
-  record.taskNames = [taskName, ...(record.taskNames || [])].slice(0, 5);
-  record.taskTypes = Array.from(new Set([taskType, ...(record.taskTypes || [])])).slice(0, 5);
-  record.date ||= todayDate;
-  record.realm = realms[player.realm];
-  player.dailyRecords = player.dailyRecords
-    .sort((a, b) => (b.day || 0) - (a.day || 0))
-    .filter((item) => isRecordWithinDays(item, today, growthRecordDays))
-    .slice(0, growthRecordLimit);
+  return {
+    operation: "delete",
+    deletedCompletionId: completion.id
+  };
 }
 
 export function createTaskDefinition(state, payload = {}) {
@@ -13535,6 +13429,7 @@ export function useItem(state, kind) {
     p.elixirEffects.cultivationMultiplier = nextMultiplier;
     p.elixirEffects.cultivationMultiplierUntilDay = Math.max(Number(p.elixirEffects.cultivationMultiplierUntilDay) || 0, nextUntilDay);
     state.bag[kind] -= 1;
+    rememberTaskMultiplierForDay(state, state.day);
     log(state, `服下「${item.name}」，现实任务修为收益提升至 x${nextMultiplier}，持续到第 ${p.elixirEffects.cultivationMultiplierUntilDay} 天。`, "gold");
     return;
   }

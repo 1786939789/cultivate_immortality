@@ -3,6 +3,7 @@ import { clearProgressHistory, compactStateForStorage, createDefaultState, dateK
 import { hashAuthAttemptKey, hashPassword, hashRegistrationCode, verifyPassword } from "./authSecurity.mjs";
 import { ensureMysqlSchema, mysqlPool, parseMysqlJson, withMysqlTransaction } from "./mysqlDb.mjs";
 import { loadStateFromMysql, pruneBattleReplays, readReplayFromMysql, saveStateWithConnection, upsertBattleReplays } from "./mysqlStateRepository.mjs";
+import { loadTaskStateForUpdate, persistTaskAction } from "./mysqlTaskRepository.mjs";
 import { changedPersistenceDomains, trackPersistenceDomains } from "./persistenceDomains.mjs";
 import { cancelPendingJobs, enqueueBackgroundJob } from "./mysqlBackgroundJobs.mjs";
 
@@ -100,6 +101,19 @@ async function withSaveLock(saveId, callback) {
     release();
     if (saveLocks.get(saveId) === current) saveLocks.delete(saveId);
   }
+}
+
+function observedConnection(connection, observer) {
+  if (typeof observer !== "function") return connection;
+  return new Proxy(connection, {
+    get(target, property) {
+      if (property !== "query") return Reflect.get(target, property, target);
+      return async (sql, parameters) => {
+        observer(String(sql));
+        return target.query(sql, parameters);
+      };
+    }
+  });
 }
 
 async function readSetting(key) {
@@ -543,8 +557,68 @@ export async function mutateState(mutator, id = "default", options = {}) {
       throw error;
     }
     if (options.resultOnly) return { result };
-    const nextState = publicStateWithRevision(state, options.publicOptions);
+    const nextState = publicStateWithRevision(state, {
+      ...options.publicOptions,
+      actionResult: result
+    });
     return result === undefined ? nextState : { state: nextState, result };
+  });
+}
+
+export async function mutateTaskState(mutator, id = "default", options = {}) {
+  await bootstrapMysqlStore();
+  return withSaveLock(id, async () => {
+    let taskState;
+    let result;
+    let revision;
+    try {
+      await withMysqlTransaction(async (rawConnection) => {
+        const connection = observedConnection(rawConnection, options.queryObserver);
+        const context = await loadTaskStateForUpdate(connection, id);
+        taskState = context.state;
+        if (taskState.lastSettlementDate < dateKey()) {
+          const error = new Error("存档正在补做每日结算，请稍后重试");
+          error.statusCode = 409;
+          throw error;
+        }
+        result = mutator(taskState);
+        revision = await persistTaskAction(connection, id, taskState, result, context);
+        if (typeof options.beforeCommit === "function") await options.beforeCommit(connection, taskState, result);
+      });
+    } catch (error) {
+      if (error?.code === "STATE_REVISION_CONFLICT") {
+        stateCache.delete(id);
+        stateValidationCache.delete(id);
+      }
+      publicStateCache.delete(id);
+      throw error;
+    }
+
+    taskState.__stateRevision = revision;
+    const cached = stateCache.get(id);
+    if (cached) {
+      cached.day = taskState.day;
+      cached.calendarStartDate = taskState.calendarStartDate;
+      cached.lastSettlementDate = taskState.lastSettlementDate;
+      cached.player.xp = taskState.player.xp;
+      cached.player.spirit = taskState.player.spirit;
+      cached.taskCompletions = structuredClone(taskState.taskCompletions);
+      cached.taskProgress = structuredClone(taskState.taskProgress || {});
+      cached.taskMultiplierRecords = structuredClone(taskState.taskMultiplierRecords || []);
+      cached.__stateRevision = revision;
+      stateValidationCache.set(id, dateKey());
+    }
+    publicStateCache.delete(id);
+    const nextState = {
+      ...getPublicState(taskState, {
+        scope: "task",
+        taskDay: options.taskDay,
+        actionResult: result,
+        skipEnsureStateShape: true
+      }),
+      stateRevision: revision
+    };
+    return nextState;
   });
 }
 

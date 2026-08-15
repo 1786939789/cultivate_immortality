@@ -3,7 +3,7 @@ import { parseMysqlJson } from "./mysqlDb.mjs";
 import { normalizePersistenceDomains, persistenceDomains } from "./persistenceDomains.mjs";
 
 const metadataKeys = new Set(["day", "rebirth", "calendarStartDate", "lastSettlementDate"]);
-const extractedKeys = new Set(["player", "npcs", "equipment", "duelDays", "dungeonDays", "provinceWars", "adminProfiles"]);
+const extractedKeys = new Set(["player", "npcs", "tasks", "taskCompletions", "taskProgress", "equipment", "duelDays", "dungeonDays", "provinceWars", "adminProfiles"]);
 const historyFields = ["dailyRecords", "breakthroughs", "skillUpgrades", "duelHistory", "dungeonHistory"];
 
 function json(value) {
@@ -83,6 +83,10 @@ function compactCultivator(entity, portraits) {
 function encodeCultivator(encoded, entity, kind, position) {
   const cultivatorId = String(entity?.id || (kind === "player" ? "player" : `npc-${position + 1}`));
   const { current, histories, portraitId } = compactCultivator(entity, encoded.portraits);
+  if (kind === "player") {
+    delete current.xp;
+    delete current.spirit;
+  }
   addJsonRow(encoded.cultivators, cultivatorId, {
     cultivatorId,
     kind,
@@ -187,6 +191,11 @@ export function encodeState(state, options = {}) {
       stateVersion: Number(state.storageCompactionVersion || 1)
     },
     sections: new Map(),
+    taskCompletions: new Map(),
+    playerHot: {
+      xp: Math.max(0, Number(state.player?.xp || 0)),
+      spirit: Math.max(0, Number(state.player?.spirit || 0))
+    },
     portraits: new Map(),
     cultivators: new Map(),
     cultivatorHistory: new Map(),
@@ -205,6 +214,19 @@ export function encodeState(state, options = {}) {
       addJsonRow(encoded.sections, key, { sectionKey: key }, value);
     }
   }
+
+  if (domains.has(persistenceDomains.taskCompletions)) (state.taskCompletions || []).forEach((completion, position) => {
+    const completionId = String(completion?.id || rowKey(position, "task-completion", completion));
+    addJsonRow(encoded.taskCompletions, completionId, {
+      completionId,
+      position,
+      taskId: String(completion?.taskId || ""),
+      day: Math.max(1, Number(completion?.day || state.day || 1)),
+      date: String(completion?.date || ""),
+      xp: Math.max(0, Number(completion?.xp || 0)),
+      spirit: Math.max(0, Number(completion?.spirit || 0))
+    }, completion);
+  });
 
   if (domains.has(persistenceDomains.cultivators)) {
     encodeCultivator(encoded, state.player || {}, "player", 0);
@@ -351,7 +373,16 @@ export function decodeState(rows) {
     lastSettlementDate: rows.save.last_settlement_date || ""
   };
   for (const row of rows.sections) state[row.section_key] = parseMysqlJson(row.section_json, null);
+  state.taskCompletions = (rows.taskCompletions || [])
+    .sort((left, right) => Number(left.position_no) - Number(right.position_no))
+    .map((row) => parseMysqlJson(row.completion_json, {}));
+  delete state.tasks;
   Object.assign(state, decodeCultivators(rows.cultivators, rows.cultivatorHistory, rows.portraits));
+  const playerHot = rows.playerHot?.[0];
+  if (playerHot) {
+    state.player.xp = Number(playerHot.xp || 0);
+    state.player.spirit = Number(playerHot.spirit || 0);
+  }
   state.equipment = rows.equipment
     .sort((a, b) => Number(a.position_no) - Number(b.position_no))
     .map((row) => parseMysqlJson(row.item_json, {}));

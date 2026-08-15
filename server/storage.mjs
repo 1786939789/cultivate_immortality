@@ -8,6 +8,7 @@ export {
   loginUser,
   logoutSession,
   mutateState,
+  mutateTaskState,
   publicState,
   readBattleReplay,
   readState,

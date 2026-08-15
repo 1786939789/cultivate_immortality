@@ -48,6 +48,7 @@ import {
   loginUser,
   logoutSession,
   mutateState,
+  mutateTaskState,
   publicState,
   readBattleReplay,
   readState,
@@ -369,9 +370,14 @@ async function handleApi(req, res, url) {
 
   const body = await readJson(req);
   if (session.user.isAdmin && body.saveId !== saveId) throw new Error("管理目标已变化，请刷新后重试");
+  if (taskActionRoutes.has(url.pathname)) {
+    const mutator = url.pathname === "/api/tasks"
+      ? (state) => addTask(state, body)
+      : (state) => deleteTaskCompletion(state, body);
+    sendJson(res, 200, await mutateTaskState(mutator, saveId, { taskDay: body.day ?? body.targetDay }));
+    return;
+  }
   const routes = {
-    "/api/tasks": (state) => addTask(state, body),
-    "/api/tasks/delete": (state) => deleteTaskCompletion(state, body),
     "/api/encounters/choose": (state) => resolveEncounter(state, body),
     "/api/encounters/focus": (state) => updateEncounterFocus(state, body),
     "/api/breakthrough": (state) => attemptBreakthrough(state),
@@ -410,23 +416,17 @@ async function handleApi(req, res, url) {
   }
 
   const requestedScope = ["lite", "full"].includes(body.scope) ? body.scope : "";
-  const scope = taskActionRoutes.has(url.pathname)
-    ? "task"
-    : daoTrialActionRoutes.has(url.pathname)
+  const scope = daoTrialActionRoutes.has(url.pathname)
     ? "dao-trial"
     : requestedScope || (liteActionRoutes.has(url.pathname) ? "lite" : "full");
-  const storageOptions = taskActionRoutes.has(url.pathname)
-    ? { reuseState: true, skipPortraitUpsert: true, skipReplayPrune: true, skipBattleReplayCompaction: true }
-    : daoTrialActionRoutes.has(url.pathname)
+  const storageOptions = daoTrialActionRoutes.has(url.pathname)
     ? { skipReplayExtraction: true, deferPersist: true, deferStateWrite: true }
     : ["/api/day/advance", "/api/duels/day"].includes(url.pathname)
       ? { skipReplayExtraction: true, deferPersist: true }
       : undefined;
   const resultOnly = url.pathname === "/api/duels/day";
   const trackPersistenceDomains = ["/api/day/advance", "/api/duels/day"].includes(url.pathname) ? false : undefined;
-  const publicOptions = scope === "task"
-    ? { scope, taskDay: body.day ?? body.targetDay, skipEnsureStateShape: true }
-    : { scope };
+  const publicOptions = { scope };
   sendJson(res, 200, await mutateState(mutator, saveId, { publicOptions, storageOptions, resultOnly, trackPersistenceDomains }));
 }
 
