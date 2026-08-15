@@ -59,6 +59,7 @@ try {
   const summaryDetail = await requestDetail(detailId, "summary");
   const historyDetail = await requestDetail(detailId, "history");
   const fullDetail = await requestDetail(detailId, "full");
+  const homeCombatRating = state.derived?.combatRatings?.entries?.find((entry) => entry.id === detailId);
   if (summaryDetail.body.__scope !== "summary") throw new Error("Summary detail scope marker is missing");
   if (historyDetail.body.__scope !== "history") throw new Error("History detail scope marker is missing");
   if ("dailyRecords" in summaryDetail.body.person || "history" in summaryDetail.body.spiritPearls) {
@@ -71,13 +72,28 @@ try {
     throw new Error("History detail unexpectedly duplicates summary assets");
   }
   if (summaryDetail.body.person.name !== fullDetail.body.person.name
+    || homeCombatRating?.score !== fullDetail.body.combatRating?.score
+    || homeCombatRating?.daily?.length !== 0
+    || summaryDetail.body.combatRating?.score !== fullDetail.body.combatRating?.score
+    || summaryDetail.body.combatRating?.daily?.length !== 0
     || summaryDetail.body.equippedItems.length !== fullDetail.body.equippedItems.length
     || summaryDetail.body.spiritPearls.pearls.length !== fullDetail.body.spiritPearls.pearls.length
     || historyDetail.body.person.dailyRecords.length !== fullDetail.body.person.dailyRecords.length
     || historyDetail.body.person.duelHistory.length !== fullDetail.body.person.duelHistory.length
     || historyDetail.body.person.dungeonHistory.length !== fullDetail.body.person.dungeonHistory.length
     || historyDetail.body.spiritPearls.history.length !== fullDetail.body.spiritPearls.history.length) {
-    throw new Error("Split detail responses do not match the full detail contract");
+    throw new Error(`Split detail responses do not match the full detail contract: ${JSON.stringify({
+      summaryScore: summaryDetail.body.combatRating?.score,
+      homeScore: homeCombatRating?.score,
+      fullScore: fullDetail.body.combatRating?.score,
+      summaryDaily: summaryDetail.body.combatRating?.daily?.length,
+      equipment: [summaryDetail.body.equippedItems.length, fullDetail.body.equippedItems.length],
+      pearls: [summaryDetail.body.spiritPearls.pearls.length, fullDetail.body.spiritPearls.pearls.length],
+      dailyRecords: [historyDetail.body.person.dailyRecords.length, fullDetail.body.person.dailyRecords.length],
+      duelHistory: [historyDetail.body.person.duelHistory.length, fullDetail.body.person.duelHistory.length],
+      dungeonHistory: [historyDetail.body.person.dungeonHistory.length, fullDetail.body.person.dungeonHistory.length],
+      pearlHistory: [historyDetail.body.spiritPearls.history.length, fullDetail.body.spiritPearls.history.length]
+    })}`);
   }
 
   const npcId = original.npcs?.[0]?.id;
@@ -87,6 +103,8 @@ try {
   const npcFullDetail = await requestDetail(npcId, "full");
   if (npcSummaryDetail.body.__scope !== "summary"
     || npcHistoryDetail.body.__scope !== "history"
+    || npcSummaryDetail.body.combatRating?.score !== npcFullDetail.body.combatRating?.score
+    || npcSummaryDetail.body.combatRating?.daily?.length !== 0
     || "dailyRecords" in npcSummaryDetail.body.person
     || "history" in npcSummaryDetail.body.spiritPearls
     || "equippedItems" in npcHistoryDetail.body
