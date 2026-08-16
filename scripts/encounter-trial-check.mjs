@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { encounterDefinitionCount, encounterDefinitions } from "../server/encounterData.mjs";
-import { daoTrialEventOptions, daoTrialRoutes, daoTrialSeals } from "../server/daoTrialData.mjs";
+import { daoTrialEventOptions, daoTrialLaws, daoTrialRoutes, daoTrialSeals } from "../server/daoTrialData.mjs";
 import {
   advanceDaoTrial,
   createDefaultState,
@@ -32,6 +32,16 @@ function advanceToFortune(rootKey) {
   return testState;
 }
 
+function advanceTrialStep(state, { checkpoint = "exit", optionIndex = 0 } = {}) {
+  const run = getPublicState(state).daoTrial.activeRun;
+  if (!run) return null;
+  if (run.lawOffer.length) return advanceDaoTrial(state, { action: "law", lawId: run.lawOffer[0].id });
+  if (run.checkpointPending) return advanceDaoTrial(state, { action: checkpoint === "continue" ? "continue" : "checkpoint-exit" });
+  if (run.sealOffer.length) return advanceDaoTrial(state, { action: "seal", sealId: run.sealOffer[0].id });
+  if (run.currentNode.type === "battle") return advanceDaoTrial(state, { action: "battle" });
+  return advanceDaoTrial(state, { optionId: run.eventOptions[optionIndex % run.eventOptions.length].id });
+}
+
 assert.equal(encounterDefinitionCount, 240, "首发因缘节点必须为 240 个");
 assert.equal(new Set(encounterDefinitions.map((event) => event.id)).size, 240, "因缘节点 ID 必须唯一");
 assert.ok(encounterDefinitions.some((event) => event.season === "spring" && event.seasonal), "应包含春季因缘");
@@ -44,6 +54,7 @@ for (const event of encounterDefinitions) {
 }
 assert.equal(daoTrialRoutes.length, 3, "问道秘境应提供三条完整路线");
 assert.equal(daoTrialSeals.length, 48, "问道秘境应提供四十八道印");
+assert.equal(daoTrialLaws.length, 18, "问道秘境 V2 应提供十八项问道法则");
 assert.equal(new Set(daoTrialSeals.map((seal) => seal.id)).size, 48, "道印 ID 必须唯一");
 for (const route of daoTrialRoutes) assert.equal(route.nodes.length, 7, `${route.id} 必须包含七个节点`);
 for (const [eventId, options] of Object.entries(daoTrialEventOptions)) assert.equal(options.length, 3, `${eventId} 必须提供三个取舍`);
@@ -173,14 +184,7 @@ assert.equal(actionState.npcs, undefined, "问道局部状态不应携带完整 
 
 let actions = 0;
 while (state.daoTrial.activeRun && actions < 30) {
-  const run = getPublicState(state).daoTrial.activeRun;
-  if (run.sealOffer.length) {
-    advanceDaoTrial(state, { action: "seal", sealId: run.sealOffer[0].id });
-  } else if (run.currentNode.type === "battle") {
-    advanceDaoTrial(state, { strategy: "balanced" });
-  } else {
-    advanceDaoTrial(state, { optionId: run.eventOptions[0].id });
-  }
+  advanceTrialStep(state);
   actions += 1;
 }
 
@@ -198,7 +202,9 @@ const trialXpFortuneState = advanceToFortune("water");
 setSingleRoot(trialXpFortuneState.player, "water", encounterCatalog);
 startDaoTrial(trialXpFortuneState, { routeId: "golden-pass" });
 trialXpFortuneState.daoTrial.activeRun.nodeIndex = 3;
+trialXpFortuneState.daoTrial.activeRun.nodesCleared = 5;
 trialXpFortuneState.daoTrial.activeRun.pendingSealIds = [];
+trialXpFortuneState.daoTrial.activeRun.lawOffer = [];
 trialXpFortuneState.daoTrial.activeRun.rewards.xp = 10;
 const trialXpBefore = trialXpFortuneState.player.xp;
 const trialXpResult = advanceDaoTrial(trialXpFortuneState, { action: "abandon" });
@@ -240,13 +246,14 @@ withdrawState.player.mana = withdrawState.player.maxMana;
 withdrawState.player.divineSense *= 6;
 ensureStateShape(withdrawState);
 startDaoTrial(withdrawState, { routeId: "golden-pass" });
-assert.throws(() => advanceDaoTrial(withdrawState, { action: "abandon" }), /至少完成前三个节点/);
+assert.throws(() => advanceDaoTrial(withdrawState, { action: "abandon" }), /选择一项问道法则/);
+advanceTrialStep(withdrawState);
+assert.throws(() => advanceDaoTrial(withdrawState, { action: "abandon" }), /至少完成前五层/);
 let withdrawActions = 0;
 while (withdrawState.daoTrial.activeRun && !getPublicState(withdrawState).daoTrial.activeRun.canWithdraw && withdrawActions < 20) {
   const run = getPublicState(withdrawState).daoTrial.activeRun;
-  if (run.sealOffer.length) advanceDaoTrial(withdrawState, { action: "seal", sealId: run.sealOffer[0].id });
-  else if (run.currentNode.type === "battle") advanceDaoTrial(withdrawState, { action: "battle" });
-  else advanceDaoTrial(withdrawState, { optionId: run.eventOptions[0].id });
+  if (run.checkpointPending && !run.lawOffer.length) advanceDaoTrial(withdrawState, { action: "continue" });
+  else advanceTrialStep(withdrawState, { checkpoint: "continue" });
   withdrawActions += 1;
 }
 const bagBeforeWithdraw = getPublicState(withdrawState).daoTrial.activeRun.bag;
@@ -270,16 +277,7 @@ for (const route of daoTrialRoutes) {
     assert.equal(start.practice, attempt >= 1, `${route.id} 无签后应进入演练`);
     let routeActions = 0;
     while (routeState.daoTrial.activeRun && routeActions < 40) {
-      const run = getPublicState(routeState).daoTrial.activeRun;
-      if (run.sealOffer.length) {
-        if (run.canReroll && routeActions % 3 === 0) advanceDaoTrial(routeState, { action: "reroll" });
-        const refreshed = getPublicState(routeState).daoTrial.activeRun;
-        advanceDaoTrial(routeState, { action: "seal", sealId: refreshed.sealOffer[0].id });
-      } else if (run.currentNode.type === "battle") {
-        advanceDaoTrial(routeState, {});
-      } else {
-        advanceDaoTrial(routeState, { optionId: run.eventOptions[attempt % run.eventOptions.length].id });
-      }
+      advanceTrialStep(routeState, { optionIndex: attempt });
       routeActions += 1;
     }
     assert.ok(routeActions < 40, `${route.id} 第 ${attempt + 1} 次挑战不应卡死`);

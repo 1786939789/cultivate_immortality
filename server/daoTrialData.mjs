@@ -269,5 +269,30 @@ export const daoTrialSealSynergies = [
   { id: "poison-cloud", name: "蚀云成势", seals: ["poison-heart", "venom-script"], text: "持续效果额外提高 12%。", effects: { statusPower: 0.12 } }
 ];
 
+// Mechanic-oriented augments. The battle engine consumes these through the
+// stable trigger/effect fields instead of embedding law-specific branches.
+export const daoTrialLaws = [
+  { id: "triple-edge", name: "剑鸣三叠", school: "攻伐连锁", rarity: "silver", tags: ["tempo", "attack"], trigger: "onAttackCount", text: "每三次普通攻击追加一次余波。", effects: { attackEchoEvery: 3, attackEchoPower: 0.45 } },
+  { id: "opening-break", name: "破势追击", school: "攻伐连锁", rarity: "silver", tags: ["tempo", "risk"], trigger: "battleStart", text: "敌方气血高于 80% 时，首次技能伤害提高 24%。", effects: { openingSkillPower: 0.24 } },
+  { id: "execution-return", name: "斩意回流", school: "攻伐连锁", rarity: "gold", tags: ["attack", "tempo"], trigger: "afterBattle", text: "击败敌人后，下一场战斗攻击提高 12%。", effects: { nextBattleAttack: 0.12 } },
+  { id: "mana-loop", name: "灵潮回环", school: "技能循环", rarity: "silver", tags: ["focus", "arcane"], trigger: "onSkillCount", text: "每第三次施法减少一次法力消耗。", effects: { freeSkillEvery: 3 } },
+  { id: "spell-echo", name: "术后余音", school: "技能循环", rarity: "gold", tags: ["arcane", "tempo"], trigger: "afterSkill", text: "技能命中后有概率追加 35% 技能余波。", effects: { skillEchoChance: 0.35, skillEchoPower: 0.35 } },
+  { id: "clear-mind-law", name: "澄心观法", school: "技能循环", rarity: "silver", tags: ["focus", "vitality"], trigger: "roundStart", text: "法力高于 70% 时神识提高，低于 30% 时技能消耗降低。", effects: { highManaSense: 0.12, lowManaCost: -0.12 } },
+  { id: "iron-rebound", name: "铁壁反震", school: "守御反击", rarity: "silver", tags: ["guard", "risk"], trigger: "onTakeDamage", text: "受到攻击后积累反击值。", effects: { reflectCharge: 0.18 } },
+  { id: "steady-heart", name: "守中不乱", school: "守御反击", rarity: "silver", tags: ["guard", "focus"], trigger: "roundStart", text: "上一回合未受伤时获得短暂减伤。", effects: { noHitShield: 0.12 } },
+  { id: "unyielding-law", name: "不退之志", school: "守御反击", rarity: "gold", tags: ["guard", "vitality"], trigger: "onLethal", text: "首次受到致命伤害时保留 1 点气血。", effects: { lethalGuard: true } },
+  { id: "overheal-shield", name: "春风化雨", school: "生机转化", rarity: "silver", tags: ["vitality", "guard"], trigger: "onHeal", text: "溢出治疗转化为护盾。", effects: { overhealShield: 0.7 } },
+  { id: "breath-loop", name: "回息成环", school: "生机转化", rarity: "silver", tags: ["vitality", "tempo"], trigger: "afterBattle", text: "战斗胜利后按缺失气血恢复。", effects: { missingHpHeal: 0.16 } },
+  { id: "endless-life", name: "生生不绝", school: "生机转化", rarity: "gold", tags: ["vitality", "focus"], trigger: "onHealCount", text: "连续两次治疗后提高下一次治疗效果。", effects: { healCountBoost: 0.2 } },
+  { id: "blood-asking", name: "血炼问道", school: "风险流派", rarity: "silver", tags: ["risk", "attack"], trigger: "onLowHp", text: "气血低于 50% 时提高攻击和神识。", effects: { lowHpAttack: 0.14, lowHpSense: 0.14 } },
+  { id: "borrowed-life-law", name: "借命一线", school: "风险流派", rarity: "gold", tags: ["risk", "arcane"], trigger: "runStart", text: "降低最大气血，换取战斗分和技能效果。", effects: { maxHp: -0.08, skillPower: 0.12, scoreRisk: 0.12 } },
+  { id: "poison-formation", name: "毒经成势", school: "风险流派", rarity: "silver", tags: ["risk", "arcane"], trigger: "onStatus", text: "持续伤害命中后叠加下一次持续伤害。", effects: { statusPower: 0.2, dotStack: 0.08 } },
+  { id: "same-heart-law", name: "同心共鸣", school: "同行共鸣", rarity: "gold", tags: ["vitality", "companion"], trigger: "onCompanionAssist", text: "同行支援间隔缩短，并强化下一次玩家技能。", effects: { companionFrequency: -1, companionPower: 0.2 } },
+  { id: "twin-array", name: "双生战阵", school: "同行共鸣", rarity: "silver", tags: ["tempo", "companion"], trigger: "onCompanionAssist", text: "同行出手后强化玩家下一次技能。", effects: { companionSkillPower: 0.16 } },
+  { id: "mirror-friend", name: "以友为镜", school: "同行共鸣", rarity: "gold", tags: ["focus", "companion"], trigger: "onCompanionSkill", text: "同行使用主动支援时复制部分玩家当前增益。", effects: { companionCopy: 0.35 } }
+];
+
+export const daoTrialLawMap = Object.fromEntries(daoTrialLaws.map((law) => [law.id, law]));
+
 export const daoTrialSealMap = Object.fromEntries(daoTrialSeals.map((seal) => [seal.id, seal]));
 export const daoTrialRouteMap = Object.fromEntries(daoTrialRoutes.map((route) => [route.id, route]));

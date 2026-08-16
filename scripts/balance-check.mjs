@@ -4,6 +4,7 @@ import {
   advanceDailyRootFortuneDay,
   createDefaultState,
   dailySettlement,
+  deleteTaskCompletion,
   effectiveStats,
   ensureStateShape,
   getCombatSnapshot,
@@ -189,6 +190,17 @@ addTask(state, { taskId: "task-work-hour", completedAmount: 1 });
 mustThrow(() => addTask(state, { taskId: "task-work-hour", completedAmount: 1 }), "计量任务不应重复结算相同进度");
 addTask(state, { taskId: "task-work-hour", completedAmount: 4 });
 mustThrow(() => addTask(state, { taskId: "task-work-hour", completedAmount: 4 }), "计量任务达到上限后不应继续结算");
+
+const taskDeleteState = createDefaultState();
+taskDeleteState.day = 1;
+ensureStateShape(taskDeleteState);
+const taskDeleteXpBefore = taskDeleteState.player.xp;
+const taskDeleteSpiritBefore = taskDeleteState.player.spirit;
+const taskDeleteResult = addTask(taskDeleteState, { taskId: "task-fitness" });
+deleteTaskCompletion(taskDeleteState, { id: taskDeleteResult.completion.id });
+assert.equal(taskDeleteState.player.xp, taskDeleteXpBefore, "撤回现实任务应退回该任务增加的修为");
+assert.equal(taskDeleteState.player.spirit, taskDeleteSpiritBefore, "撤回现实任务应退回该任务增加的灵石");
+assert.equal(taskDeleteState.taskCompletions.some((entry) => entry.id === taskDeleteResult.completion.id), false, "撤回现实任务应移除完成记录");
 
 dailySettlement(state, { manual: true });
 const publicState = getPublicState(state);
