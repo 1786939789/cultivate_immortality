@@ -8583,7 +8583,7 @@ body::before {
 
 .cultivation-subtabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(150px, 1fr));
+  grid-template-columns: repeat(4, minmax(130px, 1fr));
   gap: 8px;
   max-width: 760px;
   min-height: 64px;
@@ -9435,7 +9435,7 @@ body::before {
 
 @media (max-width: 720px) {
   .cultivation-subtabs {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .cultivation-subtabs .segment {

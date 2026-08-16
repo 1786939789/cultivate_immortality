@@ -977,7 +977,7 @@
           </div>
         </section>
 
-        <section v-if="activeTab === 'dungeon'" class="view active">
+        <section v-if="activeTab === 'dungeon' || (activeTab === 'trial' && lastBattle)" class="view active">
           <div v-if="isStarSeaBattle" class="battle-detail star-sea-battle-detail">
             <div class="panel battle-header">
               <div>
@@ -1161,7 +1161,7 @@
               {{ tab.label }}
             </button>
           </div>
-          <div v-if="activeDungeonRecordTab !== 'trial'" class="dungeon-loot-toggle">
+          <div class="dungeon-loot-toggle">
             <button class="secondary" type="button" @click="showDungeonLoot = !showDungeonLoot">
               {{ showDungeonLoot ? "收起装备池" : "展开装备池" }}
             </button>
@@ -1170,7 +1170,7 @@
             </button>
           </div>
 
-          <section v-if="activeDungeonRecordTab !== 'trial' && showDungeonBestiary" class="panel dungeon-bestiary-panel" aria-label="副本妖物图鉴">
+          <section v-if="showDungeonBestiary" class="panel dungeon-bestiary-panel" aria-label="副本妖物图鉴">
             <div class="section-head compact">
               <div>
                 <h3>副本妖物图鉴</h3>
@@ -2037,14 +2037,14 @@
             </div>
           </div>
 
-          <div v-else-if="activeDungeonRecordTab !== 'trial'" class="panel empty">
+          <div v-else class="panel empty">
             暂无副本战报。
           </div>
           </template>
 
         </section>
 
-        <section v-if="activeTab === 'dungeon' && activeDungeonRecordTab === 'trial' && !lastBattle" class="view active">
+        <section v-if="activeTab === 'trial' && !lastBattle" class="view active">
           <div class="dao-trial-surface">
             <div class="panel dao-trial-header">
               <div>
@@ -4940,7 +4940,7 @@
           </div>
         </section>
 
-        <section v-if="activeTab === 'guide'" class="view active cultivation-surface guide-surface">
+        <section v-if="activeTab === 'cultivation' && cultivationSubTab === 'guide'" class="view active cultivation-surface guide-surface">
           <div class="panel">
             <div class="section-head">
               <div>
@@ -5155,7 +5155,7 @@ const tabs = [
   { id: "market", label: "坊市", icon: ShoppingBag },
   { id: "equipment", label: "装备", icon: Package },
   { id: "rank", label: "榜单", icon: Trophy },
-  { id: "guide", label: "指导", icon: BookOpen },
+  { id: "trial", label: "秘境", icon: Compass },
   { id: "admin", label: "后台", icon: Settings }
 ];
 
@@ -5166,7 +5166,8 @@ const visibleTabs = computed(() => authUser.value?.isAdmin
 const cultivationSubTabs = [
   { id: "attributes", label: "灵根", icon: BadgeCent },
   { id: "progression", label: "境界", icon: Orbit },
-  { id: "skills", label: "技能", icon: WandSparkles }
+  { id: "skills", label: "技能", icon: WandSparkles },
+  { id: "guide", label: "指导", icon: BookOpen }
 ];
 
 const marketSubTabs = [
@@ -5550,7 +5551,7 @@ const adminWikiArticles = [
     order: "02",
     category: "修行页面",
     title: "修行：灵根、境界、技能与突破",
-    summary: "修行页分为灵根、境界进度和技能三个子页，所有成长规则都在这里查看。",
+    summary: "修行页分为灵根、境界、技能和指导四个子页，成长规则与完整说明都在这里查看。",
     sections: [
       {
         title: "境界与经验",
@@ -5627,9 +5628,9 @@ const adminWikiArticles = [
   {
     id: "dungeons-trials",
     order: "04",
-    category: "副本与问道秘境页面",
-    title: "副本：三种资源线与问道秘境",
-    summary: "副本按个人、宗门、队伍和周期试炼分工，战报会记录奖励归属与战斗回放。",
+    category: "副本与秘境页面",
+    title: "副本与秘境：三种资源线与周期试炼",
+    summary: "副本记录个人、宗门与队伍资源线，秘境承载主动周期试炼，二者都会保留奖励与战斗回放。",
     sections: [
       {
         title: "血色禁地、虚天殿、乱星海",
@@ -5648,7 +5649,7 @@ const adminWikiArticles = [
       {
         title: "问道秘境：七日一期的路线试炼",
         paragraphs: [
-          "问道秘境是每日可主动进入的路线试炼，同时每 7 天更换一期异象。当前有金石关、风雷径、玄阴泽三条路线，每条路线固定 7 个节点，包含战斗、事件、调息、精英和心魔首领。",
+          "秘境页提供每日可主动进入的问道路线试炼，同时每 7 天更换一期异象。当前有金石关、风雷径、玄阴泽三条路线，前 15 层为核心层，第 16 层后进入问天阶，途中包含战斗、事件、调息、精英和心魔首领。",
           "每日补充 1 枚问道签，最多积存 2 枚；没有问道签时仍可无奖励演练。路线中的选择会改变血量、法力、悟机、道印和同行者效果。"
         ],
         bullets: [
@@ -6931,8 +6932,7 @@ const guideArticle = computed(() => adminWikiArticles.find((article) => article.
 const dungeonRecordTabs = [
   { id: "blood", label: "血色禁地" },
   { id: "void", label: "虚天殿" },
-  { id: "sea", label: "乱星海猎妖" },
-  { id: "trial", label: "问道秘境" }
+  { id: "sea", label: "乱星海猎妖" }
 ];
 const dungeonMonsterStages = monsterStageNames.map((stageName, stage) => ({
   stage,
@@ -7019,8 +7019,7 @@ async function chooseEncounter(choice) {
   const result = await act("/api/encounters/choose", { eventId: event.id, choiceId: choice.id }, { scope: "lite", markStale: true });
   selectedEncounterId.value = pendingEncounters.value[0]?.id || "";
   if (result?.replay) {
-    activeTab.value = "dungeon";
-    activeDungeonRecordTab.value = "trial";
+    activeTab.value = "trial";
     openBattleReplay(result.replay, target);
   }
 }
@@ -13316,7 +13315,7 @@ function hasFullCultivatorRoster() {
 }
 
 function needsLiteState(tab = activeTab.value) {
-  return ["cultivation", "tasks", "market"].includes(tab);
+  return ["cultivation", "tasks", "trial", "market"].includes(tab);
 }
 
 function playBattle() {
