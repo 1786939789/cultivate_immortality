@@ -5810,7 +5810,7 @@ body::before {
 .dao-trial-boon-panel small { color: #806747; }
 .dao-trial-boon-strip > span { color: #e9ddb9; border-color: rgba(132, 185, 161, .32); background: rgba(49, 92, 76, .3); }
 .dao-trial-boon-strip small { color: #b9cdbf; }
-.dao-trial-score-breakdown { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; }
+.dao-trial-score-breakdown { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 7px; }
 .dao-trial-score-breakdown span { display: grid; gap: 2px; padding: 7px 9px; border-left: 2px solid #b08a46; background: rgba(66, 71, 54, .42); }
 .dao-trial-score-breakdown small { color: #b9cdbf; }
 .dao-trial-score-breakdown b { color: #f1d78e; font-size: 16px; }

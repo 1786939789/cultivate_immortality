@@ -1055,6 +1055,12 @@ function runTurnBattle(left, right, options = {}) {
   const trialBuffs = { left: left?.trialBuffs || {}, right: right?.trialBuffs || {} };
   const actionCounts = { left: { attacks: 0, skills: 0 }, right: { attacks: 0, skills: 0 } };
   const lethalGuardUsed = { left: false, right: false };
+  const openingSkillUsed = { left: false, right: false };
+  const healStreak = { left: 0, right: 0 };
+  const healBoostReady = { left: false, right: false };
+  const statusStacks = { left: 0, right: 0 };
+  const companionSkillBoost = { left: 0, right: 0 };
+  const roundDamageTaken = { left: false, right: false };
   const trialCompanion = options.trialCompanion || null;
   const companionContribution = { damage: 0, healing: 0, shields: 0, control: 0, assists: 0 };
 
@@ -1068,8 +1074,11 @@ function runTurnBattle(left, right, options = {}) {
     ? { actor: a, target: b, actorName: left.name, targetName: right.name, hp: leftHp, targetHp: rightHp, mana: leftMana, targetMana: rightMana }
     : { actor: b, target: a, actorName: right.name, targetName: left.name, hp: rightHp, targetHp: leftHp, mana: rightMana, targetMana: leftMana };
   const setHp = (side, hp) => {
-    if (side === "left") leftHp = clamp(hp, 0, a.maxHp);
-    else rightHp = clamp(hp, 0, b.maxHp);
+    const current = side === "left" ? leftHp : rightHp;
+    const next = clamp(hp, 0, side === "left" ? a.maxHp : b.maxHp);
+    if (next < current) roundDamageTaken[side] = true;
+    if (side === "left") leftHp = next;
+    else rightHp = next;
   };
   const setMana = (side, mana) => {
     if (side === "left") leftMana = clamp(mana, 0, a.maxMana);
@@ -1196,9 +1205,38 @@ function runTurnBattle(left, right, options = {}) {
     }
     return damage;
   };
+  const boostSkill = (skill, bonus) => {
+    if (!bonus) return skill;
+    const boosted = { ...skill };
+    for (const key of ["power", "percent", "reduce", "leech"]) {
+      if (typeof boosted[key] === "number") boosted[key] *= 1 + bonus;
+    }
+    return boosted;
+  };
   const castSkill = (side, skill) => {
     const targetSide = opposite(side);
     const state = sideState(side);
+    const openingBonus = Math.max(0, Number(trialBuffs[side].openingSkillPower) || 0);
+    if (!openingSkillUsed[side]) {
+      openingSkillUsed[side] = true;
+      if (openingBonus && state.targetHp / Math.max(1, state.target.maxHp) > 0.8) {
+        skill = boostSkill(skill, openingBonus);
+        pushEvent("law", `${state.actorName}趁${state.targetName}气势未稳，以破势追击强化首次术法`, { actorSide: side, targetSide, lawId: "opening-break", leftHp, rightHp, leftMana, rightMana });
+      }
+    }
+    if (companionSkillBoost[side] > 0) {
+      skill = boostSkill(skill, companionSkillBoost[side]);
+      companionSkillBoost[side] = 0;
+      pushEvent("law", `${state.actorName}借同行战阵强化本次术法`, { actorSide: side, targetSide, lawId: "twin-array", leftHp, rightHp, leftMana, rightMana });
+    }
+    if (skill.type !== "heal") {
+      healStreak[side] = 0;
+      healBoostReady[side] = false;
+    }
+    const dotStack = Math.max(0, Number(trialBuffs[side].dotStack) || 0);
+    if (dotStack && ["dot", "dotStrike"].includes(skill.type) && statusStacks[side] > 0) {
+      skill = { ...skill, percent: Number(skill.percent || 0) * (1 + dotStack * statusStacks[side]) };
+    }
     actionCounts[side].skills += 1;
     const freeEvery = Math.max(0, Math.floor(Number(trialBuffs[side].freeSkillEvery) || 0));
     const free = Boolean(freeEvery && actionCounts[side].skills % freeEvery === 0);
@@ -1211,12 +1249,12 @@ function runTurnBattle(left, right, options = {}) {
       total += applyStrike(side, skill.power);
       if ((targetSide === "left" ? leftHp : rightHp) > 0) total += applyStrike(side, skill.power);
       pushEvent("skill", `${state.actorName}施展${skill.name}，双击共造成 ${total} 伤害`, { actorSide: side, targetSide, skill: skill.name, damage: total, leftHp, rightHp, leftMana, rightMana });
-      return;
+      return total;
     }
     if (skill.type === "multi") {
       for (let hit = 0; hit < skill.hits && (targetSide === "left" ? leftHp : rightHp) > 0; hit += 1) total += applyStrike(side, skill.power);
       pushEvent("skill", `${state.actorName}催动${skill.name}，连斩共造成 ${total} 伤害`, { actorSide: side, targetSide, skill: skill.name, damage: total, leftHp, rightHp, leftMana, rightMana });
-      return;
+      return total;
     }
     if (["pierce", "heavy", "speedStrike", "manaBurn", "weaken", "execute", "lifesteal", "dotStrike", "stun"].includes(skill.type)) {
       const multiplier = skill.type === "execute" && state.targetHp / state.target.maxHp <= skill.threshold ? skill.power + skill.bonus : skill.power;
@@ -1224,62 +1262,102 @@ function runTurnBattle(left, right, options = {}) {
       total += damage;
       if (skill.type === "manaBurn") setMana(targetSide, state.targetMana - skill.burn);
       if (skill.type === "weaken") addEffect(targetSide, { type: "attackDown", amount: skill.amount, duration: skill.duration });
-      if (skill.type === "dotStrike") addEffect(targetSide, { type: "dot", name: skill.name, percent: skill.percent, duration: skill.duration });
+      if (skill.type === "dotStrike") {
+        addEffect(targetSide, { type: "dot", name: skill.name, percent: skill.percent, duration: skill.duration });
+        if (dotStack) {
+          statusStacks[side] += 1;
+          pushEvent("law", `${state.actorName}令持续伤势叠至 ${statusStacks[side]} 层`, { actorSide: side, targetSide, lawId: "poison-formation", leftHp, rightHp, leftMana, rightMana });
+        }
+      }
       if (skill.type === "stun") addEffect(targetSide, { type: "stun", duration: skill.duration });
       if (skill.type === "speedStrike") addEffect(side, { type: "evasion", chance: skill.extraDodge, duration: skill.duration });
       if (skill.type === "lifesteal" && damage > 0) setHp(side, state.hp + Math.floor(damage * skill.leech));
       pushEvent("skill", `${state.actorName}施展${skill.name}，造成 ${damage} 伤害`, { actorSide: side, targetSide, skill: skill.name, damage, leftHp, rightHp, leftMana, rightMana });
-      return;
+      return total;
     }
     if (skill.type === "dodge") {
       addEffect(side, { type: "dodgeNext", duration: skill.duration });
       pushEvent("skill", `${state.actorName}施展${skill.name}，准备闪避下一击`, { actorSide: side, targetSide, skill: skill.name, leftHp, rightHp, leftMana, rightMana });
-      return;
+      return 0;
     }
     if (skill.type === "dot") {
       addEffect(targetSide, { type: "dot", name: skill.name, percent: skill.percent, duration: skill.duration });
+      if (dotStack) {
+        statusStacks[side] += 1;
+        pushEvent("law", `${state.actorName}令持续伤势叠至 ${statusStacks[side]} 层`, { actorSide: side, targetSide, lawId: "poison-formation", leftHp, rightHp, leftMana, rightMana });
+      }
       pushEvent("skill", `${state.actorName}放出${skill.name}，${state.targetName}陷入持续伤害`, { actorSide: side, targetSide, skill: skill.name, leftHp, rightHp, leftMana, rightMana });
-      return;
+      return 0;
     }
     if (skill.type === "shield") {
       addEffect(side, { type: "shield", reduce: skill.reduce, duration: skill.duration });
       pushEvent("skill", `${state.actorName}施展${skill.name}，伤害减免提升`, { actorSide: side, targetSide, skill: skill.name, leftHp, rightHp, leftMana, rightMana });
-      return;
+      return 0;
     }
     if (skill.type === "defenseBuff") {
       addEffect(side, { type: "defenseUp", amount: skill.amount, duration: skill.duration });
       pushEvent("skill", `${state.actorName}施展${skill.name}，防御暂时提高`, { actorSide: side, targetSide, skill: skill.name, leftHp, rightHp, leftMana, rightMana });
-      return;
+      return 0;
     }
     if (skill.type === "heal") {
-      const heal = Math.floor(state.actor.maxHp * skill.percent);
+      let heal = Math.floor(state.actor.maxHp * skill.percent);
+      const healBoost = Math.max(0, Number(trialBuffs[side].healCountBoost) || 0);
+      if (healBoostReady[side] && healBoost) {
+        heal = Math.floor(heal * (1 + healBoost));
+        healBoostReady[side] = false;
+        healStreak[side] = 0;
+        pushEvent("law", `${state.actorName}引动生生不绝，本次治疗提高`, { actorSide: side, lawId: "endless-life", leftHp, rightHp, leftMana, rightMana });
+      } else {
+        healStreak[side] += 1;
+        if (healStreak[side] >= 2 && healBoost) healBoostReady[side] = true;
+      }
+      const overflow = Math.max(0, state.hp + heal - state.actor.maxHp);
       setHp(side, state.hp + heal);
-      pushEvent("skill", `${state.actorName}运转${skill.name}，恢复 ${heal} 血量`, { actorSide: side, targetSide, skill: skill.name, healing: heal, leftHp, rightHp, leftMana, rightMana });
-      return;
+      const actualHealing = Math.max(0, sideState(side).hp - state.hp);
+      const overhealShield = Math.max(0, Number(trialBuffs[side].overhealShield) || 0);
+      const shields = Math.floor(overflow * overhealShield);
+      if (shields > 0) {
+        addEffect(side, { type: "shield", reduce: clamp(shields / Math.max(1, state.actor.maxHp), 0.03, 0.25), duration: 2 });
+        pushEvent("law", `${state.actorName}将溢出治疗化为 ${shields} 点护势`, { actorSide: side, lawId: "overheal-shield", shields, leftHp, rightHp, leftMana, rightMana });
+      }
+      pushEvent("skill", `${state.actorName}运转${skill.name}，恢复 ${actualHealing} 血量`, { actorSide: side, targetSide, skill: skill.name, healing: actualHealing, leftHp, rightHp, leftMana, rightMana });
+      return 0;
     }
     if (skill.type === "evasionBuff") {
       addEffect(side, { type: "evasion", chance: skill.chance, duration: skill.duration });
       pushEvent("skill", `${state.actorName}施展${skill.name}，身法更难捉摸`, { actorSide: side, targetSide, skill: skill.name, leftHp, rightHp, leftMana, rightMana });
-      return;
+      return 0;
     }
     if (skill.type === "reflect") {
       addEffect(side, { type: "reflect", reflect: skill.reflect, duration: skill.duration });
       pushEvent("skill", `${state.actorName}施展${skill.name}，准备反弹伤害`, { actorSide: side, targetSide, skill: skill.name, leftHp, rightHp, leftMana, rightMana });
-      return;
+      return 0;
     }
     if (skill.type === "field") {
       addEffect(side, { type: "shield", reduce: skill.reduce, duration: skill.duration });
       addEffect(targetSide, { type: "defenseDown", amount: skill.amount, duration: skill.duration });
       pushEvent("skill", `${state.actorName}布下${skill.name}，阵势压制对手`, { actorSide: side, targetSide, skill: skill.name, leftHp, rightHp, leftMana, rightMana });
     }
+    return 0;
   };
 
   for (let round = 1; round <= maxRounds && leftHp > 0 && rightHp > 0; round += 1) {
     currentRound = round;
     pushEvent("round", `第 ${round} 回合`, { leftHp, rightHp, leftMana, rightMana });
+    const previousRoundDamage = { ...roundDamageTaken };
+    roundDamageTaken.left = false;
+    roundDamageTaken.right = false;
     tickEffects("left");
     tickEffects("right");
     if (leftHp <= 0 || rightHp <= 0) break;
+    for (const side of ["left", "right"]) {
+      const guard = Math.max(0, Number(trialBuffs[side].noHitShield) || 0);
+      if (guard && (round === 1 || !previousRoundDamage[side])) {
+        addEffect(side, { type: "shield", reduce: guard, duration: 1 });
+        const state = sideState(side);
+        pushEvent("law", `${state.actorName}守中不乱，获得短暂减伤`, { actorSide: side, lawId: "steady-heart", leftHp, rightHp, leftMana, rightMana });
+      }
+    }
 
     if (trialCompanion && (round === 1 || (round - 1) % Math.max(2, Number(trialCompanion.interval) || 4) === 0)) {
       companionContribution.assists += 1;
@@ -1298,6 +1376,7 @@ function runTurnBattle(left, right, options = {}) {
         companionContribution.control += 1;
         pushEvent("companion", `${trialCompanion.name}护脉同行，恢复 ${healing} 气血并展开护势`, { actorSide: "companion", targetSide: "left", healing, shields, leftHp, rightHp, leftMana, rightMana });
       }
+      companionSkillBoost.left = Math.max(companionSkillBoost.left, Math.max(0, Number(trialBuffs.left.companionSkillPower) || 0));
       if (leftHp <= 0 || rightHp <= 0) break;
     }
 
@@ -1321,7 +1400,13 @@ function runTurnBattle(left, right, options = {}) {
         actorEffects: effects[side],
         targetEffects: effects[targetSide]
       })) {
-        castSkill(side, skill);
+        const skillDamage = castSkill(side, skill);
+        const echoChance = clamp(Number(trialBuffs[side].skillEchoChance) || 0, 0, 1);
+        if (skillDamage > 0 && sideState(targetSide).hp > 0 && echoChance && random() < echoChance) {
+          const echoPower = Math.max(0, Number(trialBuffs[side].skillEchoPower) || 0);
+          const echo = applyStrike(side, echoPower);
+          pushEvent("law", `${state.actorName}引动术后余音，追加 ${echo} 伤害`, { actorSide: side, targetSide, lawId: "spell-echo", damage: echo, leftHp, rightHp, leftMana, rightMana });
+        }
       } else {
         const damage = applyStrike(side, 1, { basic: true });
         pushEvent("attack", `${state.actorName}出手造成 ${damage} 伤害`, { actorSide: side, targetSide, damage, leftHp, rightHp, leftMana, rightMana });
@@ -8936,15 +9021,15 @@ function ensureDaoTrialState(state) {
     changed = true;
   }
   state.daoTrial.lastBoonDay = Math.max(0, Math.floor(Number(state.daoTrial.lastBoonDay) || 0));
+  state.daoTrial.routeMastery ??= createDaoTrialState(state.day).routeMastery;
+  state.daoTrial.yearGoals ??= createDaoTrialState(state.day).yearGoals;
+  state.daoTrial.yearHistory ??= [];
   const expectedCycle = daoTrialCycleOfDay(state.day);
   if (state.daoTrial.cycle !== expectedCycle) {
     if (state.daoTrial.activeRun) {
-      state.daoTrial.history.unshift({
-        ...trialRunSummary(state, state.daoTrial.activeRun),
-        result: "周期结束",
-        success: false,
-        endedDay: state.day
-      });
+      // A cycle rollover is an automatic failure, but it still needs the same
+      // reward, relationship, mastery, and annual-goal settlement as any exit.
+      finishDaoTrialRun(state, state.daoTrial.activeRun, false, "周期结束");
     }
     const history = state.daoTrial.history.slice(0, daoTrialHistoryLimit);
     const routeMastery = state.daoTrial.routeMastery;
@@ -8989,8 +9074,6 @@ function ensureDaoTrialState(state) {
     state.daoTrial.activeRun.rewards.dust = Number(state.daoTrial.activeRun.rewards.dust) || 0;
     state.daoTrial.activeRun.rewards.milestones = [...new Set(state.daoTrial.activeRun.rewards.milestones || [])];
   }
-  state.daoTrial.routeMastery ??= createDaoTrialState(state.day).routeMastery;
-  state.daoTrial.yearGoals ??= createDaoTrialState(state.day).yearGoals;
   state.daoTrial.yearHistory = (state.daoTrial.yearHistory || []).slice(0, 8);
   state.daoTrial.yearGoals.year = Number(state.daoTrial.yearGoals.year) || Math.floor((state.daoTrial.cycle - 1) / 52) + 1;
   for (const route of daoTrialRoutes) {
@@ -9061,6 +9144,11 @@ function ensureDaoTrialState(state) {
       if (activeRun.combatant && !Number(activeRun.combatant.skillManaBase)) {
         activeRun.combatant.skillManaBase = effectiveStats(state.player, state, { includeDailyRootFortune: false }).maxMana;
       }
+      activeRun.worldSnapshot ??= {
+        realm: state.player.realm,
+        baselinePower: trialWorldBaselinePower(state),
+        playerPower: powerOf(state.player, state, { includeDailyRootFortune: false })
+      };
       if (activeRun.companion) activeRun.companion.supportUsed = Boolean(activeRun.companion.supportUsed);
     }
   }
@@ -9229,18 +9317,9 @@ function combinedTrialBuffs(run) {
       }
     }
   }
-  buffs.attack = (buffs.attack || 0) + (Number(buffs.nextBattleAttack) || 0);
-  buffs.skillPower = (buffs.skillPower || 0)
-    + (Number(buffs.openingSkillPower) || 0)
-    + (Number(buffs.skillEchoChance) || 0) * (Number(buffs.skillEchoPower) || 0)
-    + (run.companion ? Number(buffs.companionSkillPower) || 0 : 0);
   const manaRate = run.combatant?.maxMana ? run.combatant.mana / run.combatant.maxMana : 1;
   if (manaRate >= 0.7) buffs.divineSense = (buffs.divineSense || 0) + (Number(buffs.highManaSense) || 0);
   if (manaRate <= 0.3) buffs.manaCost = (buffs.manaCost || 0) + (Number(buffs.lowManaCost) || 0);
-  buffs.defense = (buffs.defense || 0) + (Number(buffs.noHitShield) || 0) * 0.5;
-  buffs.healing = (buffs.healing || 0) + (Number(buffs.healCountBoost) || 0) + (Number(buffs.overhealShield) || 0) * 0.15;
-  buffs.statusPower = (buffs.statusPower || 0) + (Number(buffs.dotStack) || 0);
-  buffs.companionPower = (buffs.companionPower || 0) + (Number(buffs.companionCopy) || 0) * 0.25;
   return buffs;
 }
 
@@ -9260,9 +9339,11 @@ function trialMonsterFor(state, run, node, route) {
   const rootKey = roots.some((root) => root.key === route.rootKey) ? route.rootKey : "metal";
   const floor = Math.max(1, Number(node.floor) || run.nodeIndex + 1);
   const monsterRandom = seededBattleRandom(`${run.seed}|monster|${floor}|${node.id}`);
-  const monster = makeMonster(`${route.name}·${node.monster}`, state.player.realm, rootKey, 0.9 + Math.min(1.2, (floor - 1) * 0.04), undefined, monsterRandom);
-  const baseline = trialWorldBaselinePower(state);
-  const playerPower = powerOf(state.player, state, { includeDailyRootFortune: false });
+  const worldSnapshot = run.worldSnapshot || {};
+  const realm = Number.isFinite(Number(worldSnapshot.realm)) ? Number(worldSnapshot.realm) : state.player.realm;
+  const monster = makeMonster(`${route.name}·${node.monster}`, realm, rootKey, 0.9 + Math.min(1.2, (floor - 1) * 0.04), undefined, monsterRandom);
+  const baseline = Number(worldSnapshot.baselinePower) || trialWorldBaselinePower(state);
+  const playerPower = Number(worldSnapshot.playerPower) || powerOf(state.player, state, { includeDailyRootFortune: false });
   const affix = daoTrialCycleAffixes.find((item) => item.id === run.affixId);
   const firstEase = run.nodeIndex === 0 ? Number(affix?.effects?.firstBattleEase || 0) : 0;
   const scaling = Math.max(0, Number(affix?.effects?.scalingEnemy || 0)) * (floor - 1);
@@ -9308,6 +9389,9 @@ function trialBattleMetrics(battle, beforeStats, maxRounds = 18) {
   const healing = events
     .filter((event) => event.kind === "skill" && event.actorSide === "left")
     .reduce((sum, event) => sum + Math.max(0, Number(event.healing) || 0), 0);
+  const shields = events
+    .filter((event) => event.actorSide === "left" || event.actorSide === "companion")
+    .reduce((sum, event) => sum + Math.max(0, Number(event.shields) || 0), 0);
   const skillCasts = events.filter((event) => event.kind === "skill" && event.actorSide === "left").length;
   const rounds = Math.max(1, ...events.filter((event) => event.kind === "round").map((event) => Number(event.round) || 0));
   const maxMana = Math.max(1, Number(beforeStats?.maxMana) || 1);
@@ -9315,7 +9399,7 @@ function trialBattleMetrics(battle, beforeStats, maxRounds = 18) {
   const survival = clamp((Number(battle?.leftHp) || 0) / Math.max(1, Number(beforeStats?.maxHp) || 1), 0, 1);
   const speed = clamp(1 - (rounds - 1) / Math.max(1, maxRounds), 0, 1);
   const resource = clamp(skillCasts / Math.max(1, maxRounds * 0.35) + manaSpent / maxMana * 0.25, 0, 1);
-  return { rounds, damageDealt: ownDamage, damageTaken: takenDamage, healing, skillCasts, manaSpent, survival, speed, resource };
+  return { rounds, damageDealt: ownDamage, damageTaken: takenDamage, healing, shields, skillCasts, manaSpent, survival, speed, resource };
 }
 
 function recordTrialNodeScore(run, node, metrics = {}) {
@@ -9369,9 +9453,21 @@ function settleDaoTrialBag(state, run, success, result) {
   return settled;
 }
 
-function trialRunScore(state, run, success = false) {
+function trialRunScore(state, run, success = undefined) {
   const breakdown = run.scoreBreakdown || { progress: 0, quality: 0, risk: 0, build: 0, total: 0 };
-  return Math.max(0, Math.round(Number(breakdown.total) || Number(breakdown.progress || 0) + Number(breakdown.quality || 0) + Number(breakdown.risk || 0) + Number(breakdown.build || 0)));
+  let score = Math.max(0, Number(breakdown.total) || Number(breakdown.progress || 0) + Number(breakdown.quality || 0) + Number(breakdown.risk || 0) + Number(breakdown.build || 0));
+  const affixEffects = daoTrialCycleAffixes.find((item) => item.id === run.affixId)?.effects || {};
+  score *= Math.max(0, Number(affixEffects.scoreMultiplier) || 1);
+  const isFailure = success === false || (success === undefined && run.success === false);
+  if (isFailure) score *= 1 + Math.max(0, Number(affixEffects.failScore) || 0) + Math.max(0, Number(combinedTrialBuffs(run).failScore) || 0);
+  return Math.max(0, Math.round(score));
+}
+
+function trialRunScoreBreakdown(state, run, success = undefined) {
+  const breakdown = run.scoreBreakdown || { progress: 0, quality: 0, risk: 0, build: 0, total: 0 };
+  const rawTotal = Math.max(0, Math.round(Number(breakdown.total) || Number(breakdown.progress || 0) + Number(breakdown.quality || 0) + Number(breakdown.risk || 0) + Number(breakdown.build || 0)));
+  const total = trialRunScore(state, run, success);
+  return { ...breakdown, modifier: total - rawTotal, total };
 }
 
 function trialRunSummary(state, run) {
@@ -9393,7 +9489,7 @@ function trialRunSummary(state, run) {
     synergyIds: activeTrialSynergies(run).map((synergy) => synergy.id),
     lastReplayId: run.lastReplayId || "",
     score: trialRunScore(state, run, run.success),
-    scoreBreakdown: { ...(run.scoreBreakdown || {}) },
+    scoreBreakdown: trialRunScoreBreakdown(state, run, run.success),
     combatStats: { ...(run.combatStats || {}) },
     companionContribution: { ...(run.companionContribution || {}) },
     startedDay: run.startedDay,
@@ -9496,7 +9592,7 @@ function publicTrialRun(state, run) {
     eventOptions: node && ["event", "rest"].includes(node.type) ? (daoTrialEventOptions[node.event] || []) : [],
     nodesCleared: run.nodesCleared,
     score: trialRunScore(state, run),
-    scoreBreakdown: { ...(run.scoreBreakdown || {}) },
+    scoreBreakdown: trialRunScoreBreakdown(state, run),
     combatStats: { ...(run.combatStats || {}) },
     companionContribution: { ...(run.companionContribution || {}) },
     bag: {
@@ -9638,6 +9734,11 @@ export function startDaoTrial(state, payload = {}) {
   const mastery = daoTrialMasteryView(state.daoTrial.routeMastery[route.id] || {});
   const companionEntity = companion ? state.npcs.find((npc) => npc.id === companion.person.id) : null;
   const companionStats = companionEntity ? effectiveStats(companionEntity, state, { includeDailyRootFortune: false }) : null;
+  const worldSnapshot = {
+    realm: state.player.realm,
+    baselinePower: trialWorldBaselinePower(state),
+    playerPower: powerOf(state.player, state, { includeDailyRootFortune: false })
+  };
   const affix = daoTrialAffixForCycle(state.daoTrial.cycle);
   const taskBoons = !practice && state.daoTrial.lastBoonDay !== state.day ? daoTrialTaskBoonsForDay(state) : [];
   if (!practice) state.daoTrial.lastBoonDay = state.day;
@@ -9655,6 +9756,7 @@ export function startDaoTrial(state, payload = {}) {
     nodes: daoTrialNodesForCycle(route.id, state.daoTrial.cycle),
     seed: `dao-trial|${state.rebirth}|${state.daoTrial.cycle}|${attempt}|${route.id}`,
     startedDay: state.day,
+    worldSnapshot,
     nodeIndex: 0,
     floor: 1,
     maxFloor: 0,
@@ -9710,15 +9812,17 @@ function applyTrialEventEffects(state, run, node, effects = {}) {
   const companionBonus = effects.companionBoost && run.companion ? 1.5 : 1;
   const hpEffect = Number(effects.hp) || 0;
   const manaEffect = Number(effects.mana) || 0;
-  const eventLoss = hpEffect < 0
+  const eventLoss = hpEffect < 0 || manaEffect < 0
     ? Math.max(0.25, 1 + Number(affix?.effects?.eventLoss || 0) - Number(buffs.eventLossResist || 0))
     : 1;
   const isRest = node?.type === "rest";
   const recovery = hpEffect > 0
     ? 1 + (isRest ? Number(affix?.effects?.restBonus || 0) + Number(buffs.restHp || 0) : 0) + Number(affix?.effects?.healing || 0)
-    : eventLoss;
+    : 1;
   run.combatant.hp = clamp(run.combatant.hp + Math.floor(baseHp * hpEffect * recovery * companionBonus), 1, baseHp);
-  const manaRecovery = manaEffect > 0 ? recovery + (isRest ? Number(affix?.effects?.restMana || 0) : 0) + Number(buffs.eventMana || 0) : 1;
+  const manaRecovery = manaEffect > 0
+    ? 1 + (isRest ? Number(affix?.effects?.restMana || 0) : 0) + Number(affix?.effects?.healing || 0) + Number(buffs.eventMana || 0)
+    : eventLoss;
   run.combatant.mana = clamp(run.combatant.mana + Math.floor(baseMana * manaEffect * manaRecovery * companionBonus), 0, baseMana);
   run.insight = Math.max(0, run.insight + Math.floor(Number(effects.insight) || 0) + Math.floor(Number(affix?.effects?.insight) || 0) + (!run.companion ? Math.floor(Number(buffs.insightSolo) || 0) : 0));
   if (node?.type === "event") run.bonusScore = (Number(run.bonusScore) || 0) + Number(affix?.effects?.eventScore || 0);
@@ -9833,7 +9937,9 @@ function trialCompanionBattlePlan(run, monster) {
   const snapshot = run.companionSnapshot;
   if (!snapshot || !run.companion) return null;
   const buffs = combinedTrialBuffs(run);
-  const powerBonus = 1 + Math.max(0, Number(buffs.companionPower) || 0);
+  const copiedBuff = Math.max(0, Number(buffs.companionCopy) || 0)
+    * Math.max(0, Number(buffs.attack || 0) + Number(buffs.defense || 0) + Number(buffs.skillPower || 0));
+  const powerBonus = 1 + Math.max(0, Number(buffs.companionPower) || 0) + copiedBuff;
   const interval = clamp(4 + Math.floor(Number(buffs.companionFrequency) || 0), 2, 4);
   if (snapshot.type === "assault") {
     const raw = (Number(snapshot.attack) * 0.55 + Number(snapshot.divineSense) * 0.32) * Number(snapshot.powerFactor || 1) * powerBonus;
@@ -9848,7 +9954,10 @@ function resolveTrialBattle(state, run, node) {
   const route = daoTrialRouteMap[run.routeId];
   const monster = trialMonsterFor(state, run, node, route);
   const trialCompanion = trialCompanionBattlePlan(run, monster);
-  const fighter = { ...run.combatant, trialBuffs: combinedTrialBuffs(run) };
+  const trialBuffs = combinedTrialBuffs(run);
+  trialBuffs.attack = (trialBuffs.attack || 0) + Math.max(0, Number(run.nextBattleAttack) || 0);
+  const fighter = { ...run.combatant, trialBuffs };
+  run.nextBattleAttack = 0;
   const beforeStats = combatSnapshot(fighter, state);
   const seed = `${run.seed}|node|${run.nodeIndex}|${run.sealIds.join(",")}`;
   const battle = fightMonster(state, fighter, monster, node.rounds, { hp: beforeStats.hp, mana: beforeStats.mana, seed, trialCompanion });
@@ -9865,7 +9974,7 @@ function resolveTrialBattle(state, run, node) {
   run.lastReplayId = replay.replayId;
   const metrics = trialBattleMetrics(battle, beforeStats, node.rounds);
   run.combatStats.battles += 1;
-  for (const key of ["rounds", "damageDealt", "damageTaken", "healing", "skillCasts", "manaSpent"]) run.combatStats[key] += Number(metrics[key]) || 0;
+  for (const key of ["rounds", "damageDealt", "damageTaken", "healing", "shields", "skillCasts", "manaSpent"]) run.combatStats[key] += Number(metrics[key]) || 0;
   run.combatStats.lawTriggers += battle.events.filter((event) => event.kind === "law").length;
   for (const key of ["damage", "healing", "shields", "control", "assists"]) run.companionContribution[key] += Number(battle.companionContribution?.[key]) || 0;
   run.lastBattle = { nodeId: node.id, won, replayId: replay.replayId, monster: publicMonster(monster), metrics };
@@ -9898,6 +10007,8 @@ function resolveTrialBattle(state, run, node) {
     run.combatant.hp = clamp(run.combatant.hp + Math.floor(missingHp * Number(buffs.missingHpHeal)), 1, baseHp);
     run.combatStats.lawTriggers += 1;
   }
+  const nextBattleAttack = Math.max(0, Number(combinedTrialBuffs(run).nextBattleAttack) || 0);
+  if (nextBattleAttack) run.nextBattleAttack = Math.max(Number(run.nextBattleAttack) || 0, nextBattleAttack);
   run.tempSense = 0;
   if (node.checkpoint || node.boss) {
     run.checkpointPending = true;

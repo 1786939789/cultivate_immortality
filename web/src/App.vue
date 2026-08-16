@@ -2103,6 +2103,7 @@
                   <span><small>战斗表现</small><b>{{ activeDaoTrialRun.scoreBreakdown?.quality || 0 }}</b></span>
                   <span><small>风险</small><b>{{ activeDaoTrialRun.scoreBreakdown?.risk || 0 }}</b></span>
                   <span><small>构筑</small><b>{{ activeDaoTrialRun.scoreBreakdown?.build || 0 }}</b></span>
+                  <span v-if="activeDaoTrialRun.scoreBreakdown?.modifier"><small>异象修正</small><b>{{ signedNumber(activeDaoTrialRun.scoreBreakdown.modifier) }}</b></span>
                 </div>
 
                 <div class="dao-trial-play-grid">
@@ -11191,9 +11192,15 @@ function daoTrialBestText(record) {
   return `${record.floor || record.nodesCleared || 0} 层 · ${record.score || 0} 分`;
 }
 
+function signedNumber(value) {
+  const number = Number(value) || 0;
+  return number > 0 ? `+${number}` : `${number}`;
+}
+
 function daoTrialScoreBreakdownText(record) {
   if (record?.scoreBreakdown?.legacy) return "旧版记录 · 无评分明细";
-  return `进度 ${record?.scoreBreakdown?.progress || 0} · 表现 ${record?.scoreBreakdown?.quality || 0} · 风险 ${record?.scoreBreakdown?.risk || 0} · 构筑 ${record?.scoreBreakdown?.build || 0}`;
+  const modifier = Number(record?.scoreBreakdown?.modifier) || 0;
+  return `进度 ${record?.scoreBreakdown?.progress || 0} · 表现 ${record?.scoreBreakdown?.quality || 0} · 风险 ${record?.scoreBreakdown?.risk || 0} · 构筑 ${record?.scoreBreakdown?.build || 0}${modifier ? ` · 修正 ${signedNumber(modifier)}` : ""}`;
 }
 
 function daoTrialRewardText(record) {

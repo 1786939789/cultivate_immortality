@@ -31,6 +31,26 @@ function reachCheckpoint(state, targetFloor) {
   assert.fail(`抵达第 ${targetFloor} 层的流程不应卡死`);
 }
 
+function forcedFailureState({ affixId = "ore-awakening", sealIds = [] } = {}) {
+  const state = createDefaultState();
+  state.day = 8;
+  ensureStateShape(state);
+  startDaoTrial(state, { routeId: "golden-pass" });
+  const run = state.daoTrial.activeRun;
+  run.affixId = affixId;
+  run.sealIds = [...sealIds];
+  run.lawOffer = [];
+  run.scoreBreakdown = { progress: 100, quality: 20, risk: 10, build: 5, total: 135 };
+  run.combatant.maxHp = 1;
+  run.combatant.hp = 1;
+  run.combatant.attack = 1;
+  run.combatant.defense = 0;
+  run.combatant.divineSense = 1;
+  run.combatant.maxMana = 1;
+  run.combatant.mana = 0;
+  return state;
+}
+
 assert.equal(daoTrialLaws.length, 18, "应配置十八项问道法则");
 assert.equal(new Set(daoTrialLaws.map((law) => law.id)).size, daoTrialLaws.length, "问道法则 ID 必须唯一");
 for (const law of daoTrialLaws) {
@@ -62,6 +82,7 @@ lawBattleState.daoTrial.activeRun.sealIds = ["long-life"];
 lawBattleState.daoTrial.activeRun.lawOffer = ["triple-edge"];
 advanceDaoTrial(lawBattleState, { action: "law", lawId: "triple-edge" });
 const deterministicBattleState = structuredClone(lawBattleState);
+const worldBaselineState = structuredClone(lawBattleState);
 const lawBattle = advanceDaoTrial(lawBattleState, { action: "battle" });
 const repeatedBattle = advanceDaoTrial(deterministicBattleState, { action: "battle" });
 assert.ok(lawBattle.replay.events.some((event) => event.kind === "law" && event.lawId === "triple-edge"), "剑鸣三叠应在第三次普通攻击后产生法则事件");
@@ -83,6 +104,95 @@ const stalePowerReplay = structuredClone(lawBattle.replay);
 stalePowerReplay.left.power = 1;
 assert.equal(getPublicReplay(stalePowerReplay, lawBattleState).left.power, expectedReplayPower, "旧回放应按已保存的战斗快照修正历史战力");
 assert.equal(replayStatMax({ stats: { maxHp: 180, maxMana: 90 }, baseStats: { maxHp: 120, maxMana: 60 }, startHp: 150, startMana: 70 }, "hp"), 180, "回放上限工具应避免基础属性覆盖有效属性");
+
+const worldMutationState = structuredClone(worldBaselineState);
+for (const key of ["maxHp", "attack", "defense", "divineSense", "maxMana"]) {
+  worldMutationState.player[key] = Math.max(1, Math.floor(worldMutationState.player[key] * 0.05));
+  for (const npc of worldMutationState.npcs) npc[key] = Math.max(1, Math.floor(npc[key] * 0.05));
+}
+worldMutationState.player.hp = worldMutationState.player.maxHp;
+worldMutationState.player.mana = worldMutationState.player.maxMana;
+const worldMutationBattle = advanceDaoTrial(worldMutationState, { action: "battle" });
+assert.deepEqual(worldMutationBattle.replay.right, lawBattle.replay.right, "秘境怪物应使用入场时世界战力快照，不应被中途改属性影响");
+
+const normalFailure = advanceDaoTrial(forcedFailureState(), { action: "battle" }).summary;
+const affixFailure = advanceDaoTrial(forcedFailureState({ affixId: "borrowed-fate" }), { action: "battle" }).summary;
+const sealFailure = advanceDaoTrial(forcedFailureState({ sealIds: ["last-light"] }), { action: "battle" }).summary;
+const reducedScoreFailure = advanceDaoTrial(forcedFailureState({ affixId: "silent-bell" }), { action: "battle" }).summary;
+assert.equal(normalFailure.score, 135, "基础失败分应保留原始分数");
+assert.equal(affixFailure.score, 176, "借命一线应使失败分提高 30%");
+assert.equal(sealFailure.score, 162, "末光印应使失败分提高 20%");
+assert.equal(reducedScoreFailure.score, 128, "无声古钟应使结算分数降低 5%");
+
+function dynamicLawBattle(lawId, skillId, seedSuffix = "") {
+  const state = createDefaultState();
+  state.day = 8;
+  ensureStateShape(state);
+  startDaoTrial(state, { routeId: "golden-pass" });
+  const run = state.daoTrial.activeRun;
+  run.lawOffer = [];
+  run.lawIds = [lawId];
+  run.seed += seedSuffix;
+  run.combatant.skillId = skillId;
+  run.combatant.attack = 30;
+  run.combatant.defense *= 10;
+  run.combatant.maxHp *= 10;
+  run.combatant.hp = run.combatant.maxHp;
+  run.combatant.divineSense *= 10;
+  run.combatant.maxMana = 1000;
+  run.combatant.mana = 1000;
+  return { state, result: advanceDaoTrial(state, { action: "battle" }) };
+}
+
+const openingBattle = dynamicLawBattle("opening-break", "thunder_pearl");
+assert.equal(openingBattle.result.replay.events.filter((event) => event.lawId === "opening-break").length, 1, "破势追击只能强化首次符合条件的技能");
+const steadyBattle = dynamicLawBattle("steady-heart", "thunder_pearl");
+assert.ok(steadyBattle.result.replay.events.some((event) => event.lawId === "steady-heart"), "守中不乱应按回合生成减伤法则事件");
+const poisonBattle = dynamicLawBattle("poison-formation", "poison_flame");
+assert.ok(poisonBattle.result.replay.events.some((event) => event.lawId === "poison-formation"), "毒经成势应在持续伤害施加后叠层");
+const echoBattle = dynamicLawBattle("spell-echo", "thunder_pearl", "|echo");
+assert.ok(echoBattle.result.replay.events.some((event) => event.lawId === "spell-echo"), "术后余音应按确定性概率产生额外伤害事件");
+const executionBattle = dynamicLawBattle("execution-return", "thunder_pearl");
+assert.equal(executionBattle.state.daoTrial.activeRun?.nextBattleAttack, 0.12, "斩意回流应在获胜后储存下一战攻击加成");
+
+function eventManaAfter(affixId, sealIds = []) {
+  const state = createDefaultState();
+  state.day = 8;
+  ensureStateShape(state);
+  startDaoTrial(state, { routeId: "golden-pass" });
+  const run = state.daoTrial.activeRun;
+  run.affixId = affixId;
+  run.sealIds = sealIds;
+  run.lawOffer = [];
+  run.nodes[0] = { id: "mana-loss", name: "法力损耗测试", type: "event", event: "static-fork", floor: 1 };
+  run.combatant.maxHp = 1000;
+  run.combatant.hp = 500;
+  run.combatant.maxMana = 1000;
+  run.combatant.mana = 500;
+  advanceDaoTrial(state, { optionId: "touch" });
+  return run.combatant.mana;
+}
+assert.equal(eventManaAfter("ore-awakening"), 400, "普通事件的负法力应损失 10%");
+assert.equal(eventManaAfter("marsh-flood"), 395, "玄阴涨潮应放大负法力事件损耗");
+assert.equal(eventManaAfter("marsh-flood", ["life-knot"]), 410, "事件损耗抗性应同时保护法力");
+
+const rolloverState = createDefaultState();
+rolloverState.day = 8;
+ensureStateShape(rolloverState);
+startDaoTrial(rolloverState, { routeId: "golden-pass" });
+const rolloverRun = rolloverState.daoTrial.activeRun;
+rolloverRun.nodesCleared = 5;
+rolloverRun.maxFloor = 5;
+rolloverRun.rewards = { xp: 40, spirit: 70, dust: 6, milestones: ["入境"] };
+rolloverRun.scoreBreakdown = { progress: 700, quality: 30, risk: 10, build: 5, total: 745 };
+const rolloverXp = rolloverState.player.xp;
+const rolloverSpirit = rolloverState.player.spirit;
+rolloverState.day = rolloverState.daoTrial.cycleEndDay + 1;
+ensureStateShape(rolloverState);
+assert.equal(rolloverState.player.xp, rolloverXp + 16, "周期结束应按失败保留率结算秘境修为");
+assert.equal(rolloverState.player.spirit, rolloverSpirit + 28, "周期结束应按失败保留率结算灵石");
+assert.equal(rolloverState.daoTrial.history[0].rewards.retention, 0.4, "周期结束记录应保存失败结算倍率");
+assert.equal(rolloverState.daoTrial.routeMastery["golden-pass"].runs, 1, "周期结束应计入路线精通次数");
 
 const routeState = createDefaultState();
 strengthenPlayer(routeState);
