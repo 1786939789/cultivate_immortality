@@ -9480,6 +9480,11 @@ function trialRunScoreBreakdown(state, run, success = undefined) {
 
 function trialRunSummary(state, run) {
   const route = daoTrialRouteMap[run.routeId];
+  const remainingHpRate = Math.round(clamp(
+    (Number(run.combatant?.hp) || 0) / Math.max(1, Number(run.combatant?.maxHp) || 1),
+    0,
+    1
+  ) * 100);
   return {
     id: run.id,
     cycle: run.cycle,
@@ -9500,6 +9505,7 @@ function trialRunSummary(state, run) {
     scoreBreakdown: trialRunScoreBreakdown(state, run, run.success),
     combatStats: { ...(run.combatStats || {}) },
     companionContribution: { ...(run.companionContribution || {}) },
+    remainingHpRate,
     startedDay: run.startedDay,
     startedDate: stateDateForDay(state, run.startedDay),
     endedDay: run.endedDay || state.day,
@@ -9722,6 +9728,140 @@ export function getDaoTrialHistoryPage(state, options = {}) {
     return true;
   });
   return { offset, limit, total: items.length, hasMore: offset + limit < items.length, items: items.slice(offset, offset + limit) };
+}
+
+function daoTrialAnalyticsBestView(record) {
+  if (!record) return null;
+  const scoreBreakdown = record.scoreBreakdown || {};
+  const combatStats = record.combatStats || {};
+  const companionContribution = record.companionContribution || {};
+  const rewards = record.rewards || record.bag || {};
+  return {
+    id: record.id,
+    cycle: Number(record.cycle) || 0,
+    attempt: Number(record.attempt) || 0,
+    routeId: record.routeId || "",
+    routeName: record.routeName || daoTrialRouteMap[record.routeId]?.name || record.routeId || "未知路线",
+    affixName: record.affixName || "",
+    result: record.result || "游历结束",
+    success: Boolean(record.success),
+    floor: Math.max(0, Number(record.floor || record.nodesCleared) || 0),
+    score: Math.max(0, Number(record.score) || 0),
+    remainingHpRate: Number.isFinite(Number(record.remainingHpRate)) ? clamp(Math.round(Number(record.remainingHpRate)), 0, 100) : null,
+    companion: record.companion ? { id: record.companion.id || "", name: record.companion.name || "同行修士" } : null,
+    lastReplayId: record.lastReplayId || "",
+    sealCount: Array.isArray(record.sealIds) ? record.sealIds.length : 0,
+    lawCount: Array.isArray(record.lawIds) ? record.lawIds.length : 0,
+    synergyCount: Array.isArray(record.synergyIds) ? record.synergyIds.length : 0,
+    taskBoons: (record.taskBoons || []).map((boon) => ({ id: boon.id || "", name: boon.name || boon.category || "助力" })),
+    scoreBreakdown: {
+      legacy: Boolean(scoreBreakdown.legacy),
+      progress: Math.max(0, Number(scoreBreakdown.progress) || 0),
+      quality: Math.max(0, Number(scoreBreakdown.quality) || 0),
+      risk: Math.max(0, Number(scoreBreakdown.risk) || 0),
+      build: Math.max(0, Number(scoreBreakdown.build) || 0),
+      modifier: Number(scoreBreakdown.modifier) || 0,
+      total: Math.max(0, Number(scoreBreakdown.total) || Number(record.score) || 0)
+    },
+    combatStats: Object.fromEntries([
+      "battles", "rounds", "damageDealt", "damageTaken", "healing", "shields", "skillCasts", "manaSpent", "lawTriggers"
+    ].map((key) => [key, Math.max(0, Number(combatStats[key]) || 0)])),
+    companionContribution: Object.fromEntries([
+      "damage", "healing", "shields", "assists"
+    ].map((key) => [key, Math.max(0, Number(companionContribution[key]) || 0)])),
+    rewards: {
+      xp: Math.max(0, Number(rewards.xp) || 0),
+      spirit: Math.max(0, Number(rewards.spirit) || 0),
+      dust: Math.max(0, Number(rewards.dust) || 0)
+    }
+  };
+}
+
+export function getDaoTrialAnalytics(state, options = {}) {
+  ensureDaoTrialState(state);
+  const range = clamp(Math.floor(Number(options.range) || 14), 7, 400);
+  const routeId = String(options.routeId || "");
+  const endDay = Math.max(1, Number(state.day) || 1);
+  const startDay = Math.max(1, endDay - range + 1);
+  const officialInRange = (state.daoTrial.history || []).filter((record) => (
+    !record.practice
+    && Number(record.endedDay || record.startedDay) >= startDay
+    && Number(record.endedDay || record.startedDay) <= endDay
+  ));
+  const filtered = officialInRange.filter((record) => !routeId || record.routeId === routeId);
+  const recordsByDay = new Map();
+  for (const record of filtered) {
+    const day = Number(record.endedDay || record.startedDay) || 0;
+    if (!recordsByDay.has(day)) recordsByDay.set(day, []);
+    recordsByDay.get(day).push(record);
+  }
+  const days = [];
+  for (let day = startDay; day <= endDay; day += 1) {
+    const records = recordsByDay.get(day) || [];
+    const bestRecord = [...records].sort(compareDaoTrialRecords)[0] || null;
+    const rewards = records.reduce((total, record) => {
+      const reward = record.rewards || record.bag || {};
+      total.xp += Math.max(0, Number(reward.xp) || 0);
+      total.spirit += Math.max(0, Number(reward.spirit) || 0);
+      total.dust += Math.max(0, Number(reward.dust) || 0);
+      return total;
+    }, { xp: 0, spirit: 0, dust: 0 });
+    days.push({
+      day,
+      date: stateDateForDay(state, day),
+      attempts: records.length,
+      clears: records.filter((record) => Number(record.floor || record.nodesCleared) >= daoTrialCoreFloorCount).length,
+      rewards,
+      best: daoTrialAnalyticsBestView(bestRecord)
+    });
+  }
+  const playedDays = days.filter((entry) => entry.best);
+  let improvedDays = 0;
+  for (let index = 1; index < playedDays.length; index += 1) {
+    const previous = playedDays[index - 1].best;
+    const current = playedDays[index].best;
+    if (current.floor > previous.floor || current.score > previous.score) improvedDays += 1;
+  }
+  const comparableDays = Math.max(0, playedDays.length - 1);
+  const latest = playedDays.at(-1) || null;
+  const previous = playedDays.at(-2) || null;
+  const routeStats = daoTrialRoutes.map((route) => {
+    const records = officialInRange.filter((record) => record.routeId === route.id);
+    const scores = records.map((record) => Math.max(0, Number(record.score) || 0));
+    const floors = records.map((record) => Math.max(0, Number(record.floor || record.nodesCleared) || 0));
+    const clears = floors.filter((floor) => floor >= daoTrialCoreFloorCount).length;
+    return {
+      routeId: route.id,
+      routeName: route.name,
+      accent: route.accent,
+      attempts: records.length,
+      averageScore: records.length ? Math.round(scores.reduce((sum, value) => sum + value, 0) / records.length) : 0,
+      averageFloor: records.length ? Number((floors.reduce((sum, value) => sum + value, 0) / records.length).toFixed(1)) : 0,
+      bestFloor: records.length ? Math.max(...floors) : 0,
+      bestScore: records.length ? Math.max(...scores) : 0,
+      clearRate: records.length ? Math.round(clears / records.length * 100) : 0
+    };
+  });
+  return {
+    range,
+    routeId,
+    startDay,
+    endDay,
+    coreFloorCount: daoTrialCoreFloorCount,
+    summary: {
+      attempts: filtered.length,
+      playedDays: playedDays.length,
+      improvedDays,
+      comparableDays,
+      improvementRate: comparableDays ? Math.round(improvedDays / comparableDays * 100) : null,
+      latestDay: latest?.day || null,
+      latest: latest?.best || null,
+      previousDay: previous?.day || null,
+      previous: previous?.best || null
+    },
+    days,
+    routeStats
+  };
 }
 
 export function startDaoTrial(state, payload = {}) {

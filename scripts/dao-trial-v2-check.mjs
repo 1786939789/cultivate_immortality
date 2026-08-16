@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { daoTrialLaws, daoTrialRoutes } from "../server/daoTrialData.mjs";
 import { replayStatMax } from "../web/src/battleReplay.js";
-import { advanceDaoTrial, createDefaultState, ensureStateShape, getPublicReplay, getPublicState, startDaoTrial } from "../server/gameLogic.mjs";
+import { advanceDaoTrial, createDefaultState, ensureStateShape, getDaoTrialAnalytics, getPublicReplay, getPublicState, startDaoTrial } from "../server/gameLogic.mjs";
 
 function strengthenPlayer(state, multiplier = 20) {
   for (const key of ["maxHp", "attack", "defense", "divineSense", "maxMana"]) state.player[key] *= multiplier;
@@ -283,5 +283,48 @@ ensureStateShape(legacyState);
 assert.equal(legacyState.daoTrial.version, 3, "旧秘境状态应迁移到 V3");
 assert.equal(getPublicState(legacyState).daoTrial.bestFloor, 7, "旧通关记录应推导为七层历史深度");
 assert.equal(getPublicState(legacyState).daoTrial.history[0].scoreBreakdown.legacy, true, "旧版记录应标记为无评分明细");
+
+const analyticsState = createDefaultState();
+analyticsState.day = 20;
+ensureStateShape(analyticsState);
+const analyticsRecord = ({ id, day, routeId, routeName, floor, score, practice = false, xp = 0, spirit = 0 }) => ({
+  id,
+  cycle: analyticsState.daoTrial.cycle,
+  attempt: 1,
+  practice,
+  routeId,
+  routeName,
+  floor,
+  nodesCleared: floor,
+  score,
+  scoreBreakdown: { progress: score - 60, quality: 30, risk: 20, build: 10, modifier: 0, total: score },
+  combatStats: { battles: 2, rounds: 8, damageDealt: score * 2, damageTaken: 100, lawTriggers: 1 },
+  companionContribution: {},
+  companion: null,
+  remainingHpRate: 72,
+  success: floor >= 15,
+  result: "主动离境",
+  startedDay: day,
+  endedDay: day,
+  rewards: { xp, spirit, dust: 0 }
+});
+analyticsState.daoTrial.history = [
+  analyticsRecord({ id: "day-20-gold", day: 20, routeId: "golden-pass", routeName: "金石关", floor: 8, score: 750, xp: 20, spirit: 30 }),
+  analyticsRecord({ id: "day-20-practice", day: 20, routeId: "nether-marsh", routeName: "玄阴泽", floor: 20, score: 9_999, practice: true, xp: 999, spirit: 999 }),
+  analyticsRecord({ id: "day-19-wind", day: 19, routeId: "wind-thunder-path", routeName: "风雷径", floor: 7, score: 700, xp: 10, spirit: 12 }),
+  analyticsRecord({ id: "day-19-gold", day: 19, routeId: "golden-pass", routeName: "金石关", floor: 8, score: 650, xp: 14, spirit: 18 }),
+  analyticsRecord({ id: "day-18-gold", day: 18, routeId: "golden-pass", routeName: "金石关", floor: 5, score: 600, xp: 8, spirit: 10 })
+];
+const analytics = getDaoTrialAnalytics(analyticsState, { range: 7 });
+assert.equal(analytics.days.length, 7, "七日分析必须包含无挑战日期，图表才能显示空档");
+assert.equal(analytics.summary.attempts, 4, "分析必须排除无奖励演练");
+assert.equal(analytics.summary.latest.id, "day-20-gold", "最新成绩不得被演练覆盖");
+assert.equal(analytics.summary.previous.id, "day-19-gold", "每日最佳必须先比较层数，再比较分数");
+assert.equal(analytics.summary.improvementRate, 100, "成绩提升日应比较相邻的有效挑战日");
+assert.deepEqual(analytics.days.find((entry) => entry.day === 19).rewards, { xp: 24, spirit: 30, dust: 0 }, "每日奖励应汇总全部正式游历");
+assert.equal(analytics.routeStats.find((entry) => entry.routeId === "golden-pass").attempts, 3, "路线效率应统计范围内全部正式游历");
+const windAnalytics = getDaoTrialAnalytics(analyticsState, { range: 7, routeId: "wind-thunder-path" });
+assert.equal(windAnalytics.summary.attempts, 1, "路线筛选必须只保留指定路线的趋势数据");
+assert.equal(windAnalytics.routeStats.find((entry) => entry.routeId === "golden-pass").attempts, 3, "路线筛选不应破坏全路线效率对比");
 
 console.log("dao-trial-v2-check: passed (15 core floors, floor 16 endless, scoring, companion, laws, determinism, migration)");

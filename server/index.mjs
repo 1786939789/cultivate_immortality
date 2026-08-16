@@ -17,6 +17,7 @@ import {
   getDuelReplayId,
   getDuelDayPage,
   getDaoTrialHistoryPage,
+  getDaoTrialAnalytics,
   getCultivatorPortrait,
   getPublicCultivatorDetail,
   getPublicReplay,
@@ -305,6 +306,15 @@ async function handleApi(req, res, url) {
     return;
   }
 
+  if (req.method === "GET" && url.pathname === "/api/dao-trial/analytics") {
+    const state = await readState(saveId);
+    sendJson(res, 200, getDaoTrialAnalytics(state, {
+      range: url.searchParams.get("range"),
+      routeId: url.searchParams.get("routeId")
+    }));
+    return;
+  }
+
   if (req.method === "GET" && url.pathname === "/api/cultivators/portrait") {
     const id = url.searchParams.get("id");
     if (!id) throw new Error("缺少人物 ID");
@@ -379,6 +389,7 @@ async function handleApi(req, res, url) {
     sendJson(res, 200, await mutateTaskState(mutator, saveId, { taskDay: body.day ?? body.targetDay }));
     return;
   }
+
   const routes = {
     "/api/encounters/choose": (state) => resolveEncounter(state, body),
     "/api/encounters/focus": (state) => updateEncounterFocus(state, body),

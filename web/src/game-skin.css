@@ -5789,6 +5789,27 @@ body::before {
 .encounter-detail-scroll { max-height: 260px; }
 
 .dao-trial-surface { display: grid; gap: 12px; }
+.dao-trial-subtabs {
+  display: inline-flex;
+  width: fit-content;
+  margin-bottom: 12px;
+  padding: 3px;
+  border: 1px solid rgba(117, 87, 42, .28);
+  border-radius: 4px;
+  background: rgba(241, 226, 190, .72);
+}
+.dao-trial-subtabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 13px;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: #725632;
+}
+.dao-trial-subtabs button.active { background: #30382f; color: #ffe09a; }
 .dao-trial-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 18px; }
 .dao-trial-header > .dao-trial-affix-banner { grid-column: 1 / -1; width: 100%; box-sizing: border-box; }
 .dao-trial-header h3 { margin: 4px 0; font-size: 24px; }
@@ -5884,7 +5905,7 @@ body::before {
 .dao-trial-live-score { color: #e1c270; font-weight: 700; }
 .dao-trial-run-affix { display: inline-flex; align-items: center; gap: 4px; color: #e6c873; font-size: 12px; }
 .dao-trial-path { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 5px; }
-.dao-trial-path > div { position: relative; display: grid; flex: 0 0 86px; justify-items: center; gap: 2px; min-width: 86px; min-height: 74px; padding: 7px 5px; border: 1px solid rgba(174, 142, 77, .2); border-radius: 4px; background: rgba(12, 17, 17, .5); text-align: center; }
+.dao-trial-path > div { position: relative; display: grid; flex: 1 0 86px; justify-items: center; gap: 2px; min-width: 86px; min-height: 74px; padding: 7px 5px; border: 1px solid rgba(174, 142, 77, .2); border-radius: 4px; background: rgba(12, 17, 17, .5); text-align: center; }
 .dao-trial-path > div::after { content: ""; position: absolute; left: calc(100% + 1px); top: 24px; width: 7px; height: 1px; background: rgba(181, 146, 77, .3); }
 .dao-trial-path > div:last-child::after { display: none; }
 .dao-trial-path span { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; color: #7d735f; background: rgba(151, 129, 88, .16); }
@@ -15149,6 +15170,60 @@ body::before {
   border: 1px dashed rgba(109, 76, 36, .28);
   background: rgba(255, 249, 229, .38);
   text-align: center;
+}
+
+.view.active .dao-trial-status .meter-head {
+  color: #eee4ca;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.view.active .dao-trial-status .meter-head > span:last-child {
+  color: #f1d78e;
+}
+
+.view.active .dao-trial-run-board .dao-trial-companion-mini em {
+  color: #e8dec8;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.view.active .dao-trial-run-board .dao-trial-current-node small {
+  color: #e9dfc9;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.view.active .dao-trial-score-breakdown span {
+  border-left-color: #d2aa54;
+  background: #343a31;
+}
+
+.view.active .dao-trial-score-breakdown small {
+  color: #eee4ca;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.view.active .dao-trial-law-offer > button {
+  min-height: 132px;
+}
+
+.view.active .dao-trial-law-offer button span {
+  color: #efc96d;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.view.active .dao-trial-law-offer button strong {
+  font-size: 16px;
+}
+
+.view.active .dao-trial-law-offer button small {
+  color: #eee4cf;
+  font-size: 13px;
+  line-height: 1.55;
 }
 
 @media (max-width: 720px) {

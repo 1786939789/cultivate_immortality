@@ -117,6 +117,14 @@ export function getDaoTrialHistory(options = {}) {
   return request(`/api/dao-trial/history?${params.toString()}`);
 }
 
+export function getDaoTrialAnalytics(options = {}) {
+  const params = new URLSearchParams({ _: String(Date.now()) });
+  for (const [key, value] of Object.entries(options)) {
+    if (value !== undefined && value !== null && value !== "") params.set(key, String(value));
+  }
+  return request(`/api/dao-trial/analytics?${params.toString()}`);
+}
+
 export function postAction(path, body = {}, options = {}) {
   return request(path, { method: "POST", body: { ...body, ...options } });
 }
