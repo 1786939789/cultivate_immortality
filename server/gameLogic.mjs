@@ -9192,25 +9192,33 @@ function trialCompanionSupport(state, npc, relationship = null) {
 }
 
 function availableDaoTrialCompanions(state) {
-  const related = Object.keys(state.relationships || {})
-    .map((npcId) => ({ npc: state.npcs.find((item) => item.id === npcId), relation: state.relationships[npcId] }))
-    .filter((item) => item.npc && (item.relation.interactions > 0 || item.relation.invitedUntilCycle >= state.daoTrial.cycle))
-    .sort((a, b) => (b.relation.affinity + b.relation.respect) - (a.relation.affinity + a.relation.respect))
-    .slice(0, 6);
-  const selectedIds = new Set(related.map((item) => item.npc.id));
-  const neutral = [...(state.npcs || [])]
-    .filter((npc) => !selectedIds.has(npc.id))
-    .sort((a, b) => Math.abs(a.realm - state.player.realm) - Math.abs(b.realm - state.player.realm) || a.name.localeCompare(b.name, "zh-Hans-CN"))
-    .slice(0, 3)
-    .map((npc) => ({ npc, relation: state.relationships?.[npc.id] || { npcId: npc.id, affinity: 0, respect: 0, interactions: 0, lastDay: 0 }, neutral: true }));
-  return [...related, ...neutral].map(({ npc, relation, neutral }) => ({
+  const toPublicEntry = ({ npc, relation, neutral = false }) => ({
     person: compactCultivatorRef(publicCultivator(npc, state, { kind: "npc", compact: true })),
     relationship: relationshipTitle(relation),
     affinity: relation.affinity,
     respect: relation.respect,
     neutral: Boolean(neutral),
     support: trialCompanionSupport(state, npc, relation)
-  }));
+  });
+  const bySupportPotency = (a, b) => b.support.potency - a.support.potency
+    || b.support.power - a.support.power
+    || (b.affinity + b.respect) - (a.affinity + a.respect)
+    || a.person.name.localeCompare(b.person.name, "zh-Hans-CN");
+  const related = Object.keys(state.relationships || {})
+    .map((npcId) => ({ npc: state.npcs.find((item) => item.id === npcId), relation: state.relationships[npcId] }))
+    .filter((item) => item.npc && (item.relation.interactions > 0 || item.relation.invitedUntilCycle >= state.daoTrial.cycle))
+    .sort((a, b) => (b.relation.affinity + b.relation.respect) - (a.relation.affinity + a.relation.respect))
+    .slice(0, 6)
+    .map(toPublicEntry)
+    .sort(bySupportPotency);
+  const selectedIds = new Set(related.map((item) => item.person.id));
+  const neutral = [...(state.npcs || [])]
+    .filter((npc) => !selectedIds.has(npc.id))
+    .sort((a, b) => Math.abs(a.realm - state.player.realm) - Math.abs(b.realm - state.player.realm) || a.name.localeCompare(b.name, "zh-Hans-CN"))
+    .slice(0, 3)
+    .map((npc) => toPublicEntry({ npc, relation: state.relationships?.[npc.id] || { npcId: npc.id, affinity: 0, respect: 0, interactions: 0, lastDay: 0 }, neutral: true }))
+    .sort(bySupportPotency);
+  return [...related, ...neutral].sort(bySupportPotency);
 }
 
 function createTrialCombatant(state) {

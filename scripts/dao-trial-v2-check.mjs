@@ -255,6 +255,10 @@ boostedNpc.hp = boostedNpc.maxHp;
 boostedNpc.mana = boostedNpc.maxMana;
 ensureStateShape(companionState);
 const companions = getPublicState(companionState).daoTrial.companions;
+for (let index = 1; index < companions.length; index += 1) {
+  assert.ok(companions[index - 1].support.potency >= companions[index].support.potency, "同行列表应按实际支援加成从高到低排序");
+}
+assert.ok(companions.every((entry) => Number.isFinite(entry.affinity) && Number.isFinite(entry.respect)), "同行列表应公开亲和与敬意数值");
 const strongest = [...companions].sort((a, b) => b.support.power - a.support.power)[0];
 const weakest = [...companions].sort((a, b) => a.support.power - b.support.power)[0];
 assert.ok(strongest.support.powerFactor >= weakest.support.powerFactor, "强同行的战力系数不得低于弱同行");

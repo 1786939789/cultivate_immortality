@@ -1320,7 +1320,6 @@
                 >
                   <span class="dao-route-root"><img :src="rootIconPath(route.rootKey)" alt=""></span>
                   <span><small>七节点 · 路线精通 {{ daoTrialState.routeMastery?.[route.id]?.level || 0 }} 级</small><strong>{{ route.name }}</strong><em>{{ route.subtitle }}</em><small>通关 {{ daoTrialState.routeMastery?.[route.id]?.clears || 0 }} 次 · 最佳 {{ daoTrialState.routeMastery?.[route.id]?.bestScore || 0 }} 分</small></span>
-                  <i>{{ route.nodes.map(node => node.boss ? "心" : node.elite ? "精" : node.type === "battle" ? "战" : node.type === "rest" ? "息" : "缘").join(" · ") }}</i>
                 </button>
               </div>
 
@@ -1338,12 +1337,8 @@
                   </button>
                   <button v-for="entry in daoTrialState.companions" :key="entry.person.id" type="button" :class="{ active: selectedDaoTrialCompanionId === entry.person.id }" @click="selectedDaoTrialCompanionId = entry.person.id">
                     <CharacterPortrait :person="entry.person" size="sm" />
-                    <span><strong>{{ entry.person.name }}<small v-if="isNpcFortuneResonant(entry.person)" class="npc-fortune-badge">天运共鸣</small></strong><small>{{ entry.neutral ? "临时同道" : entry.relationship }} · {{ entry.support.text }}</small></span>
+                    <span><strong>{{ entry.person.name }}<small v-if="isNpcFortuneResonant(entry.person)" class="npc-fortune-badge">天运共鸣</small></strong><small>{{ entry.neutral ? "临时同道" : entry.relationship }} · {{ entry.support.text }}</small><small class="dao-trial-companion-relation"><span>亲和 <b>{{ entry.affinity }}</b></span><span>敬意 <b>{{ entry.respect }}</b></span></small></span>
                   </button>
-                </div>
-                <div v-if="selectedDaoTrialRoute" class="dao-trial-route-detail">
-                  <div><strong>{{ selectedDaoTrialRoute.name }} · 本期节点预览</strong><small>路线池 {{ selectedDaoTrialRoute.nodePoolCount || 14 }} 个节点，本期固定抽取 7 个；精通进度 {{ selectedDaoTrialMastery.progressScore || 0 }} / {{ selectedDaoTrialMastery.nextLevelAt || 3 }}</small></div>
-                  <span v-for="(node, index) in selectedDaoTrialRoute.nodes" :key="`${node.name}-${index}`" :class="{ elite: node.elite, boss: node.boss }">{{ index + 1 }} · {{ node.name }}</span>
                 </div>
               </div>
 
@@ -2165,13 +2160,12 @@
               </div>
               <div class="dao-trial-route-grid">
                 <button v-for="route in daoTrialState.routes" :key="route.id" type="button" :class="['panel', `route-${route.accent}`, { active: selectedDaoTrialRoute?.id === route.id }]" :aria-pressed="selectedDaoTrialRoute?.id === route.id" @click="selectedDaoTrialRouteId = route.id">
-                  <span class="dao-route-root"><img :src="rootIconPath(route.rootKey)" alt=""></span><span><small>十五层核心 · 路线精通 {{ daoTrialState.routeMastery?.[route.id]?.level || 0 }} 级</small><strong>{{ route.name }}</strong><em>{{ route.subtitle }}</em><small>最深 {{ daoTrialState.routeMastery?.[route.id]?.bestFloor || 0 }} 层 · 最佳 {{ daoTrialState.routeMastery?.[route.id]?.bestScore || 0 }} 分</small></span><i>{{ route.nodes.slice(0, 15).map(node => node.boss ? "心" : node.elite ? "精" : node.type === "battle" ? "战" : node.type === "rest" ? "息" : "缘").join(" · ") }}</i>
+                  <span class="dao-route-root"><img :src="rootIconPath(route.rootKey)" alt=""></span><span><small>十五层核心 · 路线精通 {{ daoTrialState.routeMastery?.[route.id]?.level || 0 }} 级</small><strong>{{ route.name }}</strong><em>{{ route.subtitle }}</em><small>最深 {{ daoTrialState.routeMastery?.[route.id]?.bestFloor || 0 }} 层 · 最佳 {{ daoTrialState.routeMastery?.[route.id]?.bestScore || 0 }} 分</small></span>
                 </button>
               </div>
               <div class="panel dao-trial-prepare">
-                <div class="section-head compact"><div><h3>选择同行者</h3><p>同行修士在正式游历结束后会增长少量亲和与尊重；独行也可正常问道。</p></div><button class="primary" type="button" :disabled="!selectedDaoTrialRoute || isActionPending('/api/dao-trial/start')" @click="startSelectedDaoTrial"><Compass :size="16" aria-hidden="true" />{{ isActionPending('/api/dao-trial/start') ? '踏入中...' : daoTrialState.tickets > 0 ? `消耗问道签 · 踏入${selectedDaoTrialRoute?.name || '秘境'}` : '开始无奖励演练' }}</button></div>
-                <div class="dao-trial-companion-list"><button type="button" :class="{ active: !selectedDaoTrialCompanionId }" @click="selectedDaoTrialCompanionId = ''"><span class="dao-companion-none">独</span><span><strong>独自问道</strong><small>不获得同行支援</small></span></button><button v-for="entry in daoTrialState.companions" :key="entry.person.id" type="button" :class="{ active: selectedDaoTrialCompanionId === entry.person.id }" @click="selectedDaoTrialCompanionId = entry.person.id"><CharacterPortrait :person="entry.person" size="sm" /><span><strong>{{ entry.person.name }}</strong><small>{{ entry.neutral ? '临时同道' : entry.relationship }} · {{ entry.support.text }}</small></span></button></div>
-                <div v-if="selectedDaoTrialRoute" class="dao-trial-route-detail"><div><strong>{{ selectedDaoTrialRoute.name }} · 本期核心层预览</strong><small>路线池 {{ selectedDaoTrialRoute.nodePoolCount || 14 }} 个节点，前 15 层固定生成，第 16 层后进入问天阶</small></div><span v-for="(node, index) in selectedDaoTrialRoute.nodes" :key="`${node.name}-${index}`" :class="{ elite: node.elite, boss: node.boss }">{{ index + 1 }} · {{ node.name }}</span></div>
+                <div class="section-head compact"><div><h3>选择同行者</h3><p>同行修士在正式游历结束后会增长少量亲和与敬意；独行也可正常问道。</p></div><button class="primary" type="button" :disabled="!selectedDaoTrialRoute || isActionPending('/api/dao-trial/start')" @click="startSelectedDaoTrial"><Compass :size="16" aria-hidden="true" />{{ isActionPending('/api/dao-trial/start') ? '踏入中...' : daoTrialState.tickets > 0 ? `消耗问道签 · 踏入${selectedDaoTrialRoute?.name || '秘境'}` : '开始无奖励演练' }}</button></div>
+                <div class="dao-trial-companion-list"><button type="button" :class="{ active: !selectedDaoTrialCompanionId }" @click="selectedDaoTrialCompanionId = ''"><span class="dao-companion-none">独</span><span><strong>独自问道</strong><small>不获得同行支援</small></span></button><button v-for="entry in daoTrialState.companions" :key="entry.person.id" type="button" :class="{ active: selectedDaoTrialCompanionId === entry.person.id }" @click="selectedDaoTrialCompanionId = entry.person.id"><CharacterPortrait :person="entry.person" size="sm" /><span><strong>{{ entry.person.name }}</strong><small>{{ entry.neutral ? '临时同道' : entry.relationship }} · {{ entry.support.text }}</small><small class="dao-trial-companion-relation"><span>亲和 <b>{{ entry.affinity }}</b></span><span>敬意 <b>{{ entry.respect }}</b></span></small></span></button></div>
                 <div v-if="selectedDaoTrialMastery.unlocks?.length" class="dao-trial-mastery-unlocks"><span v-for="unlock in selectedDaoTrialMastery.unlocks" :key="unlock.id"><b>{{ unlock.name }}</b><small>{{ unlock.text }}</small></span></div>
               </div>
               <section class="panel dao-trial-ranking-strip">
