@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { createDefaultState, ensureStateShape, getPublicState, runProvinceSieges } from "../server/gameLogic.mjs";
 
+let randomSeed = 0x5e1e9e;
+Math.random = () => {
+  randomSeed = (randomSeed * 1664525 + 1013904223) >>> 0;
+  return randomSeed / 0x100000000;
+};
+
 function fatigueStats(state, people = [state.player, ...(state.npcs || [])]) {
   const values = people
     .map((person) => Math.max(0, Math.min(20, Math.floor(Number(state.sectFatigue?.[person.id]) || 0))));
@@ -87,9 +93,60 @@ for (const ownedCount of [1, 2, 4, 7, 10]) {
     defendedProvinceIds.add(war.provinceId);
   }
   assert.equal(defendedProvinceIds.size, ownedCount, `${ownedCount} 城宗门没有做到每城至少一守：${defendedProvinceIds.size}/${ownedCount}`);
+  if (ownedCount <= 4) {
+    const expectedDefenders = Math.min(scenario.people.length, Math.max(3, ownedCount));
+    assert.ok(duty.garrisonIds.size >= expectedDefenders, `${ownedCount} 城宗门自动守备人数不足：${duty.garrisonIds.size}/${expectedDefenders}`);
+  }
   if (ownedCount <= 7) assert.ok(duty.attackIds.size >= 1, `${ownedCount} 城宗门尚有余员时应维持攻城能力`);
   if (ownedCount === 10) assert.equal(duty.attackIds.size, 0, "成员数等于城市数时应优先全城覆盖而暂停攻城");
 }
+
+const modeDuties = new Map();
+for (const mode of ["conservative", "balanced", "aggressive"]) {
+  randomSeed = 0x5e1e9e;
+  const scenario = createRotationState(0);
+  scenario.state.provinces.forEach((territory, index) => {
+    territory.owner = index < 4
+      ? scenario.playerSect
+      : index < 7
+        ? scenario.state.npcs.find((npc) => npc.sect !== scenario.playerSect)?.sect
+        : null;
+    territory.defenders = [];
+  });
+  scenario.state.playerSectPlan = {
+    targetDay: 1,
+    mode,
+    attack: { targetProvinceId: "", memberIds: [], autoFill: true, onConflict: "retarget" },
+    defense: { provinceIdToMemberIds: {}, autoFill: true }
+  };
+  scenario.state.day = 1;
+  runProvinceSieges(scenario.state, `2178-01-${String(modeDuties.size + 1).padStart(2, "0")}`, `2178-01-01T00:00:00.000Z`);
+  modeDuties.set(mode, dutySnapshot(scenario.state, scenario.playerSect, 1));
+}
+assert.ok(modeDuties.get("conservative").garrisonIds.size >= modeDuties.get("balanced").garrisonIds.size, "稳守策略没有增加守备投入");
+assert.ok(modeDuties.get("conservative").attackIds.size <= modeDuties.get("balanced").attackIds.size, "稳守策略没有减少攻城投入");
+assert.ok(modeDuties.get("aggressive").attackIds.size >= modeDuties.get("balanced").attackIds.size, "进取策略没有增加攻城投入");
+
+const manualDefense = createRotationState(0);
+const manualProvince = manualDefense.state.provinces[0];
+manualDefense.state.provinces.forEach((territory, index) => {
+  territory.owner = index === 0
+    ? manualDefense.playerSect
+    : index === 1
+      ? manualDefense.state.npcs.find((npc) => npc.sect !== manualDefense.playerSect)?.sect
+      : null;
+  territory.defenders = [];
+});
+manualDefense.state.playerSectPlan = {
+  targetDay: 1,
+  mode: "balanced",
+  attack: { targetProvinceId: "", memberIds: [], autoFill: false, onConflict: "retarget" },
+  defense: { provinceIdToMemberIds: { [manualProvince.id]: [manualDefense.people[0].id] }, autoFill: false }
+};
+manualDefense.state.day = 1;
+runProvinceSieges(manualDefense.state, "2179-01-01", "2179-01-01T00:00:00.000Z");
+const manualDuty = dutySnapshot(manualDefense.state, manualDefense.playerSect, 1);
+assert.deepEqual([...manualDuty.garrisonIds], [manualDefense.people[0].id], "关闭自动补位后不应改动手动守城名单");
 
 for (const memberCount of [1, 2, 3, 4, 5]) {
   const scenario = createRotationState(20);
@@ -150,7 +207,7 @@ for (let day = 1; day <= 90; day += 1) {
   assert.ok(ownedProvinceIdsBefore.every((provinceId) => defendedProvinceIds.has(provinceId)), `长期轮换第 ${day} 天存在原有城市未安排守军`);
   const remainingAfterCoverage = Math.max(0, longRotation.people.length - ownedBefore);
   const restFloor = remainingAfterCoverage >= 2 ? 1 : 0;
-  const expectedAttackers = Math.min(3, Math.max(0, remainingAfterCoverage - restFloor));
+  const expectedAttackers = Math.min(1, Math.max(0, remainingAfterCoverage - restFloor));
   assert.ok(duty.attackIds.size >= expectedAttackers, `长期轮换第 ${day} 天攻城人数不足：${duty.attackIds.size}/${expectedAttackers}`);
   if (ownedBefore) assert.ok(duty.garrisonIds.size >= 1, `长期轮换第 ${day} 天计划时有城却无守军`);
   if (restFloor) assert.ok(duty.restIds.size >= 1, `长期轮换第 ${day} 天有余员却无休整成员`);
@@ -215,15 +272,35 @@ for (let day = 1; day <= days; day += 1) {
   runProvinceSieges(state, `2099-01-${String(day).padStart(2, "0")}`, `2099-01-${String(day).padStart(2, "0")}T00:00:00.000Z`);
   const wars = (state.provinceWars || []).filter((war) => Number(war.day) === day);
   const sectWars = wars.filter((war) => war.kind !== "monster");
+  const occupiedWars = sectWars.filter((war) => war.ownerBefore);
   const targetIds = sectWars.map((war) => war.provinceId);
   assert.equal(new Set(targetIds).size, targetIds.length, `第 ${day} 天存在多个宗门攻击同一城市`);
-  daily.push({ day, wars: wars.length, sectWars: sectWars.length, fatigue: fatigueStats(state, simulatedPeople) });
+  daily.push({
+    day,
+    wars: wars.length,
+    sectWars: sectWars.length,
+    occupiedWars: occupiedWars.length,
+    defenderCounts: occupiedWars.map((war) => (war.defenderLineup || []).length),
+    defenderTerritoryCounts: occupiedWars.map((war) => Number(war.defenderTerritoryCount) || 0),
+    captured: occupiedWars.filter((war) => war.captured).length,
+    fatigue: fatigueStats(state, simulatedPeople)
+  });
 }
 
 const finalFatigue = fatigueStats(state, simulatedPeople);
 const peopleCount = simulatedPeople.length;
 const publicState = getPublicState(state);
 const playerSect = publicState.sect.name;
+const defenderCounts = daily.flatMap((item) => item.defenderCounts);
+const defenderTerritoryCounts = daily.flatMap((item) => item.defenderTerritoryCounts);
+const adequatelyStaffedWars = defenderCounts
+  .map((count, index) => ({ count, territoryCount: defenderTerritoryCounts[index] }))
+  .filter((item) => item.territoryCount <= 6);
+const occupiedWarCount = daily.reduce((sum, item) => sum + item.occupiedWars, 0);
+const capturedWarCount = daily.reduce((sum, item) => sum + item.captured, 0);
+const multiDefenderRate = defenderCounts.filter((count) => count >= 2).length / Math.max(1, defenderCounts.length);
+const averageDefenders = defenderCounts.reduce((sum, count) => sum + count, 0) / Math.max(1, defenderCounts.length);
+const captureRate = capturedWarCount / Math.max(1, occupiedWarCount);
 assert.ok(!("sectSiegeDuty" in publicState), "公开状态泄露了内部轮换负担数据");
 const enemyTerritories = publicState.provinces.filter((territory) => territory.owner && territory.owner !== playerSect);
 const ownTerritories = publicState.provinces.filter((territory) => territory.owner === playerSect);
@@ -242,6 +319,12 @@ const detailedWar = (state.provinceWars || []).find((war) => war.kind !== "monst
 assert.ok(detailedWar, "模拟期间应至少发生一场宗门攻守战");
 assert.ok(detailedWar.strategy?.preBattle?.points?.length, "战报缺少战前研判");
 assert.ok(detailedWar.strategy?.postBattle?.points?.length, "战报缺少战后查明");
+assert.ok(defenderCounts.length > 0, "长期模拟没有产生有效守城战报");
+assert.ok(adequatelyStaffedWars.length > 0, "长期模拟没有产生人员充足的守城场景");
+assert.ok(adequatelyStaffedWars.every((item) => item.count >= 2), `持城不超过 6 座时仍出现单人守城：${JSON.stringify(adequatelyStaffedWars)}`);
+assert.ok(multiDefenderRate >= 0.4, `多人守城占比过低：${(multiDefenderRate * 100).toFixed(1)}%`);
+assert.ok(averageDefenders >= 1.5, `平均守军人数过低：${averageDefenders.toFixed(2)}`);
+assert.ok(captureRate <= 0.75, `城池易主率过高：${(captureRate * 100).toFixed(1)}%`);
 const selectedAttackReasons = (detailedWar.strategy?.attackers?.roster || [])
   .filter((member) => member.selected)
   .map((member) => member.reason);
@@ -272,5 +355,17 @@ console.log(JSON.stringify({
     maximumAllowedDuty,
     fixedSevenCityMaximumConsecutiveDuty: fixedMaximumConsecutive,
     finalFatigue: longRotationFatigue
-  }
+  },
+  battleStability: {
+    occupiedWars: occupiedWarCount,
+    defenderDistribution: Object.fromEntries([...new Set(defenderCounts)].sort((a, b) => a - b).map((count) => [count, defenderCounts.filter((value) => value === count).length])),
+    averageDefenders: Number(averageDefenders.toFixed(2)),
+    multiDefenderRate: Number(multiDefenderRate.toFixed(3)),
+    captureRate: Number(captureRate.toFixed(3))
+  },
+  modeDeployment: Object.fromEntries([...modeDuties].map(([mode, duty]) => [mode, {
+    attack: duty.attackIds.size,
+    defense: duty.garrisonIds.size,
+    rest: duty.restIds.size
+  }]))
 }, null, 2));
