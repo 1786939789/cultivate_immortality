@@ -16,6 +16,7 @@
     "check:balance": "node scripts/balance-check.mjs",
     "check:systems": "node scripts/encounter-trial-check.mjs",
     "check:dao-trial-v2": "node scripts/dao-trial-v2-check.mjs",
+    "check:dao-trial-balance": "node scripts/dao-trial-balance-sim.mjs",
     "check:void-hall": "node scripts/void-hall-check.mjs",
     "check:siege": "node scripts/siege-strategy-check.mjs",
     "build": "vite build",

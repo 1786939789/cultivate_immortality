@@ -2089,7 +2089,7 @@
 
                 <div class="dao-trial-path" aria-label="问道节点进度">
                   <div v-for="node in visibleDaoTrialNodes" :key="node.id" :class="[`state-${node.state}`, { boss: node.boss }]">
-                    <span>{{ node.floor || node.index + 1 }}</span><b>{{ node.name }}</b><small>{{ node.checkpoint ? "阶段首领" : node.elite ? "精英" : node.type === "battle" ? "战斗" : node.type === "rest" ? "调息" : "取舍" }}</small>
+                    <span>{{ node.floor || node.index + 1 }}</span><b>{{ node.name }}</b><small>{{ node.boss ? (node.floor === 15 ? "最终心魔" : "阶段首领") : node.elite ? (node.checkpoint ? "精英检查点" : "精英") : node.type === "battle" ? "战斗" : node.type === "rest" ? "调息" : "取舍" }}</small>
                   </div>
                 </div>
 
@@ -2140,13 +2140,33 @@
                       <button v-for="law in activeDaoTrialRun.lawOffer" :key="law.id" type="button" :disabled="isActionPending('/api/dao-trial/advance')" @click="chooseDaoTrialLaw(law.id)"><span>{{ law.school }} · {{ law.rarity === 'gold' ? '金色' : '银色' }}</span><strong>{{ law.name }}</strong><small>{{ law.text }}</small></button>
                     </div>
                     <div v-else-if="activeDaoTrialRun.checkpointPending" class="dao-trial-checkpoint">
-                      <span>第 {{ activeDaoTrialRun.checkpointFloor }} 层阶段检查点</span><h3>收功结算，或继续深入问天阶</h3><small>安全离境按 120% 带回行囊；继续挑战会保留当前气血、法力、道印、法则和全部得分。</small><div class="actions"><button class="secondary" type="button" :disabled="isActionPending('/api/dao-trial/advance')" @click="exitDaoTrialCheckpoint">安全离境</button><button class="primary" type="button" :disabled="isActionPending('/api/dao-trial/advance')" @click="continueDaoTrialCheckpoint">继续深入</button></div>
+                      <span>第 {{ activeDaoTrialRun.checkpointFloor }} 层阶段检查点</span><h3>收功结算，或继续深入问天阶</h3><small>安全离境按 120% 带回行囊；继续挑战会恢复 {{ activeDaoTrialRun.checkpointRecovery?.hpPercent || 0 }}% 气血与 {{ activeDaoTrialRun.checkpointRecovery?.manaPercent || 0 }}% 法力，并保留道印、法则和全部得分。</small><div class="actions"><button class="secondary" type="button" :disabled="isActionPending('/api/dao-trial/advance')" @click="exitDaoTrialCheckpoint">安全离境</button><button class="primary" type="button" :disabled="isActionPending('/api/dao-trial/advance')" @click="continueDaoTrialCheckpoint">继续深入</button></div>
                     </div>
                     <div v-else-if="activeDaoTrialRun.sealOffer.length" class="dao-trial-seal-offer">
                       <div class="dao-trial-offer-head"><span>择一道印收入本轮</span><button class="secondary compact-button" type="button" :disabled="!activeDaoTrialRun.canReroll || isActionPending('/api/dao-trial/advance')" @click="rerollDaoTrialSeals"><RefreshCw :size="14" aria-hidden="true" /> {{ activeDaoTrialRun.freeRerolls ? "免费重观" : "重观 · 1悟机" }}</button></div>
                       <button v-for="seal in activeDaoTrialRun.sealOffer" :key="seal.id" type="button" :disabled="isActionPending('/api/dao-trial/advance')" @click="chooseDaoTrialSeal(seal.id)"><span>{{ seal.school }}</span><strong>{{ seal.name }}</strong><small>{{ seal.text }}</small></button>
                     </div>
-                    <div v-else-if="activeDaoTrialRun.currentNode?.type === 'battle'" class="dao-trial-battle-action"><button class="primary" type="button" :disabled="isActionPending('/api/dao-trial/advance')" @click="fightDaoTrial"><Play :size="15" aria-hidden="true" /><strong>开始战斗</strong></button></div>
+                    <div v-else-if="activeDaoTrialRun.currentNode?.type === 'battle' && activeDaoTrialRun.enemyPreview" class="dao-trial-enemy-preview">
+                      <div class="dao-trial-enemy-head">
+                        <MonsterEmblem :monster="activeDaoTrialRun.enemyPreview" size="lg" />
+                        <span><small>{{ activeDaoTrialRun.enemyPreview.kind }} · {{ activeDaoTrialRun.enemyPreview.realm }}</small><strong>{{ activeDaoTrialRun.enemyPreview.name }}</strong><em>{{ activeDaoTrialRun.enemyPreview.rootName }} · {{ activeDaoTrialRun.enemyPreview.skill }}</em></span>
+                        <b :class="`threat-${activeDaoTrialRun.enemyPreview.threat.key}`">{{ activeDaoTrialRun.enemyPreview.threat.label }}</b>
+                      </div>
+                      <div class="dao-trial-power-matchup" aria-label="双方战力对比">
+                        <span><small>当前状态战力</small><strong>{{ activeDaoTrialRun.enemyPreview.playerPower }}</strong></span>
+                        <i>对阵</i>
+                        <span><small>妖物战力</small><strong>{{ activeDaoTrialRun.enemyPreview.power }}</strong></span>
+                        <em>满状态 {{ activeDaoTrialRun.enemyPreview.playerMaxPower }} · 敌方约为当前状态的 {{ activeDaoTrialRun.enemyPreview.powerRatio }}%</em>
+                      </div>
+                      <div class="dao-trial-enemy-stats">
+                        <span><Sword :size="14" aria-hidden="true" /><small>攻击</small><b>{{ activeDaoTrialRun.enemyPreview.attack }}</b></span>
+                        <span><ShieldCheck :size="14" aria-hidden="true" /><small>防御</small><b>{{ activeDaoTrialRun.enemyPreview.defense }}</b></span>
+                        <span><Flame :size="14" aria-hidden="true" /><small>气血</small><b>{{ activeDaoTrialRun.enemyPreview.maxHp }}</b></span>
+                        <span><Eye :size="14" aria-hidden="true" /><small>神识</small><b>{{ activeDaoTrialRun.enemyPreview.divineSense }}</b></span>
+                        <span><Waves :size="14" aria-hidden="true" /><small>法力</small><b>{{ activeDaoTrialRun.enemyPreview.maxMana }}</b></span>
+                      </div>
+                      <button class="primary" type="button" :disabled="isActionPending('/api/dao-trial/advance')" @click="fightDaoTrial"><Play :size="15" aria-hidden="true" /><strong>开始战斗</strong></button>
+                    </div>
                     <div v-else class="dao-trial-event-options"><span>此处如何取舍</span><button v-for="option in activeDaoTrialRun.eventOptions" :key="option.id" type="button" :disabled="isActionPending('/api/dao-trial/advance')" @click="chooseDaoTrialEvent(option.id)"><strong>{{ option.label }}</strong><small>{{ option.hint }}</small></button></div>
                   </section>
 
@@ -2164,7 +2184,7 @@
               </div>
               <div class="dao-trial-route-grid">
                 <button v-for="route in daoTrialState.routes" :key="route.id" type="button" :class="['panel', `route-${route.accent}`, { active: selectedDaoTrialRoute?.id === route.id }]" :aria-pressed="selectedDaoTrialRoute?.id === route.id" @click="selectedDaoTrialRouteId = route.id">
-                  <span class="dao-route-root"><img :src="rootIconPath(route.rootKey)" alt=""></span><span><small>十五层核心 · 路线精通 {{ daoTrialState.routeMastery?.[route.id]?.level || 0 }} 级</small><strong>{{ route.name }}</strong><em>{{ route.subtitle }}</em><small>最深 {{ daoTrialState.routeMastery?.[route.id]?.bestFloor || 0 }} 层 · 最佳 {{ daoTrialState.routeMastery?.[route.id]?.bestScore || 0 }} 分</small></span>
+                  <span class="dao-route-root"><img :src="rootIconPath(route.rootKey)" alt=""></span><span><small>十五层核心 · 路线精通 {{ daoTrialState.routeMastery?.[route.id]?.level || 0 }} 级</small><strong>{{ route.name }}</strong><em>{{ route.subtitle }}</em><span class="dao-trial-route-opening" aria-label="前五层节点"><b v-for="(node, index) in route.nodes.slice(0, 5)" :key="`${route.id}-${index}`" :class="{ elite: node.elite, boss: node.boss }">{{ index + 1 }}·{{ node.boss ? '首领' : node.elite ? '精英' : node.type === 'battle' ? '战斗' : node.type === 'rest' ? '调息' : '取舍' }}</b></span><small>最深 {{ daoTrialState.routeMastery?.[route.id]?.bestFloor || 0 }} 层 · 最佳 {{ daoTrialState.routeMastery?.[route.id]?.bestScore || 0 }} 分</small></span>
                 </button>
               </div>
               <div class="panel dao-trial-prepare">

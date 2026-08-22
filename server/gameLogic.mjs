@@ -9065,44 +9065,52 @@ function daoTrialAffixForCycle(cycle) {
 
 const daoTrialCoreFloorCount = 15;
 
+const daoTrialCoreNodePattern = [
+  "battle", "event", "battle", "rest", "elite",
+  "battle", "event", "battle", "rest", "boss",
+  "battle", "event", "elite", "rest", "boss"
+];
+const daoTrialEndlessNodePattern = ["battle", "event", "battle", "rest", "boss"];
+const daoTrialCheckpointRecovery = { hp: 0.25, mana: 0.35 };
+
+function daoTrialNodeRole(floor) {
+  if (floor <= daoTrialCoreFloorCount) return daoTrialCoreNodePattern[floor - 1];
+  return daoTrialEndlessNodePattern[(floor - daoTrialCoreFloorCount - 1) % daoTrialEndlessNodePattern.length];
+}
+
+function daoTrialNodePool(route, variants, role) {
+  const templates = [...route.nodes, ...variants];
+  if (role === "boss") return templates.filter((node) => node.type === "battle" && node.boss);
+  if (role === "elite") return templates.filter((node) => node.type === "battle" && node.elite && !node.boss);
+  if (role === "battle") return templates.filter((node) => node.type === "battle" && !node.elite && !node.boss);
+  return templates.filter((node) => node.type === role && !node.elite && !node.boss);
+}
+
 function daoTrialNodesForCycle(routeId, cycle, count = daoTrialCoreFloorCount) {
   const route = daoTrialRouteMap[routeId];
   if (!route) return [];
   const variants = daoTrialNodeVariants[routeId] || [];
-  const slots = route.nodes.map((node, index) => {
-    const base = { ...node, slot: node.slot ?? index };
-    const options = [base, ...variants.filter((variant) => Number(variant.slot) === index)];
-    const selected = options[stableHash(`dao-node|${cycle}|${routeId}|${index}`) % options.length];
-    return { ...selected, slot: index };
-  });
-  const ordinary = slots.filter((node) => !node.boss);
-  const boss = slots.find((node) => node.boss) || slots.at(-1) || slots[0];
   return Array.from({ length: Math.max(1, Math.floor(Number(count) || daoTrialCoreFloorCount)) }, (_, index) => {
     const floor = index + 1;
-    if (floor % 5 === 0) {
-      const phase = Math.ceil(floor / 5);
-      return {
-        ...boss,
-        id: `${boss.id}-floor-${floor}`,
-        name: `${boss.name}·第${phase}问心`,
-        difficulty: Number(boss.difficulty || 1) + Math.max(0, phase - 1) * 0.08,
-        rounds: Number(boss.rounds || 18) + Math.max(0, phase - 1),
-        floor,
-        slot: index,
-        elite: false,
-        boss: true,
-        checkpoint: true
-      };
-    }
-    const selected = ordinary[(index + stableHash(`dao-floor|${cycle}|${routeId}|${floor}`)) % Math.max(1, ordinary.length)] || boss;
+    const role = daoTrialNodeRole(floor);
+    const pool = daoTrialNodePool(route, variants, role);
+    const fallback = route.nodes.find((node) => node.type === "battle") || route.nodes[0];
+    const selected = pool[stableHash(`dao-floor-template|${cycle}|${routeId}|${floor}|${role}`) % Math.max(1, pool.length)] || fallback;
+    const checkpoint = floor % 5 === 0;
+    const phase = Math.ceil(floor / 5);
+    const suffix = role === "boss"
+      ? floor === daoTrialCoreFloorCount ? "最终问心" : `第${phase}问心`
+      : `第${floor}层`;
     return {
       ...selected,
       id: `${selected.id}-floor-${floor}`,
-      name: `${selected.name}·第${floor}层`,
-      difficulty: Number(selected.difficulty || 1) + Math.max(0, Math.ceil(floor / 5) - 1) * 0.04,
+      name: `${selected.name}·${suffix}`,
       floor,
       slot: index,
-      checkpoint: false
+      elite: role === "elite",
+      boss: role === "boss",
+      checkpoint,
+      rounds: Number(selected.rounds || 18) + Math.max(0, phase - 1)
     };
   });
 }
@@ -9487,6 +9495,14 @@ function trialWorldBaselinePower(state) {
   return nearby.length ? nearby[Math.floor(nearby.length / 2)] : powerOf(state.player, state, { includeDailyRootFortune: false });
 }
 
+function trialEnemyPowerFactor(node, floor) {
+  const coreDepth = Math.min(daoTrialCoreFloorCount - 1, floor - 1);
+  const endlessDepth = Math.max(0, floor - daoTrialCoreFloorCount);
+  const depthFactor = 0.82 + coreDepth * 0.032 + endlessDepth * 0.045 + Math.floor(endlessDepth / 5) * 0.04;
+  const encounterFactor = node.boss ? 0.98 : node.elite ? 0.98 : 0.94;
+  return depthFactor * encounterFactor;
+}
+
 function trialMonsterFor(state, run, node, route) {
   const rootKey = roots.some((root) => root.key === route.rootKey) ? route.rootKey : "metal";
   const floor = Math.max(1, Number(node.floor) || run.nodeIndex + 1);
@@ -9494,15 +9510,15 @@ function trialMonsterFor(state, run, node, route) {
   const worldSnapshot = run.worldSnapshot || {};
   const realm = Number.isFinite(Number(worldSnapshot.realm)) ? Number(worldSnapshot.realm) : state.player.realm;
   const monster = makeMonster(`${route.name}·${node.monster}`, realm, rootKey, 0.9 + Math.min(1.2, (floor - 1) * 0.04), undefined, monsterRandom);
-  const baseline = Number(worldSnapshot.baselinePower) || trialWorldBaselinePower(state);
   const playerPower = Number(worldSnapshot.playerPower) || powerOf(state.player, state, { includeDailyRootFortune: false });
+  const worldPower = Number(worldSnapshot.baselinePower) || trialWorldBaselinePower(state);
+  const boundedWorldPower = clamp(worldPower, playerPower * 0.9, playerPower * 1.1);
+  const baseline = playerPower * 0.85 + boundedWorldPower * 0.15;
   const affix = daoTrialCycleAffixes.find((item) => item.id === run.affixId);
   const firstEase = run.nodeIndex === 0 ? Number(affix?.effects?.firstBattleEase || 0) : 0;
-  const scaling = Math.max(0, Number(affix?.effects?.scalingEnemy || 0)) * (floor - 1);
+  const scaling = Math.max(0, Number(affix?.effects?.scalingEnemy || 0)) * Math.max(0, Math.ceil(floor / 5) - 1);
   const enemyPower = Number(affix?.effects?.enemyPower || 0);
-  const endlessDepth = Math.max(0, floor - 10);
-  const depthMultiplier = 1 + 0.08 * (floor - 1) + 0.015 * endlessDepth * endlessDepth;
-  const targetPower = Math.max(48, (baseline * 0.7 + playerPower * 0.3) * Number(node.difficulty || 1) * depthMultiplier * (1 + enemyPower + scaling) * (1 - firstEase));
+  const targetPower = Math.max(48, baseline * trialEnemyPowerFactor(node, floor) * (1 + enemyPower + scaling) * (1 - firstEase));
   const currentPower = Math.max(1, powerOf(monster, state));
   const ratio = clamp(targetPower / currentPower, 0.55, Math.min(5, 1.8 + floor * 0.08));
   for (const key of ["attack", "defense", "maxHp", "maxMana", "divineSense"]) {
@@ -9723,6 +9739,44 @@ function publicTrialRun(state, run) {
   const node = nodes[run.nodeIndex] || null;
   const fighter = { ...run.combatant, trialBuffs: combinedTrialBuffs(run) };
   const stats = combatSnapshot(fighter, state);
+  let enemyPreview = null;
+  if (node?.type === "battle" && route) {
+    const monster = trialMonsterFor(state, run, node, route);
+    const playerPenalty = rootCounterPenalty(monster, fighter) * (1 - clamp(Number(fighter?.trialBuffs?.rootResist) || 0, 0, 0.9));
+    const monsterPenalty = rootCounterPenalty(fighter, monster);
+    const playerBattleStats = applyBattleRootPenalty(stats, playerPenalty);
+    const monsterBattleStats = applyBattleRootPenalty(combatSnapshot(monster, state), monsterPenalty);
+    const monsterPower = powerOfStats(monsterBattleStats);
+    const playerMaxPower = powerOfStats(playerBattleStats);
+    const playerPower = powerOfStats({
+      ...playerBattleStats,
+      maxHp: playerBattleStats.hp,
+      maxMana: playerBattleStats.mana
+    });
+    const powerRatio = monsterPower / Math.max(1, playerPower);
+    const threat = powerRatio <= 0.85
+      ? { key: "favorable", label: "占据上风" }
+      : powerRatio <= 1.05
+        ? { key: "even", label: "势均力敌" }
+        : powerRatio <= 1.25
+          ? { key: "danger", label: "颇为凶险" }
+          : { key: "deadly", label: "九死一生" };
+    enemyPreview = {
+      ...publicMonster(monster),
+      attack: monsterBattleStats.attack,
+      defense: monsterBattleStats.defense,
+      maxHp: monsterBattleStats.maxHp,
+      divineSense: monsterBattleStats.divineSense,
+      maxMana: monsterBattleStats.maxMana,
+      rootCounterPenalty: monsterBattleStats.rootCounterPenalty || 0,
+      power: monsterPower,
+      playerPower,
+      playerMaxPower,
+      powerRatio: Math.round(powerRatio * 100),
+      threat,
+      kind: node.boss ? "心魔首领" : node.elite ? "精英妖物" : "普通妖物"
+    };
+  }
   return {
     id: run.id,
     cycle: run.cycle,
@@ -9736,8 +9790,13 @@ function publicTrialRun(state, run) {
     maxFloor: Math.max(0, Number(run.maxFloor) || run.nodesCleared),
     checkpointFloor: Number(run.checkpointFloor) || 0,
     checkpointPending: Boolean(run.checkpointPending),
+    checkpointRecovery: run.checkpointPending ? {
+      hpPercent: Math.round(daoTrialCheckpointRecovery.hp * 100),
+      manaPercent: Math.round(daoTrialCheckpointRecovery.mana * 100)
+    } : null,
     endless: run.nodeIndex + 1 > daoTrialCoreFloorCount,
     currentNode: node ? { id: node.id, name: node.name, type: node.type, floor: Number(node.floor) || run.nodeIndex + 1, elite: Boolean(node.elite), boss: Boolean(node.boss), checkpoint: Boolean(node.checkpoint) } : null,
+    enemyPreview,
     combat: { hp: stats.hp, maxHp: stats.maxHp, mana: stats.mana, maxMana: stats.maxMana },
     companion: run.companion,
     seals: run.sealIds.map((id) => daoTrialSealMap[id]).filter(Boolean),
@@ -10158,6 +10217,23 @@ function rerollTrialLaws(run) {
 
 function continueTrialCheckpoint(run) {
   if (!run.checkpointPending) throw new Error("当前不在阶段检查点");
+  const hpBefore = run.combatant.hp;
+  const manaBefore = run.combatant.mana;
+  run.combatant.hp = clamp(
+    run.combatant.hp + Math.floor(run.combatant.maxHp * daoTrialCheckpointRecovery.hp),
+    1,
+    run.combatant.maxHp
+  );
+  run.combatant.mana = clamp(
+    run.combatant.mana + Math.floor(run.combatant.maxMana * daoTrialCheckpointRecovery.mana),
+    0,
+    run.combatant.maxMana
+  );
+  run.lastCheckpointRecovery = {
+    floor: run.checkpointFloor,
+    hp: run.combatant.hp - hpBefore,
+    mana: run.combatant.mana - manaBefore
+  };
   run.checkpointPending = false;
   run.checkpointFloor = 0;
   run.nodeIndex += 1;

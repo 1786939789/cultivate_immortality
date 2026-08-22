@@ -5860,6 +5860,10 @@ body::before {
 .dao-trial-route-grid em { color: #e0d5bf; font-style: normal; line-height: 1.4; }
 .dao-trial-route-grid .route-cyan.active { border-color: #65b8b1; }
 .dao-trial-route-grid .route-violet.active { border-color: #aa82b6; }
+.dao-trial-route-opening { display: flex !important; flex-wrap: wrap; gap: 4px; margin: 3px 0 2px; }
+.dao-trial-route-opening b { padding: 2px 5px; color: #d6c8aa; border: 1px solid rgba(151, 131, 92, .34); border-radius: 3px; background: rgba(20, 25, 22, .44); font-size: 10px; font-weight: 600; }
+.dao-trial-route-opening b.elite { color: #f0cf78; border-color: rgba(212, 173, 89, .58); }
+.dao-trial-route-opening b.boss { color: #e7a28f; border-color: rgba(179, 91, 72, .58); }
 .dao-trial-mastery-unlocks { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 9px; }
 .dao-trial-mastery-unlocks span { display: grid; gap: 2px; min-width: 170px; padding: 7px 9px; border-left: 2px solid #3d8169; background: rgba(64, 112, 89, .12); }
 .dao-trial-mastery-unlocks b { color: #5e4928; }
@@ -5969,6 +5973,28 @@ body::before {
 .dao-trial-law-offer button span { color: #e0bf70; font-size: 11px; }
 .dao-trial-law-offer button strong { color: #ffe09a; }
 .dao-trial-law-offer button small { color: #c5b99e; line-height: 1.45; }
+.dao-trial-enemy-preview { display: grid; gap: 10px; padding: 11px; border: 1px solid rgba(177, 92, 71, .46); background: rgba(47, 29, 25, .52); }
+.dao-trial-enemy-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 9px; }
+.dao-trial-enemy-head > span { display: grid; gap: 2px; min-width: 0; }
+.dao-trial-enemy-head small { color: #c4aa8a; }
+.dao-trial-enemy-head strong { color: #f3d58e; font-size: 17px; overflow-wrap: anywhere; }
+.dao-trial-enemy-head em { color: #bcae97; font-size: 11px; font-style: normal; overflow-wrap: anywhere; }
+.dao-trial-enemy-head > b { align-self: start; padding: 4px 7px; border: 1px solid currentColor; border-radius: 3px; font-size: 11px; white-space: nowrap; }
+.dao-trial-enemy-head > b.threat-favorable { color: #8fc9a8; }
+.dao-trial-enemy-head > b.threat-even { color: #e0c276; }
+.dao-trial-enemy-head > b.threat-danger { color: #e29a72; }
+.dao-trial-enemy-head > b.threat-deadly { color: #ef7868; background: rgba(126, 42, 35, .2); }
+.dao-trial-power-matchup { display: grid; grid-template-columns: minmax(78px, 1fr) auto minmax(78px, 1fr); align-items: center; gap: 8px; padding: 8px 9px; border-block: 1px solid rgba(174, 142, 77, .18); }
+.dao-trial-power-matchup > span { display: grid; gap: 1px; text-align: center; }
+.dao-trial-power-matchup small { color: #aaa08e; }
+.dao-trial-power-matchup strong { color: #f0d58b; font-size: 18px; }
+.dao-trial-power-matchup > i { color: #997f55; font-size: 11px; font-style: normal; }
+.dao-trial-power-matchup > em { grid-column: 1 / -1; color: #c4b69d; font-size: 11px; font-style: normal; text-align: center; }
+.dao-trial-enemy-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; }
+.dao-trial-enemy-stats > span { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 2px 4px; min-width: 0; padding: 6px; color: #c7ae72; background: rgba(19, 25, 22, .46); }
+.dao-trial-enemy-stats small { color: #a99f8c; font-size: 10px; }
+.dao-trial-enemy-stats b { grid-column: 1 / -1; color: #ead59c; font-size: 13px; overflow-wrap: anywhere; }
+.dao-trial-enemy-preview > button { justify-self: stretch; min-height: 38px; }
 .dao-trial-checkpoint { display: grid; gap: 8px; padding: 14px; border: 1px solid rgba(205, 169, 81, .5); background: rgba(76, 62, 34, .5); }
 .dao-trial-checkpoint > span { color: #edca76; font-size: 12px; }
 .dao-trial-checkpoint h3 { margin: 0; color: #ffe29a; }
@@ -6044,6 +6070,9 @@ body::before {
   .dao-trial-law-offer,
   .dao-trial-strategies,
   .dao-trial-event-options { grid-template-columns: minmax(0, 1fr); }
+  .dao-trial-enemy-head { grid-template-columns: auto minmax(0, 1fr); }
+  .dao-trial-enemy-head > b { grid-column: 1 / -1; justify-self: start; }
+  .dao-trial-enemy-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dao-trial-score-breakdown { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dao-trial-seal-rack { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dao-trial-seal-catalog > div:last-child { grid-template-columns: repeat(2, minmax(0, 1fr)); }

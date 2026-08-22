@@ -81,10 +81,14 @@ lawBattleState.daoTrial.activeRun.combatant.mana = 1;
 lawBattleState.daoTrial.activeRun.sealIds = ["long-life"];
 lawBattleState.daoTrial.activeRun.lawOffer = ["triple-edge"];
 advanceDaoTrial(lawBattleState, { action: "law", lawId: "triple-edge" });
+const lawBattlePreview = getPublicState(lawBattleState).daoTrial.activeRun.enemyPreview;
 const deterministicBattleState = structuredClone(lawBattleState);
 const worldBaselineState = structuredClone(lawBattleState);
 const lawBattle = advanceDaoTrial(lawBattleState, { action: "battle" });
 const repeatedBattle = advanceDaoTrial(deterministicBattleState, { action: "battle" });
+assert.ok(lawBattlePreview?.power > 0 && lawBattlePreview?.threat?.label, "战斗前应公开妖物战力和危险等级");
+assert.equal(lawBattlePreview.name, lawBattle.replay.right.name, "战前预览与实际出战妖物必须一致");
+assert.equal(lawBattlePreview.power, lawBattle.replay.right.power, "战前预览与实际出战妖物战力必须一致");
 assert.ok(lawBattle.replay.events.some((event) => event.kind === "law" && event.lawId === "triple-edge"), "剑鸣三叠应在第三次普通攻击后产生法则事件");
 assert.deepEqual(repeatedBattle.replay.right, lawBattle.replay.right, "同周期同路线同层怪物属性必须稳定可复现");
 assert.deepEqual(repeatedBattle.replay.events, lawBattle.replay.events, "相同存档与操作的秘境回合必须稳定可复现");
@@ -150,8 +154,9 @@ const steadyBattle = dynamicLawBattle("steady-heart", "thunder_pearl");
 assert.ok(steadyBattle.result.replay.events.some((event) => event.lawId === "steady-heart"), "守中不乱应按回合生成减伤法则事件");
 const poisonBattle = dynamicLawBattle("poison-formation", "poison_flame");
 assert.ok(poisonBattle.result.replay.events.some((event) => event.lawId === "poison-formation"), "毒经成势应在持续伤害施加后叠层");
-const echoBattle = dynamicLawBattle("spell-echo", "thunder_pearl", "|echo");
-assert.ok(echoBattle.result.replay.events.some((event) => event.lawId === "spell-echo"), "术后余音应按确定性概率产生额外伤害事件");
+const echoBattle = Array.from({ length: 12 }, (_, index) => dynamicLawBattle("spell-echo", "thunder_pearl", `|echo-${index}`))
+  .find((entry) => entry.result.replay.events.some((event) => event.lawId === "spell-echo"));
+assert.ok(echoBattle, "术后余音应按确定性概率产生额外伤害事件");
 const executionBattle = dynamicLawBattle("execution-return", "thunder_pearl");
 assert.equal(executionBattle.state.daoTrial.activeRun?.nextBattleAttack, 0.12, "斩意回流应在获胜后储存下一战攻击加成");
 
@@ -198,10 +203,39 @@ const routeState = createDefaultState();
 strengthenPlayer(routeState);
 ensureStateShape(routeState);
 const routePublic = getPublicState(routeState).daoTrial;
+const expectedCorePattern = [
+  "battle", "event", "battle", "rest", "elite",
+  "battle", "event", "battle", "rest", "boss",
+  "battle", "event", "elite", "rest", "boss"
+];
 for (const route of routePublic.routes) {
   assert.equal(route.nodes.length, 15, `${route.id} 必须生成十五个核心层`);
-  assert.deepEqual(route.nodes.map((node, index) => node.boss ? index + 1 : 0).filter(Boolean), [5, 10, 15], `${route.id} 应在 5/10/15 层生成首领`);
+  assert.deepEqual(
+    route.nodes.map((node) => node.boss ? "boss" : node.elite ? "elite" : node.type),
+    expectedCorePattern,
+    `${route.id} 必须遵循固定的战斗、取舍和调息节奏`
+  );
+  assert.deepEqual(route.nodes.map((node, index) => node.boss ? index + 1 : 0).filter(Boolean), [10, 15], `${route.id} 应在 10/15 层生成首领`);
+  assert.deepEqual(route.nodes.map((node, index) => node.elite ? index + 1 : 0).filter(Boolean), [5, 13], `${route.id} 应在 5/13 层生成精英`);
 }
+
+const npcPressureState = createDefaultState();
+for (const npc of npcPressureState.npcs) {
+  for (const key of ["maxHp", "attack", "defense", "divineSense", "maxMana"]) npc[key] *= 100;
+}
+ensureStateShape(npcPressureState);
+const npcPressureStart = startDaoTrial(npcPressureState, { routeId: "golden-pass" }).run;
+assert.ok(npcPressureStart.enemyPreview.powerRatio <= 85, "同期 NPC 过强时，首层妖物仍应以玩家入场战力为主");
+const pressureRun = npcPressureState.daoTrial.activeRun;
+pressureRun.lawOffer = [];
+pressureRun.nodeIndex = 4;
+pressureRun.floor = 5;
+const floorFivePreview = getPublicState(npcPressureState).daoTrial.activeRun.enemyPreview;
+assert.ok(floorFivePreview.powerRatio >= 90 && floorFivePreview.powerRatio <= 110, "第五层精英应接近玩家入场战力，不应直接形成碾压");
+pressureRun.combatant.hp = Math.max(1, Math.floor(pressureRun.combatant.maxHp * 0.2));
+pressureRun.combatant.mana = Math.floor(pressureRun.combatant.maxMana * 0.1);
+const depletedPreview = getPublicState(npcPressureState).daoTrial.activeRun.enemyPreview;
+assert.ok(depletedPreview.playerPower < depletedPreview.playerMaxPower, "战前预览应按当前气血与法力降低玩家状态战力");
 
 startDaoTrial(routeState, { routeId: daoTrialRoutes[0].id });
 let active = getPublicState(routeState).daoTrial.activeRun;
@@ -211,6 +245,23 @@ assert.equal(active.maxFloor, 5, "第一阶段应记录通过五层");
 assert.equal(active.scoreBreakdown.progress, 700, "前五层进度分应为 100+120+140+160+180");
 assert.ok(active.scoreBreakdown.quality > 0, "战斗层应产生表现分");
 const floorFiveScore = active.score;
+assert.deepEqual(active.checkpointRecovery, { hpPercent: 25, manaPercent: 35 }, "检查点应公开继续挑战的恢复比例");
+const recoveryState = structuredClone(routeState);
+const recoveryRun = recoveryState.daoTrial.activeRun;
+recoveryRun.combatant.hp = 1;
+recoveryRun.combatant.mana = 0;
+const expectedRecoveredHp = 1 + Math.floor(recoveryRun.combatant.maxHp * 0.25);
+const expectedRecoveredMana = Math.floor(recoveryRun.combatant.maxMana * 0.35);
+advanceDaoTrial(recoveryState, { action: "continue" });
+assert.equal(recoveryRun.combatant.hp, expectedRecoveredHp, "继续挑战应恢复最大气血的 25%");
+assert.equal(recoveryRun.combatant.mana, expectedRecoveredMana, "继续挑战应恢复最大法力的 35%");
+const cappedRecoveryState = structuredClone(routeState);
+const cappedRecoveryRun = cappedRecoveryState.daoTrial.activeRun;
+cappedRecoveryRun.combatant.hp = cappedRecoveryRun.combatant.maxHp - 1;
+cappedRecoveryRun.combatant.mana = cappedRecoveryRun.combatant.maxMana - 1;
+advanceDaoTrial(cappedRecoveryState, { action: "continue" });
+assert.equal(cappedRecoveryRun.combatant.hp, cappedRecoveryRun.combatant.maxHp, "检查点气血恢复不得超过上限");
+assert.equal(cappedRecoveryRun.combatant.mana, cappedRecoveryRun.combatant.maxMana, "检查点法力恢复不得超过上限");
 advanceDaoTrial(routeState, { action: "continue" });
 active = reachCheckpoint(routeState, 10);
 assert.ok(active.score > floorFiveScore, "更深层数的总分必须严格提高");
