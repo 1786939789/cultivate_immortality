@@ -705,4 +705,4 @@ const windAnalytics = getDaoTrialAnalytics(analyticsState, { range: 7, routeId: 
 assert.equal(windAnalytics.summary.attempts, 1, "路线筛选必须只保留指定路线的趋势数据");
 assert.equal(windAnalytics.routeStats.find((entry) => entry.routeId === "golden-pass").attempts, 3, "路线筛选不应破坏全路线效率对比");
 
-console.log("dao-trial-v2-check: passed (64 laws, 256 seals, rarity pity, resonance, 15 core floors, endless, scoring, companion, determinism, migration)");
+console.log("dao-trial-check: passed (64 laws, 256 seals, rarity pity, resonance, 15 core floors, endless, scoring, companion, determinism, migration)");

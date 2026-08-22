@@ -1197,193 +1197,7 @@
             </div>
           </section>
 
-          <div v-if="false" class="dao-trial-surface">
-            <div class="panel dao-trial-header">
-              <div>
-                <span class="section-kicker"><Compass :size="16" aria-hidden="true" /> 每日游历</span>
-                <h3>第 {{ daoTrialState.cycle }} 期 · 问道秘境</h3>
-                <p>每日补充 1 枚问道签，最多积存 {{ daoTrialState.ticketCap || 2 }} 枚；无签后仍可无奖励演练。</p>
-              </div>
-              <div class="dao-trial-header-stats">
-                <span><small>问道签</small><b>{{ daoTrialState.tickets || 0 }} / {{ daoTrialState.ticketCap || 2 }}</b></span>
-                <span><small>最深记录</small><b>{{ daoTrialState.bestFloor || 0 }} 层</b></span>
-                <span><small>最佳得分</small><b>{{ daoTrialState.bestScore || 0 }}</b></span>
-                <span><small>本期里程碑</small><b>{{ daoTrialState.claimedMilestones?.length || 0 }} / 3</b></span>
-              </div>
-              <div class="dao-trial-affix-banner">
-                <span><Sparkles :size="15" aria-hidden="true" /> 本期异象</span>
-                <strong>{{ daoTrialState.affix?.name }}</strong>
-                <small>{{ daoTrialState.affix?.text }}</small>
-              </div>
-            </div>
-
-            <template v-if="activeDaoTrialRun">
-              <div class="panel dao-trial-run-board">
-                <div class="dao-trial-run-heading">
-                  <div>
-                    <span class="tag" :class="`route-${activeDaoTrialRun.route?.accent}`">{{ activeDaoTrialRun.practice ? "演练" : `正式第 ${activeDaoTrialRun.attempt} 次` }}</span>
-                    <h3>{{ activeDaoTrialRun.route?.name }}</h3>
-                    <p>{{ activeDaoTrialRun.route?.subtitle }}</p>
-                  </div>
-                  <div class="actions">
-                    <span v-if="activeDaoTrialRun.affix" class="dao-trial-run-affix" :title="activeDaoTrialRun.affix.text"><Sparkles :size="14" aria-hidden="true" /> {{ activeDaoTrialRun.affix.name }}</span>
-                    <span class="dao-trial-live-score">当前 {{ activeDaoTrialRun.score }} 分</span>
-                    <button class="danger compact-button" type="button" :disabled="isActionPending('/api/dao-trial/abandon')" @click="abandonCurrentDaoTrial">
-                      <X :size="15" aria-hidden="true" /> 离境
-                    </button>
-                  </div>
-                </div>
-
-                <div class="dao-trial-path" aria-label="问道节点进度">
-                  <div v-for="(node, index) in activeDaoTrialRun.nodes" :key="node.id" :class="[`state-${node.state}`, { elite: node.elite, boss: node.boss }]">
-                    <span>{{ index + 1 }}</span>
-                    <b>{{ node.name }}</b>
-                    <small>{{ node.boss ? "心魔" : node.elite ? "精英" : node.type === "battle" ? "斗法" : node.type === "rest" ? "调息" : "抉择" }}</small>
-                  </div>
-                </div>
-
-                <div class="dao-trial-play-grid">
-                  <section class="dao-trial-status">
-                    <div class="dao-trial-player-line">
-                      <CharacterPortrait :person="player" size="lg" />
-                      <div>
-                        <strong>{{ player.name }}</strong>
-                        <small>{{ realmName(player.realm) }} · {{ activeDaoTrialRun.seals.length }} 道印</small>
-                      </div>
-                    </div>
-                    <Meter label="秘境血量" icon="health" :value="activeDaoTrialRun.combat.hp" :max="activeDaoTrialRun.combat.maxHp" tone="health" />
-                    <Meter label="秘境法力" icon="mana" :value="activeDaoTrialRun.combat.mana" :max="activeDaoTrialRun.combat.maxMana" tone="focus" />
-                    <div v-if="activeDaoTrialRun.companion" class="dao-trial-companion-mini">
-                      <CharacterPortrait :person="activeDaoTrialRun.companion.person" size="sm" />
-                      <span><small>同行 · {{ activeDaoTrialRun.companion.relationship }}</small><b>{{ activeDaoTrialRun.companion.person.name }}</b><em>{{ activeDaoTrialRun.companion.support.active?.name }} · {{ activeDaoTrialRun.companion.support.text }}</em></span>
-                      <button class="secondary compact-button" type="button" :disabled="activeDaoTrialRun.companion.supportUsed || isActionPending('/api/dao-trial/advance')" :title="activeDaoTrialRun.companion.supportUsed ? '本轮同行支援已使用' : '使用一次同行主动支援'" @click="useDaoTrialCompanionSupport">
-                        <Handshake :size="14" aria-hidden="true" /> {{ activeDaoTrialRun.companion.supportUsed ? "已支援" : "主动支援" }}
-                      </button>
-                    </div>
-                    <div v-else class="dao-trial-companion-mini empty"><span><small>独行</small><b>此轮未携同行者</b></span></div>
-                  </section>
-
-                  <section class="dao-trial-decision">
-                    <div class="dao-trial-current-node">
-                      <span>{{ activeDaoTrialRun.currentNode?.boss ? "心魔关" : activeDaoTrialRun.currentNode?.elite ? "精英关" : "当前节点" }}</span>
-                      <h3>{{ activeDaoTrialRun.currentNode?.name }}</h3>
-                      <small>悟机 {{ activeDaoTrialRun.insight }} · 可用于重观道印</small>
-                    </div>
-                    <div v-if="activeDaoTrialRun.synergies?.length" class="dao-trial-synergy-list">
-                      <span v-for="synergy in activeDaoTrialRun.synergies" :key="synergy.id" :title="synergy.text"><CheckCircle2 :size="14" aria-hidden="true" /><b>{{ synergy.name }}</b><small>{{ synergy.text }}</small></span>
-                    </div>
-
-                    <div v-if="activeDaoTrialRun.sealOffer.length" class="dao-trial-seal-offer">
-                      <div class="dao-trial-offer-head">
-                        <span>择一道印收入本轮</span>
-                        <button class="secondary compact-button" type="button" :disabled="!activeDaoTrialRun.canReroll || isActionPending('/api/dao-trial/advance')" @click="rerollDaoTrialSeals">
-                          <RefreshCw :size="14" aria-hidden="true" /> 重观 · 1悟机
-                        </button>
-                      </div>
-                      <button v-for="seal in activeDaoTrialRun.sealOffer" :key="seal.id" type="button" :disabled="isActionPending('/api/dao-trial/advance')" @click="chooseDaoTrialSeal(seal.id)">
-                        <span>{{ seal.school }}</span><strong>{{ seal.name }}</strong><small>{{ seal.text }}</small>
-                      </button>
-                    </div>
-
-                    <div v-else-if="activeDaoTrialRun.currentNode?.type === 'battle'" class="dao-trial-battle-action">
-                      <button class="primary" type="button" :disabled="isActionPending('/api/dao-trial/advance')" @click="fightDaoTrial">
-                        <Play :size="15" aria-hidden="true" />
-                        <strong>开始战斗</strong>
-                      </button>
-                    </div>
-
-                    <div v-else class="dao-trial-event-options">
-                      <span>此处如何取舍</span>
-                      <button v-for="option in activeDaoTrialRun.eventOptions" :key="option.id" type="button" :disabled="isActionPending('/api/dao-trial/advance')" @click="chooseDaoTrialEvent(option.id)">
-                        <strong>{{ option.label }}</strong><small>{{ option.hint }}</small>
-                      </button>
-                    </div>
-                  </section>
-
-                  <aside class="dao-trial-seal-rack">
-                    <strong>本轮道印</strong>
-                  <span v-for="seal in activeDaoTrialRun.seals" :key="seal.id" :title="seal.text"><b>{{ seal.name }}</b><small>{{ seal.school }}</small></span>
-                    <p v-if="!activeDaoTrialRun.seals.length">首战得胜后可选择第一道道印。</p>
-                  </aside>
-                </div>
-              </div>
-            </template>
-
-            <template v-else>
-              <div class="dao-trial-route-grid">
-                <button
-                  v-for="route in daoTrialState.routes"
-                  :key="route.id"
-                  type="button"
-                  :class="['panel', `route-${route.accent}`, { active: selectedDaoTrialRoute?.id === route.id }]"
-                  @click="selectedDaoTrialRouteId = route.id"
-                >
-                  <span class="dao-route-root"><img :src="rootIconPath(route.rootKey)" alt=""></span>
-                  <span><small>七节点 · 路线精通 {{ daoTrialState.routeMastery?.[route.id]?.level || 0 }} 级</small><strong>{{ route.name }}</strong><em>{{ route.subtitle }}</em><small>通关 {{ daoTrialState.routeMastery?.[route.id]?.clears || 0 }} 次 · 最佳 {{ daoTrialState.routeMastery?.[route.id]?.bestScore || 0 }} 分</small></span>
-                </button>
-              </div>
-
-              <div class="panel dao-trial-prepare">
-                <div class="section-head compact">
-                  <div><h3>选择同行者</h3><p>同行者只在本轮提供一次有上限的支援；无同行者也可独自问道。</p></div>
-                  <button class="primary" type="button" :disabled="!selectedDaoTrialRoute || isActionPending('/api/dao-trial/start')" @click="startSelectedDaoTrial">
-                    <Compass :size="16" aria-hidden="true" />
-                    {{ isActionPending("/api/dao-trial/start") ? "踏入中..." : daoTrialState.attemptsRemaining > 0 ? `踏入${selectedDaoTrialRoute?.name || '秘境'}` : "开始无奖励演练" }}
-                  </button>
-                </div>
-                <div class="dao-trial-companion-list">
-                  <button type="button" :class="{ active: !selectedDaoTrialCompanionId }" @click="selectedDaoTrialCompanionId = ''">
-                    <span class="dao-companion-none">独</span><span><strong>独自问道</strong><small>不获得同行支援</small></span>
-                  </button>
-                  <button v-for="entry in daoTrialState.companions" :key="entry.person.id" type="button" :class="{ active: selectedDaoTrialCompanionId === entry.person.id }" @click="selectedDaoTrialCompanionId = entry.person.id">
-                    <CharacterPortrait :person="entry.person" size="sm" />
-                    <span><strong>{{ entry.person.name }}<small v-if="isNpcFortuneResonant(entry.person)" class="npc-fortune-badge">天运共鸣</small></strong><small>{{ entry.neutral ? "临时同道" : entry.relationship }} · {{ entry.support.text }}</small><small class="dao-trial-companion-relation"><span>亲和 <b>{{ entry.affinity }}</b></span><span>敬意 <b>{{ entry.respect }}</b></span></small></span>
-                  </button>
-                </div>
-              </div>
-
-              <section class="panel dao-trial-year-goals">
-                <div class="section-head compact"><div><h3>年度问道志</h3><p>每年 52 期；只记录正式挑战，演练不会推进年度进度。</p></div><span class="tag">第 {{ daoTrialState.yearGoals?.year || 1 }} 年</span></div>
-                <div class="dao-trial-goal-grid">
-                  <div v-for="goal in daoTrialState.yearGoals?.goals || []" :key="goal.id" :class="{ complete: goal.completed }">
-                    <span><b>{{ goal.label }}</b><small>{{ Math.min(goal.current, goal.target) }} / {{ goal.target }}</small></span>
-                    <i><em :style="{ width: `${Math.min(100, (goal.current / Math.max(1, goal.target)) * 100)}%` }"></em></i>
-                  </div>
-                </div>
-              </section>
-
-              <div class="grid dao-trial-lower-grid">
-                <section class="panel dao-trial-seal-catalog">
-                  <div class="section-head compact"><div><h3>道印图鉴</h3><p>二百五十六道印只在当轮生效，不叠加到主世界；同流派道印可激活共鸣。</p></div><span class="tag">{{ daoTrialState.sealCatalog?.length || 0 }} 道</span></div>
-                  <div><span v-for="seal in daoTrialState.sealCatalog" :key="seal.id" :title="seal.text"><b>{{ seal.name }}</b><small>{{ seal.school }}</small></span></div>
-                </section>
-                <section class="panel dao-trial-history">
-                  <div class="section-head compact"><div><h3>问道记录</h3><p>本期与往期最近十二次结果。</p></div><button class="secondary compact-button" type="button" @click="toggleDaoTrialArchive"><BookOpen :size="14" aria-hidden="true" /> {{ daoTrialArchiveOpen ? "收起档案" : `完整档案 · ${daoTrialArchive.total || daoTrialState.history?.length || 0}` }}</button></div>
-                  <div class="timeline detail-scroll">
-                    <button v-for="record in daoTrialState.history" :key="record.id" class="event event-button" :class="{ gold: record.success, bad: !record.success, replayable: record.lastReplayId }" type="button" :disabled="!record.lastReplayId" @click="openEncounterReplay({ replayId: record.lastReplayId })">
-                      <strong>第 {{ record.cycle }} 期 · {{ record.routeName }} · {{ record.result }}</strong>
-                      <span>最深 {{ record.floor || record.nodesCleared }} 层 · {{ record.score }} 分 · {{ record.sealIds?.length || 0 }} 道印</span>
-                      <small>{{ record.practice ? "演练" : `正式第 ${record.attempt} 次` }} · {{ daoTrialRecordDate(record) }} · {{ daoTrialRewardText(record) }}</small>
-                    </button>
-                    <div v-if="!daoTrialState.history?.length" class="empty">尚未留下问道记录。</div>
-                  </div>
-                  <div v-if="daoTrialArchiveOpen" class="dao-trial-archive">
-                    <div class="dao-trial-archive-toolbar">
-                      <select v-model="daoTrialArchiveFilter.routeId" aria-label="按问道路线筛选" @change="loadDaoTrialArchive(true)"><option value="">全部路线</option><option v-for="route in daoTrialState.routes" :key="route.id" :value="route.id">{{ route.name }}</option></select>
-                      <span>已载入 {{ daoTrialArchive.items.length }} / {{ daoTrialArchive.total }}</span>
-                    </div>
-                    <div class="dao-trial-archive-list">
-                      <button v-for="record in daoTrialArchive.items" :key="record.id" type="button" :disabled="!record.lastReplayId" @click="openEncounterReplay(record)"><span><b>第 {{ record.cycle }} 期 · {{ record.routeName }}</b><small>{{ record.affixName }} · {{ record.practice ? "演练" : `正式第 ${record.attempt} 次` }}</small><small>{{ daoTrialRecordDate(record) }} · {{ daoTrialRewardText(record) }}</small></span><em>{{ record.result }} · {{ record.score }} 分</em></button>
-                      <div v-if="!daoTrialArchive.items.length && !daoTrialArchiveLoading" class="empty">暂无更多问道记录。</div>
-                    </div>
-                    <button v-if="daoTrialArchive.hasMore" class="secondary" type="button" :disabled="daoTrialArchiveLoading" @click="loadDaoTrialArchive(false)">{{ daoTrialArchiveLoading ? "翻阅中..." : "继续翻阅" }}</button>
-                  </div>
-                </section>
-              </div>
-            </template>
-          </div>
-
-          <div v-else-if="selectedDungeonDay && activeDungeonRecordTab === 'blood'" class="panel dungeon-record-panel">
+          <div v-if="selectedDungeonDay && activeDungeonRecordTab === 'blood'" class="panel dungeon-record-panel">
             <div class="section-head compact">
               <div>
                 <h3>血色禁地</h3>
@@ -5208,7 +5022,7 @@ import {
   Minimize2
 } from "lucide-vue-next";
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from "vue";
-import { clearCachedState, getAdminAccounts, getBattleReplay, getCachedState, getCultivatorDetail, getCurrentUser, getDaoTrialHistory, getDuelDayPage, getDuelReplay, getState, login, logout, postAction, register, saveCachedState, setAdminActiveAccount, setAdminManagedAccount } from "./api";
+import { clearCachedState, getAdminAccounts, getBattleReplay, getCachedState, getCultivatorDetail, getCurrentUser, getDuelDayPage, getDuelReplay, getState, login, logout, postAction, register, saveCachedState, setAdminActiveAccount, setAdminManagedAccount } from "./api";
 import { replayStatMax } from "./battleReplay";
 import CharacterPortrait from "./components/CharacterPortrait.vue";
 import DaoTrialAnalytics from "./components/DaoTrialAnalytics.vue";
@@ -5431,10 +5245,6 @@ const daoTrialCatalogRarity = ref("");
 const daoTrialCatalogDiscovery = ref("");
 const daoTrialCatalogPage = ref(1);
 const daoTrialCatalogPageSize = 48;
-const daoTrialArchiveOpen = ref(false);
-const daoTrialArchiveLoading = ref(false);
-const daoTrialArchive = reactive({ items: [], total: 0, offset: 0, hasMore: false });
-const daoTrialArchiveFilter = reactive({ routeId: "" });
 const showDungeonLoot = ref(false);
 const showDungeonBestiary = ref(false);
 const selectedStarSeaCycle = ref(null);
@@ -7117,30 +6927,6 @@ function encounterChoiceHint(choice) {
 
 function selectEncounter(eventId) {
   if (pendingEncounters.value.some((event) => event.id === eventId)) selectedEncounterId.value = eventId;
-}
-
-async function loadDaoTrialArchive(reset = false) {
-  if (daoTrialArchiveLoading.value) return;
-  daoTrialArchiveLoading.value = true;
-  const generation = authGeneration;
-  try {
-    const offset = reset ? 0 : daoTrialArchive.items.length;
-    const result = await getDaoTrialHistory({ offset, limit: 24, routeId: daoTrialArchiveFilter.routeId });
-    if (generation !== authGeneration) return;
-    daoTrialArchive.items = reset ? (result.items || []) : [...daoTrialArchive.items, ...(result.items || [])];
-    daoTrialArchive.total = Number(result.total) || 0;
-    daoTrialArchive.offset = Number(result.offset) || 0;
-    daoTrialArchive.hasMore = Boolean(result.hasMore);
-  } catch (archiveError) {
-    error.value = archiveError.message;
-  } finally {
-    daoTrialArchiveLoading.value = false;
-  }
-}
-
-async function toggleDaoTrialArchive() {
-  daoTrialArchiveOpen.value = !daoTrialArchiveOpen.value;
-  if (daoTrialArchiveOpen.value && !daoTrialArchive.items.length) await loadDaoTrialArchive(true);
 }
 
 async function chooseEncounter(choice) {
@@ -11305,10 +11091,6 @@ function shortDateText(value) {
 
 function shortDisplayDate(record) {
   return shortDateText(displayDate(record));
-}
-
-function daoTrialRecordDate(record) {
-  return shortDateText(record?.date || dateForDay(record?.endedDay || record?.startedDay || gameState.value.day));
 }
 
 function daoTrialBestText(record) {

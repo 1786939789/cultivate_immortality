@@ -5885,7 +5885,6 @@ body::before {
 
 .dao-trial-prepare .section-head { align-items: center; }
 .dao-trial-prepare .section-head p,
-.dao-trial-seal-catalog .section-head p,
 .dao-trial-history .section-head p { color: #624d32; }
 .dao-trial-companion-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; }
 .dao-trial-companion-list > button { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; min-height: 62px; padding: 7px 9px; color: #f0e3c6; border-color: #76643f; background: #30382f; text-align: left; box-shadow: inset 0 0 0 1px rgba(255, 232, 170, .04); }
@@ -6062,22 +6061,8 @@ body::before {
 .dao-trial-catalog-pager span { color: #695338; font-variant-numeric: tabular-nums; }
 
 .dao-trial-lower-grid { grid-template-columns: minmax(0, 1.4fr) minmax(300px, .8fr); }
-.dao-trial-seal-catalog > div:last-child { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
-.dao-trial-seal-catalog > div:last-child > span { display: grid; gap: 2px; min-width: 0; padding: 7px 8px; border: 1px solid #756440; border-radius: 3px; background: #333a31; }
-.dao-trial-seal-catalog b { color: #ffe09a; overflow-wrap: anywhere; }
-.dao-trial-seal-catalog small { color: #c6d2c3; }
 .dao-trial-history .detail-scroll { max-height: 320px; }
 .dao-trial-history .empty { color: #4f3b24; }
-.dao-trial-archive { display: grid; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(109, 76, 36, .18); }
-.dao-trial-archive-toolbar { display: flex; align-items: center; gap: 8px; }
-.dao-trial-archive-toolbar select { min-height: 30px; color: #5a4125; border-color: rgba(99, 67, 31, .25); background: rgba(255, 250, 232, .76); }
-.dao-trial-archive-toolbar span { color: #806747; font-size: 12px; }
-.dao-trial-archive-list { display: grid; gap: 6px; max-height: 280px; overflow: auto; }
-.dao-trial-archive-list > button { display: flex; justify-content: space-between; gap: 8px; min-width: 0; padding: 7px 9px; color: #60472a; border-color: rgba(99, 67, 31, .16); background: rgba(247, 233, 198, .4); text-align: left; }
-.dao-trial-archive-list > button > span { display: grid; gap: 2px; min-width: 0; }
-.dao-trial-archive-list b, .dao-trial-archive-list em { overflow-wrap: anywhere; }
-.dao-trial-archive-list small { color: #806747; }
-.dao-trial-archive-list em { color: #6b5638; font-style: normal; white-space: nowrap; }
 
 @media (max-width: 1040px) {
   .encounter-home-body { grid-template-columns: 112px minmax(0, 1fr); }
@@ -6088,7 +6073,6 @@ body::before {
   .dao-trial-seal-rack { grid-column: 1 / -1; grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .dao-trial-seal-rack > strong,
   .dao-trial-seal-rack > p { grid-column: 1 / -1; }
-  .dao-trial-seal-catalog > div:last-child { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .dao-trial-catalog-toolbar { grid-template-columns: minmax(200px, 1.5fr) repeat(2, minmax(120px, 1fr)); }
   .dao-trial-catalog-toolbar > span { text-align: left; }
   .dao-trial-catalog-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -6133,13 +6117,10 @@ body::before {
   .dao-trial-enemy-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dao-trial-score-breakdown { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dao-trial-seal-rack { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .dao-trial-seal-catalog > div:last-child { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dao-trial-companion-list { grid-template-columns: minmax(0, 1fr); }
   .dao-trial-affix-banner { grid-template-columns: auto auto; }
   .dao-trial-affix-banner small { grid-column: 1 / -1; }
   .dao-trial-goal-grid { grid-template-columns: minmax(0, 1fr); }
-  .dao-trial-archive-list > button { flex-direction: column; }
-  .dao-trial-archive-list em { white-space: normal; }
   .dao-trial-resonance-progress { grid-template-columns: minmax(0, 1fr); }
   .dao-trial-catalog .section-head { align-items: stretch; flex-direction: column; }
   .dao-trial-catalog-modes { align-self: stretch; }
@@ -15608,7 +15589,6 @@ body::before {
 
 .view.active .dao-trial-header p,
 .view.active .dao-trial-prepare .section-head p,
-.view.active .dao-trial-seal-catalog .section-head p,
 .view.active .dao-trial-history .section-head p,
 .view.active .dao-trial-year-goals .section-head p {
   color: var(--trial-muted);
@@ -15975,15 +15955,13 @@ body::before {
 
 .view.active .dao-trial-prepare,
 .view.active .dao-trial-year-goals,
-.view.active .dao-trial-history,
-.view.active .dao-trial-seal-catalog {
+.view.active .dao-trial-history {
   padding: 18px;
 }
 
 .view.active .dao-trial-prepare .section-head h3,
 .view.active .dao-trial-year-goals .section-head h3,
-.view.active .dao-trial-history .section-head h3,
-.view.active .dao-trial-seal-catalog .section-head h3 {
+.view.active .dao-trial-history .section-head h3 {
   color: #4b3013;
   font-size: 21px;
 }
@@ -16163,8 +16141,7 @@ body::before {
   .view.active .dao-trial-header,
   .view.active .dao-trial-prepare,
   .view.active .dao-trial-year-goals,
-  .view.active .dao-trial-history,
-  .view.active .dao-trial-seal-catalog {
+  .view.active .dao-trial-history {
     padding: 15px;
   }
 
