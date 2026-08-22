@@ -1965,15 +1965,16 @@
                     </div>
                     <div v-else-if="activeDaoTrialRun.currentNode?.type === 'battle' && activeDaoTrialRun.opponentPreview" class="dao-trial-enemy-preview">
                       <div class="dao-trial-enemy-head">
-                        <CharacterPortrait :person="activeDaoTrialRun.opponentPreview.person" size="lg" />
-                        <span><small>{{ activeDaoTrialRun.opponentPreview.kind }} · {{ activeDaoTrialRun.opponentPreview.realm }} · {{ activeDaoTrialRun.opponentPreview.sect }}</small><strong>{{ activeDaoTrialRun.opponentPreview.name }}</strong><em>{{ activeDaoTrialRun.opponentPreview.rootName }} · {{ activeDaoTrialRun.opponentPreview.skill }}</em></span>
+                        <MonsterEmblem v-if="activeDaoTrialRun.opponentPreview.encounterKind === 'monster'" :monster="activeDaoTrialRun.opponentPreview" size="lg" />
+                        <CharacterPortrait v-else :person="activeDaoTrialRun.opponentPreview.person" size="lg" />
+                        <span><small>{{ activeDaoTrialRun.opponentPreview.kind }} · {{ activeDaoTrialRun.opponentPreview.realm }} · {{ activeDaoTrialRun.opponentPreview.sect }}</small><strong>{{ activeDaoTrialRun.opponentPreview.name }}</strong><em>{{ activeDaoTrialRun.opponentPreview.rootName }} · {{ activeDaoTrialRun.opponentPreview.skill }}<template v-if="activeDaoTrialRun.opponentPreview.archetypeLabel"> · {{ activeDaoTrialRun.opponentPreview.archetypeLabel }}</template></em></span>
                         <b :class="`threat-${activeDaoTrialRun.opponentPreview.threat.key}`">{{ activeDaoTrialRun.opponentPreview.threat.label }}</b>
                       </div>
                       <div class="dao-trial-power-matchup" aria-label="双方战力对比">
                         <span><small>当前状态战力</small><strong>{{ activeDaoTrialRun.opponentPreview.playerPower }}</strong></span>
                         <i>对阵</i>
-                        <span><small>投影战力</small><strong>{{ activeDaoTrialRun.opponentPreview.power }}</strong></span>
-                        <em>你的满状态 {{ activeDaoTrialRun.opponentPreview.playerMaxPower }} · 对方真实战力 {{ activeDaoTrialRun.opponentPreview.basePower }} · {{ daoTrialProjectionText(activeDaoTrialRun.opponentPreview) }} · 约为你当前状态的 {{ activeDaoTrialRun.opponentPreview.powerRatio }}%</em>
+                        <span><small>秘境战力</small><strong>{{ activeDaoTrialRun.opponentPreview.power }}</strong></span>
+                        <em>你的满状态 {{ activeDaoTrialRun.opponentPreview.playerMaxPower }} · 对方基础战力 {{ activeDaoTrialRun.opponentPreview.basePower }} · {{ daoTrialProjectionText(activeDaoTrialRun.opponentPreview) }} · 约为你当前状态的 {{ activeDaoTrialRun.opponentPreview.powerRatio }}%</em>
                       </div>
                       <div class="dao-trial-enemy-stats">
                         <span><Sword :size="14" aria-hidden="true" /><small>攻击</small><b>{{ activeDaoTrialRun.opponentPreview.attack }}</b></span>
@@ -1982,7 +1983,7 @@
                         <span><Eye :size="14" aria-hidden="true" /><small>神识</small><b>{{ activeDaoTrialRun.opponentPreview.divineSense }}</b></span>
                         <span><Waves :size="14" aria-hidden="true" /><small>法力</small><b>{{ activeDaoTrialRun.opponentPreview.maxMana }}</b></span>
                       </div>
-                      <p class="dao-trial-opponent-stake">若守关修士获胜，其将取得本轮行囊原始奖励的 60%；败北则不获得资源。</p>
+                      <p class="dao-trial-opponent-stake">{{ activeDaoTrialRun.opponentPreview.encounterKind === 'monster' ? '战胜妖物可获得本层奖励；妖物获胜则本场不结算奖励。' : '若守关修士获胜，其将取得本轮行囊原始奖励的 60%；玩家保留 40%。' }}<template v-if="activeDaoTrialRun.opponentPreview.enhancePercent"> · 秘境战意 +{{ activeDaoTrialRun.opponentPreview.enhancePercent }}%</template> · 预计灵石 +{{ activeDaoTrialRun.opponentPreview.rewardPreview?.spirit || 0 }}<template v-if="activeDaoTrialRun.opponentPreview.rewardPreview?.dust"> · 灵尘 +{{ activeDaoTrialRun.opponentPreview.rewardPreview.dust }}</template></p>
                       <button class="primary" type="button" :disabled="isActionPending('/api/dao-trial/advance')" @click="fightDaoTrial"><Play :size="15" aria-hidden="true" /><strong>开始战斗</strong></button>
                     </div>
                     <div v-else class="dao-trial-event-options"><span>此处如何取舍</span><button v-for="option in activeDaoTrialRun.eventOptions" :key="option.id" type="button" :disabled="isActionPending('/api/dao-trial/advance')" @click="chooseDaoTrialEvent(option.id)"><strong>{{ option.label }}</strong><small>{{ option.hint }}</small></button></div>
@@ -5542,13 +5543,13 @@ const adminWikiArticles = [
       {
         title: "问道秘境：七日一期的路线试炼",
         paragraphs: [
-          "秘境页提供每日可主动进入的问道路线试炼，同时每 7 天更换一期异象。当前有金石关、风雷径、玄阴泽三条路线，前 15 层为核心层，第 16 层后进入问天阶；事件与调息层保留，所有战斗层由真实修士守关。",
+          "秘境页提供每日可主动进入的问道路线试炼，同时每 7 天更换一期异象。当前有金石关、风雷径、玄阴泽三条路线，前 15 层为核心层，第 16 层后进入问天阶；战斗层会在真实修士与路线妖物之间轮换，精英与首领拥有更高强度和奖励。",
           "每日补充 1 枚问道签，最多积存 2 枚；没有问道签时仍可无奖励演练。路线中的选择会改变血量、法力、悟机、道印和同行者效果。"
         ],
         bullets: [
           "每期会应用一个异象，例如敌方投影战力 +6%、技能消耗提高 6%、治疗效果提高 12%或问心得分提高 20%。",
           "学习、运动、工作、生活四类现实任务会在当天首轮正式游历中分别提供免费重观、血量提升、灵石加成和回春符。",
-          "每轮不会重复遇到同一名守关修士，同行者也不会成为对手；NPC 以真实身份和养成属性生成入境快照，再按当前层数投影战力。",
+          "每轮不会重复遇到同一名守关修士，同行者也不会成为对手；NPC 以真实身份和养成属性生成入境快照，只接受秘境战意向上强化，妖物则按路线机制生成。",
           "战败时玩家带回原始行囊的 40%，胜方 NPC 获得余下 60%；主动离境带回 80%，检查点安全收功按 120% 结算。演练不会给 NPC 发放资源。",
           "道印按攻伐、守御、灵息、身法、险道、生机分为六类，效果覆盖攻击、防御、血量、神识、法力、技能消耗、冷却、治疗和战后恢复。",
           "问道秘境记录会保存路线熟练度、最高得分、精英/首领通关和年度目标进度。"
@@ -11137,7 +11138,7 @@ function daoTrialRewardText(record) {
 function daoTrialProjectionText(opponent) {
   const percent = Number(opponent?.projectionPercent) || 0;
   if (percent === 0) return "秘境维持原势";
-  return `${opponent?.projectionLabel || (percent > 0 ? "秘境加持" : "秘境压制")} ${signedNumber(percent)}%`;
+  return `${opponent?.projectionLabel || (percent > 0 ? "秘境战意" : "秘境维持")} ${signedNumber(percent)}%`;
 }
 
 function daoTrialHarmonyRewardText(reward) {

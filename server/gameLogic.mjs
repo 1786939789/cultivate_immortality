@@ -8441,11 +8441,16 @@ const encounterMinGapDays = 2;
 const encounterMaxGapDays = 4;
 const encounterActiveChainLimit = 2;
 const encounterFamilyCooldownDays = 30;
-const daoTrialStateVersion = 5;
+const daoTrialStateVersion = 6;
 const daoTrialHistoryLimit = 104;
 const daoTrialDailyTicketGrant = 1;
 const daoTrialTicketCap = 2;
-const daoTrialNpcProjectionFactor = 0.9;
+const daoTrialNpcProjectionFactor = 1;
+const daoTrialNpcPreferredRate = 0.82;
+const daoTrialNpcRecentDays = 3;
+const daoTrialNpcPoolReturnDays = 3;
+const daoTrialNpcApexPoolSize = 12;
+const daoTrialBattleRewardCap = { spirit: 36, dust: 6 };
 const daoTrialHarmonyMaxPerRoute = 15;
 const daoTrialCoreRewardDefinitions = {
   1: { xp: 2, spiritBase: 8, spiritPerStage: 2, dustBase: 0, dustPerTier: 0, label: "入境" },
@@ -9184,6 +9189,7 @@ function createDaoTrialState(day = 1) {
     discoveredLawIds: [],
     discoveredSealIds: [],
     lawPity: { withoutGold: 0, withoutDiamond: 0 },
+    npcTrialUsage: {},
     activeRun: null,
     history: [],
     yearHistory: [],
@@ -9228,6 +9234,7 @@ function ensureDaoTrialState(state) {
       discoveredLawIds: migratedLawIds,
       discoveredSealIds: migratedSealIds,
       lawPity: previous.lawPity,
+      npcTrialUsage: previous.npcTrialUsage,
       activeRun: previous.activeRun || null,
       routeMastery: previous.routeMastery,
       yearGoals: previous.yearGoals,
@@ -9251,6 +9258,17 @@ function ensureDaoTrialState(state) {
   state.daoTrial.lawPity ??= { withoutGold: 0, withoutDiamond: 0 };
   state.daoTrial.lawPity.withoutGold = Math.max(0, Math.floor(Number(state.daoTrial.lawPity.withoutGold) || 0));
   state.daoTrial.lawPity.withoutDiamond = Math.max(0, Math.floor(Number(state.daoTrial.lawPity.withoutDiamond) || 0));
+  state.daoTrial.npcTrialUsage = state.daoTrial.npcTrialUsage && typeof state.daoTrial.npcTrialUsage === "object"
+    ? Object.fromEntries(Object.entries(state.daoTrial.npcTrialUsage).filter(([id, record]) => (
+      state.npcs.some((npc) => npc.id === id) && record && typeof record === "object"
+    )).map(([id, record]) => [id, {
+      lastDay: Math.max(0, Math.floor(Number(record.lastDay) || 0)),
+      recentDays: [...new Set((record.recentDays || []).map((day) => Math.floor(Number(day) || 0)).filter((day) => day > 0))].slice(-8),
+      count: Math.max(0, Math.floor(Number(record.count) || 0)),
+      lastDayCount: Math.max(0, Math.floor(Number(record.lastDayCount) || 0)),
+      tier: ["preferred", "secondary", "fallback"].includes(record.tier) ? record.tier : "preferred"
+    }]))
+    : {};
   state.daoTrial.routeMastery ??= createDaoTrialState(state.day).routeMastery;
   state.daoTrial.yearGoals ??= createDaoTrialState(state.day).yearGoals;
   state.daoTrial.yearHistory ??= [];
@@ -9271,6 +9289,7 @@ function ensureDaoTrialState(state) {
     const discoveredLawIds = state.daoTrial.discoveredLawIds;
     const discoveredSealIds = state.daoTrial.discoveredSealIds;
     const lawPity = state.daoTrial.lawPity;
+    const npcTrialUsage = state.daoTrial.npcTrialUsage;
     let yearGoals = state.daoTrial.yearGoals;
     const yearHistory = state.daoTrial.yearHistory || [];
     const expectedYear = Math.floor((expectedCycle - 1) / 52) + 1;
@@ -9278,7 +9297,7 @@ function ensureDaoTrialState(state) {
       yearHistory.unshift({ ...yearGoals, endedCycle: expectedCycle - 1 });
       yearGoals = { ...createDaoTrialState(state.day).yearGoals, year: expectedYear };
     }
-    state.daoTrial = { ...createDaoTrialState(state.day), history, routeMastery, yearGoals, yearHistory: yearHistory.slice(0, 8), tickets, lastTicketDay, lastBoonDay, recentLawOfferIds, recentSealOfferIds, discoveredLawIds, discoveredSealIds, lawPity };
+    state.daoTrial = { ...createDaoTrialState(state.day), history, routeMastery, yearGoals, yearHistory: yearHistory.slice(0, 8), tickets, lastTicketDay, lastBoonDay, recentLawOfferIds, recentSealOfferIds, discoveredLawIds, discoveredSealIds, lawPity, npcTrialUsage };
     changed = true;
   }
   state.daoTrial.claimedMilestones = [...new Set(state.daoTrial.claimedMilestones || [])];
@@ -9392,9 +9411,13 @@ function ensureDaoTrialState(state) {
         baselinePower: trialWorldBaselinePower(state),
         playerPower: powerOf(state.player, state, { includeDailyRootFortune: false })
       };
-      activeRun.opponentIds = [...new Set((activeRun.opponentIds || []).filter((id) => state.npcs.some((npc) => npc.id === id)))];
+      activeRun.opponentIds = [...new Set((activeRun.opponentIds || []).filter((id) => (
+        state.npcs.some((npc) => npc.id === id) || Object.values(activeRun.opponentSnapshots || {}).some((snapshot) => snapshot?.id === id)
+      )))];
       activeRun.opponentSnapshots = activeRun.opponentSnapshots && typeof activeRun.opponentSnapshots === "object"
-        ? Object.fromEntries(Object.entries(activeRun.opponentSnapshots).filter(([, snapshot]) => state.npcs.some((npc) => npc.id === snapshot?.npcId)))
+        ? Object.fromEntries(Object.entries(activeRun.opponentSnapshots).filter(([, snapshot]) => (
+          snapshot?.kind === "monster" || state.npcs.some((npc) => npc.id === snapshot?.npcId)
+        )))
         : {};
       activeRun.opponentResults = Array.isArray(activeRun.opponentResults) ? activeRun.opponentResults.slice(0, 80) : [];
       activeRun.defeatedByOpponentId = state.npcs.some((npc) => npc.id === activeRun.defeatedByOpponentId) ? activeRun.defeatedByOpponentId : "";
@@ -9413,7 +9436,7 @@ function trialCompanionSupport(state, npc, relationship = null) {
   const npcPower = Math.max(1, powerOf(npc, state, { includeDailyRootFortune: false }));
   const powerFactor = clamp(Math.sqrt(npcPower / playerPower), 0.75, 1.35);
   const relationFactor = clamp(0.85 + score / 800, 0.7, 1.15);
-  const potency = clamp(0.045 * powerFactor * relationFactor, 0.025, 0.14);
+  const potency = clamp(0.034 * powerFactor * relationFactor, 0.02, 0.1);
   const supportType = relation.respect > Math.max(20, relation.affinity) ? "assault" : "sustain";
   const skillVariant = stableHash(`companion-skill|${npc.id}`) % 3;
   const skills = supportType === "assault"
@@ -9692,12 +9715,45 @@ function trialWorldBaselinePower(state) {
   return nearby.length ? nearby[Math.floor(nearby.length / 2)] : powerOf(state.player, state, { includeDailyRootFortune: false });
 }
 
-function trialEnemyPowerFactor(node, floor) {
-  const coreDepth = Math.min(daoTrialCoreFloorCount - 1, floor - 1);
-  const endlessDepth = Math.max(0, floor - daoTrialCoreFloorCount);
-  const depthFactor = 0.82 + coreDepth * 0.032 + endlessDepth * 0.045 + Math.floor(endlessDepth / 5) * 0.04;
-  const encounterFactor = node.boss ? 0.98 : node.elite ? 0.98 : 0.94;
-  return depthFactor * encounterFactor;
+function trialEnemyPowerFactor(node, floor, seed = "") {
+  const safeFloor = Math.max(1, Math.floor(Number(floor) || 1));
+  const base = safeFloor <= 2
+    ? 0.5
+    : safeFloor <= 5
+      ? 0.65
+      : safeFloor <= 8
+        ? 0.8
+        : safeFloor <= 12
+          ? 0.98
+          : safeFloor <= 15
+            ? 1.15
+            : 1.3 + Math.min(0.2, (safeFloor - 16) * 0.025);
+  const jitter = (stableUnit(`${seed}|floor-target`) - 0.5) * (safeFloor <= 5 ? 0.06 : 0.08);
+  const nodeMultiplier = node?.boss
+    ? safeFloor <= 5 ? 1.25 : safeFloor <= 10 ? 1.3 : 1.35
+    : node?.elite
+      ? safeFloor <= 5 ? 1.12 : safeFloor <= 10 ? 1.15 : 1.18
+      : 1;
+  return Math.max(0.98, (base + jitter) * nodeMultiplier);
+}
+
+function trialEncounterKindProbabilities(node, floor, apex = false) {
+  const safeFloor = Math.max(1, Math.floor(Number(floor) || 1));
+  let npc = safeFloor <= 2 ? 0.18 : safeFloor <= 5 ? 0.3 : safeFloor <= 10 ? 0.55 : safeFloor <= 15 ? 0.65 : 0.6;
+  if (node?.boss) npc = 0.75;
+  else if (node?.elite) npc = 0.65;
+  if (apex) npc = Math.min(0.7, npc + 0.1);
+  return { npc, monster: 1 - npc };
+}
+
+function trialNpcUsageTier(state, npcId) {
+  const record = state.daoTrial?.npcTrialUsage?.[npcId];
+  if (!record?.lastDay) return "preferred";
+  const age = Math.max(0, Number(state.day) - Number(record.lastDay));
+  const recentDays = (record.recentDays || []).filter((day) => day >= state.day - daoTrialNpcRecentDays + 1);
+  if (recentDays.length >= 2 || (age === 0 && Number(record.lastDayCount) >= 2)) return "fallback";
+  if (age < daoTrialNpcPoolReturnDays * 2 || recentDays.length) return "secondary";
+  return "preferred";
 }
 
 function trialOpponentSnapshot(state, npc) {
@@ -9716,7 +9772,8 @@ function trialOpponentSnapshot(state, npc) {
     skillId: npc.skillId,
     skillRanks: { ...(npc.skillRanks || {}) },
     stats: { ...stats },
-    basePower: powerOfStats(stats)
+    basePower: powerOfStats(stats),
+    kind: "npc"
   };
 }
 
@@ -9728,7 +9785,10 @@ function trialOpponentSelectionScore(state, run, node, npc) {
   const realmSpan = floor <= 5 ? 12 : floor <= 10 ? 22 : 40;
   const powerSpan = Math.log(floor <= 5 ? 2 : floor <= 10 ? 3 : 5);
   const realmCloseness = 1 - clamp(Math.abs((Number(npc.realm) || 0) - playerRealm) / realmSpan, 0, 1);
-  const powerCloseness = 1 - clamp(Math.abs(Math.log(npcPower / playerPower)) / powerSpan, 0, 1);
+  const desiredRatio = (run.isApex ?? trialPlayerIsApex(state, run))
+    ? (floor <= 5 ? 1.05 : floor <= 10 ? 1.15 : 1.3)
+    : (floor <= 5 ? 0.64 : floor <= 10 ? 0.88 : floor <= 15 ? 1.04 : 1.18);
+  const powerCloseness = 1 - clamp(Math.abs(Math.log(npcPower / (playerPower * desiredRatio))) / powerSpan, 0, 1);
   const closeness = (realmCloseness + powerCloseness) / 2;
   const closenessWeight = floor <= 5 ? 0.35 : floor <= 10 ? 0.3 : 0.2;
   const randomWeight = 1 - closenessWeight;
@@ -9736,12 +9796,31 @@ function trialOpponentSelectionScore(state, run, node, npc) {
   return random * randomWeight + closeness * closenessWeight;
 }
 
+function trialPlayerIsApex(state, run) {
+  const playerPower = Math.max(1, Number(run.worldSnapshot?.playerPower) || powerOf(state.player, state, { includeDailyRootFortune: false }));
+  const strongestNpc = Math.max(0, ...(state.npcs || []).map((npc) => powerOf(npc, state, { includeDailyRootFortune: false })));
+  return playerPower >= strongestNpc;
+}
+
 function selectTrialOpponent(state, run, node, usedIds) {
   const companionId = run.companion?.person?.id || "";
-  return [...(state.npcs || [])]
+  const candidates = [...(state.npcs || [])]
     .filter((npc) => npc?.id && npc.id !== companionId && !usedIds.has(npc.id))
-    .sort((a, b) => trialOpponentSelectionScore(state, run, node, b) - trialOpponentSelectionScore(state, run, node, a)
-      || a.id.localeCompare(b.id))[0] || null;
+    .map((npc) => ({ npc, tier: trialNpcUsageTier(state, npc.id) }));
+  if (!candidates.length) return null;
+  const apex = run.isApex ?? trialPlayerIsApex(state, run);
+  const preferred = apex
+    ? candidates.filter((entry) => entry.tier === "preferred").sort((a, b) => powerOf(b.npc, state) - powerOf(a.npc, state) || a.npc.id.localeCompare(b.npc.id)).slice(0, daoTrialNpcApexPoolSize)
+    : candidates.filter((entry) => entry.tier === "preferred");
+  const secondary = candidates.filter((entry) => entry.tier === "secondary");
+  const fallback = candidates.filter((entry) => entry.tier === "fallback");
+  const roll = stableUnit(`${run.seed}|npc-pool|${node.floor}|${node.id}`);
+  let pool = preferred.length && (roll < daoTrialNpcPreferredRate || !secondary.length) ? preferred : secondary;
+  if (!pool.length) pool = preferred.length ? preferred : fallback;
+  if (!pool.length) pool = candidates;
+  return pool
+    .sort((a, b) => trialOpponentSelectionScore(state, run, node, b.npc) - trialOpponentSelectionScore(state, run, node, a.npc)
+      || a.npc.id.localeCompare(b.npc.id))[0]?.npc || null;
 }
 
 function ensureTrialOpponents(state, run) {
@@ -9749,28 +9828,79 @@ function ensureTrialOpponents(state, run) {
   run.opponentSnapshots = run.opponentSnapshots && typeof run.opponentSnapshots === "object" ? run.opponentSnapshots : {};
   const companionId = run.companion?.person?.id || "";
   const usedIds = new Set();
+  const priorKinds = [];
   for (const node of (run.nodes || []).filter((entry) => entry.type === "battle").sort((a, b) => Number(a.floor) - Number(b.floor))) {
     const floor = Math.max(1, Math.floor(Number(node.floor) || 1));
     const key = String(floor);
     let snapshot = run.opponentSnapshots[key];
-    if (!snapshot?.npcId || snapshot.npcId === companionId || usedIds.has(snapshot.npcId) || !state.npcs.some((npc) => npc.id === snapshot.npcId)) {
-      const npc = selectTrialOpponent(state, run, node, usedIds);
-      if (!npc) {
-        delete run.opponentSnapshots[key];
-        run.opponentPoolExhaustedAt = floor;
-        continue;
+    if (snapshot?.kind === "npc" && (!snapshot.npcId || snapshot.npcId === companionId || usedIds.has(snapshot.npcId) || !state.npcs.some((npc) => npc.id === snapshot.npcId))) snapshot = null;
+    if (snapshot?.kind === "monster" && !snapshot.id) snapshot = null;
+    const recentKinds = priorKinds.slice(-2);
+    const mustUseNpc = floor % 5 === 0 && !priorKinds.slice(-2).includes("npc");
+    const forcedKind = recentKinds.length === 2 && recentKinds[0] === recentKinds[1] ? (recentKinds[0] === "npc" ? "monster" : "npc") : null;
+    if (!snapshot) {
+      const probabilities = trialEncounterKindProbabilities(node, floor, run.isApex ?? trialPlayerIsApex(state, run));
+      const roll = stableUnit(`${run.seed}|encounter-kind|${floor}|${node.id}`);
+      const kind = mustUseNpc || forcedKind === "npc"
+        ? "npc"
+        : forcedKind === "monster"
+          ? "monster"
+          : roll < probabilities.npc ? "npc" : "monster";
+      const npc = kind === "npc" ? selectTrialOpponent(state, run, node, usedIds) : null;
+      if (npc) {
+        snapshot = trialOpponentSnapshot(state, npc);
+        if (!run.practice) {
+          const usage = state.daoTrial.npcTrialUsage ??= {};
+          const record = usage[npc.id] || { lastDay: 0, recentDays: [], count: 0, lastDayCount: 0, tier: "preferred" };
+          record.lastDayCount = record.lastDay === state.day ? Number(record.lastDayCount || 0) + 1 : 1;
+          record.lastDay = state.day;
+          record.recentDays = [...new Set([...(record.recentDays || []), state.day])].slice(-8);
+          record.count = Number(record.count || 0) + 1;
+          record.tier = record.lastDayCount >= 2 ? "fallback" : "secondary";
+          usage[npc.id] = record;
+        }
       }
-      snapshot = trialOpponentSnapshot(state, npc);
+      else {
+        const monsterSeed = `${run.seed}|monster|${floor}|${node.id}`;
+        const route = daoTrialRouteMap[run.routeId];
+        const random = seededBattleRandom(monsterSeed);
+        const intensity = 0.82 + Math.min(0.75, floor * 0.045) + (node.elite ? 0.12 : 0) + (node.boss ? 0.2 : 0);
+        const monster = makeMonster(`${route?.name || "秘境"}·${node.monster || node.name}`, state.player.realm, route?.rootKey, intensity, "", random);
+        const rolledStats = effectiveCombatStats(monster, state, { includeDailyRootFortune: false });
+        const playerPower = Math.max(1, Number(run.worldSnapshot?.playerPower) || powerOf(state.player, state, { includeDailyRootFortune: false }));
+        const monsterTarget = playerPower * trialEnemyPowerFactor(node, floor, run.seed) * clamp(Number(route?.opponentScale) || 1, 0.95, 1.05);
+        const monsterRatio = clamp(monsterTarget / Math.max(1, powerOfStats(rolledStats)), 0.62, 1.18);
+        const stats = Object.fromEntries(["attack", "defense", "maxHp", "maxMana", "divineSense"].map((key) => [
+          key,
+          Math.max(key === "defense" ? 0 : 1, Math.floor((Number(rolledStats[key]) || 0) * monsterRatio))
+        ]));
+        snapshot = {
+          kind: "monster",
+          id: monster.id,
+          name: monster.name,
+          realm: monster.realm,
+          root: { ...monster.root },
+          roots: (monster.roots || []).map((root) => ({ ...root })),
+          primaryRootKey: monster.primaryRootKey,
+          skillId: monster.skillId,
+          archetype: monster.archetype,
+          archetypeLabel: monster.archetypeLabel,
+          archetypeText: monster.archetypeText,
+          stats: { ...stats },
+          basePower: powerOfStats(stats)
+        };
+      }
       run.opponentSnapshots[key] = snapshot;
     }
-    usedIds.add(snapshot.npcId);
+    if (snapshot.kind === "npc") usedIds.add(snapshot.npcId);
+    priorKinds.push(snapshot.kind);
   }
-  run.opponentIds = [...usedIds];
-  if (!run.opponentPoolExhaustedAt || usedIds.size >= (run.nodes || []).filter((node) => node.type === "battle").length) run.opponentPoolExhaustedAt = 0;
+  run.opponentIds = Object.values(run.opponentSnapshots).map((snapshot) => snapshot.kind === "npc" ? snapshot.npcId : snapshot.id).filter(Boolean);
+  run.opponentPoolExhaustedAt = 0;
   return run;
 }
 
-function trialNpcFor(state, run, node) {
+function trialOpponentFor(state, run, node) {
   ensureTrialOpponents(state, run);
   const floor = Math.max(1, Number(node.floor) || run.nodeIndex + 1);
   const snapshot = run.opponentSnapshots?.[String(floor)];
@@ -9778,21 +9908,22 @@ function trialNpcFor(state, run, node) {
   const baseStats = snapshot.stats || {};
   const basePower = Math.max(1, Number(snapshot.basePower) || powerOfStats(baseStats));
   const playerPower = Math.max(1, Number(run.worldSnapshot?.playerPower) || powerOf(state.player, state, { includeDailyRootFortune: false }));
-  const boundedNpcPower = clamp(basePower, playerPower * 0.6, playerPower * 1.6);
-  const baseline = playerPower * 0.75 + boundedNpcPower * 0.25;
   const affix = daoTrialCycleAffixes.find((item) => item.id === run.affixId);
   const firstEase = run.nodeIndex === 0 ? Number(affix?.effects?.firstBattleEase || 0) : 0;
   const scaling = Math.max(0, Number(affix?.effects?.scalingEnemy || 0)) * Math.max(0, Math.ceil(floor / 5) - 1);
   const enemyPower = Number(affix?.effects?.enemyPower || 0);
   const routeScale = clamp(Number(daoTrialRouteMap[run.routeId]?.opponentScale) || 1, 0.8, 1.2);
-  const targetPower = Math.max(48, baseline * trialEnemyPowerFactor(node, floor) * daoTrialNpcProjectionFactor * routeScale * (1 + enemyPower + scaling) * (1 - firstEase));
-  const ratio = clamp(targetPower / basePower, 0.001, 20);
+  const targetPower = Math.max(48, playerPower * trialEnemyPowerFactor(node, floor, run.seed) * routeScale * (1 + enemyPower + scaling) * (1 - firstEase));
+  const isNpc = snapshot.kind !== "monster";
+  const projectedPower = isNpc ? Math.max(basePower, targetPower) : targetPower;
+  const ratio = clamp(projectedPower / basePower, isNpc ? 1 : 0.62, 20);
   const projectedStats = Object.fromEntries(["attack", "defense", "maxHp", "maxMana", "divineSense"].map((key) => [
     key,
     Math.max(key === "defense" ? 0 : 1, Math.floor((Number(baseStats[key]) || 0) * ratio))
   ]));
   return {
-    id: snapshot.npcId,
+    kind: snapshot.kind || "npc",
+    id: snapshot.kind === "monster" ? snapshot.id : snapshot.npcId,
     name: snapshot.name,
     gender: snapshot.gender,
     sect: snapshot.sect,
@@ -9803,6 +9934,9 @@ function trialNpcFor(state, run, node) {
     primaryRootKey: snapshot.primaryRootKey,
     skillId: snapshot.skillId,
     skillRanks: { ...(snapshot.skillRanks || {}) },
+    archetype: snapshot.archetype,
+    archetypeLabel: snapshot.archetypeLabel,
+    archetypeText: snapshot.archetypeText,
     trialStatsAreEffective: true,
     ...projectedStats,
     hp: projectedStats.maxHp,
@@ -9810,9 +9944,38 @@ function trialNpcFor(state, run, node) {
     skillManaBase: projectedStats.maxMana,
     basePower,
     projectionRatio: ratio,
-    targetPower: Math.round(targetPower),
+    targetPower: Math.round(projectedPower),
+    enhancePercent: Math.max(0, Math.round((ratio - 1) * 100)),
     trialFloor: floor
   };
+}
+
+function trialNpcFor(state, run, node) {
+  return trialOpponentFor(state, run, node);
+}
+
+function trialBattleRewardForNode(node, floor) {
+  const safeFloor = Math.max(1, Math.floor(Number(floor) || 1));
+  const phase = safeFloor <= 5 ? 1 : safeFloor <= 10 ? 2 : safeFloor <= 15 ? 3 : 4;
+  const base = { xp: 0, spirit: 2 + Math.min(2, Math.floor((safeFloor - 1) / 5)), dust: safeFloor >= 4 ? 1 : 0 };
+  const multiplier = node?.boss ? 1.7 : node?.elite ? 1.35 : 1;
+  return {
+    xp: Math.min(1, Math.floor(base.xp * multiplier)),
+    spirit: Math.max(0, Math.round(base.spirit * multiplier)),
+    dust: Math.max(0, Math.round(base.dust * multiplier)),
+    multiplier,
+    phase
+  };
+}
+
+function addTrialBattleReward(run, node) {
+  if (run.practice) return null;
+  const reward = trialBattleRewardForNode(node, node?.floor);
+  run.rewards ??= { xp: 0, spirit: 0, dust: 0, milestones: [] };
+  run.rewards.xp += reward.xp;
+  run.rewards.spirit = Math.min(daoTrialBattleRewardCap.spirit, run.rewards.spirit + reward.spirit);
+  run.rewards.dust = Math.min(daoTrialBattleRewardCap.dust, run.rewards.dust + reward.dust);
+  return reward;
 }
 
 function trialMilestoneReward(state, run, node) {
@@ -9891,7 +10054,8 @@ function daoTrialTaskBoonsForDay(state, day = state.day) {
 
 function settleDaoTrialBag(state, run, success, result) {
   const raw = run.rewards || { xp: 0, spirit: 0, dust: 0, milestones: [] };
-  const retention = success ? 1.2 : result === "主动离境" ? 0.8 : 0.4;
+  const defeatedByMonster = !success && run.lastBattle?.opponent?.kind === "monster";
+  const retention = success ? 1.2 : result === "主动离境" ? 0.8 : defeatedByMonster ? 0 : 0.4;
   const workMultiplier = run.taskBoons?.some((boon) => boon.id === "work") ? 1.15 : 1;
   const fortuneXpMultiplier = Math.max(1, Number(run.dailyRootFortuneXpMultiplier) || dailyRootFortuneXpMultiplier(state, state.player, run.startedDay || state.day));
   const settled = {
@@ -9938,6 +10102,19 @@ function recordDaoTrialNpcBattle(state, run, node, opponent, playerWon, replayId
     dust: 0,
     replayId
   });
+}
+
+function recordDaoTrialMonsterBattle(state, run, node, opponent, playerWon, replayId) {
+  if (run.practice) return;
+  run.monsterResults ??= [];
+  run.monsterResults.unshift({
+    id: opponent.id,
+    name: opponent.name,
+    floor: Math.max(1, Math.floor(Number(node.floor) || run.nodeIndex + 1)),
+    playerWon,
+    replayId
+  });
+  run.monsterResults = run.monsterResults.slice(0, 80);
 }
 
 function settleDaoTrialOpponentReward(state, run, success, raw, retention) {
@@ -10121,6 +10298,7 @@ function trialRunSummary(state, run) {
     rewards: run.settledRewards || null,
     taskBoons: run.taskBoons || [],
     opponents: (run.opponentResults || []).map((entry) => ({ ...entry })),
+    monsters: (run.monsterResults || []).map((entry) => ({ ...entry })),
     defeatedBy: run.defeatedByOpponentId
       ? (() => {
         const snapshot = Object.values(run.opponentSnapshots || {}).find((entry) => entry?.npcId === run.defeatedByOpponentId);
@@ -10194,7 +10372,7 @@ function publicTrialRun(state, run) {
   const stats = combatSnapshot(fighter, state);
   let opponentPreview = null;
   if (node?.type === "battle" && route) {
-    const opponent = trialNpcFor(state, run, node);
+    const opponent = trialOpponentFor(state, run, node);
     if (opponent) {
       const playerPenalty = rootCounterPenalty(opponent, fighter) * (1 - clamp(Number(fighter?.trialBuffs?.rootResist) || 0, 0, 0.9));
       const opponentPenalty = rootCounterPenalty(fighter, opponent);
@@ -10220,13 +10398,13 @@ function publicTrialRun(state, run) {
         person: {
           id: opponent.id,
           name: opponent.name,
-          gender: opponent.gender,
-          sect: opponent.sect,
+          gender: opponent.gender || "",
+          sect: opponent.sect || (opponent.kind === "monster" ? "秘境妖域" : ""),
           realm: opponent.realm,
           portraitUrl: opponent.portraitUrl,
           power: opponent.basePower
         },
-        sect: opponent.sect,
+        sect: opponent.sect || (opponent.kind === "monster" ? "秘境妖域" : ""),
         portraitUrl: opponent.portraitUrl,
         attack: opponentBattleStats.attack,
         defense: opponentBattleStats.defense,
@@ -10235,14 +10413,23 @@ function publicTrialRun(state, run) {
         maxMana: opponentBattleStats.maxMana,
         rootCounterPenalty: opponentBattleStats.rootCounterPenalty || 0,
         basePower: opponent.basePower,
+        kindKey: opponent.kind || "npc",
+        encounterKind: opponent.kind || "npc",
+        archetype: opponent.archetype,
+        archetypeLabel: opponent.archetypeLabel,
+        archetypeText: opponent.archetypeText,
+        enhancePercent: Number(opponent.enhancePercent) || 0,
+        rewardPreview: trialBattleRewardForNode(node, node.floor),
         projectionPercent: Math.round((opponent.projectionRatio - 1) * 100),
-        projectionLabel: opponent.projectionRatio >= 1 ? "秘境加持" : "秘境压制",
+        projectionLabel: opponent.projectionRatio >= 1 ? "秘境战意" : "秘境维持",
         power: opponentPower,
         playerPower,
         playerMaxPower,
         powerRatio: Math.round(powerRatio * 100),
         threat,
-        kind: node.boss ? "问心守关者" : node.elite ? "精英守关者" : "守关修士"
+        kind: opponent.kind === "monster"
+          ? (node.boss ? "妖物首领" : node.elite ? "精英妖物" : "秘境妖物")
+          : (node.boss ? "问心守关者" : node.elite ? "精英守关者" : "守关修士")
       };
     }
   }
@@ -10618,6 +10805,7 @@ export function startDaoTrial(state, payload = {}) {
     seed: `dao-trial|${state.rebirth}|${state.daoTrial.cycle}|${attempt}|${route.id}`,
     startedDay: state.day,
     worldSnapshot,
+    isApex: worldSnapshot.playerPower >= Math.max(0, ...(state.npcs || []).map((npc) => powerOf(npc, state, { includeDailyRootFortune: false }))),
     nodeIndex: 0,
     floor: 1,
     maxFloor: 0,
@@ -10659,6 +10847,7 @@ export function startDaoTrial(state, payload = {}) {
     opponentIds: [],
     opponentSnapshots: {},
     opponentResults: [],
+    monsterResults: [],
     defeatedByOpponentId: "",
     combatStats: { battles: 0, rounds: 0, damageDealt: 0, damageTaken: 0, healing: 0, shields: 0, skillCasts: 0, manaSpent: 0, lawTriggers: 0 },
     scoreBreakdown: { progress: 0, quality: 0, risk: 0, build: 0, total: 0 },
@@ -10809,17 +10998,17 @@ function useTrialCompanionSupport(run) {
     run.insight += 2;
     run.tempSense = (Number(run.tempSense) || 0) + potency * 1.5;
   } else if (active?.id === "shared-strike") {
-    run.combatant.mana = clamp(run.combatant.mana + Math.floor(baseMana * 0.18), 0, baseMana);
+    run.combatant.mana = clamp(run.combatant.mana + Math.floor(baseMana * 0.12), 0, baseMana);
     run.tempAttack = (Number(run.tempAttack) || 0) + potency;
   } else if (active?.id === "guard-heart") {
-    run.combatant.hp = clamp(run.combatant.hp + Math.floor(baseHp * 0.2), 1, baseHp);
+    run.combatant.hp = clamp(run.combatant.hp + Math.floor(baseHp * 0.14), 1, baseHp);
     run.tempDefense = (Number(run.tempDefense) || 0) + potency;
   } else if (active?.id === "quiet-counsel") {
     run.insight += 1;
-    run.combatant.mana = clamp(run.combatant.mana + Math.floor(baseMana * 0.28), 0, baseMana);
+    run.combatant.mana = clamp(run.combatant.mana + Math.floor(baseMana * 0.18), 0, baseMana);
   } else {
-    run.combatant.hp = clamp(run.combatant.hp + Math.floor(baseHp * 0.2), 1, baseHp);
-    run.combatant.mana = clamp(run.combatant.mana + Math.floor(baseMana * 0.15), 0, baseMana);
+    run.combatant.hp = clamp(run.combatant.hp + Math.floor(baseHp * 0.14), 1, baseHp);
+    run.combatant.mana = clamp(run.combatant.mana + Math.floor(baseMana * 0.1), 0, baseMana);
   }
   run.companion.supportUsed = true;
   return { support: active || { name: "同行支援" }, run };
@@ -10834,17 +11023,17 @@ function trialCompanionBattlePlan(run, monster) {
   const powerBonus = 1 + Math.max(0, Number(buffs.companionPower) || 0) + copiedBuff;
   const interval = clamp(4 + Math.floor(Number(buffs.companionFrequency) || 0), 2, 4);
   if (snapshot.type === "assault") {
-    const raw = (Number(snapshot.attack) * 0.55 + Number(snapshot.divineSense) * 0.32) * Number(snapshot.powerFactor || 1) * powerBonus;
-    return { name: snapshot.person.name, type: "assault", interval, damage: Math.max(1, Math.min(Math.floor(monster.maxHp * 0.1), Math.floor(raw))) };
+    const raw = (Number(snapshot.attack) * 0.42 + Number(snapshot.divineSense) * 0.24) * Number(snapshot.powerFactor || 1) * powerBonus;
+    return { name: snapshot.person.name, type: "assault", interval, damage: Math.max(1, Math.min(Math.floor(monster.maxHp * 0.08), Math.floor(raw))) };
   }
-  const healing = Math.max(1, Math.floor((Number(snapshot.defense) * 0.3 + Number(snapshot.divineSense) * 0.18) * powerBonus));
-  const shields = Math.max(1, Math.floor(Number(snapshot.defense) * 0.42 * powerBonus));
+  const healing = Math.max(1, Math.floor((Number(snapshot.defense) * 0.22 + Number(snapshot.divineSense) * 0.13) * powerBonus));
+  const shields = Math.max(1, Math.floor(Number(snapshot.defense) * 0.3 * powerBonus));
   return { name: snapshot.person.name, type: "sustain", interval, healing, shields };
 }
 
 function resolveTrialBattle(state, run, node) {
   const route = daoTrialRouteMap[run.routeId];
-  const opponent = trialNpcFor(state, run, node);
+  const opponent = trialOpponentFor(state, run, node);
   if (!opponent) return { completed: true, summary: finishDaoTrialRun(state, run, true, "群修尽出") };
   const trialCompanion = trialCompanionBattlePlan(run, opponent);
   const trialBuffs = combinedTrialBuffs(run);
@@ -10871,7 +11060,8 @@ function resolveTrialBattle(state, run, node) {
   run.combatStats.lawTriggers += battle.events.filter((event) => event.kind === "law").length;
   for (const key of ["damage", "healing", "shields", "control", "assists"]) run.companionContribution[key] += Number(battle.companionContribution?.[key]) || 0;
   const opponentResult = {
-    npcId: opponent.id,
+    kind: opponent.kind || "npc",
+    npcId: opponent.kind === "monster" ? "" : opponent.id,
     name: opponent.name,
     sect: opponent.sect,
     realm: opponent.realm,
@@ -10882,9 +11072,10 @@ function resolveTrialBattle(state, run, node) {
   run.opponentResults.unshift(opponentResult);
   run.opponentResults = run.opponentResults.slice(0, 80);
   run.lastBattle = { nodeId: node.id, won, replayId: replay.replayId, opponent: opponentResult, metrics };
-  recordDaoTrialNpcBattle(state, run, node, opponent, won, replay.replayId);
+  if (opponent.kind === "monster") recordDaoTrialMonsterBattle(state, run, node, opponent, won, replay.replayId);
+  else recordDaoTrialNpcBattle(state, run, node, opponent, won, replay.replayId);
   if (!won) {
-    run.defeatedByOpponentId = opponent.id;
+    if (opponent.kind !== "monster") run.defeatedByOpponentId = opponent.id;
     const failureSpirit = Number(daoTrialCycleAffixes.find((item) => item.id === run.affixId)?.effects?.failureSpirit || 0);
     if (failureSpirit) state.player.spirit = Math.max(0, state.player.spirit - failureSpirit);
     const summary = finishDaoTrialRun(state, run, false, `止步${node.name}`);
@@ -10900,6 +11091,7 @@ function resolveTrialBattle(state, run, node) {
     tactical: clamp(((run.lawIds?.length || 0) + activeTrialSynergies(run).length + (run.companion ? 1 : 0)) / 5, 0, 1),
     riskMultiplier: (Number(node.floor) || 0) > daoTrialCoreFloorCount ? 0.05 + Math.floor(((Number(node.floor) || 16) - 16) / 5) * 0.01 : 0
   });
+  const battleReward = addTrialBattleReward(run, node);
   const reward = trialMilestoneReward(state, run, node);
   if (node.elite) {
     const eliteScore = Number(daoTrialCycleAffixes.find((item) => item.id === run.affixId)?.effects?.eliteScore || 0);
@@ -10920,11 +11112,11 @@ function resolveTrialBattle(state, run, node) {
     run.checkpointPending = true;
     run.checkpointFloor = Number(node.floor) || run.nodeIndex + 1;
     run.lawOffer = lawOfferForRun(state, run, route, ++run.lawNonce);
-    return { replay: publicReplay(replay), completed: false, checkpoint: true, reward, run: publicTrialRun(state, run) };
+    return { replay: publicReplay(replay), completed: false, checkpoint: true, reward, battleReward, run: publicTrialRun(state, run) };
   }
   run.pendingSealIds = sealOfferForRun(state, run, route, run.sealNonce);
   run.advanceAfterSeal = true;
-  return { replay: publicReplay(replay), completed: false, reward };
+  return { replay: publicReplay(replay), completed: false, reward, battleReward };
 }
 
 export function advanceDaoTrial(state, payload = {}) {
