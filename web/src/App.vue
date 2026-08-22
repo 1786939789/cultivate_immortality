@@ -2075,7 +2075,7 @@
                     <span class="section-kicker">{{ activeDaoTrialRun.practice ? "无奖励演练" : `今日第 ${activeDaoTrialRun.attempt} 次` }}</span>
                     <h3>{{ activeDaoTrialRun.route?.name }} · 第 {{ activeDaoTrialRun.floor }} 层<span v-if="activeDaoTrialRun.endless"> · 问天阶</span></h3>
                     <p>{{ activeDaoTrialRun.currentNode?.name }} · 已通过 {{ activeDaoTrialRun.maxFloor }} 层</p>
-                    <p>行囊 {{ daoTrialBagText(activeDaoTrialRun.bag) }} · 战败带回 40% · 主动离境带回 80% · 检查点收功按 120% 结算</p>
+                    <p>行囊 {{ daoTrialBagText(activeDaoTrialRun.bag) }} · 战败时你带回 40%，胜方修士获得余下 60% · 主动离境带回 80% · 检查点收功按 120% 结算</p>
                   </div>
                   <div class="actions">
                     <span v-if="activeDaoTrialRun.affix" class="dao-trial-run-affix"><Sparkles :size="14" aria-hidden="true" /> {{ activeDaoTrialRun.affix.name }}</span>
@@ -2089,7 +2089,7 @@
 
                 <div class="dao-trial-path" aria-label="问道节点进度">
                   <div v-for="node in visibleDaoTrialNodes" :key="node.id" :class="[`state-${node.state}`, { boss: node.boss }]">
-                    <span>{{ node.floor || node.index + 1 }}</span><b>{{ node.name }}</b><small>{{ node.boss ? (node.floor === 15 ? "最终心魔" : "阶段首领") : node.elite ? (node.checkpoint ? "精英检查点" : "精英") : node.type === "battle" ? "战斗" : node.type === "rest" ? "调息" : "取舍" }}</small>
+                    <span>{{ node.floor || node.index + 1 }}</span><b>{{ node.name }}</b><small>{{ node.boss ? (node.floor === 15 ? "问心终试" : "阶段守关") : node.elite ? (node.checkpoint ? "精英检查点" : "精英") : node.type === "battle" ? "斗法" : node.type === "rest" ? "调息" : "取舍" }}</small>
                   </div>
                 </div>
 
@@ -2126,9 +2126,9 @@
                     </div>
                   </section>
 
-                  <section :class="['dao-trial-decision', { 'has-enemy': activeDaoTrialRun.currentNode?.type === 'battle' && activeDaoTrialRun.enemyPreview }]">
+                  <section :class="['dao-trial-decision', { 'has-enemy': activeDaoTrialRun.currentNode?.type === 'battle' && activeDaoTrialRun.opponentPreview }]">
                     <div class="dao-trial-current-node">
-                      <span>{{ activeDaoTrialRun.currentNode?.boss ? "心魔关" : activeDaoTrialRun.currentNode?.elite ? "精英关" : "当前节点" }}</span>
+                      <span>{{ activeDaoTrialRun.currentNode?.boss ? "问心守关" : activeDaoTrialRun.currentNode?.elite ? "精英守关" : "当前节点" }}</span>
                       <h3>{{ activeDaoTrialRun.currentNode?.name }}</h3>
                       <small>悟机 {{ activeDaoTrialRun.insight }} · 免费重观 {{ activeDaoTrialRun.freeRerolls || 0 }} 次</small>
                     </div>
@@ -2149,25 +2149,26 @@
                       <div class="dao-trial-offer-head"><span>择一道印收入本轮</span><button class="secondary compact-button" type="button" :disabled="!activeDaoTrialRun.canReroll || isActionPending('/api/dao-trial/advance')" @click="rerollDaoTrialSeals"><RefreshCw :size="14" aria-hidden="true" /> {{ activeDaoTrialRun.freeRerolls ? "免费重观" : "重观 · 1悟机" }}</button></div>
                       <button v-for="seal in activeDaoTrialRun.sealOffer" :key="seal.id" type="button" :disabled="isActionPending('/api/dao-trial/advance')" @click="chooseDaoTrialSeal(seal.id)"><span>{{ seal.school }}<template v-if="seal.family"> · {{ seal.family }}</template></span><strong>{{ seal.name }}</strong><small>{{ seal.text }}</small></button>
                     </div>
-                    <div v-else-if="activeDaoTrialRun.currentNode?.type === 'battle' && activeDaoTrialRun.enemyPreview" class="dao-trial-enemy-preview">
+                    <div v-else-if="activeDaoTrialRun.currentNode?.type === 'battle' && activeDaoTrialRun.opponentPreview" class="dao-trial-enemy-preview">
                       <div class="dao-trial-enemy-head">
-                        <MonsterEmblem :monster="activeDaoTrialRun.enemyPreview" size="lg" />
-                        <span><small>{{ activeDaoTrialRun.enemyPreview.kind }} · {{ activeDaoTrialRun.enemyPreview.realm }}</small><strong>{{ activeDaoTrialRun.enemyPreview.name }}</strong><em>{{ activeDaoTrialRun.enemyPreview.rootName }} · {{ activeDaoTrialRun.enemyPreview.skill }}</em></span>
-                        <b :class="`threat-${activeDaoTrialRun.enemyPreview.threat.key}`">{{ activeDaoTrialRun.enemyPreview.threat.label }}</b>
+                        <CharacterPortrait :person="activeDaoTrialRun.opponentPreview.person" size="lg" />
+                        <span><small>{{ activeDaoTrialRun.opponentPreview.kind }} · {{ activeDaoTrialRun.opponentPreview.realm }} · {{ activeDaoTrialRun.opponentPreview.sect }}</small><strong>{{ activeDaoTrialRun.opponentPreview.name }}</strong><em>{{ activeDaoTrialRun.opponentPreview.rootName }} · {{ activeDaoTrialRun.opponentPreview.skill }}</em></span>
+                        <b :class="`threat-${activeDaoTrialRun.opponentPreview.threat.key}`">{{ activeDaoTrialRun.opponentPreview.threat.label }}</b>
                       </div>
                       <div class="dao-trial-power-matchup" aria-label="双方战力对比">
-                        <span><small>当前状态战力</small><strong>{{ activeDaoTrialRun.enemyPreview.playerPower }}</strong></span>
+                        <span><small>当前状态战力</small><strong>{{ activeDaoTrialRun.opponentPreview.playerPower }}</strong></span>
                         <i>对阵</i>
-                        <span><small>妖物战力</small><strong>{{ activeDaoTrialRun.enemyPreview.power }}</strong></span>
-                        <em>满状态 {{ activeDaoTrialRun.enemyPreview.playerMaxPower }} · 敌方约为当前状态的 {{ activeDaoTrialRun.enemyPreview.powerRatio }}%</em>
+                        <span><small>投影战力</small><strong>{{ activeDaoTrialRun.opponentPreview.power }}</strong></span>
+                        <em>你的满状态 {{ activeDaoTrialRun.opponentPreview.playerMaxPower }} · 对方真实战力 {{ activeDaoTrialRun.opponentPreview.basePower }} · {{ daoTrialProjectionText(activeDaoTrialRun.opponentPreview) }} · 约为你当前状态的 {{ activeDaoTrialRun.opponentPreview.powerRatio }}%</em>
                       </div>
                       <div class="dao-trial-enemy-stats">
-                        <span><Sword :size="14" aria-hidden="true" /><small>攻击</small><b>{{ activeDaoTrialRun.enemyPreview.attack }}</b></span>
-                        <span><ShieldCheck :size="14" aria-hidden="true" /><small>防御</small><b>{{ activeDaoTrialRun.enemyPreview.defense }}</b></span>
-                        <span><Flame :size="14" aria-hidden="true" /><small>气血</small><b>{{ activeDaoTrialRun.enemyPreview.maxHp }}</b></span>
-                        <span><Eye :size="14" aria-hidden="true" /><small>神识</small><b>{{ activeDaoTrialRun.enemyPreview.divineSense }}</b></span>
-                        <span><Waves :size="14" aria-hidden="true" /><small>法力</small><b>{{ activeDaoTrialRun.enemyPreview.maxMana }}</b></span>
+                        <span><Sword :size="14" aria-hidden="true" /><small>攻击</small><b>{{ activeDaoTrialRun.opponentPreview.attack }}</b></span>
+                        <span><ShieldCheck :size="14" aria-hidden="true" /><small>防御</small><b>{{ activeDaoTrialRun.opponentPreview.defense }}</b></span>
+                        <span><Flame :size="14" aria-hidden="true" /><small>气血</small><b>{{ activeDaoTrialRun.opponentPreview.maxHp }}</b></span>
+                        <span><Eye :size="14" aria-hidden="true" /><small>神识</small><b>{{ activeDaoTrialRun.opponentPreview.divineSense }}</b></span>
+                        <span><Waves :size="14" aria-hidden="true" /><small>法力</small><b>{{ activeDaoTrialRun.opponentPreview.maxMana }}</b></span>
                       </div>
+                      <p class="dao-trial-opponent-stake">若守关修士获胜，其将取得本轮行囊原始奖励的 60%；败北则不获得资源。</p>
                       <button class="primary" type="button" :disabled="isActionPending('/api/dao-trial/advance')" @click="fightDaoTrial"><Play :size="15" aria-hidden="true" /><strong>开始战斗</strong></button>
                     </div>
                     <div v-else class="dao-trial-event-options"><span>此处如何取舍</span><button v-for="option in activeDaoTrialRun.eventOptions" :key="option.id" type="button" :disabled="isActionPending('/api/dao-trial/advance')" @click="chooseDaoTrialEvent(option.id)"><strong>{{ option.label }}</strong><small>{{ option.hint }}</small></button></div>
@@ -4336,6 +4337,9 @@
               </div>
               <div class="panel flat dossier-record-panel dossier-dungeon-panel">
                 <h3>秘境记录</h3>
+                <p v-if="selectedPerson.daoTrialDefenses" class="dao-trial-defense-summary">
+                  问道守关 {{ selectedPerson.daoTrialDefenses }} 次 · 得胜 {{ selectedPerson.daoTrialWins || 0 }} 次 · 累计获得修为 {{ selectedPerson.daoTrialRewards?.xp || 0 }}、灵石 {{ selectedPerson.daoTrialRewards?.spirit || 0 }}、灵尘 {{ selectedPerson.daoTrialRewards?.dust || 0 }}
+                </p>
                 <div class="timeline detail-scroll">
                   <button
                     class="event event-button"
@@ -5728,13 +5732,14 @@ const adminWikiArticles = [
       {
         title: "问道秘境：七日一期的路线试炼",
         paragraphs: [
-          "秘境页提供每日可主动进入的问道路线试炼，同时每 7 天更换一期异象。当前有金石关、风雷径、玄阴泽三条路线，前 15 层为核心层，第 16 层后进入问天阶，途中包含战斗、事件、调息、精英和心魔首领。",
+          "秘境页提供每日可主动进入的问道路线试炼，同时每 7 天更换一期异象。当前有金石关、风雷径、玄阴泽三条路线，前 15 层为核心层，第 16 层后进入问天阶；事件与调息层保留，所有战斗层由真实修士守关。",
           "每日补充 1 枚问道签，最多积存 2 枚；没有问道签时仍可无奖励演练。路线中的选择会改变血量、法力、悟机、道印和同行者效果。"
         ],
         bullets: [
-          "每期会随机应用一个异象，例如敌方战力 +6%、技能消耗提高 6%、治疗效果提高 12%或心魔得分提高 20%。",
+          "每期会应用一个异象，例如敌方投影战力 +6%、技能消耗提高 6%、治疗效果提高 12%或问心得分提高 20%。",
           "学习、运动、工作、生活四类现实任务会在当天首轮正式游历中分别提供免费重观、血量提升、灵石加成和回春符。",
-          "战败带回行囊的 40%；完成前三个节点后可主动离境并带回 80%；击败心魔按 120% 结算。",
+          "每轮不会重复遇到同一名守关修士，同行者也不会成为对手；NPC 以真实身份和养成属性生成入境快照，再按当前层数投影战力。",
+          "战败时玩家带回原始行囊的 40%，胜方 NPC 获得余下 60%；主动离境带回 80%，检查点安全收功按 120% 结算。演练不会给 NPC 发放资源。",
           "道印按攻伐、守御、灵息、身法、险道、生机分为六类，效果覆盖攻击、防御、血量、神识、法力、技能消耗、冷却、治疗和战后恢复。",
           "问道秘境记录会保存路线熟练度、最高得分、精英/首领通关和年度目标进度。"
         ],
@@ -11337,7 +11342,20 @@ function daoTrialRewardText(record) {
     const harmonyParts = daoTrialHarmonyRewardText(harmony);
     parts.push(`合参${harmonyLabels ? `「${harmonyLabels}」` : ""} ${harmonyParts}`.trim());
   }
-  return parts.length ? `奖励 ${parts.join(" · ")}` : "本次无新增奖励";
+  const playerReward = parts.length ? `你带回 ${parts.join(" · ")}` : "你未带回奖励";
+  const opponentReward = record.rewards.opponentReward;
+  if (!opponentReward) return playerReward;
+  const opponentParts = [];
+  if (Number(opponentReward.xp) > 0) opponentParts.push(`修为 +${opponentReward.xp}`);
+  if (Number(opponentReward.spirit) > 0) opponentParts.push(`灵石 +${opponentReward.spirit}`);
+  if (Number(opponentReward.dust) > 0) opponentParts.push(`灵尘 +${opponentReward.dust}`);
+  return `${playerReward} · ${opponentReward.opponent?.name || record.defeatedBy?.name || "守关修士"}获得 ${opponentParts.join(" · ") || "0"}`;
+}
+
+function daoTrialProjectionText(opponent) {
+  const percent = Number(opponent?.projectionPercent) || 0;
+  if (percent === 0) return "秘境维持原势";
+  return `${opponent?.projectionLabel || (percent > 0 ? "秘境加持" : "秘境压制")} ${signedNumber(percent)}%`;
 }
 
 function daoTrialHarmonyRewardText(reward) {
@@ -11512,6 +11530,9 @@ function clampDuelRecordScore(score) {
 }
 
 function dungeonRecordTitle(record) {
+  if (record?.type === "dao-trial-defense") {
+    return `${shortDateText(record.date || (record.day ? `第${record.day}天` : ""))} · 问道守关 · ${record.result}`;
+  }
   const name = String(record.name || "副本").split(/[：·]/)[0].trim() || "副本";
   return `${shortDateText(record.date || (record.day ? `第${record.day}天` : ""))} · ${name} · ${record.result}`;
 }
@@ -11527,6 +11548,14 @@ function dungeonRecordSucceeded(record) {
 }
 
 function dungeonRecordMetaText(record) {
+  if (record?.type === "dao-trial-defense") {
+    const parts = [`${record.routeName || "问道秘境"}第 ${record.floor || 1} 层`, `对阵${record.opponentName || "未知修士"}`];
+    if (Number(record.xp) > 0) parts.push(`修为 +${record.xp}`);
+    if (Number(record.spirit) > 0) parts.push(`灵石 +${record.spirit}`);
+    if (Number(record.dust) > 0) parts.push(`灵尘 +${record.dust}`);
+    if (!Number(record.xp) && !Number(record.spirit) && !Number(record.dust)) parts.push("未获资源");
+    return parts.join(" · ");
+  }
   const parts = [];
   if (record.damage) parts.push(`输出 ${record.damage}`);
   parts.push(`灵石 +${record.spirit || 0}`);

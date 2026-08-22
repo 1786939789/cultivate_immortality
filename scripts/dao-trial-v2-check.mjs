@@ -102,6 +102,10 @@ ensureStateShape(resonanceState);
 startDaoTrial(resonanceState, { routeId: "golden-pass" });
 resonanceState.daoTrial.activeRun.lawOffer = [];
 resonanceState.daoTrial.activeRun.sealIds = ["edge-intent", "star-edge"];
+const resonanceOpponent = resonanceState.daoTrial.activeRun.opponentSnapshots["1"];
+resonanceOpponent.root = { ...resonanceRoot };
+resonanceOpponent.roots = [{ ...resonanceRoot }];
+resonanceOpponent.primaryRootKey = resonanceRoot.key;
 const resonancePublic = getPublicState(resonanceState).daoTrial.activeRun;
 assert.ok(resonancePublic.synergies.some((entry) => entry.id === "school-attack-2"), "持有两枚攻伐道印应激活第一档流派共鸣");
 assert.deepEqual(resonancePublic.resonanceProgress.find((entry) => entry.school === "攻伐"), { school: "攻伐", count: 2, activeThreshold: 2, nextThreshold: 4, complete: false }, "应公开下一档共鸣进度");
@@ -135,16 +139,17 @@ lawBattleState.daoTrial.activeRun.combatant.mana = 1;
 lawBattleState.daoTrial.activeRun.sealIds = ["long-life"];
 lawBattleState.daoTrial.activeRun.lawOffer = ["triple-edge"];
 advanceDaoTrial(lawBattleState, { action: "law", lawId: "triple-edge" });
-const lawBattlePreview = getPublicState(lawBattleState).daoTrial.activeRun.enemyPreview;
+const lawBattlePreview = getPublicState(lawBattleState).daoTrial.activeRun.opponentPreview;
 const deterministicBattleState = structuredClone(lawBattleState);
 const worldBaselineState = structuredClone(lawBattleState);
 const lawBattle = advanceDaoTrial(lawBattleState, { action: "battle" });
 const repeatedBattle = advanceDaoTrial(deterministicBattleState, { action: "battle" });
-assert.ok(lawBattlePreview?.power > 0 && lawBattlePreview?.threat?.label, "战斗前应公开妖物战力和危险等级");
-assert.equal(lawBattlePreview.name, lawBattle.replay.right.name, "战前预览与实际出战妖物必须一致");
-assert.equal(lawBattlePreview.power, lawBattle.replay.right.power, "战前预览与实际出战妖物战力必须一致");
+assert.ok(lawBattlePreview?.power > 0 && lawBattlePreview?.threat?.label, "战斗前应公开守关修士的投影战力和危险等级");
+assert.equal(lawBattlePreview.person.id, lawBattle.replay.right.id, "战前预览与实际出战 NPC 必须一致");
+assert.equal(lawBattlePreview.name, lawBattle.replay.right.name, "战前预览与实际出战 NPC 名字必须一致");
+assert.equal(lawBattlePreview.power, lawBattle.replay.right.power, "战前预览与实际出战 NPC 投影战力必须一致");
 assert.ok(lawBattle.replay.events.some((event) => event.kind === "law" && event.lawId === "triple-edge"), "剑鸣三叠应在第三次普通攻击后产生法则事件");
-assert.deepEqual(repeatedBattle.replay.right, lawBattle.replay.right, "同周期同路线同层怪物属性必须稳定可复现");
+assert.deepEqual(repeatedBattle.replay.right, lawBattle.replay.right, "同周期同路线同层 NPC 投影必须稳定可复现");
 assert.deepEqual(repeatedBattle.replay.events, lawBattle.replay.events, "相同存档与操作的秘境回合必须稳定可复现");
 assert.ok(lawBattle.replay.left.stats.maxHp > lawBattle.replay.left.baseStats.maxHp, "秘境生命法则应提高战斗快照的最大血量");
 assert.equal(replayStatMax(lawBattle.replay.left, "hp"), lawBattle.replay.left.stats.maxHp, "回放血量上限应优先使用有效战斗快照");
@@ -171,7 +176,7 @@ for (const key of ["maxHp", "attack", "defense", "divineSense", "maxMana"]) {
 worldMutationState.player.hp = worldMutationState.player.maxHp;
 worldMutationState.player.mana = worldMutationState.player.maxMana;
 const worldMutationBattle = advanceDaoTrial(worldMutationState, { action: "battle" });
-assert.deepEqual(worldMutationBattle.replay.right, lawBattle.replay.right, "秘境怪物应使用入场时世界战力快照，不应被中途改属性影响");
+assert.deepEqual(worldMutationBattle.replay.right, lawBattle.replay.right, "守关 NPC 应使用入场快照，不应被中途改属性影响");
 
 const normalFailure = advanceDaoTrial(forcedFailureState(), { action: "battle" }).summary;
 const affixFailure = advanceDaoTrial(forcedFailureState({ affixId: "borrowed-fate" }), { action: "battle" }).summary;
@@ -181,6 +186,76 @@ assert.equal(normalFailure.score, 135, "基础失败分应保留原始分数");
 assert.equal(affixFailure.score, 176, "借命一线应使失败分提高 30%");
 assert.equal(sealFailure.score, 162, "末光印应使失败分提高 20%");
 assert.equal(reducedScoreFailure.score, 128, "无声古钟应使结算分数降低 5%");
+
+const npcWinState = forcedFailureState();
+npcWinState.daoTrial.activeRun.rewards = { xp: 11, spirit: 13, dust: 5, milestones: ["测试"] };
+const npcWinOpponentId = npcWinState.daoTrial.activeRun.opponentSnapshots["1"].npcId;
+const npcWinOpponent = npcWinState.npcs.find((npc) => npc.id === npcWinOpponentId);
+const uninvolvedNpc = npcWinState.npcs.find((npc) => npc.id !== npcWinOpponentId);
+const uninvolvedAssets = { xp: uninvolvedNpc.xp, spirit: uninvolvedNpc.spirit, dust: uninvolvedNpc.spiritPearls.dust };
+const npcPermanentStats = Object.fromEntries(["realm", "layer", "maxHp", "hp", "attack", "defense", "divineSense", "maxMana", "mana"].map((key) => [key, npcWinOpponent[key]]));
+const npcAssetsBefore = {
+  xp: npcWinOpponent.xp,
+  spirit: npcWinOpponent.spirit,
+  dust: npcWinOpponent.spiritPearls.dust,
+  defenses: npcWinOpponent.daoTrialDefenses,
+  wins: npcWinOpponent.daoTrialWins
+};
+const npcWinResult = advanceDaoTrial(npcWinState, { action: "battle" });
+assert.equal(npcWinResult.completed, true, "玩家战败后应立即结束本轮问道");
+assert.deepEqual(
+  { xp: npcWinResult.summary.rewards.opponentReward.xp, spirit: npcWinResult.summary.rewards.opponentReward.spirit, dust: npcWinResult.summary.rewards.opponentReward.dust },
+  { xp: 7, spirit: 8, dust: 3 },
+  "NPC 获胜时应取得原始奖励包扣除玩家 40% 基础份额后的全部余数"
+);
+assert.equal(npcWinResult.summary.rewards.opponentReward.opponent.id, npcWinOpponentId, "奖励必须发给实际击败玩家的 NPC");
+assert.equal(npcWinResult.summary.defeatedBy.id, npcWinOpponentId, "结算摘要应公开实际击败玩家的 NPC");
+assert.deepEqual({ spirit: npcWinResult.summary.rewards.spirit, dust: npcWinResult.summary.rewards.dust }, { spirit: 5, dust: 2 }, "玩家战败时基础灵石与灵尘应精确保留原始行囊的 40%");
+assert.deepEqual({
+  xp: npcWinOpponent.xp - npcAssetsBefore.xp,
+  spirit: npcWinOpponent.spirit - npcAssetsBefore.spirit,
+  dust: npcWinOpponent.spiritPearls.dust - npcAssetsBefore.dust,
+  defenses: npcWinOpponent.daoTrialDefenses - npcAssetsBefore.defenses,
+  wins: npcWinOpponent.daoTrialWins - npcAssetsBefore.wins
+}, { xp: 7, spirit: 8, dust: 3, defenses: 1, wins: 1 }, "胜方 NPC 的资源、守关和胜场数据应精确入账");
+assert.deepEqual({ xp: uninvolvedNpc.xp, spirit: uninvolvedNpc.spirit, dust: uninvolvedNpc.spiritPearls.dust }, uninvolvedAssets, "未参与最终胜负的 NPC 不得收到分账");
+assert.deepEqual(
+  Object.fromEntries(Object.keys(npcPermanentStats).map((key) => [key, npcWinOpponent[key]])),
+  npcPermanentStats,
+  "秘境投影和战斗不得修改 NPC 的境界、气血、法力或永久战斗属性"
+);
+const npcWinHistory = npcWinOpponent.dungeonHistory.find((record) => record.type === "dao-trial-defense" && record.replayId === npcWinResult.replay.replayId);
+assert.deepEqual({ result: npcWinHistory.result, xp: npcWinHistory.xp, spirit: npcWinHistory.spirit, dust: npcWinHistory.dust }, { result: "守关得胜", xp: 7, spirit: 8, dust: 3 }, "NPC 守关历史应保存胜负和实际所得");
+assert.throws(() => advanceDaoTrial(npcWinState, { action: "battle" }), /没有进行中的问道/, "已结算挑战不得重复触发 NPC 奖励");
+
+const playerWinState = createDefaultState();
+strengthenPlayer(playerWinState, 100);
+ensureStateShape(playerWinState);
+startDaoTrial(playerWinState, { routeId: "golden-pass" });
+playerWinState.daoTrial.activeRun.lawOffer = [];
+const playerWinOpponentId = playerWinState.daoTrial.activeRun.opponentSnapshots["1"].npcId;
+const playerWinOpponent = playerWinState.npcs.find((npc) => npc.id === playerWinOpponentId);
+const playerWinAssets = { xp: playerWinOpponent.xp, spirit: playerWinOpponent.spirit, dust: playerWinOpponent.spiritPearls.dust, defenses: playerWinOpponent.daoTrialDefenses, wins: playerWinOpponent.daoTrialWins };
+const playerWinResult = advanceDaoTrial(playerWinState, { action: "battle" });
+assert.equal(playerWinResult.replay.result, "胜", "强化后的玩家应击败首层守关 NPC");
+assert.deepEqual({ xp: playerWinOpponent.xp, spirit: playerWinOpponent.spirit, dust: playerWinOpponent.spiritPearls.dust }, { xp: playerWinAssets.xp, spirit: playerWinAssets.spirit, dust: playerWinAssets.dust }, "NPC 败北时不得获得资源");
+assert.deepEqual({ defenses: playerWinOpponent.daoTrialDefenses - playerWinAssets.defenses, wins: playerWinOpponent.daoTrialWins - playerWinAssets.wins }, { defenses: 1, wins: 0 }, "正式挑战中败北的 NPC 只记录参与，不增加守关胜场");
+
+const practiceNpcState = createDefaultState();
+ensureStateShape(practiceNpcState);
+practiceNpcState.daoTrial.tickets = 0;
+startDaoTrial(practiceNpcState, { routeId: "golden-pass" });
+practiceNpcState.daoTrial.activeRun.lawOffer = [];
+practiceNpcState.daoTrial.activeRun.rewards = { xp: 11, spirit: 13, dust: 5, milestones: [] };
+for (const key of ["maxHp", "hp", "attack", "divineSense", "maxMana"]) practiceNpcState.daoTrial.activeRun.combatant[key] = 1;
+practiceNpcState.daoTrial.activeRun.combatant.defense = 0;
+practiceNpcState.daoTrial.activeRun.combatant.mana = 0;
+const practiceOpponentId = practiceNpcState.daoTrial.activeRun.opponentSnapshots["1"].npcId;
+const practiceOpponent = practiceNpcState.npcs.find((npc) => npc.id === practiceOpponentId);
+const practiceAssets = { xp: practiceOpponent.xp, spirit: practiceOpponent.spirit, dust: practiceOpponent.spiritPearls.dust, defenses: practiceOpponent.daoTrialDefenses, wins: practiceOpponent.daoTrialWins, history: practiceOpponent.dungeonHistory.length };
+const practiceResult = advanceDaoTrial(practiceNpcState, { action: "battle" });
+assert.equal(practiceResult.summary.rewards.opponentReward, undefined, "无奖励演练中 NPC 获胜也不得分账");
+assert.deepEqual({ xp: practiceOpponent.xp, spirit: practiceOpponent.spirit, dust: practiceOpponent.spiritPearls.dust, defenses: practiceOpponent.daoTrialDefenses, wins: practiceOpponent.daoTrialWins, history: practiceOpponent.dungeonHistory.length }, practiceAssets, "演练不得刷取 NPC 资源、参与次数、胜场或历史");
 
 function dynamicLawBattle(lawId, skillId, seedSuffix = "") {
   const state = createDefaultState();
@@ -255,6 +330,7 @@ ensureStateShape(rolloverState);
 assert.equal(rolloverState.player.xp, rolloverXp + 16, "周期结束应按失败保留率结算秘境修为");
 assert.equal(rolloverState.player.spirit, rolloverSpirit + 28, "周期结束应按失败保留率结算灵石");
 assert.equal(rolloverState.daoTrial.history[0].rewards.retention, 0.4, "周期结束记录应保存失败结算倍率");
+assert.equal(rolloverState.daoTrial.history[0].rewards.opponentReward, undefined, "周期结束自动结算不得向 NPC 发放奖励");
 assert.equal(rolloverState.daoTrial.routeMastery["golden-pass"].runs, 1, "周期结束应计入路线精通次数");
 
 const routeState = createDefaultState();
@@ -277,25 +353,52 @@ for (const route of routePublic.routes) {
   assert.deepEqual(route.nodes.map((node, index) => node.elite ? index + 1 : 0).filter(Boolean), [5, 13], `${route.id} 应在 5/13 层生成精英`);
 }
 
+const opponentRosterState = createDefaultState();
+strengthenPlayer(opponentRosterState, 20);
+ensureStateShape(opponentRosterState);
+const rosterCompanion = getPublicState(opponentRosterState).daoTrial.companions[0];
+startDaoTrial(opponentRosterState, { routeId: "golden-pass", companionId: rosterCompanion.person.id });
+const coreOpponentIds = [...opponentRosterState.daoTrial.activeRun.opponentIds];
+assert.equal(coreOpponentIds.length, 9, "十五层核心路线的九个战斗节点应预先分配九名真实 NPC");
+assert.equal(new Set(coreOpponentIds).size, 9, "同一轮核心路线不得重复出现同一名守关 NPC");
+assert.ok(!coreOpponentIds.includes(rosterCompanion.person.id), "同行修士不得被选为本轮守关 NPC");
+const rosterReload = structuredClone(opponentRosterState);
+assert.deepEqual(
+  getPublicState(rosterReload).daoTrial.activeRun.opponentPreview,
+  getPublicState(opponentRosterState).daoTrial.activeRun.opponentPreview,
+  "存档重载后当前层的 NPC 身份和投影属性必须保持一致"
+);
+
+const seededOpponentIds = new Set();
+for (let index = 0; index < 36; index += 1) {
+  const state = createDefaultState();
+  state.day = index * 7 + 1;
+  ensureStateShape(state);
+  startDaoTrial(state, { routeId: daoTrialRoutes[index % daoTrialRoutes.length].id });
+  seededOpponentIds.add(state.daoTrial.activeRun.opponentIds[0]);
+}
+assert.ok(seededOpponentIds.size >= 18, `固定种子抽取应覆盖足够广的 NPC，实际覆盖 ${seededOpponentIds.size}/36`);
+
 const npcPressureState = createDefaultState();
 for (const npc of npcPressureState.npcs) {
   for (const key of ["maxHp", "attack", "defense", "divineSense", "maxMana"]) npc[key] *= 100;
 }
 ensureStateShape(npcPressureState);
 const npcPressureStart = startDaoTrial(npcPressureState, { routeId: "golden-pass" }).run;
-assert.ok(npcPressureStart.enemyPreview.powerRatio <= 85, "同期 NPC 过强时，首层妖物仍应以玩家入场战力为主");
+assert.ok(npcPressureStart.opponentPreview.powerRatio <= 90, "真实 NPC 过强时，首层投影仍应以玩家入场战力为主");
 const pressureRun = npcPressureState.daoTrial.activeRun;
 pressureRun.lawOffer = [];
 pressureRun.nodeIndex = 4;
 pressureRun.floor = 5;
-const floorFivePreview = getPublicState(npcPressureState).daoTrial.activeRun.enemyPreview;
+const floorFivePreview = getPublicState(npcPressureState).daoTrial.activeRun.opponentPreview;
 assert.ok(floorFivePreview.powerRatio >= 85 && floorFivePreview.powerRatio <= 110, "第五层精英应接近玩家入场战力，不应直接形成碾压");
 pressureRun.combatant.hp = Math.max(1, Math.floor(pressureRun.combatant.maxHp * 0.2));
 pressureRun.combatant.mana = Math.floor(pressureRun.combatant.maxMana * 0.1);
-const depletedPreview = getPublicState(npcPressureState).daoTrial.activeRun.enemyPreview;
+const depletedPreview = getPublicState(npcPressureState).daoTrial.activeRun.opponentPreview;
 assert.ok(depletedPreview.playerPower < depletedPreview.playerMaxPower, "战前预览应按当前气血与法力降低玩家状态战力");
 
 startDaoTrial(routeState, { routeId: daoTrialRoutes[0].id });
+const initialOpponentSnapshots = structuredClone(routeState.daoTrial.activeRun.opponentSnapshots);
 let active = getPublicState(routeState).daoTrial.activeRun;
 assert.equal(active.lawOffer.length, 3, "入境应先提供三项问道法则");
 active = reachCheckpoint(routeState, 5);
@@ -334,6 +437,13 @@ active = getPublicState(routeState).daoTrial.activeRun;
 assert.equal(active.floor, 16, "十五层后应进入第十六层问天阶");
 assert.equal(active.nodes.length, 20, "问天阶应按五层继续扩展节点");
 assert.equal(active.endless, true, "第十六层应标记为问天阶");
+assert.equal(routeState.daoTrial.activeRun.opponentIds.length, 12, "扩展至二十层后应新增三名不重复守关 NPC");
+assert.equal(new Set(routeState.daoTrial.activeRun.opponentIds).size, 12, "问天阶新增的守关 NPC 不得与前十五层重复");
+assert.deepEqual(
+  Object.fromEntries(Object.entries(routeState.daoTrial.activeRun.opponentSnapshots).filter(([floor]) => Number(floor) <= 15)),
+  initialOpponentSnapshots,
+  "扩展问天阶时不得改写核心层已经确定的 NPC 快照"
+);
 active = reachCheckpoint(routeState, 20);
 assert.deepEqual(active.bag, { xp: 10, spirit: 38, dust: 4, milestones: ["入境", "精英", "问心", "归一"] }, "问天阶只应提供分数与纪录，不得让单张问道签无限产出资源");
 
@@ -348,6 +458,7 @@ assert.equal(exitResult.summary.score, earnedScore, "安全离境不得折损已
 assert.equal(exitResult.summary.rewards.retention, 1.2, "检查点安全离境应按 120% 结算奖励");
 assert.deepEqual({ xp: exitResult.summary.rewards.xp, spirit: exitResult.summary.rewards.spirit, dust: exitResult.summary.rewards.dust }, { xp: 4, spirit: 9, dust: 1 }, "炼气五层安全收功后的实际入账应保持克制");
 assert.equal(exitResult.summary.floor, 5, "历史应保存最深层数");
+assert.equal(exitResult.summary.rewards.opponentReward, undefined, "主动安全离境不得向任何 NPC 发放奖励");
 const exitPublic = getPublicState(exitState).daoTrial;
 assert.equal(exitPublic.rankings.overall.floor, 5, "综合最佳记录应按层数派生");
 assert.equal(exitPublic.rankings.solo.floor, 5, "独行挑战应进入独行最佳记录");
@@ -534,7 +645,7 @@ legacyState.daoTrial.discoveredSealIds = undefined;
 legacyState.daoTrial.yearGoals.lawsSeen = ["triple-edge"];
 legacyState.daoTrial.history = [{ id: "legacy", routeId: "golden-pass", routeName: "金石关", success: true, nodesCleared: 4, score: 618, practice: false, lawIds: ["spell-echo"], sealIds: ["edge-intent"] }];
 ensureStateShape(legacyState);
-assert.equal(legacyState.daoTrial.version, 4, "旧秘境状态应迁移到 V4");
+assert.equal(legacyState.daoTrial.version, 5, "旧秘境状态应迁移到 V5");
 assert.deepEqual(legacyState.daoTrial.recentLawOfferIds, [], "旧存档应补齐最近法则展示记录");
 assert.deepEqual(legacyState.daoTrial.recentSealOfferIds, [], "旧存档应补齐最近道印展示记录");
 assert.deepEqual(legacyState.daoTrial.lawPity, { withoutGold: 0, withoutDiamond: 0 }, "旧存档应补齐法则保底状态");
