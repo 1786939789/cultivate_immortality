@@ -2079,6 +2079,7 @@
                   </div>
                   <div class="actions">
                     <span v-if="activeDaoTrialRun.affix" class="dao-trial-run-affix"><Sparkles :size="14" aria-hidden="true" /> {{ activeDaoTrialRun.affix.name }}</span>
+                    <span v-if="activeDaoTrialRun.firstExploreSupport?.applied" class="dao-trial-run-first-explore"><Compass :size="14" aria-hidden="true" /> 首探护持 · 悟机 +{{ activeDaoTrialRun.firstExploreSupport.insight }}<template v-if="activeDaoTrialRun.firstExploreSupport.freeRerolls"> · 免费重观 +{{ activeDaoTrialRun.firstExploreSupport.freeRerolls }}</template></span>
                     <span class="dao-trial-live-score">当前 {{ activeDaoTrialRun.score }} 分</span>
                     <button class="secondary compact-button" type="button" :disabled="!activeDaoTrialRun.canWithdraw || isActionPending('/api/dao-trial/abandon')" :title="activeDaoTrialRun.canWithdraw ? '带回当前行囊的 80%' : '完成前五层并处理当前选择后可离境'" @click="abandonCurrentDaoTrial">
                       收功离境
@@ -2185,9 +2186,23 @@
                 <span v-if="!daoTrialState.boonsAvailable"><b>今日助力已使用</b></span>
                 <span v-else-if="!daoTrialState.taskBoons?.length"><b>尚无助力</b></span>
               </div>
+              <section class="dao-trial-harmony-panel" aria-labelledby="dao-trial-harmony-title">
+                <div class="dao-trial-harmony-head">
+                  <span><Sparkles :size="16" aria-hidden="true" /><b id="dao-trial-harmony-title">本期三脉合参</b></span>
+                  <strong>{{ daoTrialState.harmony?.progress || 0 }} / {{ daoTrialState.harmony?.maxProgress || 45 }}</strong>
+                </div>
+                <div class="dao-trial-harmony-track" role="progressbar" aria-label="本期三脉合参进度" :aria-valuenow="daoTrialState.harmony?.progress || 0" aria-valuemin="0" :aria-valuemax="daoTrialState.harmony?.maxProgress || 45"><i :style="{ width: `${Math.min(100, (daoTrialState.harmony?.progress || 0) / Math.max(1, daoTrialState.harmony?.maxProgress || 45) * 100)}%` }"></i></div>
+                <div class="dao-trial-harmony-milestones">
+                  <span v-for="milestone in daoTrialState.harmony?.milestones || []" :key="milestone.id" :class="{ reached: milestone.reached, claimed: milestone.claimed }">
+                    <b>{{ milestone.target }}</b>
+                    <small>{{ milestone.label }}</small>
+                    <em>{{ milestone.claimed ? "已领取" : daoTrialHarmonyRewardText(milestone.reward) }}</em>
+                  </span>
+                </div>
+              </section>
               <div class="dao-trial-route-grid">
                 <button v-for="route in daoTrialState.routes" :key="route.id" type="button" :class="[`route-${route.accent}`, { active: selectedDaoTrialRoute?.id === route.id }]" :aria-pressed="selectedDaoTrialRoute?.id === route.id" @click="selectedDaoTrialRouteId = route.id">
-                  <span class="dao-route-root"><img :src="rootIconPath(route.rootKey)" alt=""></span><span><small>十五层核心 · 路线精通 {{ daoTrialState.routeMastery?.[route.id]?.level || 0 }} 级</small><strong>{{ route.name }}</strong><em>{{ route.subtitle }}</em><small>最深 {{ daoTrialState.routeMastery?.[route.id]?.bestFloor || 0 }} 层 · 最佳 {{ daoTrialState.routeMastery?.[route.id]?.bestScore || 0 }} 分</small></span>
+                  <span class="dao-route-root"><img :src="rootIconPath(route.rootKey)" alt=""></span><span><small>十五层核心 · 路线精通 {{ daoTrialState.routeMastery?.[route.id]?.level || 0 }} 级</small><strong>{{ route.name }}</strong><em>{{ route.subtitle }}</em><small>最深 {{ daoTrialState.routeMastery?.[route.id]?.bestFloor || 0 }} 层 · 最佳 {{ daoTrialState.routeMastery?.[route.id]?.bestScore || 0 }} 分</small><span class="dao-trial-route-cycle"><b>{{ route.cycleProgress?.bestFloor ? `本期 ${route.cycleProgress.bestFloor} 层` : "本期未探索" }}</b><small>合参 {{ route.cycleProgress?.contribution || 0 }} / {{ daoTrialState.harmony?.perRouteCap || 15 }}</small><span v-if="route.firstExplore?.available && route.firstExplore?.rewardEligible" class="dao-trial-route-first-explore">首探 · 悟机 +{{ route.firstExplore.insight }}<template v-if="route.firstExplore.freeRerolls"> · 重观 +{{ route.firstExplore.freeRerolls }}</template></span></span></span>
                 </button>
               </div>
               <section v-if="selectedDaoTrialRoute" class="dao-trial-mastery-card" aria-live="polite">
@@ -11316,7 +11331,22 @@ function daoTrialRewardText(record) {
   if (Number(record.rewards.dust) > 0) parts.push(`灵尘 +${record.rewards.dust}`);
   const milestones = (record.rewards.milestones || []).filter(Boolean);
   if (milestones.length) parts.unshift(milestones.join("、"));
+  const harmony = record.harmonyRewards;
+  if (harmony) {
+    const harmonyLabels = (harmony.milestones || []).map((milestone) => milestone.label).filter(Boolean).join("、");
+    const harmonyParts = daoTrialHarmonyRewardText(harmony);
+    parts.push(`合参${harmonyLabels ? `「${harmonyLabels}」` : ""} ${harmonyParts}`.trim());
+  }
   return parts.length ? `奖励 ${parts.join(" · ")}` : "本次无新增奖励";
+}
+
+function daoTrialHarmonyRewardText(reward) {
+  if (!reward) return "";
+  const parts = [];
+  if (Number(reward.xp) > 0) parts.push(`修为 +${reward.xp}`);
+  if (Number(reward.spirit) > 0) parts.push(`灵石 +${reward.spirit}`);
+  if (Number(reward.dust) > 0) parts.push(`灵尘 +${reward.dust}`);
+  return parts.join(" · ");
 }
 
 function daoTrialBagText(bag) {

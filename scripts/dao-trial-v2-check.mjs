@@ -93,6 +93,10 @@ startDaoTrial(practicePityState, { routeId: "golden-pass" });
 assert.deepEqual(practicePityState.daoTrial.lawPity, { withoutGold: 1, withoutDiamond: 5 }, "演练不应推进法则保底计数");
 
 const resonanceState = createDefaultState();
+const resonanceRoot = getPublicState(resonanceState).catalog.roots.find((root) => root.key === "earth");
+resonanceState.player.root = resonanceRoot;
+resonanceState.player.roots = [resonanceRoot];
+resonanceState.player.primaryRootKey = resonanceRoot.key;
 strengthenPlayer(resonanceState);
 ensureStateShape(resonanceState);
 startDaoTrial(resonanceState, { routeId: "golden-pass" });
@@ -296,6 +300,7 @@ let active = getPublicState(routeState).daoTrial.activeRun;
 assert.equal(active.lawOffer.length, 3, "入境应先提供三项问道法则");
 active = reachCheckpoint(routeState, 5);
 assert.equal(active.maxFloor, 5, "第一阶段应记录通过五层");
+assert.deepEqual(active.bag, { xp: 4, spirit: 8, dust: 1, milestones: ["入境", "精英"] }, "前五层日常奖励应以少量灵石和灵尘为主");
 assert.equal(active.scoreBreakdown.progress, 700, "前五层进度分应为 100+120+140+160+180");
 assert.ok(active.scoreBreakdown.quality > 0, "战斗层应产生表现分");
 const floorFiveScore = active.score;
@@ -318,15 +323,19 @@ assert.equal(cappedRecoveryRun.combatant.hp, cappedRecoveryRun.combatant.maxHp, 
 assert.equal(cappedRecoveryRun.combatant.mana, cappedRecoveryRun.combatant.maxMana, "检查点法力恢复不得超过上限");
 advanceDaoTrial(routeState, { action: "continue" });
 active = reachCheckpoint(routeState, 10);
+assert.deepEqual(active.bag, { xp: 7, spirit: 26, dust: 2, milestones: ["入境", "精英", "问心"] }, "前十层累计奖励不得接近现实任务的修为收益");
 assert.ok(active.score > floorFiveScore, "更深层数的总分必须严格提高");
 advanceDaoTrial(routeState, { action: "continue" });
 active = reachCheckpoint(routeState, 15);
 assert.equal(active.maxFloor, 15, "应完成十五层核心秘境");
+assert.deepEqual(active.bag, { xp: 10, spirit: 38, dust: 4, milestones: ["入境", "精英", "问心", "归一"] }, "炼气十五层日常奖励应精确限制为修为 10、灵石 38、灵尘 4");
 advanceDaoTrial(routeState, { action: "continue" });
 active = getPublicState(routeState).daoTrial.activeRun;
 assert.equal(active.floor, 16, "十五层后应进入第十六层问天阶");
 assert.equal(active.nodes.length, 20, "问天阶应按五层继续扩展节点");
 assert.equal(active.endless, true, "第十六层应标记为问天阶");
+active = reachCheckpoint(routeState, 20);
+assert.deepEqual(active.bag, { xp: 10, spirit: 38, dust: 4, milestones: ["入境", "精英", "问心", "归一"] }, "问天阶只应提供分数与纪录，不得让单张问道签无限产出资源");
 
 const exitState = createDefaultState();
 strengthenPlayer(exitState);
@@ -337,6 +346,7 @@ const earnedScore = exitRun.score;
 const exitResult = advanceDaoTrial(exitState, { action: "checkpoint-exit" });
 assert.equal(exitResult.summary.score, earnedScore, "安全离境不得折损已经取得的分数");
 assert.equal(exitResult.summary.rewards.retention, 1.2, "检查点安全离境应按 120% 结算奖励");
+assert.deepEqual({ xp: exitResult.summary.rewards.xp, spirit: exitResult.summary.rewards.spirit, dust: exitResult.summary.rewards.dust }, { xp: 4, spirit: 9, dust: 1 }, "炼气五层安全收功后的实际入账应保持克制");
 assert.equal(exitResult.summary.floor, 5, "历史应保存最深层数");
 const exitPublic = getPublicState(exitState).daoTrial;
 assert.equal(exitPublic.rankings.overall.floor, 5, "综合最佳记录应按层数派生");
@@ -345,12 +355,148 @@ assert.equal(exitPublic.yearGoals.deepestFloor, 5, "年度问道志应记录最�
 exitState.daoTrial.history.push({ ...exitResult.summary, id: "previous-cycle-best", cycle: exitState.daoTrial.cycle - 1, floor: 99, score: 99_999 });
 assert.equal(getPublicState(exitState).daoTrial.rankings.overall.cycle, exitState.daoTrial.cycle, "本期排行不得混入往期高分记录");
 
+const foundationRewardState = createDefaultState();
+foundationRewardState.player.realm = 18;
+strengthenPlayer(foundationRewardState);
+ensureStateShape(foundationRewardState);
+startDaoTrial(foundationRewardState, { routeId: "golden-pass" });
+for (const key of ["maxHp", "attack", "defense", "divineSense", "maxMana"]) foundationRewardState.daoTrial.activeRun.combatant[key] *= 100;
+foundationRewardState.daoTrial.activeRun.combatant.hp = foundationRewardState.daoTrial.activeRun.combatant.maxHp;
+foundationRewardState.daoTrial.activeRun.combatant.mana = foundationRewardState.daoTrial.activeRun.combatant.maxMana;
+const foundationRewardRun = reachCheckpoint(foundationRewardState, 15);
+assert.deepEqual(foundationRewardRun.bag, { xp: 10, spirit: 47, dust: 4, milestones: ["入境", "精英", "问心", "归一"] }, "筑基日常问道的境界成长应集中在适量灵石，不得额外放大修为和灵尘");
+const foundationRewardResult = advanceDaoTrial(foundationRewardState, { action: "checkpoint-exit" });
+assert.deepEqual({ xp: foundationRewardResult.summary.rewards.xp, spirit: foundationRewardResult.summary.rewards.spirit, dust: foundationRewardResult.summary.rewards.dust }, { xp: 12, spirit: 56, dust: 4 }, "筑基十五层安全收功应精确入账修为 12、灵石 56、灵尘 4");
+
 const masteryState = createDefaultState();
 ensureStateShape(masteryState);
 masteryState.daoTrial.routeMastery["golden-pass"].clears = 4;
 const masteryStart = startDaoTrial(masteryState, { routeId: "golden-pass" }).run;
 assert.ok(masteryStart.insight >= 2, "二级路线精通应提供额外悟机");
 assert.ok(masteryStart.freeRerolls >= 1, "四级路线精通应提供免费重观");
+
+function finishSyntheticHarmonyRun(state, routeId, floor = 15) {
+  state.daoTrial.tickets = 1;
+  startDaoTrial(state, { routeId });
+  const run = state.daoTrial.activeRun;
+  run.lawOffer = [];
+  run.pendingSealIds = [];
+  run.nodesCleared = floor;
+  run.maxFloor = floor;
+  run.checkpointFloor = floor;
+  run.checkpointPending = true;
+  return advanceDaoTrial(state, { action: "checkpoint-exit" }).summary;
+}
+
+const harmonyState = createDefaultState();
+ensureStateShape(harmonyState);
+const harmonyStartingAssets = { xp: harmonyState.player.xp, spirit: harmonyState.player.spirit, dust: harmonyState.player.spiritPearls.dust };
+const harmonyInitial = getPublicState(harmonyState).daoTrial;
+assert.equal(harmonyInitial.harmony.progress, 0, "新一期三脉合参应从零开始");
+assert.deepEqual(harmonyInitial.harmony.milestones.map((milestone) => milestone.target), [15, 30, 45], "三脉合参应提供 15/30/45 三档奖励");
+
+const foundationHarmonyState = createDefaultState();
+foundationHarmonyState.player.realm = 18;
+ensureStateShape(foundationHarmonyState);
+assert.deepEqual(getPublicState(foundationHarmonyState).daoTrial.harmony.milestones.map((milestone) => milestone.reward.spirit), [10, 15, 22], "筑基九层应按筑基大境界统一计算三档灵石奖励，不得随小境界产生小数倍率");
+
+const harmonyGold = finishSyntheticHarmonyRun(harmonyState, "golden-pass");
+assert.deepEqual(harmonyGold.harmonyRewards, { xp: 0, spirit: 8, dust: 1, milestones: [{ id: "harmony-15", target: 15, label: "初窥三脉" }] }, "首条路线十五层应领取第一档合参奖励");
+assert.equal(getPublicState(harmonyState).daoTrial.harmony.progress, 15, "单条路线对合参最多贡献十五层");
+
+const harmonyGoldRepeat = finishSyntheticHarmonyRun(harmonyState, "golden-pass");
+assert.equal(harmonyGoldRepeat.harmonyRewards, null, "重复同一路线不得重复领取合参奖励");
+assert.equal(getPublicState(harmonyState).daoTrial.harmony.progress, 15, "重复同一路线不得继续提高合参进度");
+
+const harmonyWind = finishSyntheticHarmonyRun(harmonyState, "wind-thunder-path");
+assert.deepEqual(harmonyWind.harmonyRewards, { xp: 2, spirit: 12, dust: 1, milestones: [{ id: "harmony-30", target: 30, label: "两脉互证" }] }, "第二条路线十五层应领取第二档合参奖励");
+const harmonyMarsh = finishSyntheticHarmonyRun(harmonyState, "nether-marsh");
+assert.deepEqual(harmonyMarsh.harmonyRewards, { xp: 3, spirit: 18, dust: 2, milestones: [{ id: "harmony-45", target: 45, label: "三脉归一" }] }, "三条路线十五层应领取最终合参奖励");
+const harmonyComplete = getPublicState(harmonyState).daoTrial.harmony;
+assert.equal(harmonyComplete.progress, 45, "三条路线全部达到十五层时合参应满进度");
+assert.ok(harmonyComplete.milestones.every((milestone) => milestone.claimed), "三档合参奖励应全部标记为已领取");
+assert.deepEqual({
+  xp: harmonyState.player.xp - harmonyStartingAssets.xp,
+  spirit: harmonyState.player.spirit - harmonyStartingAssets.spirit,
+  dust: harmonyState.player.spiritPearls.dust - harmonyStartingAssets.dust
+}, { xp: 5, spirit: 38, dust: 4 }, "第一期三档合参奖励应精确入账修为 5、灵石 38、灵尘 4");
+
+const harmonyPreviousCycle = harmonyState.daoTrial.cycle;
+const harmonyAssetsBeforeRollover = { xp: harmonyState.player.xp, spirit: harmonyState.player.spirit, dust: harmonyState.player.spiritPearls.dust };
+harmonyState.day = harmonyState.daoTrial.cycleEndDay + 1;
+ensureStateShape(harmonyState);
+assert.equal(harmonyState.daoTrial.cycle, harmonyPreviousCycle + 1, "跨七日周期应进入下一期问道");
+assert.equal(getPublicState(harmonyState).daoTrial.harmony.progress, 0, "换期后合参进度应重置");
+assert.deepEqual(harmonyState.daoTrial.claimedHarmonyMilestones, [], "换期后合参领取状态应重置");
+assert.deepEqual({ xp: harmonyState.player.xp, spirit: harmonyState.player.spirit, dust: harmonyState.player.spiritPearls.dust }, harmonyAssetsBeforeRollover, "一期结束时不得重复发放已经领取的合参奖励");
+
+const secondCycleStartingAssets = { xp: harmonyState.player.xp, spirit: harmonyState.player.spirit, dust: harmonyState.player.spiritPearls.dust };
+finishSyntheticHarmonyRun(harmonyState, "golden-pass");
+finishSyntheticHarmonyRun(harmonyState, "wind-thunder-path");
+finishSyntheticHarmonyRun(harmonyState, "nether-marsh");
+assert.deepEqual({
+  xp: harmonyState.player.xp - secondCycleStartingAssets.xp,
+  spirit: harmonyState.player.spirit - secondCycleStartingAssets.spirit,
+  dust: harmonyState.player.spiritPearls.dust - secondCycleStartingAssets.dust
+}, { xp: 5, spirit: 38, dust: 4 }, "第二期应可重新领取完整三档合参奖励");
+assert.equal(getPublicState(harmonyState).daoTrial.harmony.progress, 45, "第二期三路线记录必须独立计算为 45 点");
+
+const incompleteHarmonyState = createDefaultState();
+ensureStateShape(incompleteHarmonyState);
+const incompleteStartingAssets = { xp: incompleteHarmonyState.player.xp, spirit: incompleteHarmonyState.player.spirit, dust: incompleteHarmonyState.player.spiritPearls.dust };
+finishSyntheticHarmonyRun(incompleteHarmonyState, "golden-pass", 5);
+finishSyntheticHarmonyRun(incompleteHarmonyState, "wind-thunder-path", 4);
+finishSyntheticHarmonyRun(incompleteHarmonyState, "nether-marsh", 5);
+assert.equal(getPublicState(incompleteHarmonyState).daoTrial.harmony.progress, 14, "未达第一档时合参应准确记录 14 点");
+incompleteHarmonyState.day = incompleteHarmonyState.daoTrial.cycleEndDay + 1;
+ensureStateShape(incompleteHarmonyState);
+assert.deepEqual({
+  xp: incompleteHarmonyState.player.xp - incompleteStartingAssets.xp,
+  spirit: incompleteHarmonyState.player.spirit - incompleteStartingAssets.spirit,
+  dust: incompleteHarmonyState.player.spiritPearls.dust - incompleteStartingAssets.dust
+}, { xp: 0, spirit: 0, dust: 0 }, "一期结束时未达到 15 点不得误发合参奖励");
+
+const rolloverHarmonyState = createDefaultState();
+ensureStateShape(rolloverHarmonyState);
+finishSyntheticHarmonyRun(rolloverHarmonyState, "golden-pass", 10);
+finishSyntheticHarmonyRun(rolloverHarmonyState, "wind-thunder-path", 4);
+const rolloverHarmonyStartingAssets = { xp: rolloverHarmonyState.player.xp, spirit: rolloverHarmonyState.player.spirit, dust: rolloverHarmonyState.player.spiritPearls.dust };
+rolloverHarmonyState.daoTrial.tickets = 1;
+startDaoTrial(rolloverHarmonyState, { routeId: "nether-marsh" });
+rolloverHarmonyState.daoTrial.activeRun.lawOffer = [];
+rolloverHarmonyState.daoTrial.activeRun.nodesCleared = 1;
+rolloverHarmonyState.daoTrial.activeRun.maxFloor = 1;
+rolloverHarmonyState.day = rolloverHarmonyState.daoTrial.cycleEndDay + 1;
+ensureStateShape(rolloverHarmonyState);
+assert.deepEqual({
+  xp: rolloverHarmonyState.player.xp - rolloverHarmonyStartingAssets.xp,
+  spirit: rolloverHarmonyState.player.spirit - rolloverHarmonyStartingAssets.spirit,
+  dust: rolloverHarmonyState.player.spiritPearls.dust - rolloverHarmonyStartingAssets.dust
+}, { xp: 0, spirit: 8, dust: 1 }, "周期结束自动结算进行中挑战时，达到 15 点应发放第一档奖励");
+assert.equal(rolloverHarmonyState.daoTrial.history[0].result, "周期结束", "跨期进行中的挑战应写入周期结束记录");
+assert.equal(rolloverHarmonyState.daoTrial.history[0].harmonyProgress, 15, "周期结束记录应保存结算前的合参进度");
+assert.deepEqual(rolloverHarmonyState.daoTrial.history[0].harmonyRewards?.milestones, [{ id: "harmony-15", target: 15, label: "初窥三脉" }], "周期结束记录应保存实际发放的合参档位");
+
+const firstExploreState = createDefaultState();
+ensureStateShape(firstExploreState);
+firstExploreState.daoTrial.routeMastery["golden-pass"].clears = 6;
+const firstExplorePublic = getPublicState(firstExploreState).daoTrial;
+assert.equal(firstExplorePublic.routes.find((route) => route.id === "wind-thunder-path").firstExplore.freeRerolls, 1, "低于最高精通两级的未探索路线应获得追赶重观");
+const firstExploreRun = startDaoTrial(firstExploreState, { routeId: "wind-thunder-path" }).run;
+assert.deepEqual(firstExploreRun.firstExploreSupport, { applied: true, insight: 1, freeRerolls: 1, masteryGap: 6 }, "本期首次正式进入弱路线应应用首探护持");
+assert.equal(firstExploreRun.insight, 2, "首探护持应额外提供一点悟机");
+assert.equal(firstExploreRun.freeRerolls, 1, "弱路线首探应额外提供一次免费重观");
+firstExploreState.daoTrial.activeRun.lawOffer = [];
+firstExploreState.daoTrial.activeRun.pendingSealIds = [];
+firstExploreState.daoTrial.activeRun.nodesCleared = 5;
+firstExploreState.daoTrial.activeRun.maxFloor = 5;
+firstExploreState.daoTrial.activeRun.checkpointFloor = 5;
+firstExploreState.daoTrial.activeRun.checkpointPending = true;
+advanceDaoTrial(firstExploreState, { action: "checkpoint-exit" });
+firstExploreState.daoTrial.tickets = 0;
+const practiceFirstExplore = startDaoTrial(firstExploreState, { routeId: "nether-marsh" }).run;
+assert.equal(practiceFirstExplore.firstExploreSupport.applied, false, "无奖励演练不得消耗或获得首探护持");
+assert.equal(practiceFirstExplore.insight, 1, "演练不应获得首探悟机");
 
 const companionState = createDefaultState();
 strengthenPlayer(companionState, 8);
@@ -392,6 +538,7 @@ assert.equal(legacyState.daoTrial.version, 4, "旧秘境状态应迁移到 V4");
 assert.deepEqual(legacyState.daoTrial.recentLawOfferIds, [], "旧存档应补齐最近法则展示记录");
 assert.deepEqual(legacyState.daoTrial.recentSealOfferIds, [], "旧存档应补齐最近道印展示记录");
 assert.deepEqual(legacyState.daoTrial.lawPity, { withoutGold: 0, withoutDiamond: 0 }, "旧存档应补齐法则保底状态");
+assert.deepEqual(legacyState.daoTrial.claimedHarmonyMilestones, [], "旧存档应补齐本期合参领取状态");
 assert.deepEqual(new Set(legacyState.daoTrial.discoveredLawIds), new Set(["triple-edge", "spell-echo"]), "旧存档应从年度与历史记录恢复已发现法则");
 assert.deepEqual(legacyState.daoTrial.discoveredSealIds, ["edge-intent"], "旧存档应从历史记录恢复已发现道印");
 assert.equal(getPublicState(legacyState).daoTrial.bestFloor, 7, "旧通关记录应推导为七层历史深度");

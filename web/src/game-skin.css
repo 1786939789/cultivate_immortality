@@ -15806,6 +15806,132 @@ body::before {
 .view.active .dao-trial-route-grid small { color: #ddd2b9; }
 .view.active .dao-trial-route-grid em { color: #f0e6d0; }
 
+.view.active .dao-trial-harmony-panel {
+  display: grid;
+  gap: 11px;
+  padding: 14px 16px;
+  color: #e5ddc8;
+  border: 1px solid rgba(178, 143, 72, .5);
+  border-radius: 5px;
+  background: linear-gradient(135deg, #30372e, #202923);
+  box-shadow: inset 0 1px rgba(255, 238, 185, .08), 0 5px 14px rgba(34, 28, 18, .15);
+}
+
+.view.active .dao-trial-harmony-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+}
+
+.view.active .dao-trial-harmony-head > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #efd183;
+}
+
+.view.active .dao-trial-harmony-head strong {
+  color: #ffe6a3;
+  font-size: 19px;
+}
+
+.view.active .dao-trial-harmony-track {
+  height: 7px;
+  overflow: hidden;
+  border: 1px solid rgba(228, 201, 137, .18);
+  border-radius: 4px;
+  background: rgba(6, 13, 10, .58);
+}
+
+.view.active .dao-trial-harmony-track i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #629c7f, #e1b956);
+  transition: width .25s ease;
+}
+
+.view.active .dao-trial-harmony-milestones {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.view.active .dao-trial-harmony-milestones > span {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 8px;
+  align-items: center;
+  min-width: 0;
+  padding-left: 10px;
+  border-left: 2px solid #746d59;
+}
+
+.view.active .dao-trial-harmony-milestones b {
+  grid-row: span 2;
+  color: #e8dcbf;
+  font-size: 17px;
+}
+
+.view.active .dao-trial-harmony-milestones small {
+  color: #e5ddca;
+  font-size: 13px;
+}
+
+.view.active .dao-trial-harmony-milestones em {
+  overflow: hidden;
+  color: #bfc9be;
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.view.active .dao-trial-harmony-milestones > span.reached {
+  border-left-color: #d2a949;
+}
+
+.view.active .dao-trial-harmony-milestones > span.claimed b,
+.view.active .dao-trial-harmony-milestones > span.claimed em {
+  color: #83c39f;
+}
+
+.view.active .dao-trial-route-cycle {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px 8px;
+  margin-top: 7px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(224, 194, 124, .2);
+}
+
+.view.active .dao-trial-route-cycle > b {
+  color: #f2cf77;
+  font-size: 13px;
+}
+
+.view.active .dao-trial-route-cycle > small {
+  color: #b9c9bb;
+  font-size: 12px;
+  text-align: right;
+}
+
+.view.active .dao-trial-route-first-explore {
+  grid-column: 1 / -1;
+  color: #9ed5b6;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.view.active .dao-trial-run-first-explore {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #a7ddbd;
+  font-size: 12px;
+}
+
 .view.active .dao-trial-prepare,
 .view.active .dao-trial-year-goals,
 .view.active .dao-trial-history,
@@ -16035,6 +16161,22 @@ body::before {
     min-width: 0;
     max-width: none;
     margin-right: 0;
+  }
+
+  .view.active .dao-trial-harmony-panel {
+    padding: 12px;
+  }
+
+  .view.active .dao-trial-harmony-milestones {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .view.active .dao-trial-harmony-milestones > span {
+    min-height: 42px;
+  }
+
+  .view.active .dao-trial-harmony-milestones em {
+    white-space: normal;
   }
 
   .view.active .dao-trial-surface.dao-trial-running > .dao-trial-run-board {

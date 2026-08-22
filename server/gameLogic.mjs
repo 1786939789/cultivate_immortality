@@ -8431,6 +8431,18 @@ const daoTrialStateVersion = 4;
 const daoTrialHistoryLimit = 104;
 const daoTrialDailyTicketGrant = 1;
 const daoTrialTicketCap = 2;
+const daoTrialHarmonyMaxPerRoute = 15;
+const daoTrialCoreRewardDefinitions = {
+  1: { xp: 2, spiritBase: 8, spiritPerStage: 2, dustBase: 0, dustPerTier: 0, label: "入境" },
+  5: { xp: 2, spiritBase: 0, spiritPerStage: 0, dustBase: 1, dustPerTier: 1, label: "精英" },
+  10: { xp: 3, spiritBase: 18, spiritPerStage: 4, dustBase: 1, dustPerTier: 1, label: "问心" },
+  15: { xp: 3, spiritBase: 12, spiritPerStage: 3, dustBase: 2, dustPerTier: 1, label: "归一" }
+};
+const daoTrialHarmonyMilestoneDefinitions = [
+  { id: "harmony-15", target: 15, label: "初窥三脉", reward: { xp: 0, spiritBase: 8, spiritPerStage: 2, dust: 1 } },
+  { id: "harmony-30", target: 30, label: "两脉互证", reward: { xp: 2, spiritBase: 12, spiritPerStage: 3, dust: 1 } },
+  { id: "harmony-45", target: 45, label: "三脉归一", reward: { xp: 3, spiritBase: 18, spiritPerStage: 4, dust: 2 } }
+];
 const daoTrialTaskBoonDefinitions = {
   "学习": { id: "study", name: "悟道签", text: "本轮可免费重观一次道印。" },
   "运动": { id: "exercise", name: "护体势", text: "本轮最大血量提高 12%。" },
@@ -9147,6 +9159,7 @@ function createDaoTrialState(day = 1) {
     lastTicketDay: Math.max(0, Number(day) || 0),
     lastBoonDay: 0,
     claimedMilestones: [],
+    claimedHarmonyMilestones: [],
     bestScore: 0,
     bestFloor: 0,
     bestQualityScore: 0,
@@ -9190,6 +9203,7 @@ function ensureDaoTrialState(state) {
       lastBoonDay: Math.max(0, Math.floor(Number(previous.lastBoonDay) || 0)),
       attemptsUsed: Math.max(0, Math.floor(Number(previous.attemptsUsed) || 0)),
       claimedMilestones: [...new Set(previous.claimedMilestones || [])],
+      claimedHarmonyMilestones: [...new Set(previous.claimedHarmonyMilestones || [])],
       bestScore: Math.max(0, Math.floor(Number(previous.bestScore) || 0)),
       bestFloor: Math.max(0, Math.floor(Number(previous.bestFloor) || 0)),
       bestQualityScore: Math.max(0, Math.floor(Number(previous.bestQualityScore) || 0)),
@@ -9253,6 +9267,12 @@ function ensureDaoTrialState(state) {
     changed = true;
   }
   state.daoTrial.claimedMilestones = [...new Set(state.daoTrial.claimedMilestones || [])];
+  if (!Array.isArray(state.daoTrial.claimedHarmonyMilestones)) {
+    state.daoTrial.claimedHarmonyMilestones = [];
+    changed = true;
+  } else {
+    state.daoTrial.claimedHarmonyMilestones = [...new Set(state.daoTrial.claimedHarmonyMilestones.filter((id) => daoTrialHarmonyMilestoneDefinitions.some((milestone) => milestone.id === id)))];
+  }
   state.daoTrial.history = (state.daoTrial.history || []).slice(0, daoTrialHistoryLimit);
   for (const record of state.daoTrial.history) {
     record.floor = Math.max(0, Math.floor(Number(record.floor) || (record.success ? 7 : Number(record.nodesCleared) || 0)));
@@ -9687,12 +9707,17 @@ function trialMonsterFor(state, run, node, route) {
 
 function trialMilestoneReward(state, run, node) {
   if (run.practice) return null;
-  const stage = Math.floor(state.player.realm / 10);
-  let reward = null;
-  if (run.nodeIndex === 0) reward = { xp: 8, spirit: 10 + stage * 4, dust: 0, label: "入境" };
-  if (node.elite) reward = { xp: 10, spirit: 0, dust: 2 + stage, label: "精英" };
-  if (node.boss) reward = { xp: 12, spirit: 35 + stage * 10, dust: 3 + stage, label: "问心" };
-  if (!reward) return null;
+  const floor = Math.max(1, Math.floor(Number(node?.floor) || run.nodeIndex + 1));
+  const definition = daoTrialCoreRewardDefinitions[floor];
+  if (!definition) return null;
+  const stage = Math.max(0, Math.floor((Number(state.player?.realm) || 0) / 10));
+  const dustTier = clamp(Math.floor(stage / 3), 0, 2);
+  const reward = {
+    xp: definition.xp,
+    spirit: definition.spiritBase + stage * definition.spiritPerStage,
+    dust: definition.dustBase + dustTier * definition.dustPerTier,
+    label: definition.label
+  };
   run.rewards ??= { xp: 0, spirit: 0, dust: 0, milestones: [] };
   run.rewards.xp += reward.xp;
   run.rewards.spirit += reward.spirit;
@@ -9776,6 +9801,98 @@ function settleDaoTrialBag(state, run, success, result) {
   return settled;
 }
 
+function daoTrialHarmonyRewardForState(state, milestone) {
+  const stage = Math.max(0, Math.floor((Number(state.player?.realm) || 0) / 10));
+  return {
+    xp: Math.max(0, Math.floor(Number(milestone.reward?.xp) || 0)),
+    spirit: Math.max(0, Math.floor((Number(milestone.reward?.spiritBase) || 0) + stage * (Number(milestone.reward?.spiritPerStage) || 0))),
+    dust: Math.max(0, Math.floor(Number(milestone.reward?.dust) || 0))
+  };
+}
+
+function daoTrialCurrentCycleRouteProgress(state) {
+  return Object.fromEntries(daoTrialRoutes.map((route) => {
+    const records = (state.daoTrial.history || [])
+      .filter((record) => !record.practice && Number(record.cycle) === Number(state.daoTrial.cycle) && record.routeId === route.id)
+      .sort(compareDaoTrialRecords);
+    const best = records[0] || null;
+    const bestFloor = Math.max(0, Math.floor(Number(best?.floor || best?.nodesCleared) || 0));
+    return [route.id, {
+      routeId: route.id,
+      routeName: route.name,
+      attempts: records.length,
+      bestFloor,
+      bestScore: Math.max(0, Math.floor(Number(best?.score) || 0)),
+      contribution: Math.min(daoTrialHarmonyMaxPerRoute, bestFloor),
+      best
+    }];
+  }));
+}
+
+function daoTrialFirstExploreView(state, routeId, routeProgress = null) {
+  const progress = routeProgress || daoTrialCurrentCycleRouteProgress(state);
+  const routeEntry = progress[routeId] || { attempts: 0 };
+  const masteryLevels = daoTrialRoutes.map((route) => daoTrialMasteryView(state.daoTrial.routeMastery?.[route.id] || {}).level);
+  const highestMasteryLevel = Math.max(0, ...masteryLevels);
+  const masteryLevel = daoTrialMasteryView(state.daoTrial.routeMastery?.[routeId] || {}).level;
+  const masteryGap = Math.max(0, highestMasteryLevel - masteryLevel);
+  const available = Number(routeEntry.attempts) === 0;
+  return {
+    available,
+    insight: available ? 1 : 0,
+    freeRerolls: available && masteryGap >= 2 ? 1 : 0,
+    masteryGap
+  };
+}
+
+function daoTrialHarmonyView(state) {
+  const routes = daoTrialCurrentCycleRouteProgress(state);
+  const progress = Object.values(routes).reduce((total, route) => total + route.contribution, 0);
+  const claimed = new Set(state.daoTrial.claimedHarmonyMilestones || []);
+  const milestones = daoTrialHarmonyMilestoneDefinitions.map((milestone) => ({
+    id: milestone.id,
+    target: milestone.target,
+    label: milestone.label,
+    reward: daoTrialHarmonyRewardForState(state, milestone),
+    reached: progress >= milestone.target,
+    claimed: claimed.has(milestone.id)
+  }));
+  return {
+    progress,
+    maxProgress: daoTrialRoutes.length * daoTrialHarmonyMaxPerRoute,
+    perRouteCap: daoTrialHarmonyMaxPerRoute,
+    routes,
+    milestones,
+    nextMilestone: milestones.find((milestone) => !milestone.claimed) || null
+  };
+}
+
+function claimDaoTrialHarmonyMilestones(state) {
+  const harmony = daoTrialHarmonyView(state);
+  const newlyReached = harmony.milestones.filter((milestone) => milestone.reached && !milestone.claimed);
+  if (!newlyReached.length) return null;
+  const reward = newlyReached.reduce((total, milestone) => ({
+    xp: total.xp + milestone.reward.xp,
+    spirit: total.spirit + milestone.reward.spirit,
+    dust: total.dust + milestone.reward.dust
+  }), { xp: 0, spirit: 0, dust: 0 });
+  state.daoTrial.claimedHarmonyMilestones.push(...newlyReached.map((milestone) => milestone.id));
+  state.daoTrial.claimedHarmonyMilestones = [...new Set(state.daoTrial.claimedHarmonyMilestones)];
+  state.player.xp += reward.xp;
+  state.player.spirit += reward.spirit;
+  if (reward.dust) addSpiritDust(state, reward.dust, `问道合参·${newlyReached.at(-1).label}`, state.player);
+  const rewardText = [
+    reward.xp > 0 ? `修为 +${reward.xp}` : "",
+    reward.spirit > 0 ? `灵石 +${reward.spirit}` : "",
+    reward.dust > 0 ? `灵尘 +${reward.dust}` : ""
+  ].filter(Boolean).join("，");
+  log(state, `三脉合参达到 ${harmony.progress}/${harmony.maxProgress}，领取${newlyReached.map((milestone) => `「${milestone.label}」`).join("、")}奖励：${rewardText}。`, "gold");
+  return {
+    ...reward,
+    milestones: newlyReached.map((milestone) => ({ id: milestone.id, target: milestone.target, label: milestone.label }))
+  };
+}
+
 function trialRunScore(state, run, success = undefined) {
   const breakdown = run.scoreBreakdown || { progress: 0, quality: 0, risk: 0, build: 0, total: 0 };
   let score = Math.max(0, Number(breakdown.total) || Number(breakdown.progress || 0) + Number(breakdown.quality || 0) + Number(breakdown.risk || 0) + Number(breakdown.build || 0));
@@ -9851,6 +9968,10 @@ function finishDaoTrialRun(state, run, success, result) {
   const summary = { ...trialRunSummary(state, run), success, result };
   state.daoTrial.history.unshift(summary);
   state.daoTrial.history = state.daoTrial.history.slice(0, daoTrialHistoryLimit);
+  if (!run.practice) {
+    summary.harmonyRewards = claimDaoTrialHarmonyMilestones(state);
+    summary.harmonyProgress = daoTrialHarmonyView(state).progress;
+  }
   const qualityScore = Number(summary.scoreBreakdown?.quality) || 0;
   const isNewBest = summary.floor > state.daoTrial.bestFloor
     || (summary.floor === state.daoTrial.bestFloor && summary.score > state.daoTrial.bestScore)
@@ -9976,6 +10097,7 @@ function publicTrialRun(state, run) {
       milestones: [...new Set(run.rewards?.milestones || [])]
     },
     taskBoons: run.taskBoons || [],
+    firstExploreSupport: run.firstExploreSupport ? { ...run.firstExploreSupport } : null,
     freeRerolls: run.freeRerolls || 0,
     canUseLifeHeal: Boolean(run.lifeHealAvailable && stats.hp < stats.maxHp),
     canWithdraw: Boolean(run.nodesCleared >= 5 && !run.checkpointPending && !run.pendingSealIds?.length && !run.lawOffer?.length),
@@ -10018,6 +10140,7 @@ function daoTrialRankings(state) {
 
 function publicDaoTrial(state) {
   ensureDaoTrialState(state);
+  const harmony = daoTrialHarmonyView(state);
   const mastery = Object.fromEntries(daoTrialRoutes.map((route) => {
     const record = state.daoTrial.routeMastery[route.id] || {};
     return [route.id, daoTrialMasteryView(record)];
@@ -10047,6 +10170,20 @@ function publicDaoTrial(state) {
     taskBoons: daoTrialTaskBoonsForDay(state),
     boonsAvailable: state.daoTrial.lastBoonDay !== state.day,
     claimedMilestones: [...state.daoTrial.claimedMilestones],
+    harmony: {
+      progress: harmony.progress,
+      maxProgress: harmony.maxProgress,
+      perRouteCap: harmony.perRouteCap,
+      milestones: harmony.milestones,
+      routes: Object.fromEntries(Object.entries(harmony.routes).map(([routeId, route]) => [routeId, {
+        routeId: route.routeId,
+        routeName: route.routeName,
+        attempts: route.attempts,
+        bestFloor: route.bestFloor,
+        bestScore: route.bestScore,
+        contribution: route.contribution
+      }]))
+    },
     bestFloor: state.daoTrial.bestFloor,
     bestScore: state.daoTrial.bestScore,
     bestQualityScore: state.daoTrial.bestQualityScore,
@@ -10059,16 +10196,27 @@ function publicDaoTrial(state) {
     rankings: daoTrialRankings(state),
     activeRun: publicTrialRun(state, state.daoTrial.activeRun),
     history: state.daoTrial.history.slice(0, 12),
-    routes: daoTrialRoutes.map((route) => ({
-      id: route.id,
-      name: route.name,
-      subtitle: route.subtitle,
-      rootKey: route.rootKey,
-      accent: route.accent,
-      nodeCount: daoTrialCoreFloorCount,
-      nodePoolCount: route.nodes.length + (daoTrialNodeVariants[route.id] || []).length,
-      nodes: daoTrialNodesForCycle(route.id, state.daoTrial.cycle).map((node) => ({ name: node.name, type: node.type, elite: Boolean(node.elite), boss: Boolean(node.boss) }))
-    })),
+    routes: daoTrialRoutes.map((route) => {
+      const cycleProgress = harmony.routes[route.id];
+      const firstExplore = daoTrialFirstExploreView(state, route.id, harmony.routes);
+      return {
+        id: route.id,
+        name: route.name,
+        subtitle: route.subtitle,
+        rootKey: route.rootKey,
+        accent: route.accent,
+        nodeCount: daoTrialCoreFloorCount,
+        nodePoolCount: route.nodes.length + (daoTrialNodeVariants[route.id] || []).length,
+        nodes: daoTrialNodesForCycle(route.id, state.daoTrial.cycle).map((node) => ({ name: node.name, type: node.type, elite: Boolean(node.elite), boss: Boolean(node.boss) })),
+        cycleProgress: {
+          attempts: cycleProgress.attempts,
+          bestFloor: cycleProgress.bestFloor,
+          bestScore: cycleProgress.bestScore,
+          contribution: cycleProgress.contribution
+        },
+        firstExplore: { ...firstExplore, rewardEligible: state.daoTrial.tickets > 0 }
+      };
+    }),
     companions: availableDaoTrialCompanions(state),
     sealCatalog: daoTrialSeals.map((seal) => ({ ...seal, discovered: state.daoTrial.discoveredSealIds.includes(seal.id) })),
     lawCatalog: daoTrialLaws.map((law) => ({ ...publicTrialLaw(law), discovered: state.daoTrial.discoveredLawIds.includes(law.id) })),
@@ -10249,6 +10397,8 @@ export function startDaoTrial(state, payload = {}) {
   const attempt = practice ? state.daoTrial.attemptsUsed + state.daoTrial.history.filter((entry) => entry.cycle === state.daoTrial.cycle && entry.practice).length + 1 : state.daoTrial.attemptsUsed;
   const combatant = createTrialCombatant(state);
   const mastery = daoTrialMasteryView(state.daoTrial.routeMastery[route.id] || {});
+  const firstExplore = daoTrialFirstExploreView(state, route.id);
+  const firstExploreApplied = !practice && firstExplore.available;
   const companionEntity = companion ? state.npcs.find((npc) => npc.id === companion.person.id) : null;
   const companionStats = companionEntity ? effectiveStats(companionEntity, state, { includeDailyRootFortune: false }) : null;
   const worldSnapshot = {
@@ -10284,7 +10434,7 @@ export function startDaoTrial(state, payload = {}) {
     pendingSealIds: [],
     sealNonce: 0,
     masteryLevel: mastery.level,
-    insight: 1 + Math.max(0, Math.floor(Number(affix.effects?.initialInsight) || 0)) + (mastery.level >= 2 ? 1 : 0),
+    insight: 1 + Math.max(0, Math.floor(Number(affix.effects?.initialInsight) || 0)) + (mastery.level >= 2 ? 1 : 0) + (firstExploreApplied ? firstExplore.insight : 0),
     lawIds: [],
     lawOffer: [],
     lawNonce: 0,
@@ -10292,7 +10442,7 @@ export function startDaoTrial(state, payload = {}) {
     offeredSealIds: [],
     taskBoons,
     dailyRootFortuneXpMultiplier: dailyRootFortuneXpMultiplier(state, state.player),
-    freeRerolls: (taskBoons.some((boon) => boon.id === "study") ? 1 : 0) + (mastery.level >= 4 ? 1 : 0),
+    freeRerolls: (taskBoons.some((boon) => boon.id === "study") ? 1 : 0) + (mastery.level >= 4 ? 1 : 0) + (firstExploreApplied ? firstExplore.freeRerolls : 0),
     lifeHealAvailable: taskBoons.some((boon) => boon.id === "life"),
     eliteCleared: false,
     bossCleared: false,
@@ -10315,6 +10465,12 @@ export function startDaoTrial(state, payload = {}) {
     combatStats: { battles: 0, rounds: 0, damageDealt: 0, damageTaken: 0, healing: 0, shields: 0, skillCasts: 0, manaSpent: 0, lawTriggers: 0 },
     scoreBreakdown: { progress: 0, quality: 0, risk: 0, build: 0, total: 0 },
     rewards: { xp: 0, spirit: 0, dust: 0, milestones: [] },
+    firstExploreSupport: {
+      applied: firstExploreApplied,
+      insight: firstExploreApplied ? firstExplore.insight : 0,
+      freeRerolls: firstExploreApplied ? firstExplore.freeRerolls : 0,
+      masteryGap: firstExplore.masteryGap
+    },
     combatant
   };
   run.lawOffer = lawOfferForRun(state, run, route, run.lawNonce);
