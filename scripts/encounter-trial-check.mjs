@@ -53,9 +53,9 @@ for (const event of encounterDefinitions) {
   assert.equal(new Set(event.choices.map((choice) => choice.id)).size, 3, `${event.id} 选择 ID 必须唯一`);
 }
 assert.equal(daoTrialRoutes.length, 3, "问道秘境应提供三条完整路线");
-assert.equal(daoTrialSeals.length, 48, "问道秘境应提供四十八道印");
-assert.equal(daoTrialLaws.length, 18, "问道秘境 V2 应提供十八项问道法则");
-assert.equal(new Set(daoTrialSeals.map((seal) => seal.id)).size, 48, "道印 ID 必须唯一");
+assert.equal(daoTrialSeals.length, 256, "问道秘境应提供二百五十六道印");
+assert.equal(daoTrialLaws.length, 64, "问道秘境应提供六十四项问道法则");
+assert.equal(new Set(daoTrialSeals.map((seal) => seal.id)).size, 256, "道印 ID 必须唯一");
 for (const route of daoTrialRoutes) assert.equal(route.nodes.length, 7, `${route.id} 必须包含七个节点`);
 for (const [eventId, options] of Object.entries(daoTrialEventOptions)) assert.equal(options.length, 3, `${eventId} 必须提供三个取舍`);
 for (const event of encounterDefinitions) {

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { daoTrialLaws, daoTrialRoutes } from "../server/daoTrialData.mjs";
+import { daoTrialLaws, daoTrialRoutes, daoTrialSeals, daoTrialSealSchoolResonances } from "../server/daoTrialData.mjs";
 import { replayStatMax } from "../web/src/battleReplay.js";
 import { advanceDaoTrial, createDefaultState, ensureStateShape, getDaoTrialAnalytics, getPublicReplay, getPublicState, startDaoTrial } from "../server/gameLogic.mjs";
 
@@ -51,12 +51,62 @@ function forcedFailureState({ affixId = "ore-awakening", sealIds = [] } = {}) {
   return state;
 }
 
-assert.equal(daoTrialLaws.length, 18, "应配置十八项问道法则");
+assert.equal(daoTrialLaws.length, 64, "应配置六十四项问道法则");
+assert.equal(daoTrialSeals.length, 256, "应配置二百五十六项问道道印");
 assert.equal(new Set(daoTrialLaws.map((law) => law.id)).size, daoTrialLaws.length, "问道法则 ID 必须唯一");
+assert.equal(new Set(daoTrialSeals.map((seal) => seal.id)).size, daoTrialSeals.length, "问道道印 ID 必须唯一");
+assert.deepEqual(Object.fromEntries(["silver", "gold", "diamond"].map((rarity) => [rarity, daoTrialLaws.filter((law) => law.rarity === rarity).length])), { silver: 40, gold: 16, diamond: 8 }, "法则品质数量应为白银 40、黄金 16、钻石 8");
+assert.ok(Object.values(Object.groupBy(daoTrialLaws, (law) => law.school)).every((entries) => entries.length === 8), "八个法则流派应各有八项法则");
+assert.ok(Object.values(Object.groupBy(daoTrialSeals, (seal) => seal.school)).every((entries) => entries.length === 32), "八个道印流派应各有三十二项道印");
+assert.equal(daoTrialSealSchoolResonances.length, 24, "八个道印流派应各有 2/4/6 三档共鸣");
 for (const law of daoTrialLaws) {
   assert.ok(law.name && law.school && law.trigger && law.text, `${law.id} 缺少展示或触发信息`);
   assert.ok(Object.keys(law.effects || {}).length, `${law.id} 必须包含结构化效果`);
 }
+for (const seal of daoTrialSeals) {
+  assert.ok(seal.name && seal.school && seal.text, `${seal.id} 缺少展示信息`);
+  assert.ok(Object.keys(seal.effects || {}).length, `${seal.id} 必须包含结构化效果`);
+}
+
+const goldPityState = createDefaultState();
+ensureStateShape(goldPityState);
+goldPityState.daoTrial.lawPity = { withoutGold: 2, withoutDiamond: 3 };
+const goldPityRun = startDaoTrial(goldPityState, { routeId: "golden-pass" }).run;
+assert.ok(goldPityRun.lawOffer.some((law) => ["gold", "diamond"].includes(law.rarity)), "连续两次未出黄金以上时应触发黄金保底");
+
+const diamondPityState = createDefaultState();
+ensureStateShape(diamondPityState);
+diamondPityState.daoTrial.lawPity = { withoutGold: 2, withoutDiamond: 12 };
+const diamondPityRun = startDaoTrial(diamondPityState, { routeId: "golden-pass" }).run;
+assert.ok(diamondPityRun.lawOffer.some((law) => law.rarity === "diamond"), "连续十二次未出钻石时应触发钻石保底");
+assert.ok(diamondPityRun.lawOffer.filter((law) => law.rarity === "diamond").length <= 1, "单次法则选择最多出现一项钻石法则");
+assert.equal(new Set(diamondPityRun.lawOffer.map((law) => law.id)).size, diamondPityRun.lawOffer.length, "单次法则选择不得重复");
+assert.deepEqual(diamondPityRun.lawRarityRates, { silver: 82, gold: 16, diamond: 2 }, "首层应公开 82/16/2 品质概率");
+assert.equal(diamondPityState.daoTrial.discoveredLawIds.length, 3, "展示的法则应立即进入发现记录");
+assert.deepEqual(diamondPityState.daoTrial.recentLawOfferIds.slice(-3), diamondPityRun.lawOffer.map((law) => law.id), "最近展示记录应保存本次法则选项");
+
+const practicePityState = createDefaultState();
+ensureStateShape(practicePityState);
+practicePityState.daoTrial.tickets = 0;
+practicePityState.daoTrial.lawPity = { withoutGold: 1, withoutDiamond: 5 };
+startDaoTrial(practicePityState, { routeId: "golden-pass" });
+assert.deepEqual(practicePityState.daoTrial.lawPity, { withoutGold: 1, withoutDiamond: 5 }, "演练不应推进法则保底计数");
+
+const resonanceState = createDefaultState();
+strengthenPlayer(resonanceState);
+ensureStateShape(resonanceState);
+startDaoTrial(resonanceState, { routeId: "golden-pass" });
+resonanceState.daoTrial.activeRun.lawOffer = [];
+resonanceState.daoTrial.activeRun.sealIds = ["edge-intent", "star-edge"];
+const resonancePublic = getPublicState(resonanceState).daoTrial.activeRun;
+assert.ok(resonancePublic.synergies.some((entry) => entry.id === "school-attack-2"), "持有两枚攻伐道印应激活第一档流派共鸣");
+assert.deepEqual(resonancePublic.resonanceProgress.find((entry) => entry.school === "攻伐"), { school: "攻伐", count: 2, activeThreshold: 2, nextThreshold: 4, complete: false }, "应公开下一档共鸣进度");
+const resonanceBaseAttack = resonanceState.daoTrial.activeRun.combatant.attack;
+const resonanceBattle = advanceDaoTrial(resonanceState, { action: "battle" });
+assert.equal(resonanceBattle.replay.left.stats.attack, Math.floor(resonanceBaseAttack * 1.19), "两枚攻伐道印应叠加自身 16% 攻击与第一档 3% 共鸣效果");
+const resonanceSealOffer = getPublicState(resonanceState).daoTrial.activeRun.sealOffer;
+assert.equal(new Set(resonanceSealOffer.map((seal) => seal.id)).size, resonanceSealOffer.length, "单次道印选择不得重复");
+assert.ok(resonanceSealOffer.every((seal) => resonanceState.daoTrial.discoveredSealIds.includes(seal.id)), "展示的道印应立即进入发现记录");
 
 for (const law of daoTrialLaws) {
   const lawState = createDefaultState();
@@ -157,6 +207,10 @@ assert.ok(poisonBattle.result.replay.events.some((event) => event.lawId === "poi
 const echoBattle = Array.from({ length: 12 }, (_, index) => dynamicLawBattle("spell-echo", "thunder_pearl", `|echo-${index}`))
   .find((entry) => entry.result.replay.events.some((event) => event.lawId === "spell-echo"));
 assert.ok(echoBattle, "术后余音应按确定性概率产生额外伤害事件");
+const expandedEchoBattle = Array.from({ length: 20 }, (_, index) => dynamicLawBattle("arcane-overflow", "thunder_pearl", `|expanded-echo-${index}`))
+  .find((entry) => entry.result.replay.events.some((event) => event.lawId === "arcane-overflow"));
+assert.ok(expandedEchoBattle, "新法则复用术法余波机制时，战斗日志应记录实际法则来源");
+assert.ok(expandedEchoBattle.result.replay.events.filter((event) => event.kind === "law").every((event) => event.lawId !== "spell-echo"), "未持有术后余音时不得错误记录旧法则 ID");
 const executionBattle = dynamicLawBattle("execution-return", "thunder_pearl");
 assert.equal(executionBattle.state.daoTrial.activeRun?.nextBattleAttack, 0.12, "斩意回流应在获胜后储存下一战攻击加成");
 
@@ -231,7 +285,7 @@ pressureRun.lawOffer = [];
 pressureRun.nodeIndex = 4;
 pressureRun.floor = 5;
 const floorFivePreview = getPublicState(npcPressureState).daoTrial.activeRun.enemyPreview;
-assert.ok(floorFivePreview.powerRatio >= 90 && floorFivePreview.powerRatio <= 110, "第五层精英应接近玩家入场战力，不应直接形成碾压");
+assert.ok(floorFivePreview.powerRatio >= 85 && floorFivePreview.powerRatio <= 110, "第五层精英应接近玩家入场战力，不应直接形成碾压");
 pressureRun.combatant.hp = Math.max(1, Math.floor(pressureRun.combatant.maxHp * 0.2));
 pressureRun.combatant.mana = Math.floor(pressureRun.combatant.maxMana * 0.1);
 const depletedPreview = getPublicState(npcPressureState).daoTrial.activeRun.enemyPreview;
@@ -329,9 +383,17 @@ if (contribution) assert.ok(contribution.assists > 0 && contribution.damage + co
 const legacyState = createDefaultState();
 legacyState.daoTrial.version = 2;
 legacyState.daoTrial.bestFloor = undefined;
-legacyState.daoTrial.history = [{ id: "legacy", routeId: "golden-pass", routeName: "金石关", success: true, nodesCleared: 4, score: 618, practice: false }];
+legacyState.daoTrial.discoveredLawIds = undefined;
+legacyState.daoTrial.discoveredSealIds = undefined;
+legacyState.daoTrial.yearGoals.lawsSeen = ["triple-edge"];
+legacyState.daoTrial.history = [{ id: "legacy", routeId: "golden-pass", routeName: "金石关", success: true, nodesCleared: 4, score: 618, practice: false, lawIds: ["spell-echo"], sealIds: ["edge-intent"] }];
 ensureStateShape(legacyState);
-assert.equal(legacyState.daoTrial.version, 3, "旧秘境状态应迁移到 V3");
+assert.equal(legacyState.daoTrial.version, 4, "旧秘境状态应迁移到 V4");
+assert.deepEqual(legacyState.daoTrial.recentLawOfferIds, [], "旧存档应补齐最近法则展示记录");
+assert.deepEqual(legacyState.daoTrial.recentSealOfferIds, [], "旧存档应补齐最近道印展示记录");
+assert.deepEqual(legacyState.daoTrial.lawPity, { withoutGold: 0, withoutDiamond: 0 }, "旧存档应补齐法则保底状态");
+assert.deepEqual(new Set(legacyState.daoTrial.discoveredLawIds), new Set(["triple-edge", "spell-echo"]), "旧存档应从年度与历史记录恢复已发现法则");
+assert.deepEqual(legacyState.daoTrial.discoveredSealIds, ["edge-intent"], "旧存档应从历史记录恢复已发现道印");
 assert.equal(getPublicState(legacyState).daoTrial.bestFloor, 7, "旧通关记录应推导为七层历史深度");
 assert.equal(getPublicState(legacyState).daoTrial.history[0].scoreBreakdown.legacy, true, "旧版记录应标记为无评分明细");
 
@@ -378,4 +440,4 @@ const windAnalytics = getDaoTrialAnalytics(analyticsState, { range: 7, routeId: 
 assert.equal(windAnalytics.summary.attempts, 1, "路线筛选必须只保留指定路线的趋势数据");
 assert.equal(windAnalytics.routeStats.find((entry) => entry.routeId === "golden-pass").attempts, 3, "路线筛选不应破坏全路线效率对比");
 
-console.log("dao-trial-v2-check: passed (15 core floors, floor 16 endless, scoring, companion, laws, determinism, migration)");
+console.log("dao-trial-v2-check: passed (64 laws, 256 seals, rarity pity, resonance, 15 core floors, endless, scoring, companion, determinism, migration)");

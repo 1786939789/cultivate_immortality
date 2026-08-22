@@ -1,6 +1,6 @@
 import { canonicalPotentialRealms, combatSkills, dungeons, duelLadderDays, duelLossScore, duelRankForScore, duelRanks, duelSeasonDay, duelSeasonLength, duelSeasonMaxScore, duelSeasonOfDay, duelTournamentBracketSize, duelTournamentDays, duelWinScore, equipmentCatalog, equipmentSlots, equipmentTiers, itemCatalog, npcGenders, npcNames, provinceVersion, provinces, realms, realmStages, rootCycle, specialRoots, spiritPearls, roots, rosterVersion, sectRoster, sects, taskTemplates } from "./gameData.mjs";
 import { encounterCategoryLabels, encounterDefinitionCount, encounterDefinitionMap, encounterDefinitions } from "./encounterData.mjs";
-import { daoTrialCycleAffixes, daoTrialCycleLength, daoTrialEventOptions, daoTrialLawMap, daoTrialLaws, daoTrialNodeVariants, daoTrialRouteMap, daoTrialRoutes, daoTrialSealMap, daoTrialSeals, daoTrialSealSynergies } from "./daoTrialData.mjs";
+import { daoTrialCycleAffixes, daoTrialCycleLength, daoTrialEventOptions, daoTrialLawMap, daoTrialLawRarities, daoTrialLawRarityRates, daoTrialLaws, daoTrialNodeVariants, daoTrialRouteMap, daoTrialRoutes, daoTrialSealMap, daoTrialSeals, daoTrialSealSchoolResonances, daoTrialSealSynergies } from "./daoTrialData.mjs";
 
 export function dateKey(date = new Date()) {
   const year = date.getFullYear();
@@ -1067,6 +1067,11 @@ function runTurnBattle(left, right, options = {}) {
   const pushEvent = (kind, text, detail = {}) => {
     events.push({ round: currentRound, kind, text, ...detail });
   };
+  const lawSourceFor = (side, effectKey, fallbackId) => {
+    const source = trialBuffs[side]?.__lawSources?.[effectKey];
+    const fallback = daoTrialLawMap[fallbackId];
+    return source || { id: fallbackId, name: fallback?.name || "问道法则" };
+  };
 
   if (leftPenalty) pushEvent("root", `${right.name}主灵根克制${left.name}，${left.name}攻击、防御、神识降低 ${Math.round(leftPenalty * 1000) / 10}%`, { side: "left", penalty: leftPenalty });
   if (rightPenalty) pushEvent("root", `${left.name}主灵根克制${right.name}，${right.name}攻击、防御、神识降低 ${Math.round(rightPenalty * 1000) / 10}%`, { side: "right", penalty: rightPenalty });
@@ -1170,7 +1175,8 @@ function runTurnBattle(left, right, options = {}) {
     if (state.targetHp - damage <= 0 && trialBuffs[targetSide].lethalGuard && !lethalGuardUsed[targetSide]) {
       damage = Math.max(0, state.targetHp - 1);
       lethalGuardUsed[targetSide] = true;
-      pushEvent("law", `${state.targetName}以不退之志守住最后一线生机`, { actorSide: targetSide, targetSide: side, lawId: "unyielding-law", leftHp, rightHp, leftMana, rightMana });
+      const law = lawSourceFor(targetSide, "lethalGuard", "unyielding-law");
+      pushEvent("law", `${state.targetName}以「${law.name}」守住最后一线生机`, { actorSide: targetSide, targetSide: side, lawId: law.id, lawName: law.name, leftHp, rightHp, leftMana, rightMana });
     }
     setHp(targetSide, state.targetHp - damage);
 
@@ -1192,7 +1198,8 @@ function runTurnBattle(left, right, options = {}) {
     if (lawReflect > 0 && damage > 0) {
       const reflected = Math.max(1, Math.floor(damage * lawReflect));
       setHp(side, sideState(side).hp - reflected);
-      pushEvent("law", `${state.targetName}借铁壁反震 ${reflected} 伤害`, { actorSide: targetSide, targetSide: side, lawId: "iron-rebound", damage: reflected, leftHp, rightHp, leftMana, rightMana });
+      const law = lawSourceFor(targetSide, "reflectCharge", "iron-rebound");
+      pushEvent("law", `${state.targetName}借「${law.name}」反震 ${reflected} 伤害`, { actorSide: targetSide, targetSide: side, lawId: law.id, lawName: law.name, damage: reflected, leftHp, rightHp, leftMana, rightMana });
     }
     if (options.basic) {
       actionCounts[side].attacks += 1;
@@ -1200,7 +1207,8 @@ function runTurnBattle(left, right, options = {}) {
       if (every && actionCounts[side].attacks % every === 0 && sideState(targetSide).hp > 0) {
         const echo = Math.max(1, Math.floor(state.actor.attack * Math.max(0, Number(trialBuffs[side].attackEchoPower) || 0.35)));
         setHp(targetSide, sideState(targetSide).hp - echo);
-        pushEvent("law", `${state.actorName}引动剑鸣余波，追加 ${echo} 伤害`, { actorSide: side, targetSide, lawId: "triple-edge", damage: echo, leftHp, rightHp, leftMana, rightMana });
+        const law = lawSourceFor(side, "attackEchoEvery", "triple-edge");
+        pushEvent("law", `${state.actorName}引动「${law.name}」余波，追加 ${echo} 伤害`, { actorSide: side, targetSide, lawId: law.id, lawName: law.name, damage: echo, leftHp, rightHp, leftMana, rightMana });
       }
     }
     return damage;
@@ -1221,13 +1229,15 @@ function runTurnBattle(left, right, options = {}) {
       openingSkillUsed[side] = true;
       if (openingBonus && state.targetHp / Math.max(1, state.target.maxHp) > 0.8) {
         skill = boostSkill(skill, openingBonus);
-        pushEvent("law", `${state.actorName}趁${state.targetName}气势未稳，以破势追击强化首次术法`, { actorSide: side, targetSide, lawId: "opening-break", leftHp, rightHp, leftMana, rightMana });
+        const law = lawSourceFor(side, "openingSkillPower", "opening-break");
+        pushEvent("law", `${state.actorName}趁${state.targetName}气势未稳，以「${law.name}」强化首次术法`, { actorSide: side, targetSide, lawId: law.id, lawName: law.name, leftHp, rightHp, leftMana, rightMana });
       }
     }
     if (companionSkillBoost[side] > 0) {
       skill = boostSkill(skill, companionSkillBoost[side]);
       companionSkillBoost[side] = 0;
-      pushEvent("law", `${state.actorName}借同行战阵强化本次术法`, { actorSide: side, targetSide, lawId: "twin-array", leftHp, rightHp, leftMana, rightMana });
+      const law = lawSourceFor(side, "companionSkillPower", "twin-array");
+      pushEvent("law", `${state.actorName}借「${law.name}」强化本次术法`, { actorSide: side, targetSide, lawId: law.id, lawName: law.name, leftHp, rightHp, leftMana, rightMana });
     }
     if (skill.type !== "heal") {
       healStreak[side] = 0;
@@ -1241,7 +1251,10 @@ function runTurnBattle(left, right, options = {}) {
     const freeEvery = Math.max(0, Math.floor(Number(trialBuffs[side].freeSkillEvery) || 0));
     const free = Boolean(freeEvery && actionCounts[side].skills % freeEvery === 0);
     setMana(side, state.mana - (free ? 0 : skill.cost));
-    if (free) pushEvent("law", `${state.actorName}引动灵潮回环，本次施法未消耗法力`, { actorSide: side, lawId: "mana-loop", leftHp, rightHp, leftMana, rightMana });
+    if (free) {
+      const law = lawSourceFor(side, "freeSkillEvery", "mana-loop");
+      pushEvent("law", `${state.actorName}引动「${law.name}」，本次施法未消耗法力`, { actorSide: side, lawId: law.id, lawName: law.name, leftHp, rightHp, leftMana, rightMana });
+    }
     cooldowns[side] = skill.cooldown;
     let total = 0;
 
@@ -1266,7 +1279,8 @@ function runTurnBattle(left, right, options = {}) {
         addEffect(targetSide, { type: "dot", name: skill.name, percent: skill.percent, duration: skill.duration });
         if (dotStack) {
           statusStacks[side] += 1;
-          pushEvent("law", `${state.actorName}令持续伤势叠至 ${statusStacks[side]} 层`, { actorSide: side, targetSide, lawId: "poison-formation", leftHp, rightHp, leftMana, rightMana });
+          const law = lawSourceFor(side, "dotStack", "poison-formation");
+          pushEvent("law", `${state.actorName}借「${law.name}」令持续伤势叠至 ${statusStacks[side]} 层`, { actorSide: side, targetSide, lawId: law.id, lawName: law.name, leftHp, rightHp, leftMana, rightMana });
         }
       }
       if (skill.type === "stun") addEffect(targetSide, { type: "stun", duration: skill.duration });
@@ -1284,7 +1298,8 @@ function runTurnBattle(left, right, options = {}) {
       addEffect(targetSide, { type: "dot", name: skill.name, percent: skill.percent, duration: skill.duration });
       if (dotStack) {
         statusStacks[side] += 1;
-        pushEvent("law", `${state.actorName}令持续伤势叠至 ${statusStacks[side]} 层`, { actorSide: side, targetSide, lawId: "poison-formation", leftHp, rightHp, leftMana, rightMana });
+        const law = lawSourceFor(side, "dotStack", "poison-formation");
+        pushEvent("law", `${state.actorName}借「${law.name}」令持续伤势叠至 ${statusStacks[side]} 层`, { actorSide: side, targetSide, lawId: law.id, lawName: law.name, leftHp, rightHp, leftMana, rightMana });
       }
       pushEvent("skill", `${state.actorName}放出${skill.name}，${state.targetName}陷入持续伤害`, { actorSide: side, targetSide, skill: skill.name, leftHp, rightHp, leftMana, rightMana });
       return 0;
@@ -1306,7 +1321,8 @@ function runTurnBattle(left, right, options = {}) {
         heal = Math.floor(heal * (1 + healBoost));
         healBoostReady[side] = false;
         healStreak[side] = 0;
-        pushEvent("law", `${state.actorName}引动生生不绝，本次治疗提高`, { actorSide: side, lawId: "endless-life", leftHp, rightHp, leftMana, rightMana });
+        const law = lawSourceFor(side, "healCountBoost", "endless-life");
+        pushEvent("law", `${state.actorName}引动「${law.name}」，本次治疗提高`, { actorSide: side, lawId: law.id, lawName: law.name, leftHp, rightHp, leftMana, rightMana });
       } else {
         healStreak[side] += 1;
         if (healStreak[side] >= 2 && healBoost) healBoostReady[side] = true;
@@ -1318,7 +1334,8 @@ function runTurnBattle(left, right, options = {}) {
       const shields = Math.floor(overflow * overhealShield);
       if (shields > 0) {
         addEffect(side, { type: "shield", reduce: clamp(shields / Math.max(1, state.actor.maxHp), 0.03, 0.25), duration: 2 });
-        pushEvent("law", `${state.actorName}将溢出治疗化为 ${shields} 点护势`, { actorSide: side, lawId: "overheal-shield", shields, leftHp, rightHp, leftMana, rightMana });
+        const law = lawSourceFor(side, "overhealShield", "overheal-shield");
+        pushEvent("law", `${state.actorName}借「${law.name}」将溢出治疗化为 ${shields} 点护势`, { actorSide: side, lawId: law.id, lawName: law.name, shields, leftHp, rightHp, leftMana, rightMana });
       }
       pushEvent("skill", `${state.actorName}运转${skill.name}，恢复 ${actualHealing} 血量`, { actorSide: side, targetSide, skill: skill.name, healing: actualHealing, leftHp, rightHp, leftMana, rightMana });
       return 0;
@@ -1355,7 +1372,8 @@ function runTurnBattle(left, right, options = {}) {
       if (guard && (round === 1 || !previousRoundDamage[side])) {
         addEffect(side, { type: "shield", reduce: guard, duration: 1 });
         const state = sideState(side);
-        pushEvent("law", `${state.actorName}守中不乱，获得短暂减伤`, { actorSide: side, lawId: "steady-heart", leftHp, rightHp, leftMana, rightMana });
+        const law = lawSourceFor(side, "noHitShield", "steady-heart");
+        pushEvent("law", `${state.actorName}引动「${law.name}」，获得短暂减伤`, { actorSide: side, lawId: law.id, lawName: law.name, leftHp, rightHp, leftMana, rightMana });
       }
     }
 
@@ -1405,7 +1423,8 @@ function runTurnBattle(left, right, options = {}) {
         if (skillDamage > 0 && sideState(targetSide).hp > 0 && echoChance && random() < echoChance) {
           const echoPower = Math.max(0, Number(trialBuffs[side].skillEchoPower) || 0);
           const echo = applyStrike(side, echoPower);
-          pushEvent("law", `${state.actorName}引动术后余音，追加 ${echo} 伤害`, { actorSide: side, targetSide, lawId: "spell-echo", damage: echo, leftHp, rightHp, leftMana, rightMana });
+          const law = lawSourceFor(side, "skillEchoChance", "spell-echo");
+          pushEvent("law", `${state.actorName}引动「${law.name}」，追加 ${echo} 伤害`, { actorSide: side, targetSide, lawId: law.id, lawName: law.name, damage: echo, leftHp, rightHp, leftMana, rightMana });
         }
       } else {
         const damage = applyStrike(side, 1, { basic: true });
@@ -8408,7 +8427,7 @@ const encounterMinGapDays = 2;
 const encounterMaxGapDays = 4;
 const encounterActiveChainLimit = 2;
 const encounterFamilyCooldownDays = 30;
-const daoTrialStateVersion = 3;
+const daoTrialStateVersion = 4;
 const daoTrialHistoryLimit = 104;
 const daoTrialDailyTicketGrant = 1;
 const daoTrialTicketCap = 2;
@@ -9132,6 +9151,11 @@ function createDaoTrialState(day = 1) {
     bestFloor: 0,
     bestQualityScore: 0,
     bestResult: null,
+    recentLawOfferIds: [],
+    recentSealOfferIds: [],
+    discoveredLawIds: [],
+    discoveredSealIds: [],
+    lawPity: { withoutGold: 0, withoutDiamond: 0 },
     activeRun: null,
     history: [],
     yearHistory: [],
@@ -9145,6 +9169,19 @@ function ensureDaoTrialState(state) {
   if (!state.daoTrial || state.daoTrial.version !== daoTrialStateVersion) {
     const previous = state.daoTrial || {};
     const previousHistory = Array.isArray(previous.history) ? previous.history : [];
+    const migratedLawIds = [
+      ...(previous.discoveredLawIds || []),
+      ...(previous.yearGoals?.lawsSeen || []),
+      ...(previous.activeRun?.lawIds || []),
+      ...(previous.activeRun?.lawOffer || []),
+      ...previousHistory.flatMap((record) => record.lawIds || [])
+    ];
+    const migratedSealIds = [
+      ...(previous.discoveredSealIds || []),
+      ...(previous.activeRun?.sealIds || []),
+      ...(previous.activeRun?.pendingSealIds || []),
+      ...previousHistory.flatMap((record) => record.sealIds || [])
+    ];
     state.daoTrial = {
       ...createDaoTrialState(state.day),
       history: previousHistory,
@@ -9157,6 +9194,11 @@ function ensureDaoTrialState(state) {
       bestFloor: Math.max(0, Math.floor(Number(previous.bestFloor) || 0)),
       bestQualityScore: Math.max(0, Math.floor(Number(previous.bestQualityScore) || 0)),
       bestResult: previous.bestResult || null,
+      recentLawOfferIds: previous.recentLawOfferIds,
+      recentSealOfferIds: previous.recentSealOfferIds,
+      discoveredLawIds: migratedLawIds,
+      discoveredSealIds: migratedSealIds,
+      lawPity: previous.lawPity,
       activeRun: previous.activeRun || null,
       routeMastery: previous.routeMastery,
       yearGoals: previous.yearGoals,
@@ -9173,6 +9215,13 @@ function ensureDaoTrialState(state) {
     changed = true;
   }
   state.daoTrial.lastBoonDay = Math.max(0, Math.floor(Number(state.daoTrial.lastBoonDay) || 0));
+  state.daoTrial.recentLawOfferIds = (state.daoTrial.recentLawOfferIds || []).filter((id) => daoTrialLawMap[id]).slice(-18);
+  state.daoTrial.recentSealOfferIds = (state.daoTrial.recentSealOfferIds || []).filter((id) => daoTrialSealMap[id]).slice(-36);
+  state.daoTrial.discoveredLawIds = [...new Set((state.daoTrial.discoveredLawIds || []).filter((id) => daoTrialLawMap[id]))];
+  state.daoTrial.discoveredSealIds = [...new Set((state.daoTrial.discoveredSealIds || []).filter((id) => daoTrialSealMap[id]))];
+  state.daoTrial.lawPity ??= { withoutGold: 0, withoutDiamond: 0 };
+  state.daoTrial.lawPity.withoutGold = Math.max(0, Math.floor(Number(state.daoTrial.lawPity.withoutGold) || 0));
+  state.daoTrial.lawPity.withoutDiamond = Math.max(0, Math.floor(Number(state.daoTrial.lawPity.withoutDiamond) || 0));
   state.daoTrial.routeMastery ??= createDaoTrialState(state.day).routeMastery;
   state.daoTrial.yearGoals ??= createDaoTrialState(state.day).yearGoals;
   state.daoTrial.yearHistory ??= [];
@@ -9188,6 +9237,11 @@ function ensureDaoTrialState(state) {
     const tickets = state.daoTrial.tickets;
     const lastTicketDay = state.daoTrial.lastTicketDay;
     const lastBoonDay = state.daoTrial.lastBoonDay;
+    const recentLawOfferIds = state.daoTrial.recentLawOfferIds;
+    const recentSealOfferIds = state.daoTrial.recentSealOfferIds;
+    const discoveredLawIds = state.daoTrial.discoveredLawIds;
+    const discoveredSealIds = state.daoTrial.discoveredSealIds;
+    const lawPity = state.daoTrial.lawPity;
     let yearGoals = state.daoTrial.yearGoals;
     const yearHistory = state.daoTrial.yearHistory || [];
     const expectedYear = Math.floor((expectedCycle - 1) / 52) + 1;
@@ -9195,7 +9249,7 @@ function ensureDaoTrialState(state) {
       yearHistory.unshift({ ...yearGoals, endedCycle: expectedCycle - 1 });
       yearGoals = { ...createDaoTrialState(state.day).yearGoals, year: expectedYear };
     }
-    state.daoTrial = { ...createDaoTrialState(state.day), history, routeMastery, yearGoals, yearHistory: yearHistory.slice(0, 8), tickets, lastTicketDay, lastBoonDay };
+    state.daoTrial = { ...createDaoTrialState(state.day), history, routeMastery, yearGoals, yearHistory: yearHistory.slice(0, 8), tickets, lastTicketDay, lastBoonDay, recentLawOfferIds, recentSealOfferIds, discoveredLawIds, discoveredSealIds, lawPity };
     changed = true;
   }
   state.daoTrial.claimedMilestones = [...new Set(state.daoTrial.claimedMilestones || [])];
@@ -9285,6 +9339,8 @@ function ensureDaoTrialState(state) {
       for (const key of ["battles", "rounds", "damageDealt", "damageTaken", "healing", "shields", "skillCasts", "manaSpent", "lawTriggers"]) activeRun.combatStats[key] = Math.max(0, Number(activeRun.combatStats[key]) || 0);
       activeRun.lawIds = [...new Set((activeRun.lawIds || []).filter((id) => daoTrialLawMap[id]))];
       activeRun.lawOffer = [...new Set((activeRun.lawOffer || []).filter((id) => daoTrialLawMap[id]))];
+      activeRun.offeredLawIds = [...new Set((activeRun.offeredLawIds || []).filter((id) => daoTrialLawMap[id]))];
+      activeRun.offeredSealIds = [...new Set((activeRun.offeredSealIds || []).filter((id) => daoTrialSealMap[id]))];
       activeRun.lawNonce = Math.max(0, Math.floor(Number(activeRun.lawNonce) || 0));
       activeRun.checkpointPending = Boolean(activeRun.checkpointPending);
       activeRun.companionContribution ??= { damage: 0, healing: 0, shields: 0, control: 0, assists: 0 };
@@ -9400,52 +9456,124 @@ function createTrialCombatant(state) {
   };
 }
 
-function sealOfferForRun(run, route, nonce = 0) {
+function rememberDaoTrialOffer(state, run, ids, kind) {
+  const recentKey = kind === "law" ? "recentLawOfferIds" : "recentSealOfferIds";
+  const discoveredKey = kind === "law" ? "discoveredLawIds" : "discoveredSealIds";
+  const runKey = kind === "law" ? "offeredLawIds" : "offeredSealIds";
+  const limit = kind === "law" ? 18 : 36;
+  state.daoTrial[recentKey] = [...(state.daoTrial[recentKey] || []), ...ids].slice(-limit);
+  state.daoTrial[discoveredKey] = [...new Set([...(state.daoTrial[discoveredKey] || []), ...ids])];
+  run[runKey] = [...new Set([...(run[runKey] || []), ...ids])];
+}
+
+function rankedOfferCandidate(items, seed, weightOf) {
+  return [...items].sort((a, b) => (
+    stableHash(`${seed}|${b.id}`) * Math.max(0.01, weightOf(b))
+    - stableHash(`${seed}|${a.id}`) * Math.max(0.01, weightOf(a))
+  ) || a.id.localeCompare(b.id))[0] || null;
+}
+
+function sealOfferForRun(state, run, route, nonce = 0) {
   const owned = new Set(run.sealIds || []);
+  const selected = new Set();
+  const recent = new Set(state.daoTrial.recentSealOfferIds || []);
+  const discovered = new Set(state.daoTrial.discoveredSealIds || []);
   const affix = daoTrialCycleAffixes.find((item) => item.id === run.affixId);
   const preferredTag = affix?.effects?.sealTag || "";
   const suppressedRouteTag = affix?.effects?.noRouteBonus || "";
-  const candidates = daoTrialSeals
-    .filter((seal) => !owned.has(seal.id))
-    .map((seal) => ({
-      seal,
-      score: stableHash(`${run.seed}|seal|${run.nodeIndex}|${nonce}|${seal.id}`)
-        + (seal.tags || []).filter((tag) => route.sealTags.includes(tag) && tag !== suppressedRouteTag).length * 1_000_000
-        + (preferredTag && seal.tags?.includes(preferredTag) ? 600_000 : 0)
-    }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 3)
-    .map((item) => item.seal.id);
-  return candidates;
+  const ownedSeals = [...owned].map((id) => daoTrialSealMap[id]).filter(Boolean);
+  const ownedTags = new Set(ownedSeals.flatMap((seal) => seal.tags || []));
+  const partnerIds = new Set(daoTrialSealSynergies.flatMap((synergy) => {
+    const ownedInPair = synergy.seals.filter((id) => owned.has(id));
+    return ownedInPair.length === 1 ? synergy.seals.filter((id) => !owned.has(id)) : [];
+  }));
+  const slots = ["route", "build", "wildcard"];
+  for (const slot of slots) {
+    const candidates = daoTrialSeals.filter((seal) => !owned.has(seal.id) && !selected.has(seal.id));
+    const picked = rankedOfferCandidate(candidates, `${run.seed}|seal|${run.nodeIndex}|${nonce}|${slot}`, (seal) => {
+      const tags = seal.tags || [];
+      const routeMatches = tags.filter((tag) => route.sealTags.includes(tag) && tag !== suppressedRouteTag).length;
+      const buildMatches = tags.filter((tag) => ownedTags.has(tag)).length;
+      let weight = recent.has(seal.id) ? 0.2 : 1;
+      if (!discovered.has(seal.id)) weight *= 1.8;
+      if (preferredTag && tags.includes(preferredTag)) weight *= 1.35;
+      if (slot === "route") weight *= 1 + routeMatches * 1.8;
+      if (slot === "build") weight *= 1 + buildMatches * 1.25 + (partnerIds.has(seal.id) ? 2.5 : 0);
+      return weight;
+    });
+    if (picked) selected.add(picked.id);
+  }
+  const offer = [...selected];
+  rememberDaoTrialOffer(state, run, offer, "seal");
+  return offer;
 }
 
-function lawOfferForRun(run, route, nonce = 0) {
+function lawRarityRatesForFloor(floor) {
+  return daoTrialLawRarityRates.find((entry) => floor <= entry.maxFloor) || daoTrialLawRarityRates.at(-1);
+}
+
+function rolledLawRarity(run, nonce, slot, rates, diamondSelected) {
+  const roll = stableHash(`${run.seed}|law-rarity|${run.floor}|${nonce}|${slot}`) % 10_000 / 100;
+  if (!diamondSelected && roll < rates.diamond) return "diamond";
+  if (roll < rates.diamond + rates.gold) return "gold";
+  return "silver";
+}
+
+function lawOfferForRun(state, run, route, nonce = 0) {
   const owned = new Set(run.lawIds || []);
+  const selected = new Set();
+  const recent = new Set(state.daoTrial.recentLawOfferIds || []);
+  const discovered = new Set(state.daoTrial.discoveredLawIds || []);
   const routeTags = route?.sealTags || [];
-  return daoTrialLaws
-    .filter((law) => !owned.has(law.id))
-    .map((law) => ({
-      law,
-      score: stableHash(`${run.seed}|law|${run.floor}|${nonce}|${law.id}`)
-        + (law.tags || []).filter((tag) => routeTags.includes(tag)).length * 1_000_000
-        + (Number(run.masteryLevel) >= 6 ? (law.tags || []).filter((tag) => routeTags.includes(tag)).length * 450_000 : 0)
-        + (run.companion && law.tags?.includes("companion") ? 800_000 : 0)
-    }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 3)
-    .map(({ law }) => law.id);
+  const rates = lawRarityRatesForFloor(Math.max(1, Number(run.floor) || 1));
+  const pity = state.daoTrial.lawPity || { withoutGold: 0, withoutDiamond: 0 };
+  const forceDiamond = !run.practice && pity.withoutDiamond >= 12;
+  const forceGold = !forceDiamond && !run.practice && pity.withoutGold >= 2;
+  let diamondSelected = false;
+  for (let slot = 0; slot < 3; slot += 1) {
+    let rarity = slot === 0 && forceDiamond
+      ? "diamond"
+      : slot === 0 && forceGold
+        ? "gold"
+        : rolledLawRarity(run, nonce, slot, rates, diamondSelected);
+    if (rarity === "diamond" && diamondSelected) rarity = "gold";
+    let candidates = daoTrialLaws.filter((law) => law.rarity === rarity && !owned.has(law.id) && !selected.has(law.id));
+    if (!candidates.length) candidates = daoTrialLaws.filter((law) => !owned.has(law.id) && !selected.has(law.id));
+    const picked = rankedOfferCandidate(candidates, `${run.seed}|law|${run.floor}|${nonce}|${slot}`, (law) => {
+      const routeMatches = (law.tags || []).filter((tag) => routeTags.includes(tag)).length;
+      let weight = recent.has(law.id) ? 0.2 : 1;
+      if (!discovered.has(law.id)) weight *= 1.8;
+      weight *= 1 + routeMatches * (Number(run.masteryLevel) >= 6 ? 1.45 : 1);
+      if (run.companion && law.tags?.includes("companion")) weight *= 1.8;
+      if (!run.companion && law.tags?.includes("companion") && !law.effects?.maxHpWithoutCompanion) weight *= 0.45;
+      return weight;
+    });
+    if (picked) {
+      selected.add(picked.id);
+      if (picked.rarity === "diamond") diamondSelected = true;
+    }
+  }
+  const offer = [...selected];
+  run.lastLawRarityRates = { silver: rates.silver, gold: rates.gold, diamond: rates.diamond };
+  rememberDaoTrialOffer(state, run, offer, "law");
+  if (!run.practice) {
+    const rarities = new Set(offer.map((id) => daoTrialLawMap[id]?.rarity));
+    pity.withoutGold = rarities.has("gold") || rarities.has("diamond") ? 0 : pity.withoutGold + 1;
+    pity.withoutDiamond = rarities.has("diamond") ? 0 : pity.withoutDiamond + 1;
+    state.daoTrial.lawPity = pity;
+  }
+  return offer;
 }
 
 function combinedTrialBuffs(run) {
   const buffs = {};
+  const lawSources = {};
   for (const sealId of run.sealIds || []) {
     const effects = daoTrialSealMap[sealId]?.effects || {};
     for (const [key, value] of Object.entries(effects)) buffs[key] = (buffs[key] || 0) + Number(value || 0);
   }
-  for (const synergy of daoTrialSealSynergies) {
-    if (synergy.seals.every((id) => run.sealIds?.includes(id))) {
-      for (const [key, value] of Object.entries(synergy.effects || {})) buffs[key] = (buffs[key] || 0) + Number(value || 0);
-    }
+  for (const synergy of activeTrialSynergies(run)) {
+    for (const [key, value] of Object.entries(synergy.effects || {})) buffs[key] = (buffs[key] || 0) + Number(value || 0);
   }
   const affixEffects = daoTrialCycleAffixes.find((item) => item.id === run.affixId)?.effects || {};
   for (const key of ["attack", "defense", "maxHp", "maxMana", "divineSense", "manaCost", "healing"]) {
@@ -9468,8 +9596,12 @@ function combinedTrialBuffs(run) {
   buffs.attack = (buffs.attack || 0) + (Number(run.tempAttack) || 0);
   buffs.defense = (buffs.defense || 0) + (Number(run.tempDefense) || 0);
   for (const lawId of run.lawIds || []) {
-    const effects = daoTrialLawMap[lawId]?.effects || {};
+    const law = daoTrialLawMap[lawId];
+    const effects = law?.effects || {};
     for (const [key, value] of Object.entries(effects)) {
+      if (!lawSources[key] || Math.abs(Number(value) || 0) > Math.abs(Number(lawSources[key].value) || 0)) {
+        lawSources[key] = { id: lawId, name: law?.name || lawId, value };
+      }
       if (typeof value === "boolean") {
         if (value) buffs[key] = true;
       } else {
@@ -9477,6 +9609,7 @@ function combinedTrialBuffs(run) {
       }
     }
   }
+  if (Object.keys(lawSources).length) buffs.__lawSources = lawSources;
   const manaRate = run.combatant?.maxMana ? run.combatant.mana / run.combatant.maxMana : 1;
   if (manaRate >= 0.7) buffs.divineSense = (buffs.divineSense || 0) + (Number(buffs.highManaSense) || 0);
   if (manaRate <= 0.3) buffs.manaCost = (buffs.manaCost || 0) + (Number(buffs.lowManaCost) || 0);
@@ -9484,7 +9617,29 @@ function combinedTrialBuffs(run) {
 }
 
 function activeTrialSynergies(run) {
-  return daoTrialSealSynergies.filter((synergy) => synergy.seals.every((id) => run?.sealIds?.includes(id)));
+  const exact = daoTrialSealSynergies.filter((synergy) => synergy.seals.every((id) => run?.sealIds?.includes(id)));
+  const counts = (run?.sealIds || []).reduce((result, id) => {
+    const school = daoTrialSealMap[id]?.school;
+    if (school) result[school] = (result[school] || 0) + 1;
+    return result;
+  }, {});
+  const school = daoTrialSealSchoolResonances.filter((resonance) => (counts[resonance.school] || 0) >= resonance.threshold);
+  return [...exact, ...school];
+}
+
+function trialSealResonanceProgress(run) {
+  const schools = [...new Set(daoTrialSeals.map((seal) => seal.school))];
+  return schools.map((school) => {
+    const count = (run?.sealIds || []).filter((id) => daoTrialSealMap[id]?.school === school).length;
+    const activeThreshold = [2, 4, 6].filter((threshold) => count >= threshold).at(-1) || 0;
+    const nextThreshold = [2, 4, 6].find((threshold) => count < threshold) || 6;
+    return { school, count, activeThreshold, nextThreshold, complete: count >= 6 };
+  }).filter((entry) => entry.count > 0);
+}
+
+function publicTrialLaw(law) {
+  const rarity = daoTrialLawRarities[law?.rarity] || daoTrialLawRarities.silver;
+  return law ? { ...law, rarityLabel: rarity.label, rarityColor: rarity.color } : null;
 }
 
 function trialWorldBaselinePower(state) {
@@ -9800,9 +9955,11 @@ function publicTrialRun(state, run) {
     combat: { hp: stats.hp, maxHp: stats.maxHp, mana: stats.mana, maxMana: stats.maxMana },
     companion: run.companion,
     seals: run.sealIds.map((id) => daoTrialSealMap[id]).filter(Boolean),
-    laws: (run.lawIds || []).map((id) => daoTrialLawMap[id]).filter(Boolean),
-    lawOffer: (run.lawOffer || []).map((id) => daoTrialLawMap[id]).filter(Boolean),
+    laws: (run.lawIds || []).map((id) => publicTrialLaw(daoTrialLawMap[id])).filter(Boolean),
+    lawOffer: (run.lawOffer || []).map((id) => publicTrialLaw(daoTrialLawMap[id])).filter(Boolean),
+    lawRarityRates: run.lastLawRarityRates || lawRarityRatesForFloor(Math.max(1, Number(run.floor) || 1)),
     synergies: activeTrialSynergies(run),
+    resonanceProgress: trialSealResonanceProgress(run),
     sealOffer: (run.pendingSealIds || []).map((id) => daoTrialSealMap[id]).filter(Boolean),
     insight: run.insight,
     canReroll: Boolean((run.pendingSealIds?.length || run.lawOffer?.length) && (run.insight > 0 || run.freeRerolls > 0)),
@@ -9873,7 +10030,7 @@ function publicDaoTrial(state) {
     { id: "clears-12", label: "十二次问心", current: goalState.routeClears, target: 12 },
     { id: "perfect-6", label: "六次从容问心", current: goalState.perfectRuns, target: 6 },
     { id: "deepest-20", label: "问天二十层", current: goalState.deepestFloor, target: 20 },
-    { id: "laws-18", label: "遍观十八法则", current: goalState.lawsSeen.length, target: daoTrialLaws.length },
+    { id: "laws-64", label: "参悟六十四法则", current: goalState.lawsSeen.length, target: daoTrialLaws.length },
     { id: "companions-6", label: "六友同行", current: goalState.companionIds.length, target: 6 },
     { id: "affixes-16", label: "遍历十六异象", current: goalState.affixesSeen.length, target: daoTrialCycleAffixes.length }
   ].map((goal) => ({ ...goal, completed: goal.current >= goal.target }));
@@ -9913,8 +10070,17 @@ function publicDaoTrial(state) {
       nodes: daoTrialNodesForCycle(route.id, state.daoTrial.cycle).map((node) => ({ name: node.name, type: node.type, elite: Boolean(node.elite), boss: Boolean(node.boss) }))
     })),
     companions: availableDaoTrialCompanions(state),
-    sealCatalog: daoTrialSeals,
-    lawCatalog: daoTrialLaws,
+    sealCatalog: daoTrialSeals.map((seal) => ({ ...seal, discovered: state.daoTrial.discoveredSealIds.includes(seal.id) })),
+    lawCatalog: daoTrialLaws.map((law) => ({ ...publicTrialLaw(law), discovered: state.daoTrial.discoveredLawIds.includes(law.id) })),
+    lawRarities: Object.values(daoTrialLawRarities),
+    lawRarityRates: daoTrialLawRarityRates.map((entry) => ({ ...entry, maxFloor: Number.isFinite(entry.maxFloor) ? entry.maxFloor : null })),
+    lawPity: { ...state.daoTrial.lawPity, goldGuaranteeAt: 2, diamondGuaranteeAt: 12 },
+    collection: {
+      discoveredLawCount: state.daoTrial.discoveredLawIds.length,
+      discoveredSealCount: state.daoTrial.discoveredSealIds.length,
+      totalLawCount: daoTrialLaws.length,
+      totalSealCount: daoTrialSeals.length
+    },
     coreFloorCount: daoTrialCoreFloorCount
   };
 }
@@ -10122,6 +10288,8 @@ export function startDaoTrial(state, payload = {}) {
     lawIds: [],
     lawOffer: [],
     lawNonce: 0,
+    offeredLawIds: [],
+    offeredSealIds: [],
     taskBoons,
     dailyRootFortuneXpMultiplier: dailyRootFortuneXpMultiplier(state, state.player),
     freeRerolls: (taskBoons.some((boon) => boon.id === "study") ? 1 : 0) + (mastery.level >= 4 ? 1 : 0),
@@ -10149,7 +10317,7 @@ export function startDaoTrial(state, payload = {}) {
     rewards: { xp: 0, spirit: 0, dust: 0, milestones: [] },
     combatant
   };
-  run.lawOffer = lawOfferForRun(run, route, run.lawNonce);
+  run.lawOffer = lawOfferForRun(state, run, route, run.lawNonce);
   state.daoTrial.activeRun = run;
   log(state, `踏入问道秘境「${route.name}」，${practice ? "本次为无奖励演练" : `消耗 1 枚问道签，余 ${state.daoTrial.tickets} 枚`}。`, "gold");
   return { run: publicTrialRun(state, run), practice };
@@ -10179,7 +10347,7 @@ function applyTrialEventEffects(state, run, node, effects = {}) {
   if (node?.type === "event") run.bonusScore = (Number(run.bonusScore) || 0) + Number(affix?.effects?.eventScore || 0);
   run.tempSense = Math.max(0, (Number(run.tempSense) || 0) + (Number(effects.tempSense) || 0));
   if (effects.grantSeal) {
-    run.pendingSealIds = sealOfferForRun(run, daoTrialRouteMap[run.routeId], run.sealNonce);
+    run.pendingSealIds = sealOfferForRun(state, run, daoTrialRouteMap[run.routeId], run.sealNonce);
     run.advanceAfterSeal = true;
   }
 }
@@ -10203,7 +10371,7 @@ function chooseTrialLaw(run, lawId) {
   return { law: daoTrialLawMap[lawId], run };
 }
 
-function rerollTrialLaws(run) {
+function rerollTrialLaws(state, run) {
   if (!run.lawOffer?.length) throw new Error("当前没有可重观的问道法则");
   if (run.freeRerolls > 0) run.freeRerolls -= 1;
   else {
@@ -10211,7 +10379,7 @@ function rerollTrialLaws(run) {
     run.insight -= 1;
   }
   run.lawNonce += 1;
-  run.lawOffer = lawOfferForRun(run, daoTrialRouteMap[run.routeId], run.lawNonce);
+  run.lawOffer = lawOfferForRun(state, run, daoTrialRouteMap[run.routeId], run.lawNonce);
   return { lawOffer: run.lawOffer.map((id) => daoTrialLawMap[id]) };
 }
 
@@ -10244,7 +10412,7 @@ function continueTrialCheckpoint(run) {
   return run;
 }
 
-function rerollTrialSeals(run) {
+function rerollTrialSeals(state, run) {
   if (!run.pendingSealIds.length) throw new Error("当前没有可重观的道印");
   if (run.freeRerolls > 0) run.freeRerolls -= 1;
   else {
@@ -10252,7 +10420,7 @@ function rerollTrialSeals(run) {
     run.insight -= 1;
   }
   run.sealNonce += 1;
-  run.pendingSealIds = sealOfferForRun(run, daoTrialRouteMap[run.routeId], run.sealNonce);
+  run.pendingSealIds = sealOfferForRun(state, run, daoTrialRouteMap[run.routeId], run.sealNonce);
   return { sealOffer: run.pendingSealIds.map((id) => daoTrialSealMap[id]) };
 }
 
@@ -10381,10 +10549,10 @@ function resolveTrialBattle(state, run, node) {
   if (node.checkpoint || node.boss) {
     run.checkpointPending = true;
     run.checkpointFloor = Number(node.floor) || run.nodeIndex + 1;
-    run.lawOffer = lawOfferForRun(run, route, ++run.lawNonce);
+    run.lawOffer = lawOfferForRun(state, run, route, ++run.lawNonce);
     return { replay: publicReplay(replay), completed: false, checkpoint: true, reward, run: publicTrialRun(state, run) };
   }
-  run.pendingSealIds = sealOfferForRun(run, route, run.sealNonce);
+  run.pendingSealIds = sealOfferForRun(state, run, route, run.sealNonce);
   run.advanceAfterSeal = true;
   return { replay: publicReplay(replay), completed: false, reward };
 }
@@ -10394,7 +10562,7 @@ export function advanceDaoTrial(state, payload = {}) {
   const run = state.daoTrial.activeRun;
   if (!run) throw new Error("当前没有进行中的问道秘境");
   if (run.lawOffer?.length) {
-    if (payload.action === "reroll-law") return rerollTrialLaws(run);
+    if (payload.action === "reroll-law") return rerollTrialLaws(state, run);
     if (payload.action !== "law") throw new Error("请先选择一项问道法则");
     return chooseTrialLaw(run, payload.lawId);
   }
@@ -10409,7 +10577,7 @@ export function advanceDaoTrial(state, payload = {}) {
     if (run.nodesCleared < 5 || run.pendingSealIds.length) throw new Error("至少完成前五层并处理当前道印后，方可收功离境");
     return { completed: true, summary: finishDaoTrialRun(state, run, false, "主动离境") };
   }
-  if (payload.action === "reroll") return rerollTrialSeals(run);
+  if (payload.action === "reroll") return rerollTrialSeals(state, run);
   if (payload.action === "companion") return useTrialCompanionSupport(run);
   if (payload.action === "life-heal") return useTrialLifeHeal(run);
   if (run.pendingSealIds.length) {

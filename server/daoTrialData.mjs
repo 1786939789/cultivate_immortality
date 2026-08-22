@@ -1,6 +1,19 @@
 export const daoTrialCycleLength = 7;
 export const daoTrialOfficialAttempts = 3;
 
+export const daoTrialLawRarities = {
+  silver: { id: "silver", label: "白银", order: 1, color: "#c7d0d4" },
+  gold: { id: "gold", label: "黄金", order: 2, color: "#e7bd58" },
+  diamond: { id: "diamond", label: "钻石", order: 3, color: "#8fe5e8" }
+};
+
+export const daoTrialLawRarityRates = [
+  { maxFloor: 4, silver: 82, gold: 16, diamond: 2 },
+  { maxFloor: 9, silver: 78, gold: 19, diamond: 3 },
+  { maxFloor: 14, silver: 72, gold: 23, diamond: 5 },
+  { maxFloor: Infinity, silver: 65, gold: 27, diamond: 8 }
+];
+
 export const daoTrialRoutes = [
   {
     id: "golden-pass",
@@ -198,7 +211,7 @@ export const daoTrialEventOptions = {
   ]
 };
 
-export const daoTrialSeals = [
+const legacyDaoTrialSeals = [
   { id: "edge-intent", name: "青锋意", school: "攻伐", tags: ["tempo"], text: "攻击提高 10%。", effects: { attack: 0.1 } },
   { id: "star-edge", name: "星芒印", school: "攻伐", tags: ["tempo", "focus"], text: "攻击与神识各提高 6%。", effects: { attack: 0.06, divineSense: 0.06 } },
   { id: "breaking-edge", name: "破岳意", school: "攻伐", tags: ["risk"], text: "攻击提高 15%，防御降低 5%。", effects: { attack: 0.15, defense: -0.05 } },
@@ -260,6 +273,171 @@ export const daoTrialSeals = [
   { id: "life-knot", name: "生结印", school: "生机", tags: ["vitality", "guard"], text: "血量提高 10%，防御提高 4%，事件损耗降低。", effects: { maxHp: 0.1, defense: 0.04, eventLossResist: 0.15 } }
 ];
 
+const daoTrialSealSchoolDefinitions = [
+  { id: "attack", school: "攻伐", tags: ["attack", "tempo"], roots: ["裂岳", "追星", "鸣锋", "断潮", "惊鸿", "燃刃", "逐日", "破军"] },
+  { id: "guard", school: "守御", tags: ["guard", "vitality"], roots: ["镇山", "玄甲", "磐心", "止戈", "承岳", "护元", "定海", "不动"] },
+  { id: "focus", school: "灵息", tags: ["focus", "arcane"], roots: ["纳海", "观星", "澄神", "回澜", "抱月", "听雷", "归元", "灵台"] },
+  { id: "tempo", school: "身法", tags: ["tempo", "focus"], roots: ["掠影", "乘风", "踏月", "逐电", "流云", "无迹", "回雪", "游龙"] },
+  { id: "risk", school: "险道", tags: ["risk", "attack"], roots: ["燃命", "饮血", "蚀骨", "孤注", "逆脉", "焚心", "绝境", "夺寿"] },
+  { id: "vitality", school: "生机", tags: ["vitality", "guard"], roots: ["回春", "青木", "长息", "润脉", "生莲", "复苏", "养元", "不息"] },
+  { id: "element", school: "五行", tags: ["arcane", "element"], roots: ["金生", "木荣", "水衍", "火明", "土镇", "雷转", "冰凝", "风化"] },
+  { id: "bond", school: "同契", tags: ["companion", "vitality"], roots: ["并肩", "照影", "合鸣", "守望", "同尘", "共济", "双曜", "一心"] }
+];
+
+const daoTrialSealForms = ["印", "诀", "环", "契"];
+const roundedSealEffect = (value) => Math.round(value * 1000) / 1000;
+
+function generatedSealEffects(schoolId, index) {
+  const variant = index % 8;
+  const rank = Math.floor(index / 8);
+  const up = rank * 0.01;
+  const profiles = {
+    attack: [
+      { attack: 0.07 + up },
+      { attack: 0.04 + up / 2, skillPower: 0.05 + up },
+      { skillPower: 0.08 + up },
+      { attack: 0.1 + up, maxHp: -0.03 },
+      { attack: 0.04 + up / 2, statusPower: 0.1 + up },
+      { lowHpAttack: 0.12 + up, lowHpSense: 0.05 + up / 2 },
+      { attack: 0.04 + up / 2, postBattleMana: 0.04 + up / 2 },
+      { attack: 0.04 + up / 2, defense: 0.04 + up / 2 }
+    ],
+    guard: [
+      { defense: 0.08 + up },
+      { maxHp: 0.09 + up },
+      { defense: 0.05 + up / 2, maxHp: 0.05 + up / 2 },
+      { defense: 0.12 + up, divineSense: -0.03 },
+      { rootResist: 0.18 + up * 2, defense: 0.03 + up / 2 },
+      { lowHpAttack: 0.05 + up / 2, defense: 0.07 + up },
+      { postBattleHeal: 0.04 + up / 2, defense: 0.03 + up / 2 },
+      { eventLossResist: 0.1 + up, maxHp: 0.05 + up / 2 }
+    ],
+    focus: [
+      { maxMana: 0.1 + up },
+      { divineSense: 0.08 + up },
+      { manaCost: -0.07 - up / 2, maxMana: 0.04 + up / 2 },
+      { skillPower: 0.08 + up, attack: -0.02 },
+      { cooldown: -1, maxMana: 0.03 + up / 2 },
+      { highManaSense: 0.08 + up, lowManaCost: -0.06 - up / 2 },
+      { postBattleMana: 0.06 + up / 2, divineSense: 0.03 + up / 2 },
+      { eventMana: 0.05 + up / 2, maxMana: 0.05 + up / 2 }
+    ],
+    tempo: [
+      { divineSense: 0.08 + up },
+      { divineSense: 0.05 + up / 2, attack: 0.04 + up / 2 },
+      { divineSense: 0.05 + up / 2, maxMana: 0.06 + up / 2 },
+      { divineSense: 0.11 + up, maxHp: -0.03 },
+      { cooldown: -1, divineSense: 0.03 + up / 2 },
+      { lowHpSense: 0.12 + up, lowHpAttack: 0.04 + up / 2 },
+      { postBattleHeal: 0.04 + up / 2, postBattleMana: 0.04 + up / 2 },
+      { divineSense: 0.04 + up / 2, defense: 0.04 + up / 2 }
+    ],
+    risk: [
+      { lowHpAttack: 0.13 + up, lowHpSense: 0.06 + up / 2 },
+      { attack: 0.1 + up, maxHp: -0.05 },
+      { skillPower: 0.12 + up, defense: -0.04 },
+      { statusPower: 0.16 + up, maxMana: -0.04 },
+      { maxMana: 0.16 + up, defense: -0.05 },
+      { attack: 0.06 + up / 2, scoreRisk: 0.05 + up / 2 },
+      { failScore: 0.1 + up, attack: 0.04 + up / 2 },
+      { lowHpAttack: 0.1 + up, postBattleHeal: 0.03 + up / 2 }
+    ],
+    vitality: [
+      { maxHp: 0.09 + up },
+      { healing: 0.14 + up * 2 },
+      { postBattleHeal: 0.06 + up / 2 },
+      { postBattleMana: 0.06 + up / 2 },
+      { maxHp: 0.05 + up / 2, maxMana: 0.05 + up / 2 },
+      { missingHpHeal: 0.08 + up },
+      { restHp: 0.06 + up / 2, eventMana: 0.04 + up / 2 },
+      { maxHp: 0.05 + up / 2, defense: 0.04 + up / 2 }
+    ],
+    element: [
+      { rootResist: 0.18 + up * 2 },
+      { statusPower: 0.11 + up },
+      { skillPower: 0.07 + up, divineSense: 0.03 + up / 2 },
+      { attack: 0.05 + up / 2, rootResist: 0.1 + up },
+      { defense: 0.05 + up / 2, rootResist: 0.1 + up },
+      { statusPower: 0.1 + up, maxMana: 0.05 + up / 2 },
+      { rootResist: 0.14 + up, postBattleMana: 0.04 + up / 2 },
+      { attack: 0.03 + up / 2, defense: 0.03 + up / 2, divineSense: 0.03 + up / 2 }
+    ],
+    bond: [
+      { companion: 0.16 + up, maxHpWithoutCompanion: 0.05 + up / 2 },
+      { companionMana: 0.08 + up, maxMana: 0.03 + up / 2 },
+      { companion: 0.1 + up, attack: 0.03 + up / 2 },
+      { companion: 0.1 + up, defense: 0.03 + up / 2 },
+      { companion: 0.1 + up, divineSense: 0.03 + up / 2 },
+      { companion: 0.12 + up, postBattleHeal: 0.03 + up / 2 },
+      { maxHpWithoutCompanion: 0.08 + up, attack: 0.03 + up / 2 },
+      { companionMana: 0.06 + up / 2, maxHpWithoutCompanion: 0.06 + up / 2 }
+    ]
+  };
+  return Object.fromEntries(Object.entries(profiles[schoolId][variant]).map(([key, value]) => [key, roundedSealEffect(value)]));
+}
+
+const daoTrialSealEffectLabels = {
+  attack: "攻击", defense: "防御", maxHp: "气血上限", maxMana: "法力上限", divineSense: "神识",
+  skillPower: "技能效果", statusPower: "持续效果", manaCost: "技能消耗", cooldown: "技能冷却",
+  lowHpAttack: "低血攻击", lowHpSense: "低血神识", postBattleHeal: "胜后气血恢复", postBattleMana: "胜后法力恢复",
+  rootResist: "灵根克制抗性", eventLossResist: "事件损耗抗性", eventMana: "事件法力恢复", restHp: "调息气血恢复",
+  healing: "治疗效果", missingHpHeal: "缺失气血恢复", scoreRisk: "风险得分", failScore: "失败得分",
+  companion: "同行支援", companionMana: "同行法力", maxHpWithoutCompanion: "独行气血"
+};
+
+function generatedSealText(effects) {
+  return Object.entries(effects).map(([key, value]) => {
+    const label = daoTrialSealEffectLabels[key] || key;
+    if (key === "cooldown") return `${label}减少 ${Math.abs(value)} 回合`;
+    const percent = Math.round(Math.abs(value) * 100);
+    return `${label}${value >= 0 ? "提高" : "降低"} ${percent}%`;
+  }).join("；") + "。";
+}
+
+const expandedDaoTrialSeals = daoTrialSealSchoolDefinitions.flatMap((definition) => {
+  const existingCount = legacyDaoTrialSeals.filter((seal) => seal.school === definition.school).length;
+  return Array.from({ length: 32 - existingCount }, (_, offset) => {
+    const index = existingCount + offset;
+    const root = definition.roots[Math.floor(index / 4)];
+    const form = daoTrialSealForms[index % daoTrialSealForms.length];
+    const effects = generatedSealEffects(definition.id, index);
+    return {
+      id: `expanded-${definition.id}-${String(index + 1).padStart(2, "0")}`,
+      name: `${root}${form}`,
+      school: definition.school,
+      family: root,
+      form,
+      tags: [...new Set([...definition.tags, index % 3 === 0 ? "vitality" : index % 3 === 1 ? "focus" : "tempo"])],
+      text: generatedSealText(effects),
+      effects
+    };
+  });
+});
+
+export const daoTrialSeals = [...legacyDaoTrialSeals, ...expandedDaoTrialSeals];
+
+const sealResonanceDefinitions = {
+  "攻伐": [{ attack: 0.03 }, { attack: 0.04, skillPower: 0.05 }, { attack: 0.05, postBattleMana: 0.05 }],
+  "守御": [{ defense: 0.03 }, { defense: 0.04, maxHp: 0.05 }, { defense: 0.05, rootResist: 0.12 }],
+  "灵息": [{ maxMana: 0.04 }, { divineSense: 0.04, manaCost: -0.04 }, { skillPower: 0.06, postBattleMana: 0.05 }],
+  "身法": [{ divineSense: 0.03 }, { divineSense: 0.04, cooldown: -1 }, { attack: 0.04, postBattleHeal: 0.05 }],
+  "险道": [{ lowHpAttack: 0.05 }, { skillPower: 0.06, scoreRisk: 0.04 }, { lowHpAttack: 0.08, lowHpSense: 0.08 }],
+  "生机": [{ maxHp: 0.04 }, { healing: 0.08, postBattleHeal: 0.04 }, { missingHpHeal: 0.08, postBattleMana: 0.05 }],
+  "五行": [{ rootResist: 0.1 }, { statusPower: 0.06, skillPower: 0.04 }, { rootResist: 0.15, divineSense: 0.05 }],
+  "同契": [{ companion: 0.08, maxHpWithoutCompanion: 0.03 }, { companion: 0.12, companionMana: 0.05 }, { companion: 0.16, maxHpWithoutCompanion: 0.08 }]
+};
+
+export const daoTrialSealSchoolResonances = Object.entries(sealResonanceDefinitions).flatMap(([school, stages]) => (
+  [2, 4, 6].map((threshold, index) => ({
+    id: `school-${daoTrialSealSchoolDefinitions.find((entry) => entry.school === school)?.id}-${threshold}`,
+    name: `${school}${["初鸣", "成势", "圆满"][index]}`,
+    school,
+    threshold,
+    text: `持有 ${threshold} 枚${school}道印，${generatedSealText(stages[index]).replace(/。$/, "")}。`,
+    effects: stages[index]
+  }))
+));
+
 export const daoTrialSealSynergies = [
   { id: "iron-mountain", name: "铁山成壁", seals: ["iron-wall", "mountain-body"], text: "血量与防御额外提高 5%。", effects: { maxHp: 0.05, defense: 0.05 } },
   { id: "wind-star", name: "风星同轨", seals: ["star-edge", "wind-step"], text: "神识额外提高 8%。", effects: { divineSense: 0.08 } },
@@ -271,7 +449,7 @@ export const daoTrialSealSynergies = [
 
 // Mechanic-oriented augments. The battle engine consumes these through the
 // stable trigger/effect fields instead of embedding law-specific branches.
-export const daoTrialLaws = [
+const legacyDaoTrialLaws = [
   { id: "triple-edge", name: "剑鸣三叠", school: "攻伐连锁", rarity: "silver", tags: ["tempo", "attack"], trigger: "onAttackCount", text: "每三次普通攻击追加一次余波。", effects: { attackEchoEvery: 3, attackEchoPower: 0.45 } },
   { id: "opening-break", name: "破势追击", school: "攻伐连锁", rarity: "silver", tags: ["tempo", "risk"], trigger: "battleStart", text: "敌方气血高于 80% 时，首次技能伤害提高 24%。", effects: { openingSkillPower: 0.24 } },
   { id: "execution-return", name: "斩意回流", school: "攻伐连锁", rarity: "gold", tags: ["attack", "tempo"], trigger: "afterBattle", text: "击败敌人后，下一场战斗攻击提高 12%。", effects: { nextBattleAttack: 0.12 } },
@@ -280,7 +458,7 @@ export const daoTrialLaws = [
   { id: "clear-mind-law", name: "澄心观法", school: "技能循环", rarity: "silver", tags: ["focus", "vitality"], trigger: "roundStart", text: "法力高于 70% 时神识提高，低于 30% 时技能消耗降低。", effects: { highManaSense: 0.12, lowManaCost: -0.12 } },
   { id: "iron-rebound", name: "铁壁反震", school: "守御反击", rarity: "silver", tags: ["guard", "risk"], trigger: "onTakeDamage", text: "受到攻击后积累反击值。", effects: { reflectCharge: 0.18 } },
   { id: "steady-heart", name: "守中不乱", school: "守御反击", rarity: "silver", tags: ["guard", "focus"], trigger: "roundStart", text: "上一回合未受伤时获得短暂减伤。", effects: { noHitShield: 0.12 } },
-  { id: "unyielding-law", name: "不退之志", school: "守御反击", rarity: "gold", tags: ["guard", "vitality"], trigger: "onLethal", text: "首次受到致命伤害时保留 1 点气血。", effects: { lethalGuard: true } },
+  { id: "unyielding-law", name: "不退之志", school: "守御反击", rarity: "diamond", tags: ["guard", "vitality"], trigger: "onLethal", text: "首次受到致命伤害时保留 1 点气血。", effects: { lethalGuard: true } },
   { id: "overheal-shield", name: "春风化雨", school: "生机转化", rarity: "silver", tags: ["vitality", "guard"], trigger: "onHeal", text: "溢出治疗转化为护盾。", effects: { overhealShield: 0.7 } },
   { id: "breath-loop", name: "回息成环", school: "生机转化", rarity: "silver", tags: ["vitality", "tempo"], trigger: "afterBattle", text: "战斗胜利后按缺失气血恢复。", effects: { missingHpHeal: 0.16 } },
   { id: "endless-life", name: "生生不绝", school: "生机转化", rarity: "gold", tags: ["vitality", "focus"], trigger: "onHealCount", text: "连续两次治疗后提高下一次治疗效果。", effects: { healCountBoost: 0.2 } },
@@ -291,6 +469,64 @@ export const daoTrialLaws = [
   { id: "twin-array", name: "双生战阵", school: "同行共鸣", rarity: "silver", tags: ["tempo", "companion"], trigger: "onCompanionAssist", text: "同行出手后强化玩家下一次技能。", effects: { companionSkillPower: 0.16 } },
   { id: "mirror-friend", name: "以友为镜", school: "同行共鸣", rarity: "gold", tags: ["focus", "companion"], trigger: "onCompanionSkill", text: "同行使用主动支援时复制部分玩家当前增益。", effects: { companionCopy: 0.35 } }
 ];
+
+const expandedDaoTrialLaws = [
+  { id: "edge-pressure", name: "锋压如山", school: "攻伐连锁", rarity: "silver", tags: ["attack", "guard"], trigger: "battleStart", text: "攻击提高 7%。", effects: { attack: 0.07 } },
+  { id: "relentless-step", name: "连步追魂", school: "攻伐连锁", rarity: "silver", tags: ["attack", "tempo"], trigger: "roundStart", text: "攻击与神识各提高 5%。", effects: { attack: 0.05, divineSense: 0.05 } },
+  { id: "armor-sunder-law", name: "摧甲锋意", school: "攻伐连锁", rarity: "silver", tags: ["attack", "arcane"], trigger: "onSkill", text: "技能效果提高 9%。", effects: { skillPower: 0.09 } },
+  { id: "hundred-blades", name: "百刃同鸣", school: "攻伐连锁", rarity: "gold", tags: ["attack", "tempo"], trigger: "onAttackCount", text: "每两次普通攻击追加 30% 攻击余波。", effects: { attackEchoEvery: 2, attackEchoPower: 0.3 } },
+  { id: "sword-domain", name: "万剑归宗", school: "攻伐连锁", rarity: "diamond", tags: ["attack", "tempo"], trigger: "afterBattle", text: "攻击和技能效果提高 12%，胜利后下一战攻击再提高 12%。", effects: { attack: 0.12, skillPower: 0.12, nextBattleAttack: 0.12 } },
+
+  { id: "deep-channel", name: "灵海深流", school: "技能循环", rarity: "silver", tags: ["focus", "arcane"], trigger: "runStart", text: "法力上限提高 12%。", effects: { maxMana: 0.12 } },
+  { id: "quick-incantation", name: "疾咒无滞", school: "技能循环", rarity: "silver", tags: ["focus", "tempo"], trigger: "onSkill", text: "技能冷却减少 1 回合。", effects: { cooldown: -1 } },
+  { id: "spirit-reserve", name: "藏灵归窍", school: "技能循环", rarity: "silver", tags: ["focus", "vitality"], trigger: "afterBattle", text: "战斗胜利后恢复 9% 法力。", effects: { postBattleMana: 0.09 } },
+  { id: "arcane-overflow", name: "术海迭浪", school: "技能循环", rarity: "gold", tags: ["arcane", "tempo"], trigger: "afterSkill", text: "技能命中后有 28% 概率追加 45% 余波。", effects: { skillEchoChance: 0.28, skillEchoPower: 0.45 } },
+  { id: "boundless-casting", name: "周天无尽", school: "技能循环", rarity: "diamond", tags: ["focus", "arcane"], trigger: "onSkillCount", text: "每第二次施法不消耗法力，并有概率追加术法余波。", effects: { freeSkillEvery: 2, skillEchoChance: 0.22, skillEchoPower: 0.3 } },
+
+  { id: "stone-skin-law", name: "玄岩法身", school: "守御反击", rarity: "silver", tags: ["guard", "vitality"], trigger: "runStart", text: "防御提高 9%。", effects: { defense: 0.09 } },
+  { id: "vitality-guard-law", name: "厚土载生", school: "守御反击", rarity: "silver", tags: ["guard", "vitality"], trigger: "runStart", text: "气血上限提高 11%。", effects: { maxHp: 0.11 } },
+  { id: "root-ward-law", name: "五行护命", school: "守御反击", rarity: "silver", tags: ["guard", "element"], trigger: "battleStart", text: "灵根克制惩罚降低 30%。", effects: { rootResist: 0.3 } },
+  { id: "rebound-domain", name: "反照玄域", school: "守御反击", rarity: "gold", tags: ["guard", "risk"], trigger: "onTakeDamage", text: "受到攻击后反震 26% 伤害。", effects: { reflectCharge: 0.26 } },
+  { id: "tranquil-fortress", name: "寂然天垒", school: "守御反击", rarity: "gold", tags: ["guard", "focus"], trigger: "roundStart", text: "防御提高 7%，上一回合未受伤时获得更强减伤。", effects: { defense: 0.07, noHitShield: 0.18 } },
+
+  { id: "healing-current-law", name: "青流润脉", school: "生机转化", rarity: "silver", tags: ["vitality", "focus"], trigger: "onHeal", text: "治疗效果提高 18%。", effects: { healing: 0.18 } },
+  { id: "victory-breath", name: "胜后纳息", school: "生机转化", rarity: "silver", tags: ["vitality", "tempo"], trigger: "afterBattle", text: "战斗胜利后恢复 8% 气血。", effects: { postBattleHeal: 0.08 } },
+  { id: "balanced-life-law", name: "水木相济", school: "生机转化", rarity: "silver", tags: ["vitality", "arcane"], trigger: "runStart", text: "气血和法力上限各提高 7%。", effects: { maxHp: 0.07, maxMana: 0.07 } },
+  { id: "overflowing-spring", name: "灵泉覆体", school: "生机转化", rarity: "gold", tags: ["vitality", "guard"], trigger: "onHeal", text: "治疗提高 10%，溢出治疗的 90% 转为护盾。", effects: { healing: 0.1, overhealShield: 0.9 } },
+  { id: "immortal-spring", name: "枯木逢春", school: "生机转化", rarity: "diamond", tags: ["vitality", "guard"], trigger: "onLethal", text: "首次致命伤保留生机，胜后按缺失气血恢复并强化治疗。", effects: { lethalGuard: true, missingHpHeal: 0.2, healing: 0.2 } },
+
+  { id: "blood-sense-law", name: "血照灵台", school: "风险流派", rarity: "silver", tags: ["risk", "focus"], trigger: "onLowHp", text: "低血时攻击提高 12%、神识提高 9%。", effects: { lowHpAttack: 0.12, lowHpSense: 0.09 } },
+  { id: "venom-heart-law", name: "蚀心毒意", school: "风险流派", rarity: "silver", tags: ["risk", "arcane"], trigger: "onStatus", text: "持续效果提高 16%。", effects: { statusPower: 0.16 } },
+  { id: "empty-blood-law", name: "空血藏灵", school: "风险流派", rarity: "silver", tags: ["risk", "focus"], trigger: "runStart", text: "法力提高 14%，防御降低 4%。", effects: { maxMana: 0.14, defense: -0.04 } },
+  { id: "razor-fate", name: "刃上问命", school: "风险流派", rarity: "gold", tags: ["risk", "attack"], trigger: "runStart", text: "攻击提高 13%、风险得分提高，气血上限降低 6%。", effects: { attack: 0.13, scoreRisk: 0.08, maxHp: -0.06 } },
+  { id: "life-wager", name: "向死而生", school: "风险流派", rarity: "diamond", tags: ["risk", "attack"], trigger: "onLethal", text: "攻击和技能效果提高 18%，降低气血上限，并可抵挡一次致命伤。", effects: { attack: 0.18, skillPower: 0.18, maxHp: -0.12, lethalGuard: true } },
+
+  { id: "shared-breath-law", name: "同息相扶", school: "同行共鸣", rarity: "silver", tags: ["companion", "vitality"], trigger: "runStart", text: "同行支援提高 12%；独行时气血提高 5%。", effects: { companion: 0.12, maxHpWithoutCompanion: 0.05 } },
+  { id: "shared-mana-law", name: "灵脉共流", school: "同行共鸣", rarity: "silver", tags: ["companion", "focus"], trigger: "runStart", text: "有同行者时法力提高 10%；独行时气血提高 4%。", effects: { companionMana: 0.1, maxHpWithoutCompanion: 0.04 } },
+  { id: "shared-edge-law", name: "并锋同行", school: "同行共鸣", rarity: "silver", tags: ["companion", "attack"], trigger: "onCompanionAssist", text: "攻击提高 6%，同行支援提高 8%。", effects: { attack: 0.06, companion: 0.08 } },
+  { id: "shared-guard-law", name: "共守心门", school: "同行共鸣", rarity: "silver", tags: ["companion", "guard"], trigger: "onCompanionAssist", text: "防御提高 6%，同行支援提高 8%。", effects: { defense: 0.06, companion: 0.08 } },
+  { id: "twin-stars-law", name: "两仪同心", school: "同行共鸣", rarity: "diamond", tags: ["companion", "focus"], trigger: "onCompanionAssist", text: "同行出手更频繁、支援更强并复制部分增益；独行时提高气血。", effects: { companionFrequency: -1, companionPower: 0.3, companionCopy: 0.25, maxHpWithoutCompanion: 0.08 } },
+
+  { id: "metal-cycle-law", name: "金行肃杀", school: "五行衍化", rarity: "silver", tags: ["element", "attack"], trigger: "battleStart", text: "攻击提高 6%，灵根克制抗性提高 10%。", effects: { attack: 0.06, rootResist: 0.1 } },
+  { id: "wood-cycle-law", name: "木行滋荣", school: "五行衍化", rarity: "silver", tags: ["element", "vitality"], trigger: "afterBattle", text: "气血提高 6%，胜后恢复 5% 气血。", effects: { maxHp: 0.06, postBattleHeal: 0.05 } },
+  { id: "water-cycle-law", name: "水行归藏", school: "五行衍化", rarity: "silver", tags: ["element", "focus"], trigger: "afterBattle", text: "法力提高 7%，胜后恢复 5% 法力。", effects: { maxMana: 0.07, postBattleMana: 0.05 } },
+  { id: "fire-cycle-law", name: "火行燎原", school: "五行衍化", rarity: "silver", tags: ["element", "arcane"], trigger: "onStatus", text: "技能和持续效果各提高 7%。", effects: { skillPower: 0.07, statusPower: 0.07 } },
+  { id: "earth-cycle-law", name: "土行镇守", school: "五行衍化", rarity: "silver", tags: ["element", "guard"], trigger: "battleStart", text: "防御提高 7%，灵根克制抗性提高 12%。", effects: { defense: 0.07, rootResist: 0.12 } },
+  { id: "element-harmony-law", name: "五气朝元", school: "五行衍化", rarity: "gold", tags: ["element", "vitality"], trigger: "runStart", text: "攻防神识各提高 6%，灵根克制抗性提高 20%。", effects: { attack: 0.06, defense: 0.06, divineSense: 0.06, rootResist: 0.2 } },
+  { id: "element-reversal-law", name: "逆转五行", school: "五行衍化", rarity: "gold", tags: ["element", "arcane"], trigger: "battleStart", text: "大幅削弱灵根克制，并提高技能与持续效果。", effects: { rootResist: 0.45, skillPower: 0.1, statusPower: 0.1 } },
+  { id: "element-domain-law", name: "五行轮转", school: "五行衍化", rarity: "diamond", tags: ["element", "arcane"], trigger: "battleStart", text: "灵根克制惩罚降低 70%，技能、持续效果和神识提高 15%。", effects: { rootResist: 0.7, skillPower: 0.15, statusPower: 0.15, divineSense: 0.15 } },
+
+  { id: "rest-fate-law", name: "静处逢生", school: "命数经营", rarity: "silver", tags: ["fate", "vitality"], trigger: "onRest", text: "调息恢复提高 10%。", effects: { restHp: 0.1 } },
+  { id: "event-fate-law", name: "遇事藏灵", school: "命数经营", rarity: "silver", tags: ["fate", "focus"], trigger: "onEvent", text: "事件中的法力恢复提高 9%。", effects: { eventMana: 0.09 } },
+  { id: "safe-fate-law", name: "趋吉避凶", school: "命数经营", rarity: "silver", tags: ["fate", "guard"], trigger: "onEvent", text: "事件损耗降低 20%。", effects: { eventLossResist: 0.2 } },
+  { id: "victory-fate-law", name: "胜机回转", school: "命数经营", rarity: "silver", tags: ["fate", "tempo"], trigger: "afterBattle", text: "胜利后恢复 5% 气血与法力。", effects: { postBattleHeal: 0.05, postBattleMana: 0.05 } },
+  { id: "score-fate-law", name: "险中求果", school: "命数经营", rarity: "silver", tags: ["fate", "risk"], trigger: "runStart", text: "风险得分提高 7%。", effects: { scoreRisk: 0.07 } },
+  { id: "fortune-current-law", name: "福祸相倚", school: "命数经营", rarity: "gold", tags: ["fate", "risk"], trigger: "runStart", text: "风险与失败得分提高，并获得少量攻防。", effects: { scoreRisk: 0.1, failScore: 0.12, attack: 0.05, defense: 0.05 } },
+  { id: "fate-reserve-law", name: "留一线天机", school: "命数经营", rarity: "gold", tags: ["fate", "vitality"], trigger: "afterBattle", text: "胜利后恢复 8% 气血与法力，事件损耗降低。", effects: { postBattleHeal: 0.08, postBattleMana: 0.08, eventLossResist: 0.15 } },
+  { id: "rewrite-fate-law", name: "改命一掷", school: "命数经营", rarity: "diamond", tags: ["fate", "risk"], trigger: "runStart", text: "攻防神识提高 8%，胜后恢复气血法力，并提高风险得分。", effects: { attack: 0.08, defense: 0.08, divineSense: 0.08, postBattleHeal: 0.08, postBattleMana: 0.08, scoreRisk: 0.08 } }
+];
+
+export const daoTrialLaws = [...legacyDaoTrialLaws, ...expandedDaoTrialLaws];
 
 export const daoTrialLawMap = Object.fromEntries(daoTrialLaws.map((law) => [law.id, law]));
 

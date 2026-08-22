@@ -5970,9 +5970,20 @@ body::before {
 .dao-trial-law-offer { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .dao-trial-law-offer > .dao-trial-offer-head { grid-column: 1 / -1; }
 .dao-trial-law-offer > button { display: grid; align-content: start; gap: 4px; min-height: 118px; padding: 10px; color: #d7c9ae; border-color: rgba(203, 164, 85, .42); background: rgba(61, 52, 34, .78); text-align: left; }
-.dao-trial-law-offer button span { color: #e0bf70; font-size: 11px; }
+.dao-trial-law-offer button span { display: flex; align-items: center; gap: 5px; color: #e0bf70; font-size: 11px; }
+.dao-trial-law-offer button span i { font-size: 8px; font-style: normal; }
 .dao-trial-law-offer button strong { color: #ffe09a; }
 .dao-trial-law-offer button small { color: #c5b99e; line-height: 1.45; }
+.dao-trial-law-offer button > em { align-self: end; margin-top: 4px; color: #9f9582; font-size: 10px; font-style: normal; overflow-wrap: anywhere; }
+.dao-trial-law-offer > button.rarity-silver { border-color: rgba(188, 201, 207, .46); background: rgba(48, 56, 57, .84); box-shadow: inset 3px 0 0 #9baeb5; }
+.dao-trial-law-offer > button.rarity-silver span,
+.dao-trial-law-offer > button.rarity-silver strong { color: #dce5e7; }
+.dao-trial-law-offer > button.rarity-gold { border-color: rgba(231, 189, 88, .62); background: rgba(68, 55, 29, .88); box-shadow: inset 3px 0 0 #e7bd58; }
+.dao-trial-law-offer > button.rarity-gold span,
+.dao-trial-law-offer > button.rarity-gold strong { color: #ffe098; }
+.dao-trial-law-offer > button.rarity-diamond { border-color: rgba(143, 229, 232, .68); background: rgba(31, 58, 59, .9); box-shadow: inset 3px 0 0 #8fe5e8, 0 0 14px rgba(143, 229, 232, .08); }
+.dao-trial-law-offer > button.rarity-diamond span { color: #a9f0f1; }
+.dao-trial-law-offer > button.rarity-diamond strong { color: #f1ffff; }
 .dao-trial-enemy-preview { display: grid; gap: 10px; padding: 11px; border: 1px solid rgba(177, 92, 71, .46); background: rgba(47, 29, 25, .52); }
 .dao-trial-enemy-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 9px; }
 .dao-trial-enemy-head > span { display: grid; gap: 2px; min-width: 0; }
@@ -6003,8 +6014,54 @@ body::before {
 .dao-trial-seal-rack { display: grid; align-content: start; gap: 6px; }
 .dao-trial-seal-rack > strong { color: #d9c27f; }
 .dao-trial-seal-rack > span { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 6px 8px; border-left: 2px solid #6d9b80; background: rgba(60, 91, 73, .16); }
+.dao-trial-seal-rack > span.rarity-silver { border-left-color: #9baeb5; background: rgba(109, 128, 134, .12); }
+.dao-trial-seal-rack > span.rarity-gold { border-left-color: #e7bd58; background: rgba(163, 123, 43, .14); }
+.dao-trial-seal-rack > span.rarity-diamond { border-left-color: #8fe5e8; background: rgba(72, 156, 158, .15); }
+.dao-trial-seal-rack > span.rarity-diamond b { color: #d9ffff; }
 .dao-trial-seal-rack small { color: #9a917e; }
 .dao-trial-seal-rack p { color: #8f8778; }
+
+.dao-trial-resonance-progress { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding: 8px; border: 1px solid rgba(112, 160, 136, .25); background: rgba(36, 66, 52, .18); }
+.dao-trial-resonance-progress > span { display: grid; grid-template-columns: auto minmax(48px, 1fr) auto; align-items: center; gap: 6px; min-width: 0; }
+.dao-trial-resonance-progress b { color: #a7cbb7; font-size: 11px; }
+.dao-trial-resonance-progress i { height: 5px; overflow: hidden; background: rgba(141, 163, 146, .2); }
+.dao-trial-resonance-progress i em { display: block; height: 100%; background: #6eac8e; transition: width .25s ease; }
+.dao-trial-resonance-progress small { color: #a59d8d; font-size: 10px; white-space: nowrap; }
+.dao-trial-resonance-progress > span.complete b,
+.dao-trial-resonance-progress > span.complete small { color: #f0d98d; }
+.dao-trial-resonance-progress > span.complete i em { background: #d0a951; }
+
+.dao-trial-catalog { display: grid; gap: 12px; }
+.dao-trial-catalog .section-head { align-items: center; }
+.dao-trial-catalog-modes { display: inline-grid; grid-template-columns: repeat(2, minmax(70px, 1fr)); overflow: hidden; border: 1px solid rgba(91, 67, 35, .28); border-radius: 4px; }
+.dao-trial-catalog-modes button { min-height: 32px; padding: 5px 12px; border: 0; border-radius: 0; color: #6b5639; background: rgba(255, 250, 232, .62); }
+.dao-trial-catalog-modes button + button { border-left: 1px solid rgba(91, 67, 35, .2); }
+.dao-trial-catalog-modes button.active { color: #f5e8c6; background: #3f705d; }
+.dao-trial-catalog-toolbar { display: grid; grid-template-columns: minmax(210px, 1.5fr) repeat(3, minmax(120px, .7fr)) auto; gap: 8px; align-items: center; }
+.dao-trial-catalog-toolbar input,
+.dao-trial-catalog-toolbar select { width: 100%; min-width: 0; min-height: 36px; color: #523c24; border-color: rgba(91, 67, 35, .25); background: rgba(255, 252, 238, .78); }
+.dao-trial-catalog-toolbar > span { color: #725c3d; font-size: 12px; text-align: right; white-space: nowrap; }
+.dao-trial-catalog-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.dao-trial-catalog-grid > article { position: relative; display: grid; align-content: start; gap: 5px; min-width: 0; min-height: 116px; padding: 10px 11px; border: 1px solid rgba(96, 74, 44, .2); border-left: 3px solid #65947b; border-radius: 4px; background: rgba(249, 239, 212, .55); }
+.dao-trial-catalog-grid article > span { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; min-width: 0; }
+.dao-trial-catalog-grid article b { color: #563e25; overflow-wrap: anywhere; }
+.dao-trial-catalog-grid article em { flex: 0 0 auto; color: #766143; font-size: 10px; font-style: normal; }
+.dao-trial-catalog-grid article small { color: #39705a; overflow-wrap: anywhere; }
+.dao-trial-catalog-grid article p { margin: 0; color: #685337; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.dao-trial-catalog-grid article.rarity-silver { border-left-color: #91a5ad; background: rgba(230, 235, 233, .68); }
+.dao-trial-catalog-grid article.rarity-silver em { color: #62757c; }
+.dao-trial-catalog-grid article.rarity-gold { border-left-color: #c99c39; background: rgba(249, 232, 178, .58); }
+.dao-trial-catalog-grid article.rarity-gold em { color: #936b19; }
+.dao-trial-catalog-grid article.rarity-diamond { border-color: rgba(72, 151, 154, .28); border-left-color: #4eaeb1; background: rgba(214, 241, 239, .62); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .44); }
+.dao-trial-catalog-grid article.rarity-diamond em { color: #277c80; }
+.dao-trial-catalog-grid article.undiscovered { border-color: rgba(102, 91, 74, .14); border-left-color: #a8a195; background: rgba(223, 216, 199, .42); filter: saturate(.35); }
+.dao-trial-catalog-grid article.undiscovered b,
+.dao-trial-catalog-grid article.undiscovered small,
+.dao-trial-catalog-grid article.undiscovered p { color: #857d70; }
+.dao-trial-catalog-grid > .empty { grid-column: 1 / -1; padding: 28px; text-align: center; }
+.dao-trial-catalog-pager { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.dao-trial-catalog-pager button { min-width: 82px; }
+.dao-trial-catalog-pager span { color: #695338; font-variant-numeric: tabular-nums; }
 
 .dao-trial-lower-grid { grid-template-columns: minmax(0, 1.4fr) minmax(300px, .8fr); }
 .dao-trial-seal-catalog > div:last-child { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
@@ -6034,6 +6091,9 @@ body::before {
   .dao-trial-seal-rack > strong,
   .dao-trial-seal-rack > p { grid-column: 1 / -1; }
   .dao-trial-seal-catalog > div:last-child { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .dao-trial-catalog-toolbar { grid-template-columns: minmax(200px, 1.5fr) repeat(2, minmax(120px, 1fr)); }
+  .dao-trial-catalog-toolbar > span { text-align: left; }
+  .dao-trial-catalog-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 @media (max-width: 720px) {
@@ -6082,6 +6142,13 @@ body::before {
   .dao-trial-goal-grid { grid-template-columns: minmax(0, 1fr); }
   .dao-trial-archive-list > button { flex-direction: column; }
   .dao-trial-archive-list em { white-space: normal; }
+  .dao-trial-resonance-progress { grid-template-columns: minmax(0, 1fr); }
+  .dao-trial-catalog .section-head { align-items: stretch; flex-direction: column; }
+  .dao-trial-catalog-modes { align-self: stretch; }
+  .dao-trial-catalog-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dao-trial-catalog-toolbar input { grid-column: 1 / -1; }
+  .dao-trial-catalog-toolbar > span { align-self: center; }
+  .dao-trial-catalog-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 .equipment-surface .equipment-table-head,
@@ -15254,6 +15321,10 @@ body::before {
   font-size: 13px;
   line-height: 1.55;
 }
+
+.view.active .dao-trial-law-offer > button.rarity-silver span { color: #dce5e7; }
+.view.active .dao-trial-law-offer > button.rarity-gold span { color: #ffe098; }
+.view.active .dao-trial-law-offer > button.rarity-diamond span { color: #a9f0f1; }
 
 @media (max-width: 720px) {
   .battle-detail .battle-line .skill-tip {
