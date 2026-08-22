@@ -9420,6 +9420,18 @@ function ensureDaoTrialState(state) {
         )))
         : {};
       activeRun.opponentResults = Array.isArray(activeRun.opponentResults) ? activeRun.opponentResults.slice(0, 80) : [];
+      if (!activeRun.battleRewardTotals || typeof activeRun.battleRewardTotals !== "object") {
+        activeRun.battleRewardTotals = (activeRun.nodes || [])
+          .filter((node) => node.type === "battle" && Number(node.floor) <= Number(activeRun.maxFloor || activeRun.nodesCleared || 0))
+          .reduce((totals, node) => {
+            const reward = trialBattleRewardForNode(node, node.floor);
+            totals.spirit = Math.min(daoTrialBattleRewardCap.spirit, totals.spirit + reward.spirit);
+            totals.dust = Math.min(daoTrialBattleRewardCap.dust, totals.dust + reward.dust);
+            return totals;
+          }, { spirit: 0, dust: 0 });
+      }
+      activeRun.battleRewardTotals.spirit = clamp(Math.floor(Number(activeRun.battleRewardTotals.spirit) || 0), 0, daoTrialBattleRewardCap.spirit);
+      activeRun.battleRewardTotals.dust = clamp(Math.floor(Number(activeRun.battleRewardTotals.dust) || 0), 0, daoTrialBattleRewardCap.dust);
       activeRun.defeatedByOpponentId = state.npcs.some((npc) => npc.id === activeRun.defeatedByOpponentId) ? activeRun.defeatedByOpponentId : "";
       if (activeRun.companion) activeRun.companion.supportUsed = Boolean(activeRun.companion.supportUsed);
       ensureTrialOpponents(state, activeRun);
@@ -9734,7 +9746,7 @@ function trialEnemyPowerFactor(node, floor, seed = "") {
     : node?.elite
       ? safeFloor <= 5 ? 1.12 : safeFloor <= 10 ? 1.15 : 1.18
       : 1;
-  return Math.max(0.98, (base + jitter) * nodeMultiplier);
+  return Math.max(0.48, (base + jitter) * nodeMultiplier);
 }
 
 function trialEncounterKindProbabilities(node, floor, apex = false) {
@@ -9957,8 +9969,9 @@ function trialNpcFor(state, run, node) {
 function trialBattleRewardForNode(node, floor) {
   const safeFloor = Math.max(1, Math.floor(Number(floor) || 1));
   const phase = safeFloor <= 5 ? 1 : safeFloor <= 10 ? 2 : safeFloor <= 15 ? 3 : 4;
-  const base = { xp: 0, spirit: 2 + Math.min(2, Math.floor((safeFloor - 1) / 5)), dust: safeFloor >= 4 ? 1 : 0 };
   const multiplier = node?.boss ? 1.7 : node?.elite ? 1.35 : 1;
+  if (safeFloor > daoTrialCoreFloorCount) return { xp: 0, spirit: 0, dust: 0, multiplier, phase };
+  const base = { xp: 0, spirit: 2 + Math.min(2, Math.floor((safeFloor - 1) / 5)), dust: safeFloor >= 4 ? 1 : 0 };
   return {
     xp: Math.min(1, Math.floor(base.xp * multiplier)),
     spirit: Math.max(0, Math.round(base.spirit * multiplier)),
@@ -9972,10 +9985,18 @@ function addTrialBattleReward(run, node) {
   if (run.practice) return null;
   const reward = trialBattleRewardForNode(node, node?.floor);
   run.rewards ??= { xp: 0, spirit: 0, dust: 0, milestones: [] };
-  run.rewards.xp += reward.xp;
-  run.rewards.spirit = Math.min(daoTrialBattleRewardCap.spirit, run.rewards.spirit + reward.spirit);
-  run.rewards.dust = Math.min(daoTrialBattleRewardCap.dust, run.rewards.dust + reward.dust);
-  return reward;
+  run.battleRewardTotals ??= { spirit: 0, dust: 0 };
+  const granted = {
+    ...reward,
+    spirit: Math.min(reward.spirit, Math.max(0, daoTrialBattleRewardCap.spirit - run.battleRewardTotals.spirit)),
+    dust: Math.min(reward.dust, Math.max(0, daoTrialBattleRewardCap.dust - run.battleRewardTotals.dust))
+  };
+  run.rewards.xp += granted.xp;
+  run.rewards.spirit += granted.spirit;
+  run.rewards.dust += granted.dust;
+  run.battleRewardTotals.spirit += granted.spirit;
+  run.battleRewardTotals.dust += granted.dust;
+  return granted;
 }
 
 function trialMilestoneReward(state, run, node) {
@@ -10852,6 +10873,7 @@ export function startDaoTrial(state, payload = {}) {
     combatStats: { battles: 0, rounds: 0, damageDealt: 0, damageTaken: 0, healing: 0, shields: 0, skillCasts: 0, manaSpent: 0, lawTriggers: 0 },
     scoreBreakdown: { progress: 0, quality: 0, risk: 0, build: 0, total: 0 },
     rewards: { xp: 0, spirit: 0, dust: 0, milestones: [] },
+    battleRewardTotals: { spirit: 0, dust: 0 },
     firstExploreSupport: {
       applied: firstExploreApplied,
       insight: firstExploreApplied ? firstExplore.insight : 0,
