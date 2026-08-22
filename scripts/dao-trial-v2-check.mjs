@@ -9,6 +9,13 @@ function strengthenPlayer(state, multiplier = 20) {
   state.player.mana = state.player.maxMana;
 }
 
+function strengthenTrialCombatant(state, multiplier = 100) {
+  const combatant = state.daoTrial.activeRun.combatant;
+  for (const key of ["maxHp", "attack", "defense", "divineSense", "maxMana"]) combatant[key] *= multiplier;
+  combatant.hp = combatant.maxHp;
+  combatant.mana = combatant.maxMana;
+}
+
 function choosePending(state) {
   const run = getPublicState(state).daoTrial.activeRun;
   if (!run) return null;
@@ -398,6 +405,7 @@ const depletedPreview = getPublicState(npcPressureState).daoTrial.activeRun.oppo
 assert.ok(depletedPreview.playerPower < depletedPreview.playerMaxPower, "战前预览应按当前气血与法力降低玩家状态战力");
 
 startDaoTrial(routeState, { routeId: daoTrialRoutes[0].id });
+strengthenTrialCombatant(routeState);
 const initialOpponentSnapshots = structuredClone(routeState.daoTrial.activeRun.opponentSnapshots);
 let active = getPublicState(routeState).daoTrial.activeRun;
 assert.equal(active.lawOffer.length, 3, "入境应先提供三项问道法则");
@@ -451,6 +459,7 @@ const exitState = createDefaultState();
 strengthenPlayer(exitState);
 ensureStateShape(exitState);
 startDaoTrial(exitState, { routeId: "golden-pass" });
+strengthenTrialCombatant(exitState);
 const exitRun = reachCheckpoint(exitState, 5);
 const earnedScore = exitRun.score;
 const exitResult = advanceDaoTrial(exitState, { action: "checkpoint-exit" });
@@ -471,9 +480,7 @@ foundationRewardState.player.realm = 18;
 strengthenPlayer(foundationRewardState);
 ensureStateShape(foundationRewardState);
 startDaoTrial(foundationRewardState, { routeId: "golden-pass" });
-for (const key of ["maxHp", "attack", "defense", "divineSense", "maxMana"]) foundationRewardState.daoTrial.activeRun.combatant[key] *= 100;
-foundationRewardState.daoTrial.activeRun.combatant.hp = foundationRewardState.daoTrial.activeRun.combatant.maxHp;
-foundationRewardState.daoTrial.activeRun.combatant.mana = foundationRewardState.daoTrial.activeRun.combatant.maxMana;
+strengthenTrialCombatant(foundationRewardState);
 const foundationRewardRun = reachCheckpoint(foundationRewardState, 15);
 assert.deepEqual(foundationRewardRun.bag, { xp: 10, spirit: 47, dust: 4, milestones: ["入境", "精英", "问心", "归一"] }, "筑基日常问道的境界成长应集中在适量灵石，不得额外放大修为和灵尘");
 const foundationRewardResult = advanceDaoTrial(foundationRewardState, { action: "checkpoint-exit" });

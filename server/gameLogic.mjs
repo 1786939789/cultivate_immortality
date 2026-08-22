@@ -9784,7 +9784,8 @@ function trialNpcFor(state, run, node) {
   const firstEase = run.nodeIndex === 0 ? Number(affix?.effects?.firstBattleEase || 0) : 0;
   const scaling = Math.max(0, Number(affix?.effects?.scalingEnemy || 0)) * Math.max(0, Math.ceil(floor / 5) - 1);
   const enemyPower = Number(affix?.effects?.enemyPower || 0);
-  const targetPower = Math.max(48, baseline * trialEnemyPowerFactor(node, floor) * daoTrialNpcProjectionFactor * (1 + enemyPower + scaling) * (1 - firstEase));
+  const routeScale = clamp(Number(daoTrialRouteMap[run.routeId]?.opponentScale) || 1, 0.8, 1.2);
+  const targetPower = Math.max(48, baseline * trialEnemyPowerFactor(node, floor) * daoTrialNpcProjectionFactor * routeScale * (1 + enemyPower + scaling) * (1 - firstEase));
   const ratio = clamp(targetPower / basePower, 0.001, 20);
   const projectedStats = Object.fromEntries(["attack", "defense", "maxHp", "maxMana", "divineSense"].map((key) => [
     key,

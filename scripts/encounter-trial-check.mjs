@@ -246,6 +246,9 @@ withdrawState.player.mana = withdrawState.player.maxMana;
 withdrawState.player.divineSense *= 6;
 ensureStateShape(withdrawState);
 startDaoTrial(withdrawState, { routeId: "golden-pass" });
+for (const key of ["maxHp", "hp", "attack", "defense", "maxMana", "mana", "divineSense"]) {
+  withdrawState.daoTrial.activeRun.combatant[key] *= 20;
+}
 assert.throws(() => advanceDaoTrial(withdrawState, { action: "abandon" }), /选择一项问道法则/);
 advanceTrialStep(withdrawState);
 assert.throws(() => advanceDaoTrial(withdrawState, { action: "abandon" }), /至少完成前五层/);

@@ -38,6 +38,7 @@ export const daoTrialRoutes = [
     subtitle: "雷隙瞬息，以神识和法力抢得先机",
     rootKey: "thunder",
     accent: "cyan",
+    opponentScale: 0.94,
     sealTags: ["focus", "tempo"],
     nodes: [
       { id: "cloud", type: "battle", name: "踏云试速", difficulty: 0.88, monster: "逐电风隼", rounds: 15 },
@@ -55,6 +56,7 @@ export const daoTrialRoutes = [
     subtitle: "幽瘴蚀骨，以持续伤害和取舍求生",
     rootKey: "water",
     accent: "violet",
+    opponentScale: 0.94,
     sealTags: ["arcane", "risk"],
     nodes: [
       { id: "mist", type: "battle", name: "入泽迷雾", difficulty: 0.88, monster: "噬灵雾妖", rounds: 17 },
