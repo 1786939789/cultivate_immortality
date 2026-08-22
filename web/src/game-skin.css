@@ -5860,14 +5860,12 @@ body::before {
 .dao-trial-route-grid em { color: #e0d5bf; font-style: normal; line-height: 1.4; }
 .dao-trial-route-grid .route-cyan.active { border-color: #65b8b1; }
 .dao-trial-route-grid .route-violet.active { border-color: #aa82b6; }
-.dao-trial-route-opening { display: flex !important; flex-wrap: wrap; gap: 4px; margin: 3px 0 2px; }
-.dao-trial-route-opening b { padding: 2px 5px; color: #d6c8aa; border: 1px solid rgba(151, 131, 92, .34); border-radius: 3px; background: rgba(20, 25, 22, .44); font-size: 10px; font-weight: 600; }
-.dao-trial-route-opening b.elite { color: #f0cf78; border-color: rgba(212, 173, 89, .58); }
-.dao-trial-route-opening b.boss { color: #e7a28f; border-color: rgba(179, 91, 72, .58); }
-.dao-trial-mastery-unlocks { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 9px; }
-.dao-trial-mastery-unlocks span { display: grid; gap: 2px; min-width: 170px; padding: 7px 9px; border-left: 2px solid #3d8169; background: rgba(64, 112, 89, .12); }
-.dao-trial-mastery-unlocks b { color: #5e4928; }
-.dao-trial-mastery-unlocks small { color: #766044; }
+.dao-trial-mastery-card { display: grid; gap: 10px; padding: 13px 15px; color: #d8dfd7; border: 1px solid rgba(134, 111, 70, .56); border-radius: 5px; background: linear-gradient(145deg, rgba(29, 38, 33, .96), rgba(39, 47, 38, .94)); box-shadow: 0 8px 20px rgba(37, 30, 20, .14); }
+.dao-trial-mastery-unlocks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.dao-trial-mastery-unlocks > span { display: grid; gap: 3px; min-width: 0; padding: 8px 10px; border-left: 2px solid #d1aa50; background: rgba(9, 16, 13, .28); }
+.dao-trial-mastery-unlocks b { color: #efc765; font-size: 13px; }
+.dao-trial-mastery-unlocks small { color: #d8e0d7; font-size: 12px; line-height: 1.5; }
+.dao-trial-mastery-empty { color: #b9c3ba; font-size: 12px; }
 .dao-trial-ranking-strip { display: grid; grid-template-columns: minmax(220px, 1.4fr) repeat(3, minmax(120px, .7fr)); gap: 8px; align-items: stretch; }
 .dao-trial-ranking-strip > div,
 .dao-trial-ranking-strip > span { display: grid; align-content: center; gap: 3px; min-width: 0; padding: 8px 10px; }
@@ -6149,6 +6147,648 @@ body::before {
   .dao-trial-catalog-toolbar input { grid-column: 1 / -1; }
   .dao-trial-catalog-toolbar > span { align-self: center; }
   .dao-trial-catalog-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Dao trial: compact entry and immersive run scene. */
+.view.active .dao-trial-surface {
+  gap: 14px;
+}
+
+.view.active .dao-trial-header {
+  position: relative;
+  min-height: 142px;
+  padding: 20px 22px;
+  overflow: hidden;
+  border-color: rgba(87, 65, 35, .24);
+  background:
+    linear-gradient(90deg, rgba(249, 239, 208, .98) 0%, rgba(246, 232, 193, .94) 56%, rgba(230, 216, 178, .45) 100%),
+    url("/assets/home-cards/dungeon-trial.png") center 48% / cover;
+  box-shadow: 0 10px 28px rgba(55, 39, 20, .11);
+}
+
+.view.active .dao-trial-header::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 250, 228, .38);
+}
+
+.view.active .dao-trial-header > * {
+  position: relative;
+  z-index: 1;
+}
+
+.view.active .dao-trial-header > div:first-child {
+  max-width: 670px;
+}
+
+.view.active .dao-trial-header h3 {
+  margin: 6px 0;
+  color: #3c2a18;
+  font-size: 26px;
+}
+
+.view.active .dao-trial-header-stats {
+  grid-template-columns: repeat(3, minmax(104px, 1fr));
+}
+
+.view.active .dao-trial-header-stats span {
+  min-width: 0;
+  padding: 7px 10px;
+  border-color: rgba(213, 178, 105, .34);
+  background: rgba(31, 38, 32, .86);
+  box-shadow: 0 6px 16px rgba(29, 28, 21, .15);
+}
+
+.view.active .dao-trial-affix-banner {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+  margin-top: 2px;
+  padding: 7px 10px;
+  border-radius: 0 3px 3px 0;
+}
+
+.view.active .dao-trial-affix-banner span,
+.view.active .dao-trial-affix-banner strong,
+.view.active .dao-trial-affix-banner small {
+  line-height: 1.4;
+}
+
+.dao-trial-entry-stage {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid rgba(91, 67, 35, .22);
+  border-radius: 6px;
+  background: rgba(250, 241, 216, .66);
+  box-shadow: 0 10px 24px rgba(58, 40, 21, .08);
+}
+
+.view.active .dao-trial-boon-panel {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 0 0 11px;
+  overflow-x: auto;
+  border-bottom: 1px solid rgba(93, 68, 35, .16);
+}
+
+.view.active .dao-trial-boon-panel > div {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 1px;
+  max-width: 280px;
+  margin-right: 5px;
+}
+
+.view.active .dao-trial-boon-panel > div small {
+  color: #7b6548;
+}
+
+.view.active .dao-trial-boon-panel > span {
+  flex: 0 0 auto;
+  min-width: 156px;
+  padding: 6px 9px;
+  border-color: rgba(78, 118, 94, .25);
+  background: rgba(230, 235, 211, .62);
+}
+
+.view.active .dao-trial-route-grid {
+  gap: 9px;
+}
+
+.view.active .dao-trial-route-grid > button {
+  min-height: 128px;
+  padding: 13px;
+  border: 1px solid rgba(129, 108, 72, .5);
+  border-radius: 5px;
+  background:
+    linear-gradient(145deg, rgba(30, 39, 34, .96), rgba(43, 50, 40, .92)),
+    url("/assets/home-cards/dungeon-trial.png") center / cover;
+  box-shadow: none;
+  transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+
+.view.active .dao-trial-route-grid > button:hover {
+  transform: translateY(-2px);
+  border-color: rgba(221, 187, 108, .72);
+  box-shadow: 0 9px 20px rgba(37, 30, 20, .18);
+}
+
+.view.active .dao-trial-route-grid > button.active {
+  border-color: #ddb85f;
+  box-shadow: inset 0 0 0 1px rgba(255, 226, 151, .28), 0 9px 20px rgba(37, 30, 20, .2);
+}
+
+.view.active .dao-trial-route-grid .dao-route-root {
+  align-self: start;
+  width: 42px;
+  height: 42px;
+}
+
+.view.active .dao-trial-route-grid strong {
+  font-size: 19px;
+}
+
+.view.active .dao-trial-route-opening {
+  margin-top: 5px;
+}
+
+.view.active .dao-trial-prepare {
+  display: grid;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.view.active .dao-trial-entry-action {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 12px;
+  border-top: 1px solid rgba(93, 68, 35, .18);
+}
+
+.view.active .dao-trial-entry-action > button {
+  min-width: 220px;
+}
+
+.view.active .dao-trial-prepare .section-head h3 {
+  margin-bottom: 2px;
+  color: #49341d;
+  font-size: 18px;
+}
+
+.view.active .dao-trial-companion-list {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.view.active .dao-trial-companion-list > button {
+  min-height: 58px;
+  padding: 6px 8px;
+}
+
+.dao-trial-archive-page {
+  gap: 14px;
+}
+
+.view.active .dao-trial-archive-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  min-height: 112px;
+  padding: 18px 20px;
+  background:
+    linear-gradient(90deg, rgba(249, 239, 208, .98), rgba(239, 224, 188, .88)),
+    url("/assets/home-cards/dungeon-trial.png") center 42% / cover;
+}
+
+.view.active .dao-trial-archive-header h3 {
+  margin: 5px 0 2px;
+  color: #49321a;
+  font-size: 26px;
+}
+
+.view.active .dao-trial-archive-header p {
+  margin: 0;
+  color: #725739;
+}
+
+.view.active .dao-trial-archive-header > div:last-child {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(118px, 1fr));
+  gap: 8px;
+}
+
+.view.active .dao-trial-archive-header > div:last-child > span {
+  display: grid;
+  gap: 2px;
+  padding: 9px 12px;
+  border: 1px solid rgba(206, 170, 91, .36);
+  border-radius: 4px;
+  background: rgba(39, 45, 38, .9);
+  text-align: center;
+}
+
+.view.active .dao-trial-archive-header small {
+  color: #ded2b5;
+  font-size: 12px;
+}
+
+.view.active .dao-trial-archive-header b {
+  color: #ffe19a;
+  font-size: 18px;
+}
+
+.dao-trial-running-view .dao-trial-subtabs {
+  margin-bottom: 2px;
+}
+
+.view.active .dao-trial-running .dao-trial-run-board {
+  isolation: isolate;
+  position: relative;
+  min-height: 760px;
+  padding: 18px;
+  overflow: hidden;
+  color: #efe5ca;
+  border: 1px solid rgba(201, 163, 82, .5);
+  background:
+    linear-gradient(180deg, rgba(5, 12, 13, .22) 0%, rgba(6, 12, 12, .42) 35%, rgba(5, 10, 10, .88) 100%),
+    url("/assets/home-cards/dungeon-trial.png") center 30% / cover no-repeat;
+  box-shadow: 0 20px 44px rgba(14, 19, 17, .3), inset 0 0 0 1px rgba(255, 225, 154, .08);
+}
+
+.view.active .dao-trial-running .dao-trial-run-board::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 30%, transparent 0 22%, rgba(2, 8, 9, .12) 52%, rgba(2, 7, 7, .46) 100%),
+    linear-gradient(90deg, rgba(4, 12, 12, .38), transparent 24% 76%, rgba(4, 10, 10, .38));
+}
+
+.view.active .dao-trial-running .dao-trial-run-heading {
+  padding: 12px 14px;
+  border: 1px solid rgba(215, 185, 119, .22);
+  border-radius: 5px;
+  background: rgba(7, 15, 15, .7);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .24);
+  backdrop-filter: blur(10px);
+}
+
+.view.active .dao-trial-running .dao-trial-run-heading h3 {
+  color: #ffe3a0;
+  font-size: 24px;
+}
+
+.view.active .dao-trial-running .dao-trial-run-heading p {
+  color: #c8c0ac;
+  font-size: 12px;
+}
+
+.view.active .dao-trial-running .dao-trial-run-heading p + p {
+  margin-top: 3px;
+  color: #9fb0a7;
+}
+
+.view.active .dao-trial-running .dao-trial-live-score {
+  padding: 5px 8px;
+  border: 1px solid rgba(221, 184, 93, .34);
+  border-radius: 3px;
+  background: rgba(109, 76, 25, .25);
+}
+
+.view.active .dao-trial-running .dao-trial-path {
+  position: relative;
+  gap: 0;
+  padding: 7px 10px 9px;
+  border: 1px solid rgba(202, 174, 109, .16);
+  border-radius: 5px;
+  background: rgba(5, 13, 13, .68);
+  backdrop-filter: blur(8px);
+}
+
+.view.active .dao-trial-running .dao-trial-path > div {
+  min-width: 88px;
+  min-height: 70px;
+  border: 0;
+  background: transparent;
+}
+
+.view.active .dao-trial-running .dao-trial-path > div::after {
+  left: calc(50% + 13px);
+  top: 19px;
+  width: calc(100% - 26px);
+  height: 2px;
+  background: rgba(154, 143, 111, .3);
+}
+
+.view.active .dao-trial-running .dao-trial-path span {
+  z-index: 1;
+  width: 27px;
+  height: 27px;
+  border: 1px solid rgba(173, 153, 105, .32);
+  box-shadow: 0 0 0 4px rgba(4, 12, 12, .72);
+}
+
+.view.active .dao-trial-running .dao-trial-path .state-current span {
+  color: #2c2111;
+  background: #efcf75;
+  box-shadow: 0 0 0 4px rgba(4, 12, 12, .78), 0 0 18px rgba(239, 207, 117, .75);
+}
+
+.view.active .dao-trial-running .dao-trial-path .state-cleared::after {
+  background: rgba(91, 177, 132, .66);
+}
+
+.view.active .dao-trial-running .dao-trial-boon-strip,
+.view.active .dao-trial-running .dao-trial-score-breakdown {
+  padding: 7px;
+  border-radius: 4px;
+  background: rgba(5, 13, 13, .6);
+  backdrop-filter: blur(8px);
+}
+
+.view.active .dao-trial-running .dao-trial-score-breakdown {
+  grid-template-columns: repeat(5, minmax(90px, 1fr));
+}
+
+.view.active .dao-trial-running .dao-trial-score-breakdown span {
+  padding-block: 4px;
+}
+
+.view.active .dao-trial-running .dao-trial-play-grid {
+  grid-template-columns: minmax(200px, 240px) minmax(360px, 1fr) minmax(190px, 220px);
+  align-items: start;
+}
+
+.view.active .dao-trial-running .dao-trial-status,
+.view.active .dao-trial-running .dao-trial-decision,
+.view.active .dao-trial-running .dao-trial-seal-rack {
+  border: 1px solid rgba(204, 173, 106, .2);
+  border-radius: 5px;
+  background: rgba(5, 13, 13, .76);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .24);
+  backdrop-filter: blur(12px);
+}
+
+.view.active .dao-trial-running .dao-trial-decision {
+  min-height: 320px;
+  padding: 15px;
+}
+
+.view.active .dao-trial-running .dao-trial-current-node {
+  padding-bottom: 9px;
+  border-bottom: 1px solid rgba(196, 164, 96, .18);
+}
+
+.view.active .dao-trial-running .dao-trial-current-node > span {
+  color: #91c9a9;
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+.view.active .dao-trial-running .dao-trial-current-node h3 {
+  color: #ffe09a;
+  font-size: 22px;
+}
+
+.view.active .dao-trial-running .dao-trial-law-offer > button,
+.view.active .dao-trial-running .dao-trial-seal-offer > button,
+.view.active .dao-trial-running .dao-trial-event-options > button,
+.view.active .dao-trial-running .dao-trial-strategies > button {
+  min-height: 132px;
+  border-radius: 4px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, .2);
+  transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
+}
+
+.view.active .dao-trial-running .dao-trial-law-offer > button:hover,
+.view.active .dao-trial-running .dao-trial-seal-offer > button:hover,
+.view.active .dao-trial-running .dao-trial-event-options > button:hover,
+.view.active .dao-trial-running .dao-trial-strategies > button:hover {
+  transform: translateY(-2px);
+  border-color: rgba(240, 206, 126, .75);
+  box-shadow: 0 12px 26px rgba(0, 0, 0, .3);
+}
+
+.view.active .dao-trial-running .dao-trial-enemy-preview {
+  position: relative;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 340px;
+  padding: 15px;
+  overflow: hidden;
+  border-color: rgba(219, 117, 87, .48);
+  border-radius: 5px;
+  background:
+    radial-gradient(circle at 18% 42%, rgba(138, 59, 39, .26), transparent 32%),
+    linear-gradient(115deg, rgba(21, 12, 10, .82), rgba(11, 17, 15, .74));
+}
+
+.view.active .dao-trial-running .dao-trial-enemy-head {
+  grid-template-columns: 152px minmax(0, 1fr) auto;
+  gap: 16px;
+}
+
+.view.active .dao-trial-running .dao-trial-enemy-head .monster-emblem.lg {
+  --monster-size: 152px;
+  grid-row: span 3;
+  border-radius: 5px;
+  box-shadow: 0 16px 30px rgba(0, 0, 0, .36), 0 0 28px rgba(210, 109, 72, .2);
+}
+
+.view.active .dao-trial-running .dao-trial-enemy-head strong {
+  color: #ffe09b;
+  font-size: 24px;
+}
+
+.view.active .dao-trial-running .dao-trial-power-matchup {
+  grid-template-columns: minmax(100px, 1fr) auto minmax(100px, 1fr);
+  margin-left: 168px;
+  padding: 8px 0;
+}
+
+.view.active .dao-trial-running .dao-trial-enemy-stats {
+  margin-left: 168px;
+}
+
+.view.active .dao-trial-running .dao-trial-enemy-preview > button {
+  min-height: 46px;
+  margin-left: 168px;
+  font-size: 15px;
+  box-shadow: 0 8px 24px rgba(154, 61, 36, .26);
+}
+
+.view.active .dao-trial-running .dao-trial-seal-rack {
+  max-height: 440px;
+  overflow: auto;
+}
+
+@media (max-width: 1180px) {
+  .view.active .dao-trial-companion-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .view.active .dao-trial-running .dao-trial-play-grid {
+    grid-template-columns: minmax(200px, 230px) minmax(0, 1fr);
+  }
+
+  .view.active .dao-trial-running .dao-trial-seal-rack {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    max-height: none;
+  }
+
+  .view.active .dao-trial-running .dao-trial-seal-rack > strong,
+  .view.active .dao-trial-running .dao-trial-seal-rack > p {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 720px) {
+  .view.active .dao-trial-header {
+    min-height: 0;
+    padding: 15px;
+    background:
+      linear-gradient(90deg, rgba(249, 239, 208, .97), rgba(241, 225, 186, .86)),
+      url("/assets/home-cards/dungeon-trial.png") center / cover;
+  }
+
+  .view.active .dao-trial-header h3 {
+    font-size: 22px;
+  }
+
+  .view.active .dao-trial-header-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .dao-trial-entry-stage {
+    padding: 12px;
+  }
+
+  .view.active .dao-trial-boon-panel {
+    align-items: stretch;
+  }
+
+  .view.active .dao-trial-boon-panel > div {
+    min-width: 220px;
+  }
+
+  .view.active .dao-trial-route-grid > button {
+    min-height: 112px;
+  }
+
+  .dao-trial-mastery-unlocks {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .view.active .dao-trial-companion-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .view.active .dao-trial-prepare .section-head > button {
+    width: 100%;
+  }
+
+  .view.active .dao-trial-affix-banner {
+    grid-template-columns: auto auto;
+  }
+
+  .view.active .dao-trial-affix-banner small {
+    grid-column: 1 / -1;
+  }
+
+  .view.active .dao-trial-entry-action > button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .view.active .dao-trial-archive-header {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 15px;
+  }
+
+  .view.active .dao-trial-archive-header > div:last-child {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .view.active .dao-trial-running .dao-trial-run-board {
+    min-height: 720px;
+    padding: 10px;
+    background:
+      linear-gradient(180deg, rgba(5, 12, 13, .2), rgba(5, 10, 10, .9) 52%),
+      url("/assets/home-cards/dungeon-trial.png") 58% top / auto 500px no-repeat,
+      #071010;
+  }
+
+  .view.active .dao-trial-running .dao-trial-run-heading {
+    align-items: stretch;
+    padding: 10px;
+  }
+
+  .view.active .dao-trial-running .dao-trial-run-heading .actions {
+    display: grid;
+    grid-template-columns: 1fr auto;
+  }
+
+  .view.active .dao-trial-running .dao-trial-run-affix {
+    grid-column: 1 / -1;
+  }
+
+  .view.active .dao-trial-running .dao-trial-path {
+    margin-inline: -2px;
+    padding-inline: 6px;
+  }
+
+  .view.active .dao-trial-running .dao-trial-path > div {
+    flex-basis: 76px;
+    min-width: 76px;
+  }
+
+  .view.active .dao-trial-running .dao-trial-score-breakdown {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .view.active .dao-trial-running .dao-trial-play-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .view.active .dao-trial-running .dao-trial-status {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .view.active .dao-trial-running .dao-trial-decision {
+    min-height: 0;
+    padding: 11px;
+  }
+
+  .view.active .dao-trial-running .dao-trial-law-offer > button,
+  .view.active .dao-trial-running .dao-trial-seal-offer > button,
+  .view.active .dao-trial-running .dao-trial-event-options > button,
+  .view.active .dao-trial-running .dao-trial-strategies > button {
+    min-height: 102px;
+  }
+
+  .view.active .dao-trial-running .dao-trial-enemy-preview {
+    min-height: 0;
+  }
+
+  .view.active .dao-trial-running .dao-trial-enemy-head {
+    grid-template-columns: 104px minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .view.active .dao-trial-running .dao-trial-enemy-head .monster-emblem.lg {
+    --monster-size: 104px;
+  }
+
+  .view.active .dao-trial-running .dao-trial-enemy-head > b {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .view.active .dao-trial-running .dao-trial-enemy-head strong {
+    font-size: 19px;
+  }
+
+  .view.active .dao-trial-running .dao-trial-power-matchup,
+  .view.active .dao-trial-running .dao-trial-enemy-stats,
+  .view.active .dao-trial-running .dao-trial-enemy-preview > button {
+    margin-left: 0;
+  }
+
+  .view.active .dao-trial-running .dao-trial-enemy-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .view.active .dao-trial-running .dao-trial-seal-rack {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .equipment-surface .equipment-table-head,
@@ -15370,4 +16010,131 @@ body::before {
     min-height: 136px;
     padding: 15px;
   }
+}
+
+/* Keep the run scene above the late readability skin overrides. */
+.view.active .dao-trial-surface.dao-trial-running > .dao-trial-run-board {
+  color: #efe5ca;
+  border-color: rgba(201, 163, 82, .5);
+  background:
+    linear-gradient(180deg, rgba(5, 12, 13, .22) 0%, rgba(6, 12, 12, .42) 35%, rgba(5, 10, 10, .88) 100%),
+    url("/assets/home-cards/dungeon-trial.png") center 30% / cover no-repeat;
+  box-shadow: 0 20px 44px rgba(14, 19, 17, .3), inset 0 0 0 1px rgba(255, 225, 154, .08);
+}
+
+@media (max-width: 720px) {
+  .view.active .dao-trial-boon-panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    overflow: visible;
+  }
+
+  .view.active .dao-trial-boon-panel > div,
+  .view.active .dao-trial-boon-panel > span {
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    margin-right: 0;
+  }
+
+  .view.active .dao-trial-surface.dao-trial-running > .dao-trial-run-board {
+    background:
+      linear-gradient(180deg, rgba(5, 12, 13, .2), rgba(5, 10, 10, .9) 52%),
+      url("/assets/home-cards/dungeon-trial.png") 58% top / auto 500px no-repeat,
+      #071010;
+  }
+}
+
+/* Archive uses the same paper, jade and gold language as the trial entry. */
+.view.active .dao-trial-archive-page > .dao-trial-archive-header {
+  border-color: rgba(87, 65, 35, .24);
+  background:
+    linear-gradient(90deg, rgba(249, 239, 208, .98) 0%, rgba(246, 232, 193, .94) 56%, rgba(230, 216, 178, .45) 100%),
+    url("/assets/home-cards/dungeon-trial.png") center 48% / cover;
+  box-shadow: 0 10px 28px rgba(55, 39, 20, .11);
+}
+
+.view.active .dao-trial-archive-header::after {
+  content: "档案";
+}
+
+.view.active .dao-trial-archive-page .dao-trial-archive-section {
+  border-color: rgba(91, 67, 35, .22);
+  background: rgba(196, 195, 174, .9);
+  box-shadow: 0 10px 24px rgba(58, 40, 21, .08);
+}
+
+.view.active .dao-trial-archive-section > .section-head {
+  padding-bottom: 11px;
+  border-bottom: 1px solid rgba(86, 63, 34, .18);
+}
+
+.view.active .dao-trial-archive-page .dao-trial-goal-grid > div,
+.view.active .dao-trial-archive-page .dao-trial-history .event,
+.view.active .dao-trial-archive-page .dao-trial-catalog-grid > article {
+  border-color: #897548;
+  background: linear-gradient(135deg, #364039, #28312c);
+  box-shadow: inset 0 1px rgba(255, 237, 185, .07), 0 3px 8px rgba(28, 24, 15, .14);
+}
+
+.view.active .dao-trial-archive-page .dao-trial-goal-grid b,
+.view.active .dao-trial-archive-page .dao-trial-history .event strong,
+.view.active .dao-trial-archive-page .dao-trial-catalog-grid article b {
+  color: #ffe3a0;
+}
+
+.view.active .dao-trial-archive-page .dao-trial-goal-grid small,
+.view.active .dao-trial-archive-page .dao-trial-history .event span,
+.view.active .dao-trial-archive-page .dao-trial-history .event small,
+.view.active .dao-trial-archive-page .dao-trial-catalog-grid article small,
+.view.active .dao-trial-archive-page .dao-trial-catalog-grid article p {
+  color: #dce4da;
+}
+
+.view.active .dao-trial-archive-page .dao-trial-goal-grid i {
+  border-color: rgba(229, 206, 146, .16);
+  background: rgba(9, 16, 13, .5);
+}
+
+.view.active .dao-trial-archive-page .dao-trial-goal-grid em {
+  background: #d0a951;
+}
+
+.view.active .dao-trial-archive-page .dao-trial-history .event:hover,
+.view.active .dao-trial-archive-page .dao-trial-history .event:focus-visible {
+  border-color: #d0ad62;
+  background: linear-gradient(135deg, #414c40, #303a32);
+}
+
+.view.active .dao-trial-archive-page .dao-trial-catalog-grid > article.rarity-silver {
+  border-left-color: #a9bec6;
+  background: linear-gradient(135deg, #3b4749, #2b3436);
+}
+
+.view.active .dao-trial-archive-page .dao-trial-catalog-grid > article.rarity-gold {
+  border-left-color: #e7bd58;
+  background: linear-gradient(135deg, #514529, #36301f);
+}
+
+.view.active .dao-trial-archive-page .dao-trial-catalog-grid > article.rarity-diamond {
+  border-color: rgba(114, 198, 200, .48);
+  border-left-color: #8fe5e8;
+  background: linear-gradient(135deg, #274648, #1d3334);
+}
+
+.view.active .dao-trial-archive-page .dao-trial-catalog-grid > article.undiscovered {
+  border-color: rgba(137, 117, 72, .55);
+  border-left-color: #727d73;
+  background: linear-gradient(135deg, #343a35, #292e2a);
+  filter: none;
+}
+
+.view.active .dao-trial-archive-page .dao-trial-catalog-grid > article.undiscovered b,
+.view.active .dao-trial-archive-page .dao-trial-catalog-grid > article.undiscovered small,
+.view.active .dao-trial-archive-page .dao-trial-catalog-grid > article.undiscovered p {
+  color: #aeb8ad;
+}
+
+.view.active .dao-trial-archive-page .dao-trial-catalog-pager span {
+  color: #4f3a23;
 }

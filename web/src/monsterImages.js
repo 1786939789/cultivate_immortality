@@ -65,6 +65,17 @@ export const monsterImageEntries = Object.entries(monsterImageNames).map(([name,
 
 const monsterNames = Object.keys(monsterImageNames).sort((a, b) => b.length - a.length);
 
+const monsterFallbackImages = [
+  { pattern: /石|岩|矿|土/, file: "black-armored-giant-spirit.png" },
+  { pattern: /雷|电/, file: "dark-magnetic-thunder-roc.png" },
+  { pattern: /冰|霜|寒/, file: "dark-ice-scorpion-king.png" },
+  { pattern: /火|焰|炎/, file: "red-fire-toad.webp" },
+  { pattern: /水|潮|海/, file: "azure-water-ape.webp" },
+  { pattern: /风|羽|云/, file: "iron-feather-hawk.webp" },
+  { pattern: /木|毒|藤/, file: "greenwood-centipede.webp" },
+  { pattern: /魔|阴|魂|煞|魇/, file: "void-nightmare-beast.png" }
+];
+
 export function baseMonsterName(name = "") {
   const text = String(name || "");
   return monsterNames.find((monsterName) => text.includes(monsterName)) || text.replace(/^.*?·/, "").replace(/王$/, "");
@@ -78,7 +89,10 @@ export function monsterArchetype(monster) {
 export function monsterImagePath(monster) {
   const name = baseMonsterName(typeof monster === "string" ? monster : monster?.name);
   const file = monsterImageNames[name];
-  if (!file) return "";
-  const filename = /\.[a-z0-9]+$/i.test(file) ? file : `${file}.webp`;
+  const hint = typeof monster === "string" ? monster : `${monster?.name || ""}${monster?.rootName || ""}${monster?.kind || ""}`;
+  const fallbackFile = monsterFallbackImages.find((entry) => entry.pattern.test(hint))?.file;
+  if (!file && !fallbackFile) return "";
+  const imageFile = file || fallbackFile;
+  const filename = /\.[a-z0-9]+$/i.test(imageFile) ? imageFile : `${imageFile}.webp`;
   return `/assets/monsters/${filename}`;
 }
