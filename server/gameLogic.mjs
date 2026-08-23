@@ -740,11 +740,13 @@ function effectiveSkillForEntity(entity) {
   const healing = Math.max(-0.5, Number(buffs.healing) || 0);
   if (typeof result.power === "number") result.power = roundSkillValue("power", result.power * (1 + skillPower));
   if (typeof result.percent === "number") {
-    // `skillPower` is the generic skill-effect modifier.  Continuous effects
-    // additionally receive `statusPower`, while healing deliberately uses the
-    // dedicated `healing` modifier so that the three build axes remain
-    // independently observable in combat replays.
-    const multiplier = result.type === "heal" ? 1 + healing : 1 + skillPower + statusPower;
+    // `skillPower` is the generic skill-effect modifier and therefore applies
+    // to healing skills as well.  Continuous effects additionally receive
+    // `statusPower`, while healing receives the dedicated `healing` modifier
+    // on top of the generic skill bonus.
+    const multiplier = result.type === "heal"
+      ? 1 + skillPower + healing
+      : 1 + skillPower + statusPower;
     result.percent = roundSkillValue("percent", result.percent * multiplier);
   }
   if (typeof result.reduce === "number") result.reduce = roundSkillValue("reduce", result.reduce * (1 + skillPower * 0.5));
