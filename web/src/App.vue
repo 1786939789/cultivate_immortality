@@ -1927,6 +1927,22 @@
                     </div>
                     <Meter label="秘境血量" icon="health" :value="activeDaoTrialRun.combat.hp" :max="activeDaoTrialRun.combat.maxHp" tone="health" />
                     <Meter label="秘境法力" icon="mana" :value="activeDaoTrialRun.combat.mana" :max="activeDaoTrialRun.combat.maxMana" tone="focus" />
+                    <div v-if="activeDaoTrialRun.combatModifiers" class="dao-trial-combat-modifiers" aria-label="秘境实战加成">
+                      <div class="dao-trial-modifier-head"><strong>实战加成校验</strong><small>后端已应用到本轮战斗</small></div>
+                      <div class="dao-trial-modifier-grid">
+                        <span v-if="activeDaoTrialRun.combatModifiers.attack"><small>攻击</small><b>{{ formatPercent(activeDaoTrialRun.combatModifiers.attack) }}</b></span>
+                        <span v-if="activeDaoTrialRun.combatModifiers.defense"><small>防御</small><b>{{ formatPercent(activeDaoTrialRun.combatModifiers.defense) }}</b></span>
+                        <span v-if="activeDaoTrialRun.combatModifiers.maxHp"><small>血量上限</small><b>{{ formatPercent(activeDaoTrialRun.combatModifiers.maxHp) }}</b></span>
+                        <span v-if="activeDaoTrialRun.combatModifiers.maxMana"><small>法力上限</small><b>{{ formatPercent(activeDaoTrialRun.combatModifiers.maxMana) }}</b></span>
+                        <span v-if="activeDaoTrialRun.combatModifiers.divineSense"><small>神识</small><b>{{ formatPercent(activeDaoTrialRun.combatModifiers.divineSense) }}</b></span>
+                        <span v-if="activeDaoTrialRun.combatModifiers.skillPower"><small>技能效果</small><b>{{ formatPercent(activeDaoTrialRun.combatModifiers.skillPower) }}</b></span>
+                        <span v-if="activeDaoTrialRun.combatModifiers.statusPower"><small>持续效果</small><b>{{ formatPercent(activeDaoTrialRun.combatModifiers.statusPower) }}</b></span>
+                        <span v-if="activeDaoTrialRun.combatModifiers.healing"><small>治疗</small><b>{{ formatPercent(activeDaoTrialRun.combatModifiers.healing) }}</b></span>
+                        <span v-if="activeDaoTrialRun.combatModifiers.manaCost"><small>技能消耗</small><b>{{ formatPercent(activeDaoTrialRun.combatModifiers.manaCost) }}</b></span>
+                        <span v-if="activeDaoTrialRun.combatModifiers.cooldown"><small>技能冷却</small><b>{{ activeDaoTrialRun.combatModifiers.cooldown > 0 ? '+' : '' }}{{ activeDaoTrialRun.combatModifiers.cooldown }}回合</b></span>
+                      </div>
+                      <small v-if="activeDaoTrialRun.combatModifiers.skill" class="dao-trial-effective-skill">{{ activeDaoTrialRun.combatModifiers.skill.name }} · {{ activeDaoTrialRun.combatModifiers.skill.cost }} 法力 · 冷却 {{ activeDaoTrialRun.combatModifiers.skill.cooldown }} 回合<template v-if="activeDaoTrialRun.combatModifiers.skill.power"> · 技能倍率 {{ formatPercent(activeDaoTrialRun.combatModifiers.skill.power) }}</template><template v-if="activeDaoTrialRun.combatModifiers.skill.percent"> · 持续/治疗 {{ formatPercent(activeDaoTrialRun.combatModifiers.skill.percent) }}</template></small>
+                    </div>
                     <button v-if="activeDaoTrialRun.taskBoons?.some(boon => boon.id === 'life')" class="secondary compact-button" type="button" :disabled="!activeDaoTrialRun.canUseLifeHeal || isActionPending('/api/dao-trial/advance')" @click="useDaoTrialLifeHeal">
                       {{ activeDaoTrialRun.canUseLifeHeal ? "使用回春符 · 恢复 20%" : "回春符暂不可用" }}
                     </button>

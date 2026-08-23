@@ -740,10 +740,17 @@ function effectiveSkillForEntity(entity) {
   const healing = Math.max(-0.5, Number(buffs.healing) || 0);
   if (typeof result.power === "number") result.power = roundSkillValue("power", result.power * (1 + skillPower));
   if (typeof result.percent === "number") {
-    const multiplier = result.type === "heal" ? 1 + healing : 1 + statusPower;
+    // `skillPower` is the generic skill-effect modifier.  Continuous effects
+    // additionally receive `statusPower`, while healing deliberately uses the
+    // dedicated `healing` modifier so that the three build axes remain
+    // independently observable in combat replays.
+    const multiplier = result.type === "heal" ? 1 + healing : 1 + skillPower + statusPower;
     result.percent = roundSkillValue("percent", result.percent * multiplier);
   }
   if (typeof result.reduce === "number") result.reduce = roundSkillValue("reduce", result.reduce * (1 + skillPower * 0.5));
+  for (const key of ["amount", "chance", "extraDodge", "reflect"]) {
+    if (typeof result[key] === "number") result[key] = roundSkillValue(key, result[key] * (1 + skillPower));
+  }
   if (typeof result.leech === "number") result.leech = roundSkillValue("leech", result.leech * (1 + healing));
   result.cost = Math.max(1, Math.ceil(result.cost * (1 + (Number(buffs.manaCost) || 0))));
   result.cooldown = Math.max(1, Math.round((result.cooldown || 1) + (Number(buffs.cooldown) || 0)));
@@ -9320,12 +9327,28 @@ function ensureDaoTrialState(state) {
     record.companionContribution ??= { damage: 0, healing: 0, shields: 0, control: 0, assists: 0 };
   }
   state.daoTrial.bestFloor = Math.max(0, Math.floor(Number(state.daoTrial.bestFloor) || 0));
+  state.daoTrial.bestScore = Math.max(0, Math.floor(Number(state.daoTrial.bestScore) || 0));
   state.daoTrial.bestQualityScore = Math.max(0, Math.floor(Number(state.daoTrial.bestQualityScore) || 0));
   if (!state.daoTrial.bestFloor && state.daoTrial.history.length) {
     const legacyBest = [...state.daoTrial.history].sort((a, b) => b.floor - a.floor || Number(b.score || 0) - Number(a.score || 0))[0];
     state.daoTrial.bestFloor = legacyBest.floor;
+    state.daoTrial.bestScore = Math.max(0, Number(legacyBest.score) || 0);
     if (!state.daoTrial.bestResult) state.daoTrial.bestResult = legacyBest;
     changed = true;
+  }
+  // Older records sometimes carried route mastery and a best floor but left
+  // the global best score at zero.  Rehydrate the header metric from history
+  // so the entry page and route cards cannot disagree.
+  if (state.daoTrial.history.length && state.daoTrial.bestScore <= 0) {
+    const scoredBest = [...state.daoTrial.history].sort((a, b) => (
+      Number(b.floor || 0) - Number(a.floor || 0)
+      || Number(b.score || 0) - Number(a.score || 0)
+    ))[0];
+    if (scoredBest && Number(scoredBest.score || 0) > 0) {
+      state.daoTrial.bestScore = Math.floor(Number(scoredBest.score) || 0);
+      if (!state.daoTrial.bestResult) state.daoTrial.bestResult = scoredBest;
+      changed = true;
+    }
   }
   if (state.daoTrial.activeRun) {
     state.daoTrial.activeRun.rewards ??= { xp: 0, spirit: 0, dust: 0, milestones: [] };
@@ -10389,8 +10412,40 @@ function publicTrialRun(state, run) {
   const route = daoTrialRouteMap[run.routeId];
   const nodes = run.nodes?.length ? run.nodes : (route?.nodes || []);
   const node = nodes[run.nodeIndex] || null;
-  const fighter = { ...run.combatant, trialBuffs: combinedTrialBuffs(run) };
+  const trialBuffs = combinedTrialBuffs(run);
+  const fighter = { ...run.combatant, trialBuffs };
   const stats = combatSnapshot(fighter, state);
+  const effectiveSkill = effectiveSkillForEntity(fighter);
+  const combatModifiers = {
+    attack: Number(trialBuffs.attack) || 0,
+    defense: Number(trialBuffs.defense) || 0,
+    maxHp: Number(trialBuffs.maxHp) || 0,
+    maxMana: Number(trialBuffs.maxMana) || 0,
+    divineSense: Number(trialBuffs.divineSense) || 0,
+    skillPower: Number(trialBuffs.skillPower) || 0,
+    statusPower: Number(trialBuffs.statusPower) || 0,
+    healing: Number(trialBuffs.healing) || 0,
+    manaCost: Number(trialBuffs.manaCost) || 0,
+    cooldown: Number(trialBuffs.cooldown) || 0,
+    rootResist: Number(trialBuffs.rootResist) || 0,
+    postBattleHeal: Number(trialBuffs.postBattleHeal) || 0,
+    postBattleMana: Number(trialBuffs.postBattleMana) || 0,
+    skill: {
+      id: effectiveSkill.id,
+      name: effectiveSkill.name,
+      type: effectiveSkill.type,
+      cost: effectiveSkill.cost,
+      cooldown: effectiveSkill.cooldown,
+      power: effectiveSkill.power,
+      percent: effectiveSkill.percent,
+      amount: effectiveSkill.amount,
+      reduce: effectiveSkill.reduce,
+      leech: effectiveSkill.leech,
+      chance: effectiveSkill.chance,
+      reflect: effectiveSkill.reflect,
+      extraDodge: effectiveSkill.extraDodge
+    }
+  };
   let opponentPreview = null;
   if (node?.type === "battle" && route) {
     const opponent = trialOpponentFor(state, run, node);
@@ -10476,6 +10531,7 @@ function publicTrialRun(state, run) {
     opponentPreview,
     enemyPreview: opponentPreview,
     combat: { hp: stats.hp, maxHp: stats.maxHp, mana: stats.mana, maxMana: stats.maxMana },
+    combatModifiers,
     companion: run.companion,
     seals: run.sealIds.map((id) => daoTrialSealMap[id]).filter(Boolean),
     laws: (run.lawIds || []).map((id) => publicTrialLaw(daoTrialLawMap[id])).filter(Boolean),

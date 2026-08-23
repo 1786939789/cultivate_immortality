@@ -5926,6 +5926,14 @@ body::before {
 .dao-trial-player-line { display: flex; align-items: center; gap: 10px; }
 .dao-trial-player-line > div { display: grid; gap: 2px; }
 .dao-trial-player-line small { color: #9b927f; }
+.dao-trial-combat-modifiers { display: grid; gap: 7px; padding: 9px; border: 1px solid rgba(113, 154, 128, .26); border-radius: 4px; background: rgba(38, 72, 54, .2); }
+.dao-trial-modifier-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.dao-trial-modifier-head strong { color: #d9e8c6; font-size: 12px; }
+.dao-trial-modifier-head small,
+.dao-trial-effective-skill { color: #9fb7a2; font-size: 11px; line-height: 1.45; }
+.dao-trial-modifier-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
+.dao-trial-modifier-grid span { display: flex; justify-content: space-between; gap: 6px; color: #a8b8a1; font-size: 11px; }
+.dao-trial-modifier-grid b { color: #ead28e; font-size: 12px; }
 .dao-trial-companion-mini { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: center; padding-top: 10px; border-top: 1px solid rgba(171, 139, 77, .18); }
 .dao-trial-companion-mini > span { display: grid; gap: 1px; }
 .dao-trial-companion-mini small { color: #8fb29d; }
