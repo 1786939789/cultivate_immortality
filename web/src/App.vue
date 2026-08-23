@@ -1928,20 +1928,25 @@
                     <Meter label="秘境血量" icon="health" :value="activeDaoTrialRun.combat.hp" :max="activeDaoTrialRun.combat.maxHp" tone="health" />
                     <Meter label="秘境法力" icon="mana" :value="activeDaoTrialRun.combat.mana" :max="activeDaoTrialRun.combat.maxMana" tone="focus" />
                     <div v-if="activeDaoTrialRun.combatModifiers" class="dao-trial-combat-modifiers" aria-label="秘境实战加成">
-                      <div class="dao-trial-modifier-head"><strong>实战加成校验</strong><small>后端已应用到本轮战斗</small></div>
-                      <div class="dao-trial-modifier-grid">
-                        <span v-if="activeDaoTrialRun.combatModifiers.attack"><small>攻击</small><b>{{ formatPercent(activeDaoTrialRun.combatModifiers.attack) }}</b></span>
-                        <span v-if="activeDaoTrialRun.combatModifiers.defense"><small>防御</small><b>{{ formatPercent(activeDaoTrialRun.combatModifiers.defense) }}</b></span>
-                        <span v-if="activeDaoTrialRun.combatModifiers.maxHp"><small>血量上限</small><b>{{ formatPercent(activeDaoTrialRun.combatModifiers.maxHp) }}</b></span>
-                        <span v-if="activeDaoTrialRun.combatModifiers.maxMana"><small>法力上限</small><b>{{ formatPercent(activeDaoTrialRun.combatModifiers.maxMana) }}</b></span>
-                        <span v-if="activeDaoTrialRun.combatModifiers.divineSense"><small>神识</small><b>{{ formatPercent(activeDaoTrialRun.combatModifiers.divineSense) }}</b></span>
-                        <span v-if="activeDaoTrialRun.combatModifiers.skillPower"><small>技能效果</small><b>{{ formatPercent(activeDaoTrialRun.combatModifiers.skillPower) }}</b></span>
-                        <span v-if="activeDaoTrialRun.combatModifiers.statusPower"><small>持续效果</small><b>{{ formatPercent(activeDaoTrialRun.combatModifiers.statusPower) }}</b></span>
-                        <span v-if="activeDaoTrialRun.combatModifiers.healing"><small>治疗</small><b>{{ formatPercent(activeDaoTrialRun.combatModifiers.healing) }}</b></span>
-                        <span v-if="activeDaoTrialRun.combatModifiers.manaCost"><small>技能消耗</small><b>{{ formatPercent(activeDaoTrialRun.combatModifiers.manaCost) }}</b></span>
-                        <span v-if="activeDaoTrialRun.combatModifiers.cooldown"><small>技能冷却</small><b>{{ activeDaoTrialRun.combatModifiers.cooldown > 0 ? '+' : '' }}{{ activeDaoTrialRun.combatModifiers.cooldown }}回合</b></span>
+                      <div class="dao-trial-modifier-head"><strong>属性原值与当前值</strong></div>
+                      <div v-if="activeDaoTrialRun.statComparisons?.length" class="dao-trial-stat-comparisons">
+                        <span v-for="entry in activeDaoTrialRun.statComparisons" :key="entry.key">
+                          <small>{{ entry.label }}</small>
+                          <b><i>{{ entry.base }}</i><em>→</em><strong>{{ entry.current }}</strong></b>
+                          <small :class="{ positive: entry.percent > 0, negative: entry.percent < 0 }">{{ entry.percent > 0 ? '+' : '' }}{{ formatPercent(entry.percent) }}</small>
+                        </span>
                       </div>
-                      <small v-if="activeDaoTrialRun.combatModifiers.skill" class="dao-trial-effective-skill">{{ activeDaoTrialRun.combatModifiers.skill.name }} · {{ activeDaoTrialRun.combatModifiers.skill.cost }} 法力 · 冷却 {{ activeDaoTrialRun.combatModifiers.skill.cooldown }} 回合<template v-if="activeDaoTrialRun.combatModifiers.skill.power"> · 技能倍率 {{ formatPercent(activeDaoTrialRun.combatModifiers.skill.power) }}</template><template v-if="activeDaoTrialRun.combatModifiers.skill.percent"> · 持续/治疗 {{ formatPercent(activeDaoTrialRun.combatModifiers.skill.percent) }}</template></small>
+                      <div v-if="activeDaoTrialRun.combatModifiers.skill" class="dao-trial-skill-comparison">
+                        <strong>{{ activeDaoTrialRun.combatModifiers.skill.name }}</strong>
+                        <span>
+                          <small>法力消耗</small>
+                          <b><i>{{ activeDaoTrialRun.combatModifiers.skill.baseCost }}</i><em>→</em><strong>{{ activeDaoTrialRun.combatModifiers.skill.cost }}</strong></b>
+                        </span>
+                        <span v-for="effect in activeDaoTrialRun.combatModifiers.skill.effectComparisons" :key="effect.key">
+                          <small>{{ effect.label }}</small>
+                          <b><i>{{ formatPercent(effect.base) }}</i><em>→</em><strong>{{ formatPercent(effect.current) }}</strong></b>
+                        </span>
+                      </div>
                     </div>
                     <button v-if="activeDaoTrialRun.taskBoons?.some(boon => boon.id === 'life')" class="secondary compact-button" type="button" :disabled="!activeDaoTrialRun.canUseLifeHeal || isActionPending('/api/dao-trial/advance')" @click="useDaoTrialLifeHeal">
                       {{ activeDaoTrialRun.canUseLifeHeal ? "使用回春符 · 恢复 20%" : "回春符暂不可用" }}
@@ -1990,7 +1995,7 @@
                         <span><small>当前状态战力</small><strong>{{ activeDaoTrialRun.opponentPreview.playerPower }}</strong></span>
                         <i>对阵</i>
                         <span><small>秘境战力</small><strong>{{ activeDaoTrialRun.opponentPreview.power }}</strong></span>
-                        <em>你的满状态 {{ activeDaoTrialRun.opponentPreview.playerMaxPower }} · 对方基础战力 {{ activeDaoTrialRun.opponentPreview.basePower }} · {{ daoTrialProjectionText(activeDaoTrialRun.opponentPreview) }} · 约为你当前状态的 {{ activeDaoTrialRun.opponentPreview.powerRatio }}%</em>
+                        <em>你的满状态 {{ activeDaoTrialRun.opponentPreview.playerMaxPower }} · 对方基础战力 {{ activeDaoTrialRun.opponentPreview.basePower }} · {{ daoTrialProjectionText(activeDaoTrialRun.opponentPreview) }}<template v-if="activeDaoTrialRun.opponentPreview.rootCounterPenalty"> · 灵根受克 -{{ formatPercent(activeDaoTrialRun.opponentPreview.rootCounterPenalty) }}</template> · 约为你当前状态的 {{ activeDaoTrialRun.opponentPreview.powerRatio }}%</em>
                       </div>
                       <div class="dao-trial-enemy-stats">
                         <span><Sword :size="14" aria-hidden="true" /><small>攻击</small><b>{{ activeDaoTrialRun.opponentPreview.attack }}</b></span>
@@ -2005,7 +2010,27 @@
                     <div v-else class="dao-trial-event-options"><span>此处如何取舍</span><button v-for="option in activeDaoTrialRun.eventOptions" :key="option.id" type="button" :disabled="isActionPending('/api/dao-trial/advance')" @click="chooseDaoTrialEvent(option.id)"><strong>{{ option.label }}</strong><small>{{ option.hint }}</small></button></div>
                   </section>
 
-                  <aside class="dao-trial-seal-rack"><strong>问道法则</strong><span v-for="law in activeDaoTrialRun.laws" :key="law.id" :class="`rarity-${law.rarity}`"><b>{{ law.name }}</b><small>{{ law.rarityLabel }} · {{ law.school }}</small></span><p v-if="!activeDaoTrialRun.laws.length">入境后先选择第一项法则。</p><strong>本轮道印</strong><span v-for="seal in activeDaoTrialRun.seals" :key="seal.id"><b>{{ seal.name }}</b><small>{{ seal.school }}</small></span><p v-if="!activeDaoTrialRun.seals.length">战斗得胜后可选择道印。</p></aside>
+                  <aside class="dao-trial-seal-rack">
+                    <strong>问道法则</strong>
+                    <span
+                      v-for="law in activeDaoTrialRun.laws"
+                      :key="law.id"
+                      :class="`rarity-${law.rarity}`"
+                      :title="`${law.text}${law.trigger ? ` · 触发：${daoTrialTriggerLabel(law.trigger)}` : ''}`"
+                      :aria-label="`${law.name}：${law.text}`"
+                      tabindex="0"
+                    ><b>{{ law.name }}</b><small>{{ law.rarityLabel }} · {{ law.school }}</small></span>
+                    <p v-if="!activeDaoTrialRun.laws.length">入境后先选择第一项法则。</p>
+                    <strong>本轮道印</strong>
+                    <span
+                      v-for="seal in activeDaoTrialRun.seals"
+                      :key="seal.id"
+                      :title="seal.text"
+                      :aria-label="`${seal.name}：${seal.text}`"
+                      tabindex="0"
+                    ><b>{{ seal.name }}</b><small>{{ seal.school }}</small></span>
+                    <p v-if="!activeDaoTrialRun.seals.length">战斗得胜后可选择道印。</p>
+                  </aside>
                 </div>
               </div>
             </template>
@@ -11153,8 +11178,8 @@ function daoTrialRewardText(record) {
 
 function daoTrialProjectionText(opponent) {
   const percent = Number(opponent?.projectionPercent) || 0;
-  if (percent === 0) return "秘境维持原势";
-  return `${opponent?.projectionLabel || (percent > 0 ? "秘境战意" : "秘境维持")} ${signedNumber(percent)}%`;
+  if (percent <= 0) return "秘境不削弱";
+  return `${opponent?.projectionLabel || "秘境战意"} ${signedNumber(percent)}%`;
 }
 
 function daoTrialHarmonyRewardText(reward) {

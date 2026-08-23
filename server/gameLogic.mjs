@@ -9423,6 +9423,15 @@ function ensureDaoTrialState(state) {
       activeRun.companionContribution ??= { damage: 0, healing: 0, shields: 0, control: 0, assists: 0 };
       activeRun.insight = Math.max(0, Math.floor(Number(activeRun.insight) || 0));
       activeRun.taskBoons = (activeRun.taskBoons || []).filter((boon) => boon?.id && Object.values(daoTrialTaskBoonDefinitions).some((definition) => definition.id === boon.id));
+      if (!activeRun.baseCombatStats || typeof activeRun.baseCombatStats !== "object") {
+        activeRun.baseCombatStats = trialBaseCombatStats(activeRun.combatant);
+        if (activeRun.taskBoons.some((boon) => boon.id === "exercise")) {
+          activeRun.baseCombatStats.maxHp = Math.max(1, Math.ceil(activeRun.baseCombatStats.maxHp / 1.12));
+        }
+        changed = true;
+      } else {
+        activeRun.baseCombatStats = trialBaseCombatStats(activeRun.baseCombatStats);
+      }
       activeRun.freeRerolls = Math.max(0, Math.floor(Number(activeRun.freeRerolls) || 0));
       activeRun.lifeHealAvailable = Boolean(activeRun.lifeHealAvailable);
       activeRun.dailyRootFortuneXpMultiplier = Math.max(1, Number(activeRun.dailyRootFortuneXpMultiplier) || dailyRootFortuneXpMultiplier(state, state.player, activeRun.startedDay || state.day));
@@ -9554,6 +9563,39 @@ function createTrialCombatant(state) {
     skillRanks: { ...(state.player.skillRanks || {}) },
     trialBuffs: {}
   };
+}
+
+function trialBaseCombatStats(combatant = {}) {
+  return {
+    maxHp: Math.max(1, Math.floor(Number(combatant.maxHp) || 1)),
+    maxMana: Math.max(1, Math.floor(Number(combatant.maxMana) || 1)),
+    attack: Math.max(1, Math.floor(Number(combatant.attack) || 1)),
+    defense: Math.max(0, Math.floor(Number(combatant.defense) || 0)),
+    divineSense: Math.max(1, Math.floor(Number(combatant.divineSense) || 1))
+  };
+}
+
+function trialSkillEffectComparisons(baseSkill = {}, currentSkill = {}) {
+  const percentEffects = [
+    { key: "power", label: "伤害倍率" },
+    { key: "percent", label: baseSkill.type === "heal" ? "治疗比例" : "持续效果" },
+    { key: "reduce", label: "减伤比例" },
+    { key: "pierce", label: "破防比例" },
+    { key: "chance", label: "触发概率" },
+    { key: "threshold", label: "触发阈值" },
+    { key: "bonus", label: "额外增幅" },
+    { key: "leech", label: "吸血比例" },
+    { key: "reflect", label: "反伤比例" },
+    { key: "extraDodge", label: "额外闪避" }
+  ];
+  return percentEffects
+    .filter(({ key }) => Number.isFinite(Number(baseSkill[key])) || Number.isFinite(Number(currentSkill[key])))
+    .map(({ key, label }) => ({
+      key,
+      label,
+      base: Number(baseSkill[key]) || 0,
+      current: Number(currentSkill[key]) || 0
+    }));
 }
 
 function rememberDaoTrialOffer(state, run, ids, kind) {
@@ -9949,9 +9991,9 @@ function trialOpponentFor(state, run, node) {
   const enemyPower = Number(affix?.effects?.enemyPower || 0);
   const routeScale = clamp(Number(daoTrialRouteMap[run.routeId]?.opponentScale) || 1, 0.8, 1.2);
   const targetPower = Math.max(48, playerPower * trialEnemyPowerFactor(node, floor, run.seed) * routeScale * (1 + enemyPower + scaling) * (1 - firstEase));
-  const isNpc = snapshot.kind !== "monster";
-  const projectedPower = isNpc ? Math.max(basePower, targetPower) : targetPower;
-  const ratio = clamp(projectedPower / basePower, isNpc ? 1 : 0.62, 20);
+  // 秘境只允许在原始实力之上强化对手，不再对妖物或 NPC 做负向缩放。
+  const projectedPower = Math.max(basePower, targetPower);
+  const ratio = clamp(projectedPower / basePower, 1, 20);
   const projectedStats = Object.fromEntries(["attack", "defense", "maxHp", "maxMana", "divineSense"].map((key) => [
     key,
     Math.max(key === "defense" ? 0 : 1, Math.floor((Number(baseStats[key]) || 0) * ratio))
@@ -10415,7 +10457,34 @@ function publicTrialRun(state, run) {
   const trialBuffs = combinedTrialBuffs(run);
   const fighter = { ...run.combatant, trialBuffs };
   const stats = combatSnapshot(fighter, state);
+  const baseSkill = effectiveSkillForEntity({ ...run.combatant, trialBuffs: {} });
   const effectiveSkill = effectiveSkillForEntity(fighter);
+  const baseCombatStats = trialBaseCombatStats(run.baseCombatStats || run.combatant);
+  const lowHpState = Number(run.combatant?.hp) <= Number(run.combatant?.maxHp || 1) * 0.5;
+  const appliedStatBonuses = {
+    maxHp: Number(trialBuffs.maxHp) || 0,
+    maxMana: Number(trialBuffs.maxMana) || 0,
+    attack: (Number(trialBuffs.attack) || 0) + (lowHpState ? Number(trialBuffs.lowHpAttack) || 0 : 0),
+    defense: Number(trialBuffs.defense) || 0,
+    divineSense: (Number(trialBuffs.divineSense) || 0) + (lowHpState ? Number(trialBuffs.lowHpSense) || 0 : 0)
+  };
+  const statComparisons = [
+    { key: "maxHp", label: "血量" },
+    { key: "maxMana", label: "法力" },
+    { key: "attack", label: "攻击" },
+    { key: "defense", label: "防御" },
+    { key: "divineSense", label: "神识" }
+  ].map((entry) => {
+    const base = Math.max(entry.key === "defense" ? 0 : 1, Number(baseCombatStats[entry.key]) || 0);
+    const current = Math.max(entry.key === "defense" ? 0 : 1, Number(stats[entry.key]) || 0);
+    return {
+      ...entry,
+      base,
+      current,
+      delta: current - base,
+      percent: appliedStatBonuses[entry.key] || 0
+    };
+  });
   const combatModifiers = {
     attack: Number(trialBuffs.attack) || 0,
     defense: Number(trialBuffs.defense) || 0,
@@ -10434,16 +10503,11 @@ function publicTrialRun(state, run) {
       id: effectiveSkill.id,
       name: effectiveSkill.name,
       type: effectiveSkill.type,
+      baseCost: baseSkill.cost,
       cost: effectiveSkill.cost,
+      baseCooldown: baseSkill.cooldown,
       cooldown: effectiveSkill.cooldown,
-      power: effectiveSkill.power,
-      percent: effectiveSkill.percent,
-      amount: effectiveSkill.amount,
-      reduce: effectiveSkill.reduce,
-      leech: effectiveSkill.leech,
-      chance: effectiveSkill.chance,
-      reflect: effectiveSkill.reflect,
-      extraDodge: effectiveSkill.extraDodge
+      effectComparisons: trialSkillEffectComparisons(baseSkill, effectiveSkill)
     }
   };
   let opponentPreview = null;
@@ -10497,7 +10561,7 @@ function publicTrialRun(state, run) {
         enhancePercent: Number(opponent.enhancePercent) || 0,
         rewardPreview: trialBattleRewardForNode(node, node.floor),
         projectionPercent: Math.round((opponent.projectionRatio - 1) * 100),
-        projectionLabel: opponent.projectionRatio >= 1 ? "秘境战意" : "秘境维持",
+        projectionLabel: opponent.projectionRatio > 1 ? "秘境战意" : "秘境原势",
         power: opponentPower,
         playerPower,
         playerMaxPower,
@@ -10531,6 +10595,7 @@ function publicTrialRun(state, run) {
     opponentPreview,
     enemyPreview: opponentPreview,
     combat: { hp: stats.hp, maxHp: stats.maxHp, mana: stats.mana, maxMana: stats.maxMana },
+    statComparisons,
     combatModifiers,
     companion: run.companion,
     seals: run.sealIds.map((id) => daoTrialSealMap[id]).filter(Boolean),
@@ -10854,6 +10919,7 @@ export function startDaoTrial(state, payload = {}) {
   }
   const attempt = practice ? state.daoTrial.attemptsUsed + state.daoTrial.history.filter((entry) => entry.cycle === state.daoTrial.cycle && entry.practice).length + 1 : state.daoTrial.attemptsUsed;
   const combatant = createTrialCombatant(state);
+  const baseCombatStats = trialBaseCombatStats(combatant);
   const mastery = daoTrialMasteryView(state.daoTrial.routeMastery[route.id] || {});
   const firstExplore = daoTrialFirstExploreView(state, route.id);
   const firstExploreApplied = !practice && firstExplore.available;
@@ -10882,6 +10948,7 @@ export function startDaoTrial(state, payload = {}) {
     seed: `dao-trial|${state.rebirth}|${state.daoTrial.cycle}|${attempt}|${route.id}`,
     startedDay: state.day,
     worldSnapshot,
+    baseCombatStats,
     isApex: worldSnapshot.playerPower >= Math.max(0, ...(state.npcs || []).map((npc) => powerOf(npc, state, { includeDailyRootFortune: false }))),
     nodeIndex: 0,
     floor: 1,
