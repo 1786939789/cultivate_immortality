@@ -1944,7 +1944,7 @@
                         </span>
                         <span v-for="effect in activeDaoTrialRun.combatModifiers.skill.effectComparisons" :key="effect.key">
                           <small>{{ effect.label }}</small>
-                          <b><i>{{ formatPercent(effect.base) }}</i><em>→</em><strong>{{ formatPercent(effect.current) }}</strong></b>
+                          <b><i>{{ effect.display === 'number' ? effect.base : formatPercent(effect.base) }}</i><em>→</em><strong>{{ effect.display === 'number' ? effect.current : formatPercent(effect.current) }}</strong></b>
                         </span>
                       </div>
                     </div>

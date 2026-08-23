@@ -295,6 +295,43 @@ function dynamicLawBattle(lawId, skillId, seedSuffix = "") {
   return { state, result: advanceDaoTrial(state, { action: "battle" }) };
 }
 
+function publicTrialSkillComparison(lawId, skillId) {
+  const state = createDefaultState();
+  ensureStateShape(state);
+  state.player.skillId = skillId;
+  startDaoTrial(state, { routeId: "golden-pass" });
+  state.daoTrial.activeRun.lawOffer = [];
+  state.daoTrial.activeRun.lawIds = [lawId];
+  return getPublicState(state).daoTrial.activeRun.combatModifiers.skill;
+}
+
+const piercingSkill = publicTrialSkillComparison("armor-sunder-law", "thunder_pearl");
+assert.ok(piercingSkill.effectComparisons.find((entry) => entry.key === "pierce").current > 0.45, "技能效果加成应同时提高破防比例");
+const numericSkill = publicTrialSkillComparison("armor-sunder-law", "soul_hook");
+assert.ok(numericSkill.effectComparisons.find((entry) => entry.key === "burn").current > 14, "技能效果加成应同时提高法力削减数值");
+const healingSkill = publicTrialSkillComparison("armor-sunder-law", "wood_recovery");
+assert.ok(healingSkill.effectComparisons.find((entry) => entry.key === "percent").current > 0.22, "技能效果加成应同时提高治疗比例");
+
+function delayedActionSkillBattle(skillId) {
+  const state = createDefaultState();
+  ensureStateShape(state);
+  startDaoTrial(state, { routeId: "golden-pass" });
+  const run = state.daoTrial.activeRun;
+  run.lawOffer = [];
+  run.combatant.skillId = skillId;
+  run.combatant.attack = 5;
+  run.combatant.defense = 100;
+  run.combatant.maxHp = 2_000;
+  run.combatant.hp = 2_000;
+  run.combatant.divineSense = 1;
+  run.combatant.maxMana = 1_000;
+  run.combatant.mana = 1_000;
+  return advanceDaoTrial(state, { action: "battle" }).replay.events;
+}
+
+assert.ok(delayedActionSkillBattle("blood_escape").some((event) => event.kind === "dodge"), "血影遁应在后手施放时保留到下一次受击");
+assert.ok(delayedActionSkillBattle("magnetic_light").some((event) => event.kind === "status" && event.text.includes("错过一次行动")), "眩晕应在后手施放时保留到目标下一次行动");
+
 const openingBattle = dynamicLawBattle("opening-break", "thunder_pearl");
 assert.equal(openingBattle.result.replay.events.filter((event) => event.lawId === "opening-break").length, 1, "破势追击只能强化首次符合条件的技能");
 const steadyBattle = dynamicLawBattle("steady-heart", "thunder_pearl");
@@ -331,6 +368,19 @@ function eventManaAfter(affixId, sealIds = []) {
 assert.equal(eventManaAfter("ore-awakening"), 400, "普通事件的负法力应损失 10%");
 assert.equal(eventManaAfter("marsh-flood"), 395, "玄阴涨潮应放大负法力事件损耗");
 assert.equal(eventManaAfter("marsh-flood", ["life-knot"]), 410, "事件损耗抗性应同时保护法力");
+
+const warmCurrentState = createDefaultState();
+ensureStateShape(warmCurrentState);
+startDaoTrial(warmCurrentState, { routeId: "golden-pass" });
+const warmCurrentRun = warmCurrentState.daoTrial.activeRun;
+warmCurrentRun.affixId = "heart-echo";
+warmCurrentRun.lawOffer = [];
+warmCurrentRun.sealIds = ["warm-current"];
+warmCurrentRun.nodes[0] = { id: "warm-rest", name: "暖流调息测试", type: "rest", event: "gold-spring", floor: 1 };
+warmCurrentRun.combatant.maxHp = 1_000;
+warmCurrentRun.combatant.hp = 500;
+advanceDaoTrial(warmCurrentState, { optionId: "heal" });
+assert.equal(warmCurrentRun.combatant.hp, 913, "暖流印的调息恢复应按描述提高 18%");
 
 const rolloverState = createDefaultState();
 rolloverState.day = 8;

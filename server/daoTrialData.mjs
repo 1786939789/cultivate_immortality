@@ -217,7 +217,7 @@ const legacyDaoTrialSeals = [
   { id: "edge-intent", name: "青锋意", school: "攻伐", tags: ["tempo"], text: "攻击提高 10%。", effects: { attack: 0.1 } },
   { id: "star-edge", name: "星芒印", school: "攻伐", tags: ["tempo", "focus"], text: "攻击与神识各提高 6%。", effects: { attack: 0.06, divineSense: 0.06 } },
   { id: "breaking-edge", name: "破岳意", school: "攻伐", tags: ["risk"], text: "攻击提高 15%，防御降低 5%。", effects: { attack: 0.15, defense: -0.05 } },
-  { id: "skill-tide", name: "术潮印", school: "攻伐", tags: ["arcane"], text: "技能伤害与持续效果提高 12%。", effects: { skillPower: 0.12 } },
+  { id: "skill-tide", name: "术潮印", school: "攻伐", tags: ["arcane"], text: "技能效果提高 12%。", effects: { skillPower: 0.12 } },
 
   { id: "iron-wall", name: "铁壁印", school: "守御", tags: ["guard"], text: "防御提高 12%。", effects: { defense: 0.12 } },
   { id: "mountain-body", name: "山岳身", school: "守御", tags: ["guard", "vitality"], text: "血量提高 14%。", effects: { maxHp: 0.14 } },
@@ -237,14 +237,14 @@ const legacyDaoTrialSeals = [
   { id: "blood-price", name: "血炼印", school: "险道", tags: ["risk"], text: "攻击和技能效果提高 10%，血量降低 8%。", effects: { attack: 0.1, skillPower: 0.1, maxHp: -0.08 } },
   { id: "empty-vessel", name: "空灵体", school: "险道", tags: ["risk", "arcane"], text: "法力提高 22%，防御降低 7%。", effects: { maxMana: 0.22, defense: -0.07 } },
   { id: "unyielding", name: "不屈念", school: "险道", tags: ["risk", "vitality"], text: "血量低于一半时攻击提高 18%。", effects: { lowHpAttack: 0.18 } },
-  { id: "poison-heart", name: "蚀心印", school: "险道", tags: ["risk", "arcane"], text: "持续伤害提高 20%，普通攻击降低 5%。", effects: { statusPower: 0.2, attack: -0.05 } },
+  { id: "poison-heart", name: "蚀心印", school: "险道", tags: ["risk", "arcane"], text: "持续伤害提高 20%，攻击降低 5%。", effects: { statusPower: 0.2, attack: -0.05 } },
 
   { id: "long-life", name: "长生息", school: "生机", tags: ["vitality"], text: "血量与法力各提高 9%。", effects: { maxHp: 0.09, maxMana: 0.09 } },
   { id: "spring-return", name: "回春印", school: "生机", tags: ["vitality"], text: "治疗类技能效果提高 25%。", effects: { healing: 0.25 } },
   { id: "after-battle", name: "战后调息", school: "生机", tags: ["vitality", "guard"], text: "每次战斗胜利后额外恢复 10% 法力。", effects: { postBattleMana: 0.1 } },
   { id: "companion-oath", name: "同心契", school: "生机", tags: ["vitality"], text: "同行者支援效果提高 50%；无同行者时血量提高 6%。", effects: { companion: 0.5, maxHpWithoutCompanion: 0.06 } },
 
-  { id: "falling-star", name: "坠星锋", school: "攻伐", tags: ["tempo", "risk"], text: "攻击提高 8%，技能伤害提高 4%。", effects: { attack: 0.08, skillPower: 0.04 } },
+  { id: "falling-star", name: "坠星锋", school: "攻伐", tags: ["tempo", "risk"], text: "攻击提高 8%，技能效果提高 4%。", effects: { attack: 0.08, skillPower: 0.04 } },
   { id: "red-thread", name: "赤线诀", school: "攻伐", tags: ["risk"], text: "攻击提高 12%，血量上限降低 3%。", effects: { attack: 0.12, maxHp: -0.03 } },
   { id: "iron-roar", name: "铁吼印", school: "攻伐", tags: ["guard", "tempo"], text: "攻击与防御各提高 5%。", effects: { attack: 0.05, defense: 0.05 } },
   { id: "piercing-law", name: "穿云律", school: "攻伐", tags: ["focus", "arcane"], text: "技能效果提高 8%，神识提高 5%。", effects: { skillPower: 0.08, divineSense: 0.05 } },
@@ -257,7 +257,7 @@ const legacyDaoTrialSeals = [
   { id: "mist-mana", name: "雾行诀", school: "灵息", tags: ["arcane", "tempo"], text: "法力上限提高 10%，技能消耗降低 5%。", effects: { maxMana: 0.1, manaCost: -0.05 } },
   { id: "quiet-pulse", name: "静脉印", school: "灵息", tags: ["focus"], text: "神识提高 7%，每次事件额外获得少量法力。", effects: { divineSense: 0.07, eventMana: 0.06 } },
   { id: "returning-breath", name: "回息环", school: "灵息", tags: ["vitality", "focus"], text: "法力与血量各提高 6%。", effects: { maxMana: 0.06, maxHp: 0.06 } },
-  { id: "spell-cicada", name: "蜕术蝉", school: "灵息", tags: ["arcane"], text: "技能效果提高 15%，普通攻击降低 4%。", effects: { skillPower: 0.15, attack: -0.04 } },
+  { id: "spell-cicada", name: "蜕术蝉", school: "灵息", tags: ["arcane"], text: "技能效果提高 15%，攻击降低 4%。", effects: { skillPower: 0.15, attack: -0.04 } },
 
   { id: "afterimage-step", name: "残光步", school: "身法", tags: ["tempo", "focus"], text: "神识提高 10%。", effects: { divineSense: 0.1 } },
   { id: "reed-shadow", name: "芦影身", school: "身法", tags: ["tempo", "vitality"], text: "神识提高 6%，血量提高 8%。", effects: { divineSense: 0.06, maxHp: 0.08 } },
@@ -269,7 +269,7 @@ const legacyDaoTrialSeals = [
   { id: "borrowed-heart", name: "借心契", school: "险道", tags: ["risk", "vitality"], text: "同行者支援提高 25%，自身血量降低 5%。", effects: { companion: 0.25, maxHp: -0.05 } },
   { id: "last-light", name: "末光印", school: "险道", tags: ["risk"], text: "攻击提高 6%；挑战失败时结算分数额外提高 20%。", effects: { failScore: 0.2, attack: 0.06 } },
 
-  { id: "warm-current", name: "暖流印", school: "生机", tags: ["vitality", "guard"], text: "调息和治疗效果提高 18%。", effects: { healing: 0.18, restHp: 0.08 } },
+  { id: "warm-current", name: "暖流印", school: "生机", tags: ["vitality", "guard"], text: "调息和治疗效果提高 18%。", effects: { healing: 0.18, restHp: 0.18 } },
   { id: "shared-pulse", name: "同脉息", school: "生机", tags: ["vitality", "focus"], text: "有同行者时法力上限提高 12%，独行时悟机提高。", effects: { companionMana: 0.12, insightSolo: 1 } },
   { id: "green-return", name: "青回印", school: "生机", tags: ["vitality"], text: "每次战斗胜利后恢复 6% 血量与法力。", effects: { postBattleHeal: 0.06, postBattleMana: 0.06 } },
   { id: "life-knot", name: "生结印", school: "生机", tags: ["vitality", "guard"], text: "血量提高 10%，防御提高 4%，事件损耗降低。", effects: { maxHp: 0.1, defense: 0.04, eventLossResist: 0.15 } }
@@ -467,9 +467,9 @@ const legacyDaoTrialLaws = [
   { id: "blood-asking", name: "血炼问道", school: "风险流派", rarity: "silver", tags: ["risk", "attack"], trigger: "onLowHp", text: "气血低于 50% 时提高攻击和神识。", effects: { lowHpAttack: 0.14, lowHpSense: 0.14 } },
   { id: "borrowed-life-law", name: "借命一线", school: "风险流派", rarity: "gold", tags: ["risk", "arcane"], trigger: "runStart", text: "降低最大气血，换取战斗分和技能效果。", effects: { maxHp: -0.08, skillPower: 0.12, scoreRisk: 0.12 } },
   { id: "poison-formation", name: "毒经成势", school: "风险流派", rarity: "silver", tags: ["risk", "arcane"], trigger: "onStatus", text: "持续伤害命中后叠加下一次持续伤害。", effects: { statusPower: 0.2, dotStack: 0.08 } },
-  { id: "same-heart-law", name: "同心共鸣", school: "同行共鸣", rarity: "gold", tags: ["vitality", "companion"], trigger: "onCompanionAssist", text: "同行支援间隔缩短，并强化下一次玩家技能。", effects: { companionFrequency: -1, companionPower: 0.2 } },
+  { id: "same-heart-law", name: "同心共鸣", school: "同行共鸣", rarity: "gold", tags: ["vitality", "companion"], trigger: "onCompanionAssist", text: "同行支援间隔缩短，并强化下一次玩家技能。", effects: { companionFrequency: -1, companionSkillPower: 0.2 } },
   { id: "twin-array", name: "双生战阵", school: "同行共鸣", rarity: "silver", tags: ["tempo", "companion"], trigger: "onCompanionAssist", text: "同行出手后强化玩家下一次技能。", effects: { companionSkillPower: 0.16 } },
-  { id: "mirror-friend", name: "以友为镜", school: "同行共鸣", rarity: "gold", tags: ["focus", "companion"], trigger: "onCompanionSkill", text: "同行使用主动支援时复制部分玩家当前增益。", effects: { companionCopy: 0.35 } }
+  { id: "mirror-friend", name: "以友为镜", school: "同行共鸣", rarity: "gold", tags: ["focus", "companion"], trigger: "onCompanionSkill", text: "同行出手时复制部分玩家当前增益。", effects: { companionCopy: 0.35 } }
 ];
 
 const expandedDaoTrialLaws = [

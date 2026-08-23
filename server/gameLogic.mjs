@@ -711,6 +711,25 @@ function scaleSkillValue(skill, key, target, progress) {
   return roundSkillValue(key, skill[key] + (target - skill[key]) * progress);
 }
 
+const skillEffectModifierKeys = [
+  "power", "percent", "reduce", "pierce", "chance", "bonus", "leech",
+  "reflect", "extraDodge", "amount", "burn"
+];
+
+function scaleSkillEffectValues(skill, bonus = 0) {
+  if (!bonus) return skill;
+  const result = { ...skill };
+  for (const key of skillEffectModifierKeys) {
+    if (typeof result[key] === "number") result[key] = roundSkillValue(key, result[key] * (1 + bonus));
+  }
+  return result;
+}
+
+function scaleSkillDamageValue(skill, bonus = 0) {
+  if (!bonus || typeof skill?.power !== "number") return skill;
+  return { ...skill, power: roundSkillValue("power", skill.power * (1 + bonus)) };
+}
+
 function effectiveSkill(skill, rank = 1, options = {}) {
   const safeRank = clamp(Math.floor(rank || 1), 1, maxSkillRank);
   const target = skillUpgradeTargets[skill.id] || {};
@@ -734,26 +753,21 @@ function effectiveSkillForEntity(entity) {
   const upgraded = effectiveSkill(skill, skillRankOf(entity, skill.id), { maxMana: skillManaBase });
   const buffs = entity?.trialBuffs || {};
   if (!Object.keys(buffs).length) return upgraded;
-  const result = { ...upgraded };
+  let result = { ...upgraded };
   const skillPower = Math.max(-0.5, Number(buffs.skillPower) || 0);
   const statusPower = Math.max(-0.5, Number(buffs.statusPower) || 0);
   const healing = Math.max(-0.5, Number(buffs.healing) || 0);
-  if (typeof result.power === "number") result.power = roundSkillValue("power", result.power * (1 + skillPower));
-  if (typeof result.percent === "number") {
+  const basePercent = result.percent;
+  const baseLeech = result.leech;
+  result = scaleSkillEffectValues(result, skillPower);
+  if (typeof basePercent === "number") {
     // `skillPower` is the generic skill-effect modifier and therefore applies
-    // to healing skills as well.  Continuous effects additionally receive
-    // `statusPower`, while healing receives the dedicated `healing` modifier
-    // on top of the generic skill bonus.
-    const multiplier = result.type === "heal"
-      ? 1 + skillPower + healing
-      : 1 + skillPower + statusPower;
-    result.percent = roundSkillValue("percent", result.percent * multiplier);
+    // to healing skills as well. Continuous effects additionally receive
+    // `statusPower`, while healing receives the dedicated `healing` modifier.
+    const specialPower = result.type === "heal" ? healing : statusPower;
+    result.percent = roundSkillValue("percent", basePercent * (1 + skillPower + specialPower));
   }
-  if (typeof result.reduce === "number") result.reduce = roundSkillValue("reduce", result.reduce * (1 + skillPower * 0.5));
-  for (const key of ["amount", "chance", "extraDodge", "reflect"]) {
-    if (typeof result[key] === "number") result[key] = roundSkillValue(key, result[key] * (1 + skillPower));
-  }
-  if (typeof result.leech === "number") result.leech = roundSkillValue("leech", result.leech * (1 + healing));
+  if (typeof baseLeech === "number") result.leech = roundSkillValue("leech", baseLeech * (1 + skillPower + healing));
   result.cost = Math.max(1, Math.ceil(result.cost * (1 + (Number(buffs.manaCost) || 0))));
   result.cooldown = Math.max(1, Math.round((result.cooldown || 1) + (Number(buffs.cooldown) || 0)));
   result.text = skillEffectText(result);
@@ -1148,7 +1162,9 @@ function runTurnBattle(left, right, options = {}) {
         });
         target = sideState(side);
       }
-      effect.duration -= 1;
+      // Action-consumed effects must survive until the target actually gets
+      // the promised next action/attack, regardless of turn order.
+      if (!["dodgeNext", "stun"].includes(effect.type)) effect.duration -= 1;
     }
     effects[side] = effects[side].filter((effect) => effect.duration > 0);
   };
@@ -1234,12 +1250,7 @@ function runTurnBattle(left, right, options = {}) {
     return damage;
   };
   const boostSkill = (skill, bonus) => {
-    if (!bonus) return skill;
-    const boosted = { ...skill };
-    for (const key of ["power", "percent", "reduce", "leech"]) {
-      if (typeof boosted[key] === "number") boosted[key] *= 1 + bonus;
-    }
-    return boosted;
+    return scaleSkillEffectValues(skill, bonus);
   };
   const castSkill = (side, skill) => {
     const targetSide = opposite(side);
@@ -1248,7 +1259,7 @@ function runTurnBattle(left, right, options = {}) {
     if (!openingSkillUsed[side]) {
       openingSkillUsed[side] = true;
       if (openingBonus && state.targetHp / Math.max(1, state.target.maxHp) > 0.8) {
-        skill = boostSkill(skill, openingBonus);
+        skill = scaleSkillDamageValue(skill, openingBonus);
         const law = lawSourceFor(side, "openingSkillPower", "opening-break");
         pushEvent("law", `${state.actorName}趁${state.targetName}气势未稳，以「${law.name}」强化首次术法`, { actorSide: side, targetSide, lawId: law.id, lawName: law.name, leftHp, rightHp, leftMana, rightMana });
       }
@@ -9590,13 +9601,22 @@ function trialSkillEffectComparisons(baseSkill = {}, currentSkill = {}) {
     { key: "reflect", label: "反伤比例" },
     { key: "extraDodge", label: "额外闪避" }
   ];
-  return percentEffects
+  const numericEffects = [
+    { key: "amount", label: baseSkill.type === "defenseBuff" ? "防御增量" : baseSkill.type === "weaken" ? "攻击削弱" : baseSkill.type === "field" ? "破防数值" : "效果数值" },
+    { key: "burn", label: "法力削减" }
+  ];
+  const effects = [
+    ...percentEffects.map((entry) => ({ ...entry, display: "percent" })),
+    ...numericEffects.map((entry) => ({ ...entry, display: "number" }))
+  ];
+  return effects
     .filter(({ key }) => Number.isFinite(Number(baseSkill[key])) || Number.isFinite(Number(currentSkill[key])))
-    .map(({ key, label }) => ({
+    .map(({ key, label, display }) => ({
       key,
       label,
       base: Number(baseSkill[key]) || 0,
-      current: Number(currentSkill[key]) || 0
+      current: Number(currentSkill[key]) || 0,
+      display
     }));
 }
 
