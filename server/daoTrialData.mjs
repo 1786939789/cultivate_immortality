@@ -556,6 +556,11 @@ const generatedLawProfiles = {
   ]
 };
 const lawSchoolIds = { "攻伐连锁": "attack", "技能循环": "focus", "守御反击": "guard", "生机转化": "vitality", "风险流派": "risk", "同行共鸣": "bond", "五行衍化": "element", "命数经营": "fate" };
+// The generated laws used to share the same numeric curve regardless of rarity.
+// Keep diamond near that baseline, while laws moved down to gold/silver also lose
+// a matching amount of numeric strength instead of only changing their badge.
+const generatedLawRarityScale = { silver: 0.86, gold: 0.94, diamond: 1.04 };
+const generatedLawIntegerEffects = new Set(["cooldown", "freeSkillEvery", "companionFrequency"]);
 
 const generatedDaoTrialLaws = Object.entries(generatedLawProfiles).flatMap(([school, profiles]) => {
   const existing = legacyDaoTrialLaws.filter((law) => law.school === school).length + expandedDaoTrialLaws.filter((law) => law.school === school).length;
@@ -564,8 +569,11 @@ const generatedDaoTrialLaws = Object.entries(generatedLawProfiles).flatMap(([sch
     const index = existing + offset;
     const [trigger, baseEffects] = profiles[index % profiles.length];
     const tier = Math.floor(index / profiles.length);
-    const effects = Object.fromEntries(Object.entries(baseEffects).map(([key, value]) => [key, typeof value === "boolean" ? value : Math.round((Number(value) + Math.min(0.04, tier * 0.004)) * 1000) / 1000]));
-    const rarity = index >= 24 ? "diamond" : index >= 16 ? "gold" : "silver";
+    const rarity = index >= 29 ? "diamond" : index >= 23 ? "gold" : "silver";
+    const scale = generatedLawRarityScale[rarity];
+    const effects = Object.fromEntries(Object.entries(baseEffects).map(([key, value]) => [key, typeof value === "boolean" || generatedLawIntegerEffects.has(key)
+      ? value
+      : Math.round((Number(value) + Math.min(0.04, tier * 0.004)) * scale * 1000) / 1000]));
     return {
       id: `expanded-law-${lawSchoolIds[school]}-${index + 1}`,
       name: `${school}${["天机", "玄变", "归藏", "问真", "太初", "无极", "鸿蒙", "极境"][tier]}${index % 4 + 1}`,
