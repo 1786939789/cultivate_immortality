@@ -9688,7 +9688,7 @@ function trialStackMultiplier(level) {
   return 1 + extras.slice(1, count).reduce((sum, value) => sum + value, 0);
 }
 
-function combinedTrialBuffs(run) {
+export function combinedTrialBuffs(run) {
   const buffs = {};
   const lawSources = {};
   const sealStacks = { ...Object.fromEntries((run.sealIds || []).map((id) => [id, 1])), ...(run.sealStacks || {}) };
