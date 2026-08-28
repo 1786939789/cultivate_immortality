@@ -1,3 +1,5 @@
+import { applyDaoTrialLawDesign } from "./daoTrialLawDesign.mjs";
+
 export const daoTrialCycleLength = 7;
 export const daoTrialOfficialAttempts = 3;
 
@@ -8,10 +10,7 @@ export const daoTrialLawRarities = {
 };
 
 export const daoTrialLawRarityRates = [
-  { maxFloor: 4, silver: 82, gold: 16, diamond: 2 },
-  { maxFloor: 9, silver: 78, gold: 19, diamond: 3 },
-  { maxFloor: 14, silver: 72, gold: 23, diamond: 5 },
-  { maxFloor: Infinity, silver: 65, gold: 27, diamond: 8 }
+  { maxFloor: Infinity, silver: 62.5, gold: 25, diamond: 12.5 }
 ];
 
 export const daoTrialRoutes = [
@@ -583,7 +582,7 @@ const generatedDaoTrialLaws = Object.entries(generatedLawProfiles).flatMap(([sch
   });
 });
 
-export const daoTrialLaws = [...legacyDaoTrialLaws, ...expandedDaoTrialLaws, ...generatedDaoTrialLaws];
+export const daoTrialLaws = applyDaoTrialLawDesign([...legacyDaoTrialLaws, ...expandedDaoTrialLaws, ...generatedDaoTrialLaws]);
 
 export const daoTrialLawMap = Object.fromEntries(daoTrialLaws.map((law) => [law.id, law]));
 

@@ -1973,9 +1973,18 @@
                     <div v-if="activeDaoTrialRun.resonanceProgress?.length" class="dao-trial-resonance-progress" aria-label="道印共鸣进度">
                       <span v-for="entry in activeDaoTrialRun.resonanceProgress" :key="entry.school" :class="{ complete: entry.complete }"><b>{{ entry.school }}</b><i><em :style="{ width: `${Math.min(100, entry.count / 6 * 100)}%` }"></em></i><small>{{ entry.count }} / {{ entry.nextThreshold }}</small></span>
                     </div>
+                    <div v-if="activeDaoTrialRun.lastLawEvent" class="dao-trial-law-event"><Sparkles :size="14" aria-hidden="true" /><span><b>{{ activeDaoTrialRun.lastLawEvent.lawName }}</b><small>{{ activeDaoTrialRun.lastLawEvent.text }}</small></span></div>
                     <div v-if="activeDaoTrialRun.lawOffer.length" class="dao-trial-law-offer">
                       <div class="dao-trial-offer-head"><span title="法则等权随机出现；重复选择会提升叠层效果">择一问道法则改变本轮构筑 · 等权随机</span><button class="secondary compact-button" type="button" :disabled="!activeDaoTrialRun.canReroll || isActionPending('/api/dao-trial/advance')" @click="rerollDaoTrialLaws"><RefreshCw :size="14" aria-hidden="true" /> {{ activeDaoTrialRun.freeRerolls ? "免费重观" : "重观 · 1悟机" }}</button></div>
-                      <button v-for="law in activeDaoTrialRun.lawOffer" :key="law.id" :class="`rarity-${law.rarity}`" type="button" :disabled="isActionPending('/api/dao-trial/advance')" @click="chooseDaoTrialLaw(law.id)"><span><i aria-hidden="true">◆</i>{{ law.rarityLabel }} · {{ law.school }}</span><strong>{{ law.name }}<small v-if="law.stack > 1"> · 叠层 {{ law.stack }}</small></strong><small>{{ law.text }}</small><em>{{ daoTrialTriggerLabel(law.trigger) }}</em></button>
+                      <button v-for="law in activeDaoTrialRun.lawOffer" :key="law.id" :class="`rarity-${law.rarity}`" type="button" :disabled="isActionPending('/api/dao-trial/advance')" @click="chooseDaoTrialLaw(law.id)">
+                        <span><i aria-hidden="true">◆</i>{{ law.rarityLabel }} · {{ law.school }}</span>
+                        <small class="dao-law-branch">{{ law.branch }} · {{ law.designRole }}</small>
+                        <strong>{{ law.name }}<small v-if="law.stack > 1"> · 叠层 {{ law.stack }}</small></strong>
+                        <small>{{ law.text }}</small>
+                        <em>{{ daoTrialTriggerLabel(law.trigger) }}<template v-if="law.mechanics?.[0]?.summary"> · {{ law.mechanics[0].summary }}</template></em>
+                        <small v-if="law.nextStack" class="dao-law-next">再次选择：{{ law.nextStack.text }}</small>
+                        <small v-else class="dao-law-next complete">已达五层圆满</small>
+                      </button>
                     </div>
                     <div v-else-if="activeDaoTrialRun.checkpointPending" class="dao-trial-checkpoint">
                       <span>第 {{ activeDaoTrialRun.checkpointFloor }} 层阶段检查点</span><h3>收功结算，或继续深入问天阶</h3><small>安全离境按 120% 带回行囊；继续挑战会恢复 {{ activeDaoTrialRun.checkpointRecovery?.hpPercent || 0 }}% 气血与 {{ activeDaoTrialRun.checkpointRecovery?.manaPercent || 0 }}% 法力，并保留道印、法则和全部得分。</small><div class="actions"><button class="secondary" type="button" :disabled="isActionPending('/api/dao-trial/advance')" @click="exitDaoTrialCheckpoint">安全离境</button><button class="primary" type="button" :disabled="isActionPending('/api/dao-trial/advance')" @click="continueDaoTrialCheckpoint">继续深入</button></div>
@@ -2016,10 +2025,10 @@
                       v-for="law in activeDaoTrialRun.laws"
                       :key="law.id"
                       :class="`rarity-${law.rarity}`"
-                      :title="`${law.text}${law.trigger ? ` · 触发：${daoTrialTriggerLabel(law.trigger)}` : ''}`"
+                      :title="`${law.text}${law.branch ? ` · 分支：${law.branch}` : ''}${law.currentStackText ? ` · 当前：${law.currentStackText}` : ''}${law.nextStack ? ` · 再次选择：${law.nextStack.text}` : ''}`"
                       :aria-label="`${law.name}：${law.text}`"
                       tabindex="0"
-                    ><b>{{ law.name }}<em v-if="law.stack > 1"> ×{{ law.stack }}</em></b><small>{{ law.rarityLabel }} · {{ law.school }}</small></span>
+                    ><b>{{ law.name }}<em v-if="law.stack > 1"> ×{{ law.stack }}</em></b><small>{{ law.rarityLabel }} · {{ law.school }} · {{ law.branch }}</small></span>
                     <p v-if="!activeDaoTrialRun.laws.length">入境后先选择第一项法则。</p>
                     <strong>本轮道印</strong>
                     <span
@@ -2090,6 +2099,7 @@
                 <div class="dao-trial-catalog-toolbar">
                   <input v-model="daoTrialCatalogQuery" type="search" placeholder="搜索名称、流派或效果" aria-label="搜索问道图鉴" @input="daoTrialCatalogPage = 1">
                   <select v-model="daoTrialCatalogSchool" aria-label="按流派筛选" @change="daoTrialCatalogPage = 1"><option value="">全部流派</option><option v-for="school in daoTrialCatalogSchools" :key="school" :value="school">{{ school }}</option></select>
+                  <select v-if="daoTrialCatalogMode === 'laws'" v-model="daoTrialCatalogBranch" aria-label="按构筑分支筛选" @change="daoTrialCatalogPage = 1"><option value="">全部分支</option><option v-for="branch in daoTrialCatalogBranches" :key="branch" :value="branch">{{ branch }}</option></select>
                   <select v-if="daoTrialCatalogMode === 'laws'" v-model="daoTrialCatalogRarity" aria-label="按品质筛选" @change="daoTrialCatalogPage = 1"><option value="">全部品质</option><option value="diamond">钻石</option><option value="gold">黄金</option><option value="silver">白银</option></select>
                   <select v-model="daoTrialCatalogDiscovery" aria-label="按发现状态筛选" @change="daoTrialCatalogPage = 1"><option value="">全部状态</option><option value="seen">已发现</option><option value="unseen">未发现</option></select>
                   <span>{{ filteredDaoTrialCatalog.length }} 项</span>
@@ -2097,8 +2107,10 @@
                 <div class="dao-trial-catalog-grid">
                   <article v-for="entry in pagedDaoTrialCatalog" :key="entry.id" :class="[daoTrialCatalogMode === 'laws' ? `rarity-${entry.rarity}` : `school-${entry.school}`, { undiscovered: !entry.discovered }]" :title="entry.discovered ? entry.text : '尚未在问道选择中遇见'">
                     <span><b>{{ entry.discovered ? entry.name : "未悟之印" }}</b><em v-if="daoTrialCatalogMode === 'laws'">{{ entry.rarityLabel }}</em></span>
-                    <small>{{ entry.school }}<template v-if="entry.discovered && entry.family"> · {{ entry.family }}</template></small>
+                    <small>{{ entry.school }}<template v-if="entry.discovered && entry.branch"> · {{ entry.branch }}</template><template v-else-if="entry.discovered && entry.family"> · {{ entry.family }}</template></small>
                     <p>{{ entry.discovered ? entry.text : "继续问道以发现此项。" }}</p>
+                    <p v-if="entry.discovered && entry.mechanics?.[0]?.summary" class="dao-law-mechanic">核心机制：{{ entry.mechanics[0].summary }}</p>
+                    <small v-if="entry.discovered && entry.stackPlan?.[1]" class="dao-law-next">重复强化：{{ entry.stackPlan[1].text }}</small>
                   </article>
                   <div v-if="!pagedDaoTrialCatalog.length" class="empty">没有符合筛选条件的图鉴项。</div>
                 </div>
@@ -5283,6 +5295,7 @@ const daoTrialSubTab = ref("play");
 const daoTrialCatalogMode = ref("laws");
 const daoTrialCatalogQuery = ref("");
 const daoTrialCatalogSchool = ref("");
+const daoTrialCatalogBranch = ref("");
 const daoTrialCatalogRarity = ref("");
 const daoTrialCatalogDiscovery = ref("");
 const daoTrialCatalogPage = ref(1);
@@ -6446,15 +6459,20 @@ const daoTrialCatalogSource = computed(() => daoTrialCatalogMode.value === "laws
   ? (daoTrialState.value.lawCatalog || [])
   : (daoTrialState.value.sealCatalog || []));
 const daoTrialCatalogSchools = computed(() => [...new Set(daoTrialCatalogSource.value.map((entry) => entry.school).filter(Boolean))]);
+const daoTrialCatalogBranches = computed(() => [...new Set(daoTrialCatalogSource.value
+  .filter((entry) => !daoTrialCatalogSchool.value || entry.school === daoTrialCatalogSchool.value)
+  .map((entry) => entry.branch)
+  .filter(Boolean))]);
 const filteredDaoTrialCatalog = computed(() => {
   const query = daoTrialCatalogQuery.value.trim().toLocaleLowerCase("zh-Hans-CN");
   const rarityOrder = { diamond: 3, gold: 2, silver: 1 };
   return daoTrialCatalogSource.value.filter((entry) => {
     if (daoTrialCatalogSchool.value && entry.school !== daoTrialCatalogSchool.value) return false;
+    if (daoTrialCatalogMode.value === "laws" && daoTrialCatalogBranch.value && entry.branch !== daoTrialCatalogBranch.value) return false;
     if (daoTrialCatalogMode.value === "laws" && daoTrialCatalogRarity.value && entry.rarity !== daoTrialCatalogRarity.value) return false;
     if (daoTrialCatalogDiscovery.value === "seen" && !entry.discovered) return false;
     if (daoTrialCatalogDiscovery.value === "unseen" && entry.discovered) return false;
-    if (query && !`${entry.name} ${entry.school} ${entry.text}`.toLocaleLowerCase("zh-Hans-CN").includes(query)) return false;
+    if (query && !`${entry.name} ${entry.school} ${entry.branch || ""} ${entry.text} ${(entry.mechanics || []).map((mechanic) => mechanic.summary).join(" ")}`.toLocaleLowerCase("zh-Hans-CN").includes(query)) return false;
     return true;
   }).sort((a, b) => (
     Number(b.discovered) - Number(a.discovered)
@@ -6474,6 +6492,7 @@ function resetDaoTrialCatalogFilters(mode = daoTrialCatalogMode.value) {
   daoTrialCatalogMode.value = mode;
   daoTrialCatalogQuery.value = "";
   daoTrialCatalogSchool.value = "";
+  daoTrialCatalogBranch.value = "";
   daoTrialCatalogRarity.value = "";
   daoTrialCatalogDiscovery.value = "";
   daoTrialCatalogPage.value = 1;
@@ -12942,7 +12961,11 @@ function daoTrialTriggerLabel(trigger) {
     onCompanionSkill: "同行技能",
     onRest: "调息节点",
     onEvent: "取舍节点",
-    afterBattle: "战斗胜利"
+    afterBattle: "战斗胜利",
+    beforeSkill: "施法之前",
+    afterDamage: "造成伤害",
+    onReroll: "重观法则",
+    onLawChosen: "选择法则"
   })[trigger] || "持续生效";
 }
 

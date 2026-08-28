@@ -1,6 +1,7 @@
 import { canonicalPotentialRealms, combatSkills, dungeons, duelLadderDays, duelLossScore, duelRankForScore, duelRanks, duelSeasonDay, duelSeasonLength, duelSeasonMaxScore, duelSeasonOfDay, duelTournamentBracketSize, duelTournamentDays, duelWinScore, equipmentCatalog, equipmentSlots, equipmentTiers, itemCatalog, npcGenders, npcNames, provinceVersion, provinces, realms, realmStages, rootCycle, specialRoots, spiritPearls, roots, rosterVersion, sectRoster, sects, taskTemplates } from "./gameData.mjs";
 import { encounterCategoryLabels, encounterDefinitionCount, encounterDefinitionMap, encounterDefinitions } from "./encounterData.mjs";
 import { daoTrialCycleAffixes, daoTrialCycleLength, daoTrialEventOptions, daoTrialLawMap, daoTrialLawRarities, daoTrialLawRarityRates, daoTrialLaws, daoTrialNodeVariants, daoTrialRouteMap, daoTrialRoutes, daoTrialSealMap, daoTrialSeals, daoTrialSealSchoolResonances, daoTrialSealSynergies } from "./daoTrialData.mjs";
+import { resolveLawMechanics } from "./daoTrialLawDesign.mjs";
 
 export function dateKey(date = new Date()) {
   const year = date.getFullYear();
@@ -1069,8 +1070,10 @@ function applyBattleRootPenalty(snapshot, penalty) {
 
 function runTurnBattle(left, right, options = {}) {
   const random = options.random || (options.seed ? seededBattleRandom(options.seed) : Math.random);
-  const leftPenalty = rootCounterPenalty(right, left) * (1 - clamp(Number(left?.trialBuffs?.rootResist) || 0, 0, 0.9));
-  const rightPenalty = rootCounterPenalty(left, right) * (1 - clamp(Number(right?.trialBuffs?.rootResist) || 0, 0, 0.9));
+  const leftBasePenalty = rootCounterPenalty(right, left);
+  const rightBasePenalty = rootCounterPenalty(left, right);
+  const leftPenalty = leftBasePenalty * (1 - clamp(Number(left?.trialBuffs?.rootResist) || 0, 0, 1));
+  const rightPenalty = rightBasePenalty * (1 - clamp(Number(right?.trialBuffs?.rootResist) || 0, 0, 1));
   const a = applyBattleRootPenalty(combatSnapshot(left, options.state), leftPenalty);
   const b = applyBattleRootPenalty(combatSnapshot(right, options.state), rightPenalty);
   const order = a.divineSense === b.divineSense
@@ -1087,6 +1090,8 @@ function runTurnBattle(left, right, options = {}) {
   const cooldowns = { left: 0, right: 0 };
   const effects = { left: [], right: [] };
   const trialBuffs = { left: left?.trialBuffs || {}, right: right?.trialBuffs || {} };
+  const lawMechanics = { left: trialBuffs.left.__lawMechanics || [], right: trialBuffs.right.__lawMechanics || [] };
+  const lawRuntime = { left: {}, right: {} };
   const actionCounts = { left: { attacks: 0, skills: 0 }, right: { attacks: 0, skills: 0 } };
   const lethalGuardUsed = { left: false, right: false };
   const openingSkillUsed = { left: false, right: false };
@@ -1106,6 +1111,26 @@ function runTurnBattle(left, right, options = {}) {
     const fallback = daoTrialLawMap[fallbackId];
     return source || { id: fallbackId, name: fallback?.name || "问道法则" };
   };
+  const mechanicsFor = (side, event, action = "") => lawMechanics[side].filter((entry) => {
+    const events = Array.isArray(entry.event) ? entry.event : [entry.event];
+    return events.includes(event) && (!action || entry.action === action);
+  });
+  const runtimeFor = (side, mechanic) => {
+    lawRuntime[side][mechanic.type] ??= { count: 0, stacks: 0, stored: 0, lastRound: -1, cooldown: 0, used: false, disabled: false };
+    return lawRuntime[side][mechanic.type];
+  };
+  const pushLawEvent = (side, mechanic, text, detail = {}) => pushEvent("law", `${sideState(side).actorName}引动「${mechanic.lawName}」，${text}`, {
+    actorSide: side,
+    lawId: mechanic.lawId,
+    lawName: mechanic.lawName,
+    lawStack: mechanic.stack,
+    mechanicType: mechanic.type,
+    leftHp,
+    rightHp,
+    leftMana,
+    rightMana,
+    ...detail
+  });
 
   if (leftPenalty) pushEvent("root", `${right.name}主灵根克制${left.name}，${left.name}攻击、防御、神识降低 ${Math.round(leftPenalty * 1000) / 10}%`, { side: "left", penalty: leftPenalty });
   if (rightPenalty) pushEvent("root", `${left.name}主灵根克制${right.name}，${right.name}攻击、防御、神识降低 ${Math.round(rightPenalty * 1000) / 10}%`, { side: "right", penalty: rightPenalty });
@@ -1204,17 +1229,42 @@ function runTurnBattle(left, right, options = {}) {
     const attack = Math.max(1, state.actor.attack - attackPenalty);
     const defense = Math.max(0, state.target.defense + defenseBonus - defensePenalty);
     const pierce = options.pierce || 0;
-    const rawDamage = attack * multiplier - defense * (1 - pierce);
+    const wagerPower = lawMechanics[side]
+      .filter((entry) => entry.action === "battleWager" && runtimeFor(side, entry).active)
+      .reduce((sum, entry) => sum + Math.max(0, Number(entry.params.power) || 0), 0);
+    const rootReversalPower = lawMechanics[side]
+      .filter((entry) => entry.action === "rootReversal" && runtimeFor(side, entry).active)
+      .reduce((sum, entry) => sum + Math.max(0, Number(entry.params.bonus) || 0), 0);
+    const rawDamage = attack * multiplier * (1 + wagerPower + rootReversalPower) - defense * (1 - pierce);
     let damage = Math.max(1, Math.floor(rawDamage + random() * 5));
     const reduction = effectValue(targetSide, "shield", "reduce");
     damage = Math.max(1, Math.floor(damage * (1 - reduction)));
-    if (state.targetHp - damage <= 0 && trialBuffs[targetSide].lethalGuard && !lethalGuardUsed[targetSide]) {
+    if (state.targetHp - damage <= 0) {
+      const mechanicWard = [...mechanicsFor(targetSide, "onLethal", "lethalWard"), ...mechanicsFor(targetSide, "onLethal", "companionLethalWard")]
+        .find((entry) => {
+          const runtime = runtimeFor(targetSide, entry);
+          return !runtime.used && (entry.action !== "companionLethalWard" || trialCompanion && !runtime.disabled);
+        });
+      if (mechanicWard) {
+        const runtime = runtimeFor(targetSide, mechanicWard);
+        damage = Math.max(0, state.targetHp - 1);
+        runtime.used = true;
+        if (mechanicWard.action === "companionLethalWard") runtime.disabled = true;
+        const heal = Math.floor(maxHpOf(targetSide) * Math.max(0, Number(mechanicWard.params.heal) || 0));
+        const reduction = Math.max(0, Number(mechanicWard.params.reduction ?? mechanicWard.params.shield) || 0);
+        if (heal > 0) damage = Math.max(0, damage - heal);
+        if (reduction > 0) addEffect(targetSide, { type: "shield", reduce: clamp(reduction, 0, 0.35), duration: Math.max(1, Number(mechanicWard.params.duration) || 2) });
+        pushLawEvent(targetSide, mechanicWard, mechanicWard.action === "companionLethalWard" ? "同行替劫，守住最后生机" : "守住最后一线生机", { targetSide: side, healing: heal });
+      } else if (trialBuffs[targetSide].lethalGuard && !lethalGuardUsed[targetSide]) {
       damage = Math.max(0, state.targetHp - 1);
       lethalGuardUsed[targetSide] = true;
       const law = lawSourceFor(targetSide, "lethalGuard", "unyielding-law");
       pushEvent("law", `${state.targetName}以「${law.name}」守住最后一线生机`, { actorSide: targetSide, targetSide: side, lawId: law.id, lawName: law.name, leftHp, rightHp, leftMana, rightMana });
+      }
     }
     setHp(targetSide, state.targetHp - damage);
+    triggerLawMechanics("onDamageTaken", targetSide, { damage, sourceSide: side });
+    triggerLawMechanics("afterDamage", side, { damage, targetSide });
 
     const reflect = effectValue(targetSide, "reflect", "reflect");
     if (reflect > 0) {
@@ -1256,6 +1306,14 @@ function runTurnBattle(left, right, options = {}) {
     const targetSide = opposite(side);
     const state = sideState(side);
     const openingBonus = Math.max(0, Number(trialBuffs[side].openingSkillPower) || 0);
+    for (const entry of lawMechanics[side]) {
+      const runtime = runtimeFor(side, entry);
+      if (runtime.nextSkillPower > 0) {
+        skill = boostSkill(skill, runtime.nextSkillPower);
+        pushLawEvent(side, entry, `令本次术法效果提高 ${Math.round(runtime.nextSkillPower * 100)}%`);
+        runtime.nextSkillPower = 0;
+      }
+    }
     if (!openingSkillUsed[side]) {
       openingSkillUsed[side] = true;
       if (openingBonus && state.targetHp / Math.max(1, state.target.maxHp) > 0.8) {
@@ -1280,11 +1338,25 @@ function runTurnBattle(left, right, options = {}) {
     }
     actionCounts[side].skills += 1;
     const freeEvery = Math.max(0, Math.floor(Number(trialBuffs[side].freeSkillEvery) || 0));
-    const free = Boolean(freeEvery && actionCounts[side].skills % freeEvery === 0);
-    setMana(side, state.mana - (free ? 0 : skill.cost));
+    const freeMechanic = mechanicsFor(side, "beforeSkill", "freeCast").find((entry) => {
+      const every = Math.max(1, Math.floor(Number(entry.params.every) || 99));
+      return actionCounts[side].skills % every === 0;
+    });
+    const bloodMechanic = mechanicsFor(side, "beforeSkill", "bloodCast").find((entry) => state.mana < skill.cost);
+    const free = Boolean(freeMechanic || freeEvery && actionCounts[side].skills % freeEvery === 0);
+    if (bloodMechanic && !free) {
+      const hpCost = Math.min(Math.max(0, state.hp - 1), Math.floor(state.actor.maxHp * Math.max(0, Number(bloodMechanic.params.hpCost) || 0)));
+      setHp(side, state.hp - hpCost);
+      skill = boostSkill(skill, Math.max(0, Number(bloodMechanic.params.power) || 0));
+      pushLawEvent(side, bloodMechanic, `燃烧 ${hpCost} 气血强行施法`, { damage: hpCost });
+    }
+    setMana(side, state.mana - (free || bloodMechanic ? 0 : skill.cost));
     if (free) {
-      const law = lawSourceFor(side, "freeSkillEvery", "mana-loop");
-      pushEvent("law", `${state.actorName}引动「${law.name}」，本次施法未消耗法力`, { actorSide: side, lawId: law.id, lawName: law.name, leftHp, rightHp, leftMana, rightMana });
+      if (freeMechanic) pushLawEvent(side, freeMechanic, "本次施法未消耗法力");
+      else {
+        const law = lawSourceFor(side, "freeSkillEvery", "mana-loop");
+        pushEvent("law", `${state.actorName}引动「${law.name}」，本次施法未消耗法力`, { actorSide: side, lawId: law.id, lawName: law.name, leftHp, rightHp, leftMana, rightMana });
+      }
     }
     cooldowns[side] = skill.cooldown;
     let total = 0;
@@ -1313,6 +1385,7 @@ function runTurnBattle(left, right, options = {}) {
           const law = lawSourceFor(side, "dotStack", "poison-formation");
           pushEvent("law", `${state.actorName}借「${law.name}」令持续伤势叠至 ${statusStacks[side]} 层`, { actorSide: side, targetSide, lawId: law.id, lawName: law.name, leftHp, rightHp, leftMana, rightMana });
         }
+        triggerLawMechanics("afterStatus", side, { targetSide });
       }
       if (skill.type === "stun") addEffect(targetSide, { type: "stun", duration: skill.duration });
       if (skill.type === "speedStrike") addEffect(side, { type: "evasion", chance: skill.extraDodge, duration: skill.duration });
@@ -1332,6 +1405,7 @@ function runTurnBattle(left, right, options = {}) {
         const law = lawSourceFor(side, "dotStack", "poison-formation");
         pushEvent("law", `${state.actorName}借「${law.name}」令持续伤势叠至 ${statusStacks[side]} 层`, { actorSide: side, targetSide, lawId: law.id, lawName: law.name, leftHp, rightHp, leftMana, rightMana });
       }
+      triggerLawMechanics("afterStatus", side, { targetSide });
       pushEvent("skill", `${state.actorName}放出${skill.name}，${state.targetName}陷入持续伤害`, { actorSide: side, targetSide, skill: skill.name, leftHp, rightHp, leftMana, rightMana });
       return 0;
     }
@@ -1347,6 +1421,10 @@ function runTurnBattle(left, right, options = {}) {
     }
     if (skill.type === "heal") {
       let heal = Math.floor(state.actor.maxHp * skill.percent);
+      const lowHpHealingPenalty = lawMechanics[side]
+        .filter((entry) => entry.action === "lowHpEcho" && state.hp / Math.max(1, state.actor.maxHp) <= Number(entry.params.threshold || 0))
+        .reduce((sum, entry) => Math.max(sum, Number(entry.params.healingPenalty) || 0), 0);
+      heal = Math.floor(heal * (1 - clamp(lowHpHealingPenalty, 0, 0.8)));
       const healBoost = Math.max(0, Number(trialBuffs[side].healCountBoost) || 0);
       if (healBoostReady[side] && healBoost) {
         heal = Math.floor(heal * (1 + healBoost));
@@ -1369,6 +1447,7 @@ function runTurnBattle(left, right, options = {}) {
         pushEvent("law", `${state.actorName}借「${law.name}」将溢出治疗化为 ${shields} 点护势`, { actorSide: side, lawId: law.id, lawName: law.name, shields, leftHp, rightHp, leftMana, rightMana });
       }
       pushEvent("skill", `${state.actorName}运转${skill.name}，恢复 ${actualHealing} 血量`, { actorSide: side, targetSide, skill: skill.name, healing: actualHealing, leftHp, rightHp, leftMana, rightMana });
+      triggerLawMechanics("afterHeal", side, { healing: actualHealing, targetSide });
       return 0;
     }
     if (skill.type === "evasionBuff") {
@@ -1389,6 +1468,176 @@ function runTurnBattle(left, right, options = {}) {
     return 0;
   };
 
+  function triggerLawMechanics(event, side, payload = {}) {
+    for (const entry of mechanicsFor(side, event)) {
+      const runtime = runtimeFor(side, entry);
+      const params = entry.params || {};
+      const targetSide = payload.targetSide || opposite(side);
+      const actor = sideState(side);
+      if (entry.action === "attackEcho" && event === "afterAttack") {
+        runtime.count += 1;
+        const every = Math.max(1, Math.floor(Number(params.every) || 3));
+        if (runtime.count % every === 0 && sideState(targetSide).hp > 0) {
+          const damage = applyStrike(side, Math.max(0, Number(params.power) || 0));
+          runtime.nextSkillPower = Math.max(runtime.nextSkillPower || 0, Number(params.nextSkillPower) || 0);
+          pushLawEvent(side, entry, `剑阵追击造成 ${damage} 伤害`, { targetSide, damage });
+        }
+      } else if (entry.action === "openingSurge" && event === "afterSkill" && !runtime.used && payload.damage > 0 && actor.targetHp / Math.max(1, actor.target.maxHp) >= Number(params.targetAbove || 0)) {
+        runtime.used = true;
+        const damage = applyStrike(side, Math.max(0, Number(params.power) || 0), { pierce: 0.5 });
+        pushLawEvent(side, entry, `破界追击造成 ${damage} 伤害`, { targetSide, damage });
+      } else if (entry.action === "executeStrike" && ["afterAttack", "afterSkill"].includes(event) && sideState(targetSide).hp > 0) {
+        if (runtime.lastRound === currentRound && params.oncePerRound) continue;
+        if (sideState(targetSide).hp / Math.max(1, sideState(targetSide).actor.maxHp) <= Number(params.threshold || 0)) {
+          runtime.lastRound = currentRound;
+          const damage = applyStrike(side, Math.max(0, Number(params.power) || 0));
+          pushLawEvent(side, entry, `追魂斩造成 ${damage} 伤害`, { targetSide, damage });
+        }
+      } else if (entry.action === "repeatSkill" && event === "afterSkill" && payload.damage > 0) {
+        runtime.count += 1;
+        if (runtime.count % Math.max(1, Math.floor(Number(params.every) || 3)) === 0 && sideState(targetSide).hp > 0) {
+          const damage = applyStrike(side, Math.max(0, Number(params.power) || 0));
+          pushLawEvent(side, entry, `复制术法造成 ${damage} 伤害`, { targetSide, damage });
+        }
+      } else if (entry.action === "cooldownFlow" && event === "afterAttack") {
+        runtime.count += 1;
+        if (runtime.count % Math.max(1, Math.floor(Number(params.every) || 2)) === 0) {
+          cooldowns[side] = Math.max(0, cooldowns[side] - Math.max(1, Math.floor(Number(params.cooldown) || 1)));
+          const mana = Math.floor(actor.actor.maxMana * Math.max(0, Number(params.mana) || 0));
+          setMana(side, actor.mana + mana);
+          pushLawEvent(side, entry, `推动技能周天并恢复 ${mana} 法力`, { mana });
+        }
+      } else if (entry.action === "manaTide" && event === "afterSkill" && payload.skill) {
+        const mana = Math.floor(actor.actor.maxMana * Math.max(0, Number(params.refund) || 0));
+        setMana(side, actor.mana + mana);
+        if (payload.damage > 0 && sideState(targetSide).hp > 0) {
+          const damage = applyStrike(side, Math.max(0, Number(params.power) || 0));
+          pushLawEvent(side, entry, `灵潮冲击造成 ${damage} 伤害并返还 ${mana} 法力`, { targetSide, damage, mana });
+        }
+      } else if (entry.action === "freeCast" && event === "afterSkill") {
+        const echoEvery = Math.floor(Number(params.echoEvery) || 0);
+        if (echoEvery > 0 && actionCounts[side].skills % echoEvery === 0 && payload.damage > 0 && sideState(targetSide).hp > 0) {
+          const damage = applyStrike(side, Math.max(0, Number(params.echoPower) || 0));
+          pushLawEvent(side, entry, `周天余波造成 ${damage} 伤害`, { targetSide, damage });
+        }
+      } else if (entry.action === "damageStore") {
+        if (event === "onDamageTaken" && payload.damage > 0) runtime.stored = Math.min(Math.floor(maxHpOf(side) * Number(params.capHp || 0.2)), runtime.stored + Math.floor(payload.damage * Number(params.ratio || 0)));
+        if (event === "afterAttack" && runtime.stored > 0 && sideState(targetSide).hp > 0) {
+          const damage = Math.min(sideState(targetSide).hp, runtime.stored);
+          setHp(targetSide, sideState(targetSide).hp - damage);
+          runtime.stored = 0;
+          pushLawEvent(side, entry, `释放储伤造成 ${damage} 伤害`, { targetSide, damage });
+        }
+      } else if (entry.action === "noHitCounter" && event === "roundStart" && (currentRound === 1 || !payload.wasDamaged)) {
+        addEffect(side, { type: "shield", reduce: clamp(Number(params.reduction) || 0, 0, 0.35), duration: 1 });
+        runtime.counterReady = Math.max(0, Number(params.counterPower) || 0);
+        pushLawEvent(side, entry, "展开无隙玄甲");
+      } else if (entry.action === "damageReflect" && event === "onDamageTaken" && payload.damage > 0) {
+        const lowHp = sideState(side).hp / Math.max(1, sideState(side).actor.maxHp) <= 0.5;
+        const ratio = Number(params.ratio || 0) * (lowHp ? Number(params.lowHpMultiplier || 1) : 1);
+        const damage = Math.max(1, Math.floor(payload.damage * ratio));
+        setHp(payload.sourceSide, sideState(payload.sourceSide).hp - damage);
+        pushLawEvent(side, entry, `反照 ${damage} 伤害`, { targetSide: payload.sourceSide, damage });
+      } else if (entry.action === "lifesteal" && event === "afterDamage" && payload.damage > 0) {
+        const before = sideState(side).hp;
+        const healing = Math.floor(payload.damage * Math.max(0, Number(params.ratio) || 0));
+        const overflow = Math.max(0, before + healing - maxHpOf(side));
+        setHp(side, before + healing);
+        if (overflow > 0 && Number(params.overhealShield) > 0) addEffect(side, { type: "shield", reduce: clamp(overflow * Number(params.overhealShield) / maxHpOf(side), 0.03, 0.25), duration: 2 });
+        if (healing > 0) pushLawEvent(side, entry, `汲取 ${Math.min(healing, maxHpOf(side) - before)} 气血`, { healing });
+      } else if (entry.action === "roundRegen" && event === "roundStart") {
+        const rate = Number(params.heal || 0) * (payload.wasDamaged ? 1 : 1 + Number(params.noHitBonus || 0));
+        const healing = Math.floor(maxHpOf(side) * rate);
+        const before = sideState(side).hp;
+        setHp(side, before + healing);
+        if (sideState(side).hp > before) pushLawEvent(side, entry, `恢复 ${sideState(side).hp - before} 气血`, { healing: sideState(side).hp - before });
+      } else if (entry.action === "healStrike" && event === "afterHeal" && payload.healing > 0 && sideState(targetSide).hp > 0) {
+        const damage = Math.max(1, Math.floor(payload.healing * Number(params.ratio || 0)));
+        setHp(targetSide, sideState(targetSide).hp - damage);
+        runtime.nextSkillPower = Math.max(runtime.nextSkillPower || 0, Number(params.nextSkillPower) || 0);
+        pushLawEvent(side, entry, `逆转治疗造成 ${damage} 伤害`, { targetSide, damage });
+      } else if (entry.action === "lowHpEcho" && event === "afterSkill" && payload.damage > 0 && actor.hp / Math.max(1, actor.actor.maxHp) <= Number(params.threshold || 0) && sideState(targetSide).hp > 0) {
+        const damage = applyStrike(side, Math.max(0, Number(params.power) || 0));
+        pushLawEvent(side, entry, `绝境回响造成 ${damage} 伤害`, { targetSide, damage });
+      } else if (entry.action === "adversityGrowth") {
+        if (event === "onDamageTaken" && payload.damage > 0) runtime.stacks = Math.min(Math.floor(Number(params.cap) || 5), runtime.stacks + 1);
+        if (["afterAttack", "afterSkill"].includes(event) && runtime.stacks > 0 && payload.damage > 0 && sideState(targetSide).hp > 0) {
+          const damage = applyStrike(side, Math.max(0, Number(params.gain) || 0) * runtime.stacks);
+          pushLawEvent(side, entry, `${runtime.stacks} 层劫意追加 ${damage} 伤害`, { targetSide, damage, mechanicStacks: runtime.stacks });
+        }
+      } else if (entry.action === "companionSkillEcho" && event === "afterCompanion" && trialCompanion && !runtime.disabled) {
+        runtime.count += 1;
+        runtime.nextSkillPower = Math.max(runtime.nextSkillPower || 0, Number(params.nextSkillPower) || 0);
+        if (runtime.count % Math.max(1, Math.floor(Number(params.every) || 3)) === 0 && sideState("right").hp > 0) {
+          const damage = applyStrike(side, Math.max(0, Number(params.power) || 0));
+          pushLawEvent(side, entry, `同行共鸣追加 ${damage} 伤害`, { targetSide: "right", damage });
+        }
+      } else if (entry.action === "companionFollowup" && event === "afterSkill" && trialCompanion && !runtime.disabled && payload.damage > 0) {
+        runtime.cooldown = Math.max(0, runtime.cooldown - 1);
+        if (runtime.cooldown <= 0 && sideState(targetSide).hp > 0) {
+          const damage = applyStrike(side, Math.max(0, Number(params.power) || 0));
+          runtime.cooldown = Math.max(1, Math.floor(Number(params.cooldown) || 4));
+          pushLawEvent(side, entry, `同行破阵追加 ${damage} 伤害`, { targetSide, damage });
+        }
+      } else if (entry.action === "soloEcho" && ["afterAttack", "afterSkill"].includes(event) && !trialCompanion && payload.damage > 0) {
+        runtime.count += 1;
+        if (runtime.count % Math.max(1, Math.floor(Number(params.every) || 4)) === 0 && sideState(targetSide).hp > 0) {
+          const damage = applyStrike(side, Math.max(0, Number(params.power) || 0));
+          pushLawEvent(side, entry, `独行道影复制行动，造成 ${damage} 伤害`, { targetSide, damage });
+        }
+      } else if (entry.action === "elementCycle" && event === "roundStart") {
+        const phase = (currentRound - 1) % 5;
+        if ([0, 3].includes(phase) && sideState(targetSide).hp > 0) {
+          const damage = applyStrike(side, Math.max(0, Number(params.power) || 0));
+          pushLawEvent(side, entry, `${phase === 0 ? "金行" : "火行"}轮转造成 ${damage} 伤害`, { targetSide, damage });
+        } else if (phase === 1) {
+          const healing = Math.floor(maxHpOf(side) * Number(params.healing || 0));
+          setHp(side, actor.hp + healing);
+          pushLawEvent(side, entry, `木行轮转恢复 ${healing} 气血`, { healing });
+        } else if (phase === 2) {
+          const mana = Math.floor(actor.actor.maxMana * Number(params.healing || 0));
+          setMana(side, actor.mana + mana);
+          pushLawEvent(side, entry, `水行轮转恢复 ${mana} 法力`, { mana });
+        } else addEffect(side, { type: "shield", reduce: clamp(Number(params.power) || 0, 0.05, 0.3), duration: 1 });
+      } else if (entry.action === "statusDetonate" && event === "afterStatus") {
+        runtime.count += 1;
+        if (runtime.count % Math.max(1, Math.floor(Number(params.every) || 3)) === 0 && sideState(targetSide).hp > 0) {
+          const damage = applyStrike(side, Math.max(0, Number(params.power) || 0));
+          pushLawEvent(side, entry, `熔炼异常造成 ${damage} 伤害`, { targetSide, damage });
+        }
+      } else if (entry.action === "elementPulse" && event === "roundStart" && currentRound % Math.max(1, Math.floor(Number(params.every) || 3)) === 0 && sideState(targetSide).hp > 0) {
+        const damage = applyStrike(side, Math.max(0, Number(params.power) || 0));
+        pushLawEvent(side, entry, `降下天劫造成 ${damage} 伤害`, { targetSide, damage });
+      }
+    }
+    if (event === "onDamageTaken" && payload.damage > 0) {
+      for (const entry of lawMechanics[side].filter((item) => item.action === "noHitCounter")) {
+        const runtime = runtimeFor(side, entry);
+        if (runtime.counterReady > 0 && payload.sourceSide) {
+          const damage = Math.max(1, Math.floor(sideState(side).actor.attack * runtime.counterReady));
+          setHp(payload.sourceSide, sideState(payload.sourceSide).hp - damage);
+          runtime.counterReady = 0;
+          pushLawEvent(side, entry, `玄甲反击造成 ${damage} 伤害`, { targetSide: payload.sourceSide, damage });
+        }
+      }
+    }
+  }
+
+  for (const side of ["left", "right"]) {
+    for (const entry of mechanicsFor(side, "battleStart")) {
+      const runtime = runtimeFor(side, entry);
+      if (entry.action === "battleWager") {
+        const hpCost = Math.min(Math.max(0, sideState(side).hp - 1), Math.floor(maxHpOf(side) * Number(entry.params.hpCost || 0)));
+        setHp(side, sideState(side).hp - hpCost);
+        runtime.active = true;
+        pushLawEvent(side, entry, `献祭 ${hpCost} 气血换取威能`, { damage: hpCost });
+      } else if (entry.action === "rootReversal" && (side === "left" ? leftBasePenalty : rightBasePenalty) > 0) {
+        runtime.active = true;
+        pushLawEvent(side, entry, "将灵根克制逆转为自身增益");
+      }
+    }
+  }
+
   for (let round = 1; round <= maxRounds && leftHp > 0 && rightHp > 0; round += 1) {
     currentRound = round;
     pushEvent("round", `第 ${round} 回合`, { leftHp, rightHp, leftMana, rightMana });
@@ -1397,6 +1646,9 @@ function runTurnBattle(left, right, options = {}) {
     roundDamageTaken.right = false;
     tickEffects("left");
     tickEffects("right");
+    if (leftHp <= 0 || rightHp <= 0) break;
+    triggerLawMechanics("roundStart", "left", { wasDamaged: previousRoundDamage.left, targetSide: "right" });
+    triggerLawMechanics("roundStart", "right", { wasDamaged: previousRoundDamage.right, targetSide: "left" });
     if (leftHp <= 0 || rightHp <= 0) break;
     for (const side of ["left", "right"]) {
       const guard = Math.max(0, Number(trialBuffs[side].noHitShield) || 0);
@@ -1426,6 +1678,7 @@ function runTurnBattle(left, right, options = {}) {
         pushEvent("companion", `${trialCompanion.name}护脉同行，恢复 ${healing} 气血并展开护势`, { actorSide: "companion", targetSide: "left", healing, shields, leftHp, rightHp, leftMana, rightMana });
       }
       companionSkillBoost.left = Math.max(companionSkillBoost.left, Math.max(0, Number(trialBuffs.left.companionSkillPower) || 0));
+      triggerLawMechanics("afterCompanion", "left", { targetSide: "right" });
       if (leftHp <= 0 || rightHp <= 0) break;
     }
 
@@ -1441,8 +1694,10 @@ function runTurnBattle(left, right, options = {}) {
 
       const skill = skills[side];
       const freeEvery = Math.max(0, Math.floor(Number(trialBuffs[side].freeSkillEvery) || 0));
-      const nextSkillFree = Boolean(freeEvery && (actionCounts[side].skills + 1) % freeEvery === 0);
-      if (skill && (state.mana >= skill.cost || nextSkillFree) && cooldowns[side] <= 0 && shouldUseCombatSkill({
+      const nextSkillFreeByMechanic = mechanicsFor(side, "beforeSkill", "freeCast").some((entry) => (actionCounts[side].skills + 1) % Math.max(1, Math.floor(Number(entry.params.every) || 99)) === 0);
+      const canBloodCast = mechanicsFor(side, "beforeSkill", "bloodCast").length > 0 && state.hp > Math.floor(state.actor.maxHp * 0.1);
+      const nextSkillFree = Boolean(nextSkillFreeByMechanic || freeEvery && (actionCounts[side].skills + 1) % freeEvery === 0);
+      if (skill && (state.mana >= skill.cost || nextSkillFree || canBloodCast) && cooldowns[side] <= 0 && shouldUseCombatSkill({
         skill,
         actor: { ...state.actor, hp: state.hp, mana: state.mana },
         target: { ...state.target, hp: state.targetHp, mana: state.targetMana },
@@ -1450,6 +1705,7 @@ function runTurnBattle(left, right, options = {}) {
         targetEffects: effects[targetSide]
       })) {
         const skillDamage = castSkill(side, skill);
+        triggerLawMechanics("afterSkill", side, { damage: skillDamage, targetSide, skill });
         const echoChance = clamp(Number(trialBuffs[side].skillEchoChance) || 0, 0, 1);
         if (skillDamage > 0 && sideState(targetSide).hp > 0 && echoChance && random() < echoChance) {
           const echoPower = Math.max(0, Number(trialBuffs[side].skillEchoPower) || 0);
@@ -1460,6 +1716,7 @@ function runTurnBattle(left, right, options = {}) {
       } else {
         const damage = applyStrike(side, 1, { basic: true });
         pushEvent("attack", `${state.actorName}出手造成 ${damage} 伤害`, { actorSide: side, targetSide, damage, leftHp, rightHp, leftMana, rightMana });
+        triggerLawMechanics("afterAttack", side, { damage, targetSide });
       }
       if (leftHp <= 0 || rightHp <= 0) break;
     }
@@ -9636,23 +9893,17 @@ function rememberDaoTrialOffer(state, run, ids, kind) {
   run[runKey] = [...new Set([...(run[runKey] || []), ...ids])];
 }
 
-function rankedOfferCandidate(items, seed, weightOf) {
-  return [...items].sort((a, b) => (
-    stableHash(`${seed}|${b.id}`) * Math.max(0.01, weightOf(b))
-    - stableHash(`${seed}|${a.id}`) * Math.max(0.01, weightOf(a))
-  ) || a.id.localeCompare(b.id))[0] || null;
-}
-
 export function sampleDaoTrialEqualOffer(kind, seedPrefix, count = 3) {
   const items = kind === "law" ? daoTrialLaws : kind === "seal" ? daoTrialSeals : [];
   if (!items.length) throw new Error("未知的问道候选类型");
-  const selected = new Set();
-  for (let slot = 0; slot < Math.max(1, Math.floor(Number(count) || 3)); slot += 1) {
-    const candidates = items.filter((item) => !selected.has(item.id));
-    const picked = rankedOfferCandidate(candidates, `${seedPrefix}|${slot}`, () => 1);
-    if (picked) selected.add(picked.id);
+  const pool = [...items].sort((a, b) => a.id.localeCompare(b.id));
+  const random = seededBattleRandom(`dao-trial-offer|${kind}|${seedPrefix}`);
+  const size = Math.min(pool.length, Math.max(1, Math.floor(Number(count) || 3)));
+  for (let slot = 0; slot < size; slot += 1) {
+    const pickedIndex = slot + Math.floor(random() * (pool.length - slot));
+    [pool[slot], pool[pickedIndex]] = [pool[pickedIndex], pool[slot]];
   }
-  return [...selected];
+  return pool.slice(0, size).map((item) => item.id);
 }
 
 function sealOfferForRun(state, run, route, nonce = 0) {
@@ -9662,9 +9913,15 @@ function sealOfferForRun(state, run, route, nonce = 0) {
 }
 
 function lawRarityRatesForFloor(floor) {
-  // All law entries now share one uniform draw pool. Rarity remains a label
-  // and effect tier, but no longer changes appearance probability.
-  return { silver: 33.33, gold: 33.33, diamond: 33.34 };
+  // Every concrete law has weight 1. Aggregate rarity odds therefore follow
+  // the actual 160/64/32 pool instead of assigning equal odds to rarity labels.
+  const counts = Object.groupBy(daoTrialLaws, (law) => law.rarity);
+  const total = Math.max(1, daoTrialLaws.length);
+  return {
+    silver: Math.round((counts.silver?.length || 0) / total * 10_000) / 100,
+    gold: Math.round((counts.gold?.length || 0) / total * 10_000) / 100,
+    diamond: Math.round((counts.diamond?.length || 0) / total * 10_000) / 100
+  };
 }
 
 function rolledLawRarity(run, nonce, slot, rates, diamondSelected) {
@@ -9676,7 +9933,8 @@ function rolledLawRarity(run, nonce, slot, rates, diamondSelected) {
 
 function lawOfferForRun(state, run, route, nonce = 0) {
   const rates = lawRarityRatesForFloor(Math.max(1, Number(run.floor) || 1));
-  const offer = sampleDaoTrialEqualOffer("law", `${run.seed}|law|${run.floor}|${nonce}`);
+  const bonusOptions = runLawMechanics(run, "freeReroll").reduce((max, entry) => Math.max(max, Math.floor(Number(entry.params.bonusOptions) || 0)), 0);
+  const offer = sampleDaoTrialEqualOffer("law", `${run.seed}|law|${run.floor}|${nonce}`, 3 + bonusOptions);
   run.lastLawRarityRates = { silver: rates.silver, gold: rates.gold, diamond: rates.diamond };
   rememberDaoTrialOffer(state, run, offer, "law");
   return offer;
@@ -9691,6 +9949,7 @@ function trialStackMultiplier(level) {
 export function combinedTrialBuffs(run) {
   const buffs = {};
   const lawSources = {};
+  const lawMechanics = [];
   const sealStacks = { ...Object.fromEntries((run.sealIds || []).map((id) => [id, 1])), ...(run.sealStacks || {}) };
   for (const sealId of Object.keys(sealStacks)) {
     const effects = daoTrialSealMap[sealId]?.effects || {};
@@ -9724,23 +9983,56 @@ export function combinedTrialBuffs(run) {
   for (const lawId of Object.keys(lawStacks)) {
     const law = daoTrialLawMap[lawId];
     const effects = law?.effects || {};
+    const stack = Math.max(1, Math.min(5, Math.floor(Number(lawStacks[lawId]) || 1)));
     for (const [key, value] of Object.entries(effects)) {
       if (!lawSources[key] || Math.abs(Number(value) || 0) > Math.abs(Number(lawSources[key].value) || 0)) {
         lawSources[key] = { id: lawId, name: law?.name || lawId, value };
       }
-      const multiplier = trialStackMultiplier(lawStacks[lawId]);
+      const multiplier = trialStackMultiplier(stack);
       if (typeof value === "boolean") {
         if (value) buffs[key] = true;
+      } else if (["freeSkillEvery", "attackEchoEvery"].includes(key) && Number(value) > 0) {
+        const interval = Math.max(2, Math.floor(Number(value)) - Math.floor((stack - 1) / 2));
+        buffs[key] = Math.min(Number(buffs[key]) || Number.POSITIVE_INFINITY, interval);
+      } else if (key === "cooldown" && Number(value) < 0) {
+        const reduction = Math.max(-2, Math.floor(Number(value)) - Math.floor((stack - 1) / 2));
+        buffs[key] = Math.min(Number(buffs[key]) || 0, reduction);
       } else {
         buffs[key] = (buffs[key] || 0) + Number(value || 0) * multiplier;
       }
     }
+    for (const mechanic of resolveLawMechanics(law, stack)) {
+      const source = { id: lawId, name: law?.name || lawId, value: 0 };
+      lawMechanics.push({ ...mechanic, lawId, lawName: source.name, rarity: law?.rarity, branch: law?.branch });
+      for (const [key, value] of Object.entries(mechanic.buffs || {})) {
+        if (typeof value === "boolean") {
+          if (value) buffs[key] = true;
+        } else {
+          buffs[key] = (Number(buffs[key]) || 0) + Number(value || 0);
+        }
+        if (!lawSources[key] || Math.abs(Number(value) || 0) > Math.abs(Number(lawSources[key].value) || 0)) lawSources[key] = { ...source, value };
+      }
+      if (mechanic.action === "fortune" && Number(run.fortune) > 0) {
+        const fortuneBonus = Math.min(Number(mechanic.params.cap) || 0, Number(run.fortune) || 0) * Math.max(0, Number(mechanic.params.powerPerStack) || 0);
+        buffs.attack = (Number(buffs.attack) || 0) + fortuneBonus;
+        buffs.defense = (Number(buffs.defense) || 0) + fortuneBonus;
+      }
+    }
   }
   if (Object.keys(lawSources).length) buffs.__lawSources = lawSources;
+  if (lawMechanics.length) buffs.__lawMechanics = lawMechanics;
   const manaRate = run.combatant?.maxMana ? run.combatant.mana / run.combatant.maxMana : 1;
   if (manaRate >= 0.7) buffs.divineSense = (buffs.divineSense || 0) + (Number(buffs.highManaSense) || 0);
   if (manaRate <= 0.3) buffs.manaCost = (buffs.manaCost || 0) + (Number(buffs.lowManaCost) || 0);
   return buffs;
+}
+
+function runLawMechanics(run, action = "") {
+  const stacks = { ...Object.fromEntries((run?.lawIds || []).map((id) => [id, 1])), ...(run?.lawStacks || {}) };
+  return Object.entries(stacks).flatMap(([lawId, stack]) => {
+    const law = daoTrialLawMap[lawId];
+    return resolveLawMechanics(law, stack).map((entry) => ({ ...entry, lawId, lawName: law?.name || lawId, rarity: law?.rarity, branch: law?.branch }));
+  }).filter((entry) => !action || entry.action === action);
 }
 
 function activeTrialSynergies(run) {
@@ -9767,9 +10059,21 @@ function trialSealResonanceProgress(run) {
   }).filter((entry) => entry.count > 0);
 }
 
-function publicTrialLaw(law) {
+function publicTrialLaw(law, stack = 1) {
   const rarity = daoTrialLawRarities[law?.rarity] || daoTrialLawRarities.silver;
-  return law ? { ...law, rarityLabel: rarity.label, rarityColor: rarity.color } : null;
+  if (!law) return null;
+  const safeStack = Math.max(1, Math.min(5, Math.floor(Number(stack) || 1)));
+  const stackPlan = Array.isArray(law.stackPlan) ? law.stackPlan.map((entry) => ({ ...entry })) : [];
+  return {
+    ...law,
+    mechanics: (law.mechanics || []).map((entry) => ({ type: entry.type, action: entry.action, event: entry.event, summary: entry.summary })),
+    stackPlan,
+    stack: safeStack,
+    currentStackText: stackPlan.find((entry) => entry.stack === safeStack)?.text || "",
+    nextStack: stackPlan.find((entry) => entry.stack === safeStack + 1) || null,
+    rarityLabel: rarity.label,
+    rarityColor: rarity.color
+  };
 }
 
 function trialWorldBaselinePower(state) {
@@ -10589,14 +10893,19 @@ function publicTrialRun(state, run) {
     combatModifiers,
     companion: run.companion,
     seals: run.sealIds.map((id) => ({ ...daoTrialSealMap[id], stack: Number(run.sealStacks?.[id]) || 1 })).filter(Boolean),
-    laws: (run.lawIds || []).map((id) => ({ ...publicTrialLaw(daoTrialLawMap[id]), stack: Number(run.lawStacks?.[id]) || 1 })).filter(Boolean),
-    lawOffer: (run.lawOffer || []).map((id) => ({ ...publicTrialLaw(daoTrialLawMap[id]), stack: Math.min(5, (Number(run.lawStacks?.[id]) || 0) + 1) })).filter(Boolean),
+    laws: (run.lawIds || []).map((id) => publicTrialLaw(daoTrialLawMap[id], Number(run.lawStacks?.[id]) || 1)).filter(Boolean),
+    lawOffer: (run.lawOffer || []).map((id) => publicTrialLaw(daoTrialLawMap[id], Math.min(5, (Number(run.lawStacks?.[id]) || 0) + 1))).filter(Boolean),
     lawRarityRates: run.lastLawRarityRates || lawRarityRatesForFloor(Math.max(1, Number(run.floor) || 1)),
+    lastLawEvent: run.lastLawEvent ? { ...run.lastLawEvent } : null,
     synergies: activeTrialSynergies(run),
     resonanceProgress: trialSealResonanceProgress(run),
     sealOffer: (run.pendingSealIds || []).map((id) => ({ ...daoTrialSealMap[id], stack: Math.min(5, (Number(run.sealStacks?.[id]) || 0) + 1) })).filter(Boolean),
     insight: run.insight,
-    canReroll: Boolean((run.pendingSealIds?.length || run.lawOffer?.length) && (run.insight > 0 || run.freeRerolls > 0)),
+    canReroll: Boolean((run.pendingSealIds?.length || run.lawOffer?.length) && (
+      run.insight > 0
+      || run.freeRerolls > 0
+      || run.lawOffer?.length && runLawMechanics(run, "freeReroll").length && run.fateRerollUsedOfferKey !== `${run.floor}`
+    )),
     eventOptions: node && ["event", "rest"].includes(node.type) ? (daoTrialEventOptions[node.event] || []) : [],
     nodesCleared: run.nodesCleared,
     score: trialRunScore(state, run),
@@ -10734,7 +11043,7 @@ function publicDaoTrial(state) {
     sealCatalog: daoTrialSeals.map((seal) => ({ ...seal, discovered: state.daoTrial.discoveredSealIds.includes(seal.id) })),
     lawCatalog: daoTrialLaws.map((law) => ({ ...publicTrialLaw(law), discovered: state.daoTrial.discoveredLawIds.includes(law.id) })),
     lawRarities: Object.values(daoTrialLawRarities),
-    lawRarityRates: [{ silver: 33.33, gold: 33.33, diamond: 33.34, maxFloor: null }],
+    lawRarityRates: [{ ...lawRarityRatesForFloor(1), maxFloor: null }],
     lawPity: { ...state.daoTrial.lawPity, disabled: true },
     collection: {
       discoveredLawCount: state.daoTrial.discoveredLawIds.length,
@@ -11031,6 +11340,15 @@ function applyTrialEventEffects(state, run, node, effects = {}) {
     run.pendingSealIds = sealOfferForRun(state, run, daoTrialRouteMap[run.routeId], run.sealNonce);
     run.advanceAfterSeal = true;
   }
+  if (hpEffect < 0 || manaEffect < 0) {
+    for (const mechanic of runLawMechanics(run, "eventCompensation")) {
+      const insight = Math.max(0, Math.floor(Number(mechanic.params.insight) || 0));
+      const defense = Math.max(0, Number(mechanic.params.defense) || 0);
+      run.insight += insight;
+      run.tempDefense = (Number(run.tempDefense) || 0) + defense;
+      run.lastLawEvent = { lawId: mechanic.lawId, lawName: mechanic.lawName, text: `福祸转化：悟机 +${insight}，临时防御 +${Math.round(defense * 100)}%` };
+    }
+  }
 }
 
 function chooseTrialSeal(state, run, sealId) {
@@ -11049,16 +11367,31 @@ function chooseTrialSeal(state, run, sealId) {
 
 function chooseTrialLaw(run, lawId) {
   if (!run.lawOffer?.includes(lawId)) throw new Error("该问道法则不在本次选择中");
+  const unchosenLawIds = run.lawOffer.filter((id) => id !== lawId);
   run.lawStacks ??= Object.fromEntries((run.lawIds || []).map((id) => [id, 1]));
   run.lawStacks[lawId] = Math.min(5, (Number(run.lawStacks[lawId]) || 0) + 1);
   if (!run.lawIds.includes(lawId)) run.lawIds.push(lawId);
+  for (const mechanic of runLawMechanics(run, "residualChoice")) {
+    const gain = Math.max(0, Number(mechanic.params.gain) || 0) * Math.max(1, unchosenLawIds.length);
+    run.tempAttack = (Number(run.tempAttack) || 0) + gain;
+    run.tempDefense = (Number(run.tempDefense) || 0) + gain;
+    run.tempSense = (Number(run.tempSense) || 0) + gain;
+    run.lastLawEvent = { lawId: mechanic.lawId, lawName: mechanic.lawName, text: `吸收 ${unchosenLawIds.length} 份残悟，攻防神识各提高 ${Math.round(gain * 1000) / 10}%` };
+  }
   run.lawOffer = [];
   return { law: daoTrialLawMap[lawId], run };
 }
 
 function rerollTrialLaws(state, run) {
   if (!run.lawOffer?.length) throw new Error("当前没有可重观的问道法则");
-  if (run.freeRerolls > 0) run.freeRerolls -= 1;
+  const fateReroll = runLawMechanics(run, "freeReroll")[0];
+  const offerKey = `${run.floor}`;
+  const fateFree = Boolean(fateReroll && run.fateRerollUsedOfferKey !== offerKey);
+  if (fateFree) {
+    run.fateRerollUsedOfferKey = offerKey;
+    run.insight += Math.max(0, Math.floor(Number(fateReroll.params.insight) || 0));
+    run.lastLawEvent = { lawId: fateReroll.lawId, lawName: fateReroll.lawName, text: "本次法则重观不消耗悟机" };
+  } else if (run.freeRerolls > 0) run.freeRerolls -= 1;
   else {
     if (run.insight <= 0) throw new Error("悟机不足");
     run.insight -= 1;
@@ -11237,6 +11570,17 @@ function resolveTrialBattle(state, run, node) {
   if (node.elite) {
     const eliteScore = Number(daoTrialCycleAffixes.find((item) => item.id === run.affixId)?.effects?.eliteScore || 0);
     run.bonusScore = (Number(run.bonusScore) || 0) + Math.round(100 * eliteScore);
+  }
+  for (const mechanic of runLawMechanics(run)) {
+    if (mechanic.action === "battleMomentum") {
+      const cap = Math.max(0, Number(mechanic.params.cap) || 0);
+      run.tempAttack = Math.min(cap, (Number(run.tempAttack) || 0) + Math.max(0, Number(mechanic.params.gain) || 0));
+      run.lastLawEvent = { lawId: mechanic.lawId, lawName: mechanic.lawName, text: `胜利积累战意，整轮攻击提高至 ${Math.round(run.tempAttack * 1000) / 10}%` };
+    } else if (mechanic.action === "fortune") {
+      run.fortune = Math.min(Math.max(0, Math.floor(Number(mechanic.params.cap) || 0)), (Number(run.fortune) || 0) + Math.max(1, Math.floor(Number(mechanic.params.gain) || 1)));
+      run.bonusScore = (Number(run.bonusScore) || 0) + Math.max(1, Math.floor(Number(mechanic.params.gain) || 1)) * 5;
+      run.lastLawEvent = { lawId: mechanic.lawId, lawName: mechanic.lawName, text: `胜利积累命数至 ${run.fortune} 层` };
+    }
   }
   const buffs = combinedTrialBuffs(run);
   run.combatant.hp = clamp(run.combatant.hp + Math.floor(baseHp * (Number(buffs.postBattleHeal) || 0)), 1, baseHp);

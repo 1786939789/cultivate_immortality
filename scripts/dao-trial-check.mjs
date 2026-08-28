@@ -103,7 +103,7 @@ diamondPityState.daoTrial.lawPity = { withoutGold: 2, withoutDiamond: 12 };
 const diamondPityRun = startDaoTrial(diamondPityState, { routeId: "golden-pass" }).run;
 assert.equal(diamondPityRun.lawOffer.length, 3, "等权随机应提供三项法则");
 assert.equal(new Set(diamondPityRun.lawOffer.map((law) => law.id)).size, diamondPityRun.lawOffer.length, "单次法则选择不得重复");
-assert.deepEqual(diamondPityRun.lawRarityRates, { silver: 33.33, gold: 33.33, diamond: 33.34 }, "法则品质仅作展示分类");
+assert.deepEqual(diamondPityRun.lawRarityRates, { silver: 62.5, gold: 25, diamond: 12.5 }, "品质概率应按等权条目池的实际数量公开");
 assert.equal(diamondPityState.daoTrial.discoveredLawIds.length, 3, "展示的法则应立即进入发现记录");
 assert.deepEqual(diamondPityState.daoTrial.recentLawOfferIds.slice(-3), diamondPityRun.lawOffer.map((law) => law.id), "最近展示记录应保存本次法则选项");
 
