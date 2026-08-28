@@ -18,6 +18,7 @@
     "check:dao-trial": "node scripts/dao-trial-check.mjs",
     "check:dao-trial-routes": "node scripts/dao-trial-route-audit.mjs",
     "check:dao-trial-balance": "node scripts/dao-trial-balance-sim.mjs",
+    "check:dao-trial-expansion": "node scripts/verify-dao-trial-expansion.mjs",
     "check:void-hall": "node scripts/void-hall-check.mjs",
     "check:siege": "node scripts/siege-strategy-check.mjs",
     "build": "vite build",

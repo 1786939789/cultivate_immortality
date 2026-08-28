@@ -276,14 +276,14 @@ const legacyDaoTrialSeals = [
 ];
 
 const daoTrialSealSchoolDefinitions = [
-  { id: "attack", school: "攻伐", tags: ["attack", "tempo"], roots: ["裂岳", "追星", "鸣锋", "断潮", "惊鸿", "燃刃", "逐日", "破军"] },
-  { id: "guard", school: "守御", tags: ["guard", "vitality"], roots: ["镇山", "玄甲", "磐心", "止戈", "承岳", "护元", "定海", "不动"] },
-  { id: "focus", school: "灵息", tags: ["focus", "arcane"], roots: ["纳海", "观星", "澄神", "回澜", "抱月", "听雷", "归元", "灵台"] },
-  { id: "tempo", school: "身法", tags: ["tempo", "focus"], roots: ["掠影", "乘风", "踏月", "逐电", "流云", "无迹", "回雪", "游龙"] },
-  { id: "risk", school: "险道", tags: ["risk", "attack"], roots: ["燃命", "饮血", "蚀骨", "孤注", "逆脉", "焚心", "绝境", "夺寿"] },
-  { id: "vitality", school: "生机", tags: ["vitality", "guard"], roots: ["回春", "青木", "长息", "润脉", "生莲", "复苏", "养元", "不息"] },
-  { id: "element", school: "五行", tags: ["arcane", "element"], roots: ["金生", "木荣", "水衍", "火明", "土镇", "雷转", "冰凝", "风化"] },
-  { id: "bond", school: "同契", tags: ["companion", "vitality"], roots: ["并肩", "照影", "合鸣", "守望", "同尘", "共济", "双曜", "一心"] }
+  { id: "attack", school: "攻伐", tags: ["attack", "tempo"], roots: ["裂岳", "追星", "鸣锋", "断潮", "惊鸿", "燃刃", "逐日", "破军", "斩浪", "凌霄", "碎星", "天锋", "玄刃", "流火", "孤鸿", "问天", "裂阵", "沉锋", "逐影", "回锋", "寒芒", "赤霄", "星陨", "断空", "云裁", "雷刃", "苍锋", "照胆", "无相", "破界", "归锋", "极意"] },
+  { id: "guard", school: "守御", tags: ["guard", "vitality"], roots: ["镇山", "玄甲", "磐心", "止戈", "承岳", "护元", "定海", "不动", "垂岳", "厚土", "金城", "砺壁", "藏锋", "守一", "天垣", "归藏", "铁关", "岩心", "玄门", "固本", "沉岳", "坤元", "石骨", "重阙", "玉垒", "镇魂", "山河", "磐龙", "壁立", "封疆", "地阙", "承天"] },
+  { id: "focus", school: "灵息", tags: ["focus", "arcane"], roots: ["纳海", "观星", "澄神", "回澜", "抱月", "听雷", "归元", "灵台", "引潮", "凝露", "照玄", "静渊", "天听", "息念", "清虚", "映心", "灵泉", "玄观", "太息", "归寂", "涤尘", "星河", "洗髓", "含章", "守静", "澄明", "无垢", "洞真", "返照", "抱朴", "灵犀", "太清"] },
+  { id: "tempo", school: "身法", tags: ["tempo", "focus"], roots: ["掠影", "乘风", "踏月", "逐电", "流云", "无迹", "回雪", "游龙", "听风", "追光", "星步", "云渡", "鹤行", "燕返", "凌波", "幻身", "风痕", "轻鸿", "照影", "折光", "浮空", "回旋", "惊尘", "潜踪", "逸尘", "飞渡", "天游", "踏虚", "流辉", "穿林", "逐浪", "幻步"] },
+  { id: "risk", school: "险道", tags: ["risk", "attack"], roots: ["燃命", "饮血", "蚀骨", "孤注", "逆脉", "焚心", "绝境", "夺寿", "断生", "噬魂", "血契", "残阳", "孤锋", "裂心", "负天", "焚脉", "碎命", "狂骨", "逆火", "葬锋", "血河", "枯荣", "绝念", "沉渊", "伤魂", "忘生", "煞星", "孤城", "断念", "枯血", "天罚", "末途"] },
+  { id: "vitality", school: "生机", tags: ["vitality", "guard"], roots: ["回春", "青木", "长息", "润脉", "生莲", "复苏", "养元", "不息", "甘霖", "暖脉", "春生", "青华", "玉露", "芳洲", "荣枯", "长青", "灵芽", "花生", "沐元", "归暖", "生息", "和光", "温养", "润泽", "扶苏", "木心", "春山", "回澜", "滋荣", "长宁", "清养", "不凋"] },
+  { id: "element", school: "五行", tags: ["arcane", "element"], roots: ["金生", "木荣", "水衍", "火明", "土镇", "雷转", "冰凝", "风化", "金鸣", "木灵", "水镜", "火羽", "土厚", "雷引", "冰魄", "风吟", "金轮", "木华", "水心", "火炼", "土藏", "雷极", "冰河", "风息", "金砂", "木脉", "水月", "火种", "土星", "雷门", "冰尘", "风界"] },
+  { id: "bond", school: "同契", tags: ["companion", "vitality"], roots: ["并肩", "照影", "合鸣", "守望", "同尘", "共济", "双曜", "一心", "携手", "同舟", "相照", "共鸣", "连枝", "并行", "同契", "合璧", "扶携", "相知", "并羽", "同调", "共生", "联心", "照胆", "双行", "同归", "相守", "并济", "合势", "同尘", "携光", "连心", "一念"] }
 ];
 
 const daoTrialSealForms = ["印", "诀", "环", "契"];
@@ -292,7 +292,7 @@ const roundedSealEffect = (value) => Math.round(value * 1000) / 1000;
 function generatedSealEffects(schoolId, index) {
   const variant = index % 8;
   const rank = Math.floor(index / 8);
-  const up = rank * 0.01;
+  const up = Math.min(0.07, rank * 0.01);
   const profiles = {
     attack: [
       { attack: 0.07 + up },
@@ -398,7 +398,7 @@ function generatedSealText(effects) {
 
 const expandedDaoTrialSeals = daoTrialSealSchoolDefinitions.flatMap((definition) => {
   const existingCount = legacyDaoTrialSeals.filter((seal) => seal.school === definition.school).length;
-  return Array.from({ length: 32 - existingCount }, (_, offset) => {
+  return Array.from({ length: 128 - existingCount }, (_, offset) => {
     const index = existingCount + offset;
     const root = definition.roots[Math.floor(index / 4)];
     const form = daoTrialSealForms[index % daoTrialSealForms.length];
@@ -528,7 +528,53 @@ const expandedDaoTrialLaws = [
   { id: "rewrite-fate-law", name: "改命一掷", school: "命数经营", rarity: "diamond", tags: ["fate", "risk"], trigger: "runStart", text: "攻防神识提高 8%，胜后恢复气血法力，并提高风险得分。", effects: { attack: 0.08, defense: 0.08, divineSense: 0.08, postBattleHeal: 0.08, postBattleMana: 0.08, scoreRisk: 0.08 } }
 ];
 
-export const daoTrialLaws = [...legacyDaoTrialLaws, ...expandedDaoTrialLaws];
+const generatedLawProfiles = {
+  "攻伐连锁": [
+    ["battleStart", { attack: 0.05 }], ["roundStart", { divineSense: 0.04, attack: 0.03 }], ["onSkill", { skillPower: 0.07 }], ["afterBattle", { nextBattleAttack: 0.06 }]
+  ],
+  "技能循环": [
+    ["runStart", { maxMana: 0.08 }], ["onSkill", { cooldown: -1 }], ["afterBattle", { postBattleMana: 0.06 }], ["onSkillCount", { freeSkillEvery: 4 }]
+  ],
+  "守御反击": [
+    ["runStart", { defense: 0.06 }], ["battleStart", { rootResist: 0.16 }], ["onTakeDamage", { reflectCharge: 0.12 }], ["roundStart", { noHitShield: 0.1 }]
+  ],
+  "生机转化": [
+    ["runStart", { maxHp: 0.07 }], ["onHeal", { healing: 0.12 }], ["afterBattle", { postBattleHeal: 0.06 }], ["onLethal", { lethalGuard: true }]
+  ],
+  "风险流派": [
+    ["onLowHp", { lowHpAttack: 0.1, lowHpSense: 0.06 }], ["runStart", { attack: 0.08, maxHp: -0.03 }], ["onStatus", { statusPower: 0.12 }], ["runStart", { scoreRisk: 0.06 }]
+  ],
+  "同行共鸣": [
+    ["runStart", { companion: 0.1 }], ["onCompanionAssist", { companionPower: 0.16 }], ["onCompanionAssist", { companionFrequency: -1 }], ["onCompanionSkill", { companionCopy: 0.18 }]
+  ],
+  "五行衍化": [
+    ["battleStart", { rootResist: 0.2 }], ["onStatus", { statusPower: 0.1 }], ["afterBattle", { postBattleMana: 0.05 }], ["runStart", { attack: 0.04, defense: 0.04 }]
+  ],
+  "命数经营": [
+    ["onRest", { restHp: 0.08 }], ["onEvent", { eventLossResist: 0.16 }], ["afterBattle", { postBattleHeal: 0.04, postBattleMana: 0.04 }], ["runStart", { scoreRisk: 0.08 }]
+  ]
+};
+const lawSchoolIds = { "攻伐连锁": "attack", "技能循环": "focus", "守御反击": "guard", "生机转化": "vitality", "风险流派": "risk", "同行共鸣": "bond", "五行衍化": "element", "命数经营": "fate" };
+
+const generatedDaoTrialLaws = Object.entries(generatedLawProfiles).flatMap(([school, profiles]) => {
+  const existing = legacyDaoTrialLaws.filter((law) => law.school === school).length + expandedDaoTrialLaws.filter((law) => law.school === school).length;
+  const needed = Math.max(0, 32 - existing);
+  return Array.from({ length: needed }, (_, offset) => {
+    const index = existing + offset;
+    const [trigger, baseEffects] = profiles[index % profiles.length];
+    const tier = Math.floor(index / profiles.length);
+    const effects = Object.fromEntries(Object.entries(baseEffects).map(([key, value]) => [key, typeof value === "boolean" ? value : Math.round((Number(value) + Math.min(0.04, tier * 0.004)) * 1000) / 1000]));
+    const rarity = index >= 24 ? "diamond" : index >= 16 ? "gold" : "silver";
+    return {
+      id: `expanded-law-${lawSchoolIds[school]}-${index + 1}`,
+      name: `${school}${["天机", "玄变", "归藏", "问真", "太初", "无极", "鸿蒙", "极境"][tier]}${index % 4 + 1}`,
+      school, rarity, tags: school === "命数经营" ? ["fate", "vitality"] : school === "同行共鸣" ? ["companion", "vitality"] : ["arcane", "tempo"], trigger,
+      text: `获得${school}的特殊加持（第${tier + 1}阶）。`, effects
+    };
+  });
+});
+
+export const daoTrialLaws = [...legacyDaoTrialLaws, ...expandedDaoTrialLaws, ...generatedDaoTrialLaws];
 
 export const daoTrialLawMap = Object.fromEntries(daoTrialLaws.map((law) => [law.id, law]));
 

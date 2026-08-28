@@ -8461,7 +8461,7 @@ const encounterMinGapDays = 2;
 const encounterMaxGapDays = 4;
 const encounterActiveChainLimit = 2;
 const encounterFamilyCooldownDays = 30;
-const daoTrialStateVersion = 6;
+const daoTrialStateVersion = 7;
 const daoTrialHistoryLimit = 104;
 const daoTrialDailyTicketGrant = 1;
 const daoTrialTicketCap = 2;
@@ -9418,6 +9418,9 @@ function ensureDaoTrialState(state) {
       activeRun.affixId ||= daoTrialAffixForCycle(activeRun.cycle || state.daoTrial.cycle).id;
       activeRun.sealIds = [...new Set(activeRun.sealIds || [])].filter((id) => daoTrialSealMap[id]);
       activeRun.pendingSealIds = [...new Set(activeRun.pendingSealIds || [])].filter((id) => daoTrialSealMap[id]);
+      activeRun.sealStacks = Object.fromEntries(Object.entries(activeRun.sealStacks || Object.fromEntries(activeRun.sealIds.map((id) => [id, 1])))
+        .filter(([id]) => daoTrialSealMap[id])
+        .map(([id, count]) => [id, clamp(Math.floor(Number(count) || 1), 1, 5)]));
       activeRun.nodeIndex = clamp(Math.floor(Number(activeRun.nodeIndex) || 0), 0, activeRun.nodes.length - 1);
       activeRun.nodesCleared = clamp(Math.floor(Number(activeRun.nodesCleared) || 0), 0, activeRun.nodes.length);
       activeRun.floor = Math.max(1, Math.floor(Number(activeRun.floor) || activeRun.nodeIndex + 1));
@@ -9429,6 +9432,9 @@ function ensureDaoTrialState(state) {
       for (const key of ["battles", "rounds", "damageDealt", "damageTaken", "healing", "shields", "skillCasts", "manaSpent", "lawTriggers"]) activeRun.combatStats[key] = Math.max(0, Number(activeRun.combatStats[key]) || 0);
       activeRun.lawIds = [...new Set((activeRun.lawIds || []).filter((id) => daoTrialLawMap[id]))];
       activeRun.lawOffer = [...new Set((activeRun.lawOffer || []).filter((id) => daoTrialLawMap[id]))];
+      activeRun.lawStacks = Object.fromEntries(Object.entries(activeRun.lawStacks || Object.fromEntries(activeRun.lawIds.map((id) => [id, 1])))
+        .filter(([id]) => daoTrialLawMap[id])
+        .map(([id, count]) => [id, clamp(Math.floor(Number(count) || 1), 1, 5)]));
       activeRun.offeredLawIds = [...new Set((activeRun.offeredLawIds || []).filter((id) => daoTrialLawMap[id]))];
       activeRun.offeredSealIds = [...new Set((activeRun.offeredSealIds || []).filter((id) => daoTrialSealMap[id]))];
       activeRun.lawNonce = Math.max(0, Math.floor(Number(activeRun.lawNonce) || 0));
@@ -9637,43 +9643,28 @@ function rankedOfferCandidate(items, seed, weightOf) {
   ) || a.id.localeCompare(b.id))[0] || null;
 }
 
-function sealOfferForRun(state, run, route, nonce = 0) {
-  const owned = new Set(run.sealIds || []);
+export function sampleDaoTrialEqualOffer(kind, seedPrefix, count = 3) {
+  const items = kind === "law" ? daoTrialLaws : kind === "seal" ? daoTrialSeals : [];
+  if (!items.length) throw new Error("未知的问道候选类型");
   const selected = new Set();
-  const recent = new Set(state.daoTrial.recentSealOfferIds || []);
-  const discovered = new Set(state.daoTrial.discoveredSealIds || []);
-  const affix = daoTrialCycleAffixes.find((item) => item.id === run.affixId);
-  const preferredTag = affix?.effects?.sealTag || "";
-  const suppressedRouteTag = affix?.effects?.noRouteBonus || "";
-  const ownedSeals = [...owned].map((id) => daoTrialSealMap[id]).filter(Boolean);
-  const ownedTags = new Set(ownedSeals.flatMap((seal) => seal.tags || []));
-  const partnerIds = new Set(daoTrialSealSynergies.flatMap((synergy) => {
-    const ownedInPair = synergy.seals.filter((id) => owned.has(id));
-    return ownedInPair.length === 1 ? synergy.seals.filter((id) => !owned.has(id)) : [];
-  }));
-  const slots = ["route", "build", "wildcard"];
-  for (const slot of slots) {
-    const candidates = daoTrialSeals.filter((seal) => !owned.has(seal.id) && !selected.has(seal.id));
-    const picked = rankedOfferCandidate(candidates, `${run.seed}|seal|${run.nodeIndex}|${nonce}|${slot}`, (seal) => {
-      const tags = seal.tags || [];
-      const routeMatches = tags.filter((tag) => route.sealTags.includes(tag) && tag !== suppressedRouteTag).length;
-      const buildMatches = tags.filter((tag) => ownedTags.has(tag)).length;
-      let weight = recent.has(seal.id) ? 0.2 : 1;
-      if (!discovered.has(seal.id)) weight *= 1.8;
-      if (preferredTag && tags.includes(preferredTag)) weight *= 1.35;
-      if (slot === "route") weight *= 1 + routeMatches * 1.8;
-      if (slot === "build") weight *= 1 + buildMatches * 1.25 + (partnerIds.has(seal.id) ? 2.5 : 0);
-      return weight;
-    });
+  for (let slot = 0; slot < Math.max(1, Math.floor(Number(count) || 3)); slot += 1) {
+    const candidates = items.filter((item) => !selected.has(item.id));
+    const picked = rankedOfferCandidate(candidates, `${seedPrefix}|${slot}`, () => 1);
     if (picked) selected.add(picked.id);
   }
-  const offer = [...selected];
+  return [...selected];
+}
+
+function sealOfferForRun(state, run, route, nonce = 0) {
+  const offer = sampleDaoTrialEqualOffer("seal", `${run.seed}|seal|${run.nodeIndex}|${nonce}`);
   rememberDaoTrialOffer(state, run, offer, "seal");
   return offer;
 }
 
 function lawRarityRatesForFloor(floor) {
-  return daoTrialLawRarityRates.find((entry) => floor <= entry.maxFloor) || daoTrialLawRarityRates.at(-1);
+  // All law entries now share one uniform draw pool. Rarity remains a label
+  // and effect tier, but no longer changes appearance probability.
+  return { silver: 33.33, gold: 33.33, diamond: 33.34 };
 }
 
 function rolledLawRarity(run, nonce, slot, rates, diamondSelected) {
@@ -9684,57 +9675,27 @@ function rolledLawRarity(run, nonce, slot, rates, diamondSelected) {
 }
 
 function lawOfferForRun(state, run, route, nonce = 0) {
-  const owned = new Set(run.lawIds || []);
-  const selected = new Set();
-  const recent = new Set(state.daoTrial.recentLawOfferIds || []);
-  const discovered = new Set(state.daoTrial.discoveredLawIds || []);
-  const routeTags = route?.sealTags || [];
   const rates = lawRarityRatesForFloor(Math.max(1, Number(run.floor) || 1));
-  const pity = state.daoTrial.lawPity || { withoutGold: 0, withoutDiamond: 0 };
-  const forceDiamond = !run.practice && pity.withoutDiamond >= 12;
-  const forceGold = !forceDiamond && !run.practice && pity.withoutGold >= 2;
-  let diamondSelected = false;
-  for (let slot = 0; slot < 3; slot += 1) {
-    let rarity = slot === 0 && forceDiamond
-      ? "diamond"
-      : slot === 0 && forceGold
-        ? "gold"
-        : rolledLawRarity(run, nonce, slot, rates, diamondSelected);
-    if (rarity === "diamond" && diamondSelected) rarity = "gold";
-    let candidates = daoTrialLaws.filter((law) => law.rarity === rarity && !owned.has(law.id) && !selected.has(law.id));
-    if (!candidates.length) candidates = daoTrialLaws.filter((law) => !owned.has(law.id) && !selected.has(law.id));
-    const picked = rankedOfferCandidate(candidates, `${run.seed}|law|${run.floor}|${nonce}|${slot}`, (law) => {
-      const routeMatches = (law.tags || []).filter((tag) => routeTags.includes(tag)).length;
-      let weight = recent.has(law.id) ? 0.2 : 1;
-      if (!discovered.has(law.id)) weight *= 1.8;
-      weight *= 1 + routeMatches * (Number(run.masteryLevel) >= 6 ? 1.45 : 1);
-      if (run.companion && law.tags?.includes("companion")) weight *= 1.8;
-      if (!run.companion && law.tags?.includes("companion") && !law.effects?.maxHpWithoutCompanion) weight *= 0.45;
-      return weight;
-    });
-    if (picked) {
-      selected.add(picked.id);
-      if (picked.rarity === "diamond") diamondSelected = true;
-    }
-  }
-  const offer = [...selected];
+  const offer = sampleDaoTrialEqualOffer("law", `${run.seed}|law|${run.floor}|${nonce}`);
   run.lastLawRarityRates = { silver: rates.silver, gold: rates.gold, diamond: rates.diamond };
   rememberDaoTrialOffer(state, run, offer, "law");
-  if (!run.practice) {
-    const rarities = new Set(offer.map((id) => daoTrialLawMap[id]?.rarity));
-    pity.withoutGold = rarities.has("gold") || rarities.has("diamond") ? 0 : pity.withoutGold + 1;
-    pity.withoutDiamond = rarities.has("diamond") ? 0 : pity.withoutDiamond + 1;
-    state.daoTrial.lawPity = pity;
-  }
   return offer;
+}
+
+function trialStackMultiplier(level) {
+  const extras = [0, 0.6, 0.4, 0.25, 0.15];
+  const count = Math.max(1, Math.min(5, Math.floor(Number(level) || 1)));
+  return 1 + extras.slice(1, count).reduce((sum, value) => sum + value, 0);
 }
 
 function combinedTrialBuffs(run) {
   const buffs = {};
   const lawSources = {};
-  for (const sealId of run.sealIds || []) {
+  const sealStacks = { ...Object.fromEntries((run.sealIds || []).map((id) => [id, 1])), ...(run.sealStacks || {}) };
+  for (const sealId of Object.keys(sealStacks)) {
     const effects = daoTrialSealMap[sealId]?.effects || {};
-    for (const [key, value] of Object.entries(effects)) buffs[key] = (buffs[key] || 0) + Number(value || 0);
+    const multiplier = trialStackMultiplier(sealStacks[sealId]);
+    for (const [key, value] of Object.entries(effects)) buffs[key] = (buffs[key] || 0) + Number(value || 0) * multiplier;
   }
   for (const synergy of activeTrialSynergies(run)) {
     for (const [key, value] of Object.entries(synergy.effects || {})) buffs[key] = (buffs[key] || 0) + Number(value || 0);
@@ -9759,17 +9720,19 @@ function combinedTrialBuffs(run) {
   buffs.divineSense = (buffs.divineSense || 0) + (Number(run.tempSense) || 0);
   buffs.attack = (buffs.attack || 0) + (Number(run.tempAttack) || 0);
   buffs.defense = (buffs.defense || 0) + (Number(run.tempDefense) || 0);
-  for (const lawId of run.lawIds || []) {
+  const lawStacks = { ...Object.fromEntries((run.lawIds || []).map((id) => [id, 1])), ...(run.lawStacks || {}) };
+  for (const lawId of Object.keys(lawStacks)) {
     const law = daoTrialLawMap[lawId];
     const effects = law?.effects || {};
     for (const [key, value] of Object.entries(effects)) {
       if (!lawSources[key] || Math.abs(Number(value) || 0) > Math.abs(Number(lawSources[key].value) || 0)) {
         lawSources[key] = { id: lawId, name: law?.name || lawId, value };
       }
+      const multiplier = trialStackMultiplier(lawStacks[lawId]);
       if (typeof value === "boolean") {
         if (value) buffs[key] = true;
       } else {
-        buffs[key] = (buffs[key] || 0) + Number(value || 0);
+        buffs[key] = (buffs[key] || 0) + Number(value || 0) * multiplier;
       }
     }
   }
@@ -9782,9 +9745,10 @@ function combinedTrialBuffs(run) {
 
 function activeTrialSynergies(run) {
   const exact = daoTrialSealSynergies.filter((synergy) => synergy.seals.every((id) => run?.sealIds?.includes(id)));
+  const stackMap = { ...Object.fromEntries((run?.sealIds || []).map((id) => [id, 1])), ...(run?.sealStacks || {}) };
   const counts = (run?.sealIds || []).reduce((result, id) => {
     const school = daoTrialSealMap[id]?.school;
-    if (school) result[school] = (result[school] || 0) + 1;
+    if (school) result[school] = (result[school] || 0) + Math.max(1, Math.min(5, Math.floor(Number(stackMap[id]) || 1)));
     return result;
   }, {});
   const school = daoTrialSealSchoolResonances.filter((resonance) => (counts[resonance.school] || 0) >= resonance.threshold);
@@ -9793,8 +9757,10 @@ function activeTrialSynergies(run) {
 
 function trialSealResonanceProgress(run) {
   const schools = [...new Set(daoTrialSeals.map((seal) => seal.school))];
+  const stackMap = { ...Object.fromEntries((run?.sealIds || []).map((id) => [id, 1])), ...(run?.sealStacks || {}) };
   return schools.map((school) => {
-    const count = (run?.sealIds || []).filter((id) => daoTrialSealMap[id]?.school === school).length;
+    const count = (run?.sealIds || []).filter((id) => daoTrialSealMap[id]?.school === school)
+      .reduce((sum, id) => sum + Math.max(1, Math.min(5, Math.floor(Number(stackMap[id]) || 1))), 0);
     const activeThreshold = [2, 4, 6].filter((threshold) => count >= threshold).at(-1) || 0;
     const nextThreshold = [2, 4, 6].find((threshold) => count < threshold) || 6;
     return { school, count, activeThreshold, nextThreshold, complete: count >= 6 };
@@ -10385,7 +10351,9 @@ function trialRunSummary(state, run) {
     nodesCleared: run.nodesCleared,
     floor: Math.max(0, Number(run.maxFloor) || run.nodesCleared),
     sealIds: [...(run.sealIds || [])],
+    sealStacks: { ...(run.sealStacks || {}) },
     lawIds: [...(run.lawIds || [])],
+    lawStacks: { ...(run.lawStacks || {}) },
     synergyIds: activeTrialSynergies(run).map((synergy) => synergy.id),
     lastReplayId: run.lastReplayId || "",
     score: trialRunScore(state, run, run.success),
@@ -10620,13 +10588,13 @@ function publicTrialRun(state, run) {
     statComparisons,
     combatModifiers,
     companion: run.companion,
-    seals: run.sealIds.map((id) => daoTrialSealMap[id]).filter(Boolean),
-    laws: (run.lawIds || []).map((id) => publicTrialLaw(daoTrialLawMap[id])).filter(Boolean),
-    lawOffer: (run.lawOffer || []).map((id) => publicTrialLaw(daoTrialLawMap[id])).filter(Boolean),
+    seals: run.sealIds.map((id) => ({ ...daoTrialSealMap[id], stack: Number(run.sealStacks?.[id]) || 1 })).filter(Boolean),
+    laws: (run.lawIds || []).map((id) => ({ ...publicTrialLaw(daoTrialLawMap[id]), stack: Number(run.lawStacks?.[id]) || 1 })).filter(Boolean),
+    lawOffer: (run.lawOffer || []).map((id) => ({ ...publicTrialLaw(daoTrialLawMap[id]), stack: Math.min(5, (Number(run.lawStacks?.[id]) || 0) + 1) })).filter(Boolean),
     lawRarityRates: run.lastLawRarityRates || lawRarityRatesForFloor(Math.max(1, Number(run.floor) || 1)),
     synergies: activeTrialSynergies(run),
     resonanceProgress: trialSealResonanceProgress(run),
-    sealOffer: (run.pendingSealIds || []).map((id) => daoTrialSealMap[id]).filter(Boolean),
+    sealOffer: (run.pendingSealIds || []).map((id) => ({ ...daoTrialSealMap[id], stack: Math.min(5, (Number(run.sealStacks?.[id]) || 0) + 1) })).filter(Boolean),
     insight: run.insight,
     canReroll: Boolean((run.pendingSealIds?.length || run.lawOffer?.length) && (run.insight > 0 || run.freeRerolls > 0)),
     eventOptions: node && ["event", "rest"].includes(node.type) ? (daoTrialEventOptions[node.event] || []) : [],
@@ -10698,7 +10666,7 @@ function publicDaoTrial(state) {
     { id: "clears-12", label: "十二次问心", current: goalState.routeClears, target: 12 },
     { id: "perfect-6", label: "六次从容问心", current: goalState.perfectRuns, target: 6 },
     { id: "deepest-20", label: "问天二十层", current: goalState.deepestFloor, target: 20 },
-    { id: "laws-64", label: "参悟六十四法则", current: goalState.lawsSeen.length, target: daoTrialLaws.length },
+    { id: "laws-256", label: "参悟二百五十六法则", current: goalState.lawsSeen.length, target: daoTrialLaws.length },
     { id: "companions-6", label: "六友同行", current: goalState.companionIds.length, target: 6 },
     { id: "affixes-16", label: "遍历十六异象", current: goalState.affixesSeen.length, target: daoTrialCycleAffixes.length }
   ].map((goal) => ({ ...goal, completed: goal.current >= goal.target }));
@@ -10766,8 +10734,8 @@ function publicDaoTrial(state) {
     sealCatalog: daoTrialSeals.map((seal) => ({ ...seal, discovered: state.daoTrial.discoveredSealIds.includes(seal.id) })),
     lawCatalog: daoTrialLaws.map((law) => ({ ...publicTrialLaw(law), discovered: state.daoTrial.discoveredLawIds.includes(law.id) })),
     lawRarities: Object.values(daoTrialLawRarities),
-    lawRarityRates: daoTrialLawRarityRates.map((entry) => ({ ...entry, maxFloor: Number.isFinite(entry.maxFloor) ? entry.maxFloor : null })),
-    lawPity: { ...state.daoTrial.lawPity, goldGuaranteeAt: 2, diamondGuaranteeAt: 12 },
+    lawRarityRates: [{ silver: 33.33, gold: 33.33, diamond: 33.34, maxFloor: null }],
+    lawPity: { ...state.daoTrial.lawPity, disabled: true },
     collection: {
       discoveredLawCount: state.daoTrial.discoveredLawIds.length,
       discoveredSealCount: state.daoTrial.discoveredSealIds.length,
@@ -10979,11 +10947,13 @@ export function startDaoTrial(state, payload = {}) {
     checkpointPending: false,
     nodesCleared: 0,
     sealIds: [],
+    sealStacks: {},
     pendingSealIds: [],
     sealNonce: 0,
     masteryLevel: mastery.level,
     insight: 1 + Math.max(0, Math.floor(Number(affix.effects?.initialInsight) || 0)) + (mastery.level >= 2 ? 1 : 0) + (firstExploreApplied ? firstExplore.insight : 0),
     lawIds: [],
+    lawStacks: {},
     lawOffer: [],
     lawNonce: 0,
     offeredLawIds: [],
@@ -11065,6 +11035,8 @@ function applyTrialEventEffects(state, run, node, effects = {}) {
 
 function chooseTrialSeal(state, run, sealId) {
   if (!run.pendingSealIds.includes(sealId)) throw new Error("该道印不在本次选择中");
+  run.sealStacks ??= Object.fromEntries((run.sealIds || []).map((id) => [id, 1]));
+  run.sealStacks[sealId] = Math.min(5, (Number(run.sealStacks[sealId]) || 0) + 1);
   if (!run.sealIds.includes(sealId)) run.sealIds.push(sealId);
   run.pendingSealIds = [];
   if (run.advanceAfterSeal) {
@@ -11077,6 +11049,8 @@ function chooseTrialSeal(state, run, sealId) {
 
 function chooseTrialLaw(run, lawId) {
   if (!run.lawOffer?.includes(lawId)) throw new Error("该问道法则不在本次选择中");
+  run.lawStacks ??= Object.fromEntries((run.lawIds || []).map((id) => [id, 1]));
+  run.lawStacks[lawId] = Math.min(5, (Number(run.lawStacks[lawId]) || 0) + 1);
   if (!run.lawIds.includes(lawId)) run.lawIds.push(lawId);
   run.lawOffer = [];
   return { law: daoTrialLawMap[lawId], run };
