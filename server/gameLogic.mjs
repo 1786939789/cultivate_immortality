@@ -629,8 +629,8 @@ function applyDamage(entity, amount, state) {
   return damage;
 }
 
-function randomSkillId() {
-  return pick(combatSkills).id;
+function randomSkillId(random = Math.random) {
+  return combatSkills[Math.floor(random() * combatSkills.length) % combatSkills.length].id;
 }
 
 function findSkill(skillId) {
@@ -3452,6 +3452,10 @@ function stageIndexOfRealm(realm) {
   return clamp(Math.floor((realm || 0) / 10), 0, realmStages.length - 1);
 }
 
+function monsterSkillRankForRealm(realm) {
+  return clamp(stageIndexOfRealm(realm) + 1, 1, maxSkillRank);
+}
+
 function capRealm(realm) {
   return clamp(Math.floor(realm || 0), 0, realms.length - 1);
 }
@@ -3499,7 +3503,7 @@ function applyMonsterArchetypeStats(stats, archetype) {
   };
 }
 
-function makeMonster(name, realm, rootKey, intensity = 1, archetypeId = "", random = Math.random) {
+function makeMonster(name, realm, rootKey, intensity = 1, archetypeId = "", random = Math.random, options = {}) {
   const stats = rollBirthStats(capRealm(realm), random);
   const monsterRootKey = rootKey || pick(roots).key;
   const monsterRoot = roots.find((root) => root.key === monsterRootKey) || roots[0];
@@ -3532,8 +3536,9 @@ function makeMonster(name, realm, rootKey, intensity = 1, archetypeId = "", rand
     archetype: archetype.id,
     archetypeLabel: archetype.label,
     archetypeText: archetype.text,
-    skillId: monsterSkillForArchetype(name, archetype)
+    skillId: options.unrestrictedSkills ? randomSkillId(random) : monsterSkillForArchetype(name, archetype)
   };
+  monster.skillRanks = { [monster.skillId]: clamp(Math.floor(Number(options.skillRank) || monsterSkillRankForRealm(realm)), 1, maxSkillRank) };
   applyRootSet(monster);
   if (monster.primaryRootKey === "heaven") monster.root.bonus = 0;
   monster.roots = [{ ...monster.root }];
@@ -10201,6 +10206,35 @@ function selectTrialOpponent(state, run, node, usedIds) {
       || a.npc.id.localeCompare(b.npc.id))[0]?.npc || null;
 }
 
+function trialMonsterRootOrder(seed) {
+  const order = roots.map((root) => root.key);
+  const random = seededBattleRandom(`${seed}|monster-root-order`);
+  for (let index = order.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(random() * (index + 1));
+    [order[index], order[swapIndex]] = [order[swapIndex], order[index]];
+  }
+  return order;
+}
+
+function trialMonsterRootKey(run, monsterOrdinal) {
+  const order = trialMonsterRootOrder(run.seed);
+  return order[(Math.max(1, Math.floor(Number(monsterOrdinal) || 1)) - 1) % order.length] || roots[0].key;
+}
+
+function ensureTrialMonsterSnapshotFields(snapshot, run, floor) {
+  if (!snapshot || snapshot.kind !== "monster") return snapshot;
+  const rank = monsterSkillRankForRealm(snapshot.realm);
+  if (!snapshot.skillId || !combatSkills.some((skill) => skill.id === snapshot.skillId)) {
+    const random = seededBattleRandom(`${run.seed}|monster|${floor}|legacy-skill`);
+    snapshot.skillId = randomSkillId(random);
+  }
+  snapshot.skillRanks = snapshot.skillRanks && typeof snapshot.skillRanks === "object" && !Array.isArray(snapshot.skillRanks)
+    ? snapshot.skillRanks
+    : {};
+  if (!Number.isFinite(Number(snapshot.skillRanks[snapshot.skillId]))) snapshot.skillRanks[snapshot.skillId] = rank;
+  return snapshot;
+}
+
 function ensureTrialOpponents(state, run) {
   if (!run) return run;
   run.opponentSnapshots = run.opponentSnapshots && typeof run.opponentSnapshots === "object" ? run.opponentSnapshots : {};
@@ -10213,6 +10247,7 @@ function ensureTrialOpponents(state, run) {
     let snapshot = run.opponentSnapshots[key];
     if (snapshot?.kind === "npc" && (!snapshot.npcId || snapshot.npcId === companionId || usedIds.has(snapshot.npcId) || !state.npcs.some((npc) => npc.id === snapshot.npcId))) snapshot = null;
     if (snapshot?.kind === "monster" && !snapshot.id) snapshot = null;
+    snapshot = ensureTrialMonsterSnapshotFields(snapshot, run, floor);
     const recentKinds = priorKinds.slice(-2);
     const mustUseNpc = floor % 5 === 0 && !priorKinds.slice(-2).includes("npc");
     const forcedKind = recentKinds.length === 2 && recentKinds[0] === recentKinds[1] ? (recentKinds[0] === "npc" ? "monster" : "npc") : null;
@@ -10243,7 +10278,16 @@ function ensureTrialOpponents(state, run) {
         const route = daoTrialRouteMap[run.routeId];
         const random = seededBattleRandom(monsterSeed);
         const intensity = 0.82 + Math.min(0.75, floor * 0.045) + (node.elite ? 0.12 : 0) + (node.boss ? 0.2 : 0);
-        const monster = makeMonster(`${route?.name || "秘境"}·${node.monster || node.name}`, state.player.realm, route?.rootKey, intensity, "", random);
+        const monsterOrdinal = priorKinds.filter((kind) => kind === "monster").length + 1;
+        const monster = makeMonster(
+          `${route?.name || "秘境"}·${node.monster || node.name}`,
+          state.player.realm,
+          trialMonsterRootKey(run, monsterOrdinal),
+          intensity,
+          "",
+          random,
+          { unrestrictedSkills: true, skillRank: monsterSkillRankForRealm(state.player.realm) }
+        );
         const rolledStats = effectiveCombatStats(monster, state, { includeDailyRootFortune: false });
         const playerPower = Math.max(1, Number(run.worldSnapshot?.playerPower) || powerOf(state.player, state, { includeDailyRootFortune: false }));
         const monsterTarget = playerPower * trialEnemyPowerFactor(node, floor, run.seed) * clamp(Number(route?.opponentScale) || 1, 0.95, 1.05);
@@ -10261,6 +10305,7 @@ function ensureTrialOpponents(state, run) {
           roots: (monster.roots || []).map((root) => ({ ...root })),
           primaryRootKey: monster.primaryRootKey,
           skillId: monster.skillId,
+          skillRanks: { ...(monster.skillRanks || {}) },
           archetype: monster.archetype,
           archetypeLabel: monster.archetypeLabel,
           archetypeText: monster.archetypeText,

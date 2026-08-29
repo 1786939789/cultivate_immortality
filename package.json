@@ -22,6 +22,7 @@
     "check:dao-trial-full": "node scripts/verify-dao-trial-full.mjs",
     "check:dao-trial-hex": "node scripts/verify-dao-trial-hex-laws.mjs",
     "check:dao-trial-exhaustive": "node scripts/dao-trial-exhaustive-audit.mjs",
+    "check:dao-trial-monsters": "node scripts/dao-trial-monster-check.mjs",
     "check:void-hall": "node scripts/void-hall-check.mjs",
     "check:siege": "node scripts/siege-strategy-check.mjs",
     "build": "vite build",

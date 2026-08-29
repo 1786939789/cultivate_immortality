@@ -1997,7 +1997,7 @@
                       <div class="dao-trial-enemy-head">
                         <MonsterEmblem v-if="activeDaoTrialRun.opponentPreview.encounterKind === 'monster'" :monster="activeDaoTrialRun.opponentPreview" size="lg" />
                         <CharacterPortrait v-else :person="activeDaoTrialRun.opponentPreview.person" size="lg" />
-                        <span><small>{{ activeDaoTrialRun.opponentPreview.kind }} · {{ activeDaoTrialRun.opponentPreview.realm }} · {{ activeDaoTrialRun.opponentPreview.sect }}</small><strong>{{ activeDaoTrialRun.opponentPreview.name }}</strong><em>{{ activeDaoTrialRun.opponentPreview.rootName }} · {{ activeDaoTrialRun.opponentPreview.skill }}<template v-if="activeDaoTrialRun.opponentPreview.archetypeLabel"> · {{ activeDaoTrialRun.opponentPreview.archetypeLabel }}</template></em></span>
+                        <span><small>{{ activeDaoTrialRun.opponentPreview.kind }} · {{ activeDaoTrialRun.opponentPreview.realm }} · {{ activeDaoTrialRun.opponentPreview.sect }}</small><strong>{{ activeDaoTrialRun.opponentPreview.name }}</strong><em>{{ activeDaoTrialRun.opponentPreview.rootName }} · {{ activeDaoTrialRun.opponentPreview.skill }} · {{ skillRankText(activeDaoTrialRun.opponentPreview.skillRank) }}<template v-if="activeDaoTrialRun.opponentPreview.archetypeLabel"> · {{ activeDaoTrialRun.opponentPreview.archetypeLabel }}</template></em></span>
                         <b :class="`threat-${activeDaoTrialRun.opponentPreview.threat.key}`">{{ activeDaoTrialRun.opponentPreview.threat.label }}</b>
                       </div>
                       <div class="dao-trial-power-matchup" aria-label="双方战力对比">
