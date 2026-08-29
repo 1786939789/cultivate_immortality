@@ -2096,7 +2096,7 @@
               </div>
               <div class="grid dao-trial-lower-grid">
                 <section class="panel dao-trial-year-goals dao-trial-archive-section"><div class="section-head compact"><div><h3>年度问道志</h3><p>保留周期最佳成绩、路线精通和长期目标。</p></div><span class="tag">第 {{ daoTrialState.yearGoals?.year || 1 }} 年</span></div><div class="dao-trial-goal-grid"><div v-for="goal in daoTrialState.yearGoals?.goals || []" :key="goal.id" :class="{ complete: goal.completed }"><span><b>{{ goal.label }}</b><small>{{ Math.min(goal.current, goal.target) }} / {{ goal.target }}</small></span><i><em :style="{ width: `${Math.min(100, (goal.current / Math.max(1, goal.target)) * 100)}%` }"></em></i></div></div></section>
-                <section class="panel dao-trial-history dao-trial-archive-section"><div class="section-head compact"><div><h3>最近游历</h3><p>正式游历和演练都会记录，奖励只在正式游历结算。</p></div></div><div class="timeline detail-scroll"><button v-for="record in daoTrialState.history" :key="record.id" class="event event-button" :class="{ gold: record.success, bad: !record.success, replayable: record.lastReplayId }" type="button" :disabled="!record.lastReplayId" @click="openEncounterReplay({ replayId: record.lastReplayId })"><strong>第 {{ record.cycle }} 期 · {{ record.routeName }} · {{ record.result }}</strong><span>最深 {{ record.floor || record.nodesCleared }} 层 · {{ record.score }} 分</span><small>{{ daoTrialScoreBreakdownText(record) }}</small><small>{{ record.practice ? '演练' : `正式第 ${record.attempt} 次` }} · {{ daoTrialRewardText(record) }}</small></button><div v-if="!daoTrialState.history?.length" class="empty">尚未留下游历记录。</div></div></section>
+                <section class="panel dao-trial-history dao-trial-archive-section"><div class="section-head compact"><div><h3>最近游历</h3><p>正式游历和演练都会记录，奖励只在正式游历结算。</p></div></div><div class="timeline detail-scroll"><button v-for="record in daoTrialState.history" :key="record.id" class="event event-button" :class="{ gold: record.success, bad: !record.success, replayable: record.lastReplayId }" type="button" :disabled="!record.lastReplayId" @click="openEncounterReplay({ replayId: record.lastReplayId })"><strong>第 {{ record.cycle }} 期 · {{ record.routeName }} · {{ record.result }}</strong><span>最深 {{ record.floor || record.nodesCleared }} 层 · {{ record.score }} 分</span><small>完成时间 {{ daoTrialRecordDateTime(record) }}</small><small>{{ daoTrialScoreBreakdownText(record) }}</small><small>{{ record.practice ? '演练' : `正式第 ${record.attempt} 次` }} · {{ daoTrialRewardText(record) }}</small></button><div v-if="!daoTrialState.history?.length" class="empty">尚未留下游历记录。</div></div></section>
               </div>
               <section class="panel dao-trial-catalog dao-trial-archive-section">
                 <div class="section-head compact"><div><h3>问道图鉴</h3><p>已发现 {{ daoTrialState.collection?.discoveredLawCount || 0 }} / {{ daoTrialState.collection?.totalLawCount || 256 }} 法则 · {{ daoTrialState.collection?.discoveredSealCount || 0 }} / {{ daoTrialState.collection?.totalSealCount || 1024 }} 道印</p></div><div class="dao-trial-catalog-modes"><button type="button" :class="{ active: daoTrialCatalogMode === 'laws' }" @click="resetDaoTrialCatalogFilters('laws')">法则</button><button type="button" :class="{ active: daoTrialCatalogMode === 'seals' }" @click="resetDaoTrialCatalogFilters('seals')">道印</button></div></div>
@@ -11161,6 +11161,14 @@ function shortDisplayDate(record) {
 function daoTrialBestText(record) {
   if (!record) return "暂无记录";
   return `${record.floor || record.nodesCleared || 0} 层 · ${record.score || 0} 分`;
+}
+
+function daoTrialRecordDateTime(record) {
+  const timestamp = String(record?.endedAt || record?.startedAt || "");
+  const match = timestamp.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/);
+  if (match) return `${match[1]} ${match[2]}`;
+  const date = record?.date || record?.startedDate;
+  return date ? `${date}（时间未记录）` : "时间未记录";
 }
 
 function signedNumber(value) {

@@ -10795,8 +10795,10 @@ function trialRunSummary(state, run) {
     remainingHpRate,
     startedDay: run.startedDay,
     startedDate: stateDateForDay(state, run.startedDay),
+    startedAt: run.startedAt || "",
     endedDay: run.endedDay || state.day,
     date: stateDateForDay(state, run.endedDay || state.day),
+    endedAt: run.endedAt || "",
     bag: run.rewards ? {
       xp: Number(run.rewards.xp) || 0,
       spirit: Number(run.rewards.spirit) || 0,
@@ -10820,6 +10822,7 @@ function finishDaoTrialRun(state, run, success, result) {
   run.success = success;
   run.result = result;
   run.endedDay = state.day;
+  run.endedAt = timestampKey();
   run.settledRewards = settleDaoTrialBag(state, run, success, result);
   if (!run.practice && run.companion?.person?.id) {
     const relation = relationshipEntry(state, run.companion.person.id);
@@ -11210,6 +11213,8 @@ function daoTrialAnalyticsBestView(record) {
     routeId: record.routeId || "",
     routeName: record.routeName || daoTrialRouteMap[record.routeId]?.name || record.routeId || "未知路线",
     affixName: record.affixName || "",
+    startedAt: record.startedAt || "",
+    endedAt: record.endedAt || "",
     result: record.result || "游历结束",
     success: Boolean(record.success),
     floor: Math.max(0, Number(record.floor || record.nodesCleared) || 0),
@@ -11374,6 +11379,7 @@ export function startDaoTrial(state, payload = {}) {
     nodes: daoTrialNodesForCycle(route.id, state.daoTrial.cycle),
     seed: `dao-trial|${state.rebirth}|${state.daoTrial.cycle}|${attempt}|${route.id}`,
     startedDay: state.day,
+    startedAt: timestampKey(),
     worldSnapshot,
     baseCombatStats,
     isApex: worldSnapshot.playerPower >= Math.max(0, ...(state.npcs || []).map((npc) => powerOf(npc, state, { includeDailyRootFortune: false }))),
