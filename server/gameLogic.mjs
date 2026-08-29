@@ -1031,14 +1031,17 @@ function combatSnapshot(entity, state) {
   const scale = (key, bonus) => Math.max(key === "defense" ? 0 : 1, Math.floor(snapshot[key] * (1 + bonus)));
   const maxHp = scale("maxHp", Number(buffs.maxHp) || 0);
   const maxMana = scale("maxMana", Number(buffs.maxMana) || 0);
+  const scaleResource = (current, baseMax, scaledMax) => current >= baseMax
+    ? scaledMax
+    : clamp(Math.floor(current * scaledMax / Math.max(1, baseMax)), 0, scaledMax);
   return {
     attack: scale("attack", (Number(buffs.attack) || 0) + lowHpAttack),
     defense: scale("defense", Number(buffs.defense) || 0),
     maxHp,
-    hp: clamp(Math.floor(snapshot.hp * (maxHp / Math.max(1, snapshot.maxHp))), 0, maxHp),
+    hp: scaleResource(snapshot.hp, snapshot.maxHp, maxHp),
     divineSense: scale("divineSense", (Number(buffs.divineSense) || 0) + lowHpSense),
     maxMana,
-    mana: clamp(Math.floor(snapshot.mana * (maxMana / Math.max(1, snapshot.maxMana))), 0, maxMana)
+    mana: scaleResource(snapshot.mana, snapshot.maxMana, maxMana)
   };
 }
 
@@ -1068,7 +1071,7 @@ function applyBattleRootPenalty(snapshot, penalty) {
   };
 }
 
-function runTurnBattle(left, right, options = {}) {
+export function runTurnBattle(left, right, options = {}) {
   const random = options.random || (options.seed ? seededBattleRandom(options.seed) : Math.random);
   const leftBasePenalty = rootCounterPenalty(right, left);
   const rightBasePenalty = rootCounterPenalty(left, right);
@@ -1178,7 +1181,8 @@ function runTurnBattle(left, right, options = {}) {
         const damage = Math.max(1, Math.floor(maxHpOf(side) * effect.percent));
         setHp(side, target.hp - damage);
         pushEvent("status", `${target.actorName}受${effect.name}侵蚀，损失 ${damage} 血量`, {
-          actorSide: side,
+          actorSide: effect.sourceSide || opposite(side),
+          targetSide: side,
           damage,
           leftHp,
           rightHp,
@@ -1379,7 +1383,7 @@ function runTurnBattle(left, right, options = {}) {
       if (skill.type === "manaBurn") setMana(targetSide, state.targetMana - skill.burn);
       if (skill.type === "weaken") addEffect(targetSide, { type: "attackDown", amount: skill.amount, duration: skill.duration });
       if (skill.type === "dotStrike") {
-        addEffect(targetSide, { type: "dot", name: skill.name, percent: skill.percent, duration: skill.duration });
+        addEffect(targetSide, { type: "dot", name: skill.name, percent: skill.percent, duration: skill.duration, sourceSide: side });
         if (dotStack) {
           statusStacks[side] += 1;
           const law = lawSourceFor(side, "dotStack", "poison-formation");
@@ -1399,7 +1403,7 @@ function runTurnBattle(left, right, options = {}) {
       return 0;
     }
     if (skill.type === "dot") {
-      addEffect(targetSide, { type: "dot", name: skill.name, percent: skill.percent, duration: skill.duration });
+      addEffect(targetSide, { type: "dot", name: skill.name, percent: skill.percent, duration: skill.duration, sourceSide: side });
       if (dotStack) {
         statusStacks[side] += 1;
         const law = lawSourceFor(side, "dotStack", "poison-formation");
@@ -9695,6 +9699,10 @@ function ensureDaoTrialState(state) {
       activeRun.offeredLawIds = [...new Set((activeRun.offeredLawIds || []).filter((id) => daoTrialLawMap[id]))];
       activeRun.offeredSealIds = [...new Set((activeRun.offeredSealIds || []).filter((id) => daoTrialSealMap[id]))];
       activeRun.lawNonce = Math.max(0, Math.floor(Number(activeRun.lawNonce) || 0));
+      if (activeRun.masteryLawOptions === undefined) {
+        activeRun.masteryLawOptions = Number(activeRun.masteryLevel) >= 6 ? 1 : 0;
+        changed = true;
+      } else activeRun.masteryLawOptions = clamp(Math.floor(Number(activeRun.masteryLawOptions) || 0), 0, 1);
       activeRun.checkpointPending = Boolean(activeRun.checkpointPending);
       activeRun.companionContribution ??= { damage: 0, healing: 0, shields: 0, control: 0, assists: 0 };
       activeRun.insight = Math.max(0, Math.floor(Number(activeRun.insight) || 0));
@@ -9934,7 +9942,8 @@ function rolledLawRarity(run, nonce, slot, rates, diamondSelected) {
 function lawOfferForRun(state, run, route, nonce = 0) {
   const rates = lawRarityRatesForFloor(Math.max(1, Number(run.floor) || 1));
   const bonusOptions = runLawMechanics(run, "freeReroll").reduce((max, entry) => Math.max(max, Math.floor(Number(entry.params.bonusOptions) || 0)), 0);
-  const offer = sampleDaoTrialEqualOffer("law", `${run.seed}|law|${run.floor}|${nonce}`, 3 + bonusOptions);
+  const masteryOptions = Number(run.floor) === 1 ? Math.max(0, Math.floor(Number(run.masteryLawOptions) || 0)) : 0;
+  const offer = sampleDaoTrialEqualOffer("law", `${run.seed}|law|${run.floor}|${nonce}`, 3 + bonusOptions + masteryOptions);
   run.lastLawRarityRates = { silver: rates.silver, gold: rates.gold, diamond: rates.diamond };
   rememberDaoTrialOffer(state, run, offer, "law");
   return offer;
@@ -10380,13 +10389,13 @@ function trialMilestoneReward(state, run, node) {
 function trialBattleMetrics(battle, beforeStats, maxRounds = 18) {
   const events = battle?.events || [];
   const ownDamage = events
-    .filter((event) => ["attack", "skill", "status"].includes(event.kind) && event.actorSide === "left")
+    .filter((event) => event.actorSide === "left" && event.targetSide === "right")
     .reduce((sum, event) => sum + Math.max(0, Number(event.damage) || 0), 0);
   const takenDamage = events
-    .filter((event) => ["attack", "skill", "status"].includes(event.kind) && event.targetSide === "left")
+    .filter((event) => event.actorSide === "right" && event.targetSide === "left")
     .reduce((sum, event) => sum + Math.max(0, Number(event.damage) || 0), 0);
   const healing = events
-    .filter((event) => event.kind === "skill" && event.actorSide === "left")
+    .filter((event) => event.actorSide === "left")
     .reduce((sum, event) => sum + Math.max(0, Number(event.healing) || 0), 0);
   const shields = events
     .filter((event) => event.actorSide === "left" || event.actorSide === "companion")
@@ -10808,7 +10817,7 @@ function publicTrialRun(state, run) {
   if (node?.type === "battle" && route) {
     const opponent = trialOpponentFor(state, run, node);
     if (opponent) {
-      const playerPenalty = rootCounterPenalty(opponent, fighter) * (1 - clamp(Number(fighter?.trialBuffs?.rootResist) || 0, 0, 0.9));
+      const playerPenalty = rootCounterPenalty(opponent, fighter) * (1 - clamp(Number(fighter?.trialBuffs?.rootResist) || 0, 0, 1));
       const opponentPenalty = rootCounterPenalty(fighter, opponent);
       const playerBattleStats = applyBattleRootPenalty(stats, playerPenalty);
       const opponentBattleStats = applyBattleRootPenalty(combatSnapshot(opponent, state), opponentPenalty);
@@ -10937,7 +10946,7 @@ function daoTrialMasteryView(record = {}) {
   const unlocks = [];
   if (level >= 2) unlocks.push({ id: "insight", name: "初悟", text: "入境时额外获得 1 点悟机。" });
   if (level >= 4) unlocks.push({ id: "reroll", name: "重观", text: "每轮额外获得 1 次免费重观。" });
-  if (level >= 6) unlocks.push({ id: "affinity", name: "路线共鸣", text: "路线偏好法则在首轮选择中权重提高。" });
+  if (level >= 6) unlocks.push({ id: "affinity", name: "路线共鸣", text: "首轮法则候选增加 1 项，所有具体法则仍保持等权。" });
   return { ...record, level, nextLevelAt: Math.min(30, (clamp(level, 0, 9) + 1) * 3), progressScore, unlocks };
 }
 
@@ -11260,6 +11269,7 @@ export function startDaoTrial(state, payload = {}) {
     pendingSealIds: [],
     sealNonce: 0,
     masteryLevel: mastery.level,
+    masteryLawOptions: mastery.level >= 6 ? 1 : 0,
     insight: 1 + Math.max(0, Math.floor(Number(affix.effects?.initialInsight) || 0)) + (mastery.level >= 2 ? 1 : 0) + (firstExploreApplied ? firstExplore.insight : 0),
     lawIds: [],
     lawStacks: {},
@@ -11516,7 +11526,15 @@ function resolveTrialBattle(state, run, node) {
   run.nextBattleAttack = 0;
   const beforeStats = combatSnapshot(fighter, state);
   const seed = `${run.seed}|node|${run.nodeIndex}|${run.sealIds.join(",")}`;
-  const battle = fightMonster(state, fighter, opponent, node.rounds, { hp: beforeStats.hp, mana: beforeStats.mana, seed, trialCompanion });
+  // `run.combatant` stores the persistent base-space hp/mana ratio. Passing the
+  // already-buffed snapshot here would make combatSnapshot apply maxHp/maxMana
+  // modifiers a second time whenever the fighter is not at full resources.
+  const battle = fightMonster(state, fighter, opponent, node.rounds, {
+    hp: run.combatant.hp,
+    mana: run.combatant.mana,
+    seed,
+    trialCompanion
+  });
   const won = battle.winner === "left";
   const replay = buildReplay({ ...fighter, hp: beforeStats.hp, mana: beforeStats.mana }, opponent, battle, won ? "胜" : "负", timestampKey(), state);
   replay.kind = "dao-trial";
@@ -11525,8 +11543,11 @@ function resolveTrialBattle(state, run, node) {
   queueBattleReplay(state, replay, run.id);
   const baseHp = run.combatant.maxHp;
   const baseMana = run.combatant.maxMana;
-  run.combatant.hp = clamp(Math.floor(battle.leftHp / Math.max(1, beforeStats.maxHp) * baseHp), 1, baseHp);
-  run.combatant.mana = clamp(Math.floor(battle.leftMana / Math.max(1, beforeStats.maxMana) * baseMana), 0, baseMana);
+  // Store the nearest base-space resource value. Flooring here introduces a
+  // systematic one-point loss whenever a buffed battle snapshot is converted
+  // back after combat, which compounds over a long trial run.
+  run.combatant.hp = clamp(Math.round(battle.leftHp / Math.max(1, beforeStats.maxHp) * baseHp), 1, baseHp);
+  run.combatant.mana = clamp(Math.round(battle.leftMana / Math.max(1, beforeStats.maxMana) * baseMana), 0, baseMana);
   run.lastReplayId = replay.replayId;
   const metrics = trialBattleMetrics(battle, beforeStats, node.rounds);
   run.combatStats.battles += 1;
@@ -14209,7 +14230,7 @@ function publicProvinceWars(records, currentDay = 1, people = null) {
 function publicReplay(replay, people = null) {
   if (!replay) return null;
   const refPeople = people && typeof people.get === "function" ? people : null;
-  const eventLimit = replay.kind === "starSeaTeam" ? 80 : 40;
+  const eventLimit = replay.kind === "dao-trial" ? 160 : replay.kind === "starSeaTeam" ? 80 : 40;
   const result = {
     ...replay,
     replayId: replay.replayId || makeReplayId("battle", timestampKey(), Math.random().toString(36).slice(2, 8)),

@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { advanceDaoTrial, createDefaultState, ensureStateShape, getPublicState, startDaoTrial } from "../server/gameLogic.mjs";
 import { daoTrialRoutes } from "../server/daoTrialData.mjs";
 
@@ -5,8 +6,25 @@ const runsPerRoute = Math.max(1, Math.floor(Number(process.argv[2]) || 6));
 const scenarios = [
   { id: "solo", label: "独行" },
   { id: "companion", label: "最强同行" },
-  { id: "boons", label: "最强同行 + 四类任务助力", boons: true }
+  { id: "boons", label: "最强同行 + 四类任务助力", boons: true },
+  { id: "veteran", label: "满路线精通 + 最强同行 + 四类任务助力", boons: true, mastery: true }
 ];
+const scenarioFilter = String(process.argv[3] || "").trim();
+
+function seededRandom(seed = "dao-trial-balance") {
+  let value = 2166136261;
+  for (const char of String(seed)) {
+    value ^= char.charCodeAt(0);
+    value = Math.imul(value, 16777619);
+  }
+  return () => {
+    value += 0x6D2B79F5;
+    let next = value;
+    next = Math.imul(next ^ (next >>> 15), next | 1);
+    next ^= next + Math.imul(next ^ (next >>> 7), next | 61);
+    return ((next ^ (next >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 function effectScore(effects = {}) {
   return (Number(effects.postBattleHeal) || 0) * 12
@@ -21,8 +39,49 @@ function effectScore(effects = {}) {
     + (Number(effects.manaCost) || 0) * -2;
 }
 
+const mechanicWeights = {
+  lethalWard: 2.6,
+  companionLethalWard: 2.2,
+  roundRegen: 1.9,
+  lifesteal: 1.7,
+  healStrike: 1.5,
+  damageStore: 1.4,
+  noHitCounter: 1.4,
+  damageReflect: 1.3,
+  freeCast: 1.4,
+  manaTide: 1.2,
+  cooldownFlow: 1.1,
+  repeatSkill: 1.1,
+  battleMomentum: 1.4,
+  adversityGrowth: 1.2,
+  companionSkillEcho: 1.2,
+  companionFollowup: 1.2,
+  elementCycle: 1.5,
+  rootReversal: 1.2,
+  residualChoice: 1.1,
+  fortune: 1.1,
+  freeReroll: 0.9,
+  eventCompensation: 0.8,
+  attackEcho: 1,
+  openingSurge: 1,
+  executeStrike: 0.9,
+  lowHpEcho: 0.8,
+  bloodCast: 0.8,
+  battleWager: 0.7,
+  soloEcho: 1,
+  statusDetonate: 1,
+  elementPulse: 1
+};
+
+function buildScore(option = {}) {
+  const mechanicScore = (option.mechanics || []).reduce((sum, mechanic) => sum + (mechanicWeights[mechanic.action] || 0.7), 0);
+  const rarityScore = option.rarity === "diamond" ? 0.55 : option.rarity === "gold" ? 0.25 : 0;
+  const repeatScore = Math.max(0, Number(option.stack || 1) - 1) * 0.08;
+  return effectScore(option.effects) + mechanicScore + rarityScore + repeatScore;
+}
+
 function bestBuildChoice(options = []) {
-  return [...options].sort((a, b) => effectScore(b.effects) - effectScore(a.effects))[0];
+  return [...options].sort((a, b) => buildScore(b) - buildScore(a))[0];
 }
 
 function bestEventChoice(run) {
@@ -41,7 +100,7 @@ function bestEventChoice(run) {
 }
 
 function addAllTaskBoons(state) {
-  state.taskCompletions = ["study", "exercise", "work", "life"].map((category, index) => ({
+  state.taskCompletions = ["学习", "运动", "工作", "生活"].map((category, index) => ({
     id: `sim-${state.day}-${index}`,
     day: state.day,
     category
@@ -49,27 +108,50 @@ function addAllTaskBoons(state) {
 }
 
 function createSimulationState(index) {
-  const state = createDefaultState();
-  state.day = 1 + index * 7;
-  state.rebirth = index + 1;
-  ensureStateShape(state);
-  return state;
+  const originalRandom = Math.random;
+  Math.random = seededRandom(`dao-trial-balance|${index}`);
+  try {
+    const state = createDefaultState();
+    state.day = 1 + index * 7;
+    state.rebirth = index + 1;
+    ensureStateShape(state);
+    return state;
+  } finally {
+    Math.random = originalRandom;
+  }
 }
 
 function runSimulation(scenario, state, route) {
+  if (scenario.mastery) {
+    Object.assign(state.daoTrial.routeMastery[route.id], {
+      runs: 30,
+      clears: 10,
+      eliteClears: 10,
+      bossClears: 10,
+      bestFloor: 30,
+      bestScore: 20_000
+    });
+  }
   const publicState = getPublicState(state);
   const companion = scenario.id === "solo"
     ? null
     : [...publicState.daoTrial.companions].sort((a, b) => b.support.power - a.support.power)[0];
   startDaoTrial(state, { routeId: route.id, companionId: companion?.person?.id });
+  if (scenario.boons) assert.equal(state.daoTrial.activeRun.taskBoons.length, 4, "四类任务助力模拟必须实际激活四种助力");
 
+  const rerolledOffers = new Set();
   let guard = 0;
   while (guard < 160) {
     const run = getPublicState(state).daoTrial.activeRun;
     if (!run) break;
     if (run.maxFloor >= 15) return { floor: run.maxFloor, clear: true, routeId: route.id, routeName: route.name };
     if (run.lawOffer.length) {
-      advanceDaoTrial(state, { action: "law", lawId: bestBuildChoice(run.lawOffer).id });
+      const best = bestBuildChoice(run.lawOffer);
+      const offerKey = `law-${run.floor}`;
+      if (run.canReroll && buildScore(best) < 0.85 && !rerolledOffers.has(offerKey)) {
+        rerolledOffers.add(offerKey);
+        advanceDaoTrial(state, { action: "reroll-law" });
+      } else advanceDaoTrial(state, { action: "law", lawId: best.id });
     } else if (run.checkpointPending) {
       advanceDaoTrial(state, { action: "continue" });
     } else if (run.canUseLifeHeal && run.combat.hp / run.combat.maxHp < 0.5) {
@@ -78,7 +160,12 @@ function runSimulation(scenario, state, route) {
       && (run.combat.hp / run.combat.maxHp < 0.55 || run.combat.mana / run.combat.maxMana < 0.35)) {
       advanceDaoTrial(state, { action: "companion" });
     } else if (run.sealOffer.length) {
-      advanceDaoTrial(state, { action: "seal", sealId: bestBuildChoice(run.sealOffer).id });
+      const best = bestBuildChoice(run.sealOffer);
+      const offerKey = `seal-${run.floor}`;
+      if (run.canReroll && buildScore(best) < 0.35 && !rerolledOffers.has(offerKey)) {
+        rerolledOffers.add(offerKey);
+        advanceDaoTrial(state, { action: "reroll" });
+      } else advanceDaoTrial(state, { action: "seal", sealId: best.id });
     } else if (run.currentNode.type === "battle") {
       const result = advanceDaoTrial(state, { action: "battle" });
       if (result.completed) return { floor: result.summary.floor, clear: result.summary.floor >= 15, routeId: route.id, routeName: route.name };
@@ -93,7 +180,7 @@ function runSimulation(scenario, state, route) {
 
 const simulationStates = Array.from({ length: runsPerRoute }, (_, index) => createSimulationState(index));
 
-for (const scenario of scenarios) {
+for (const scenario of scenarios.filter((entry) => !scenarioFilter || entry.id === scenarioFilter)) {
   const results = simulationStates.flatMap((baseState) => {
     const state = structuredClone(baseState);
     if (scenario.boons) addAllTaskBoons(state);
