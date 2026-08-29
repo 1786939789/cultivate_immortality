@@ -1946,6 +1946,10 @@
                           <small>{{ effect.label }}</small>
                           <b><i>{{ effect.display === 'number' ? effect.base : formatPercent(effect.base) }}</i><em>→</em><strong>{{ effect.display === 'number' ? effect.current : formatPercent(effect.current) }}</strong></b>
                         </span>
+                        <span>
+                          <small>技能冷却</small>
+                          <b><i>{{ activeDaoTrialRun.combatModifiers.skill.baseCooldown }}</i><em>→</em><strong>{{ activeDaoTrialRun.combatModifiers.skill.cooldown }}</strong></b>
+                        </span>
                       </div>
                     </div>
                     <button v-if="activeDaoTrialRun.taskBoons?.some(boon => boon.id === 'life')" class="secondary compact-button" type="button" :disabled="!activeDaoTrialRun.canUseLifeHeal || isActionPending('/api/dao-trial/advance')" @click="useDaoTrialLifeHeal">

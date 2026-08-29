@@ -137,8 +137,8 @@ const diamondDefinitions = {
   ],
   "命数经营": [
     diamond("改命一掷", "onReroll", "每次法则抉择的首次重观免费，并额外获得一次改命收益。", { eventLossResist: 0.12 }, [
-      mechanic("fate-changing-reroll", "freeReroll", "onReroll", "每次法则抉择首次重观免费", { insight: [0, 0, 1, 1, 2], bonusOptions: [0, 0, 0, 0, 1] })
-    ], diamondStackPlan("每次抉择首次重观免费", "重观后获得额外悟机", "每轮初次重观获得悟机", "悟机收益提高", "重观时额外展示一个选项")),
+      mechanic("fate-changing-reroll", "freeReroll", "onReroll", "每次法则抉择首次重观免费", { insight: [0, 0, 1, 1, 2] })
+    ], diamondStackPlan("每次抉择首次重观免费", "重观后获得额外悟机", "每轮初次重观获得悟机", "悟机收益提高", "重观时额外获得悟机")),
     diamond("一法化三", "onLawChosen", "选择法则后，从未选法则中取得一份残悟，转化为本轮攻防神识。", { attack: 0.04, defense: 0.04 }, [
       mechanic("one-law-three-insights", "residualChoice", "onLawChosen", "选择法则时吸收未选项残悟", { gain: [0.018, 0.024, 0.03, 0.038, 0.05] })
     ], diamondStackPlan("选择后吸收残悟", "残悟属性提高", "残悟同时滋养神识", "残悟再次提高", "每次选择获得显著成长")),
@@ -203,7 +203,7 @@ function goldParams(action, strong) {
     statusDetonate: { every: [4, 4, 3, 3, 3], power: [0.25 + high * 0.05, 0.31 + high * 0.05, 0.37 + high * 0.05, 0.44 + high * 0.05, 0.52 + high * 0.05] },
     rootReversal: { bonus: [0.025 + high * 0.01, 0.035 + high * 0.01, 0.045 + high * 0.01, 0.055 + high * 0.01, 0.07 + high * 0.01] },
     elementPulse: { every: [4, 4, 3, 3, 3], power: [0.24 + high * 0.05, 0.3 + high * 0.05, 0.36 + high * 0.05, 0.43 + high * 0.05, 0.52 + high * 0.05] },
-    freeReroll: { insight: [0, 0, 0, 1, 1], bonusOptions: [0, 0, 0, 0, 0] },
+    freeReroll: { insight: [0, 0, 0, 1, 1] },
     residualChoice: { gain: [0.01 + high * 0.003, 0.014 + high * 0.003, 0.018 + high * 0.003, 0.023 + high * 0.003, 0.03 + high * 0.003] },
     eventCompensation: { insight: [1, 1, 1, 2, 2], defense: [0, 0.015, 0.02, 0.03, 0.04] },
     fortune: { gain: [1, 1, 1, 1, 2], cap: [3, 4, 5, 6, 7], powerPerStack: [0.008 + high * 0.002, 0.01 + high * 0.002, 0.012 + high * 0.002, 0.014 + high * 0.002, 0.017 + high * 0.002] }
@@ -235,7 +235,7 @@ function goldMechanic(school, branchIndex, variant) {
 
 function genericStackPlan(rarity, summary = "核心效果") {
   if (rarity === "silver") {
-    return ["获得基础效果", "效果提升至 160%", "效果提升至 200%", "效果提升至 225%", "效果提升至 240%"]
+    return ["获得基础效果", "效果提升至 115%", "效果提升至 130%", "效果提升至 145%", "效果提升至 160%"]
       .map((text, index) => ({ stack: index + 1, text }));
   }
   return [

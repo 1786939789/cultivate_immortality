@@ -9707,7 +9707,9 @@ function ensureDaoTrialState(state) {
       activeRun.combatStats ??= { battles: 0, rounds: 0, damageDealt: 0, damageTaken: 0, healing: 0, shields: 0, skillCasts: 0, manaSpent: 0, lawTriggers: 0 };
       for (const key of ["battles", "rounds", "damageDealt", "damageTaken", "healing", "shields", "skillCasts", "manaSpent", "lawTriggers"]) activeRun.combatStats[key] = Math.max(0, Number(activeRun.combatStats[key]) || 0);
       activeRun.lawIds = [...new Set((activeRun.lawIds || []).filter((id) => daoTrialLawMap[id]))];
-      activeRun.lawOffer = [...new Set((activeRun.lawOffer || []).filter((id) => daoTrialLawMap[id]))];
+      const normalizedLawOffer = [...new Set((activeRun.lawOffer || []).filter((id) => daoTrialLawMap[id]))];
+      if (normalizedLawOffer.length > 3) changed = true;
+      activeRun.lawOffer = normalizedLawOffer.slice(0, 3);
       activeRun.lawStacks = Object.fromEntries(Object.entries(activeRun.lawStacks || Object.fromEntries(activeRun.lawIds.map((id) => [id, 1])))
         .filter(([id]) => daoTrialLawMap[id])
         .map(([id, count]) => [id, clamp(Math.floor(Number(count) || 1), 1, 5)]));
@@ -9956,16 +9958,14 @@ function rolledLawRarity(run, nonce, slot, rates, diamondSelected) {
 
 function lawOfferForRun(state, run, route, nonce = 0) {
   const rates = lawRarityRatesForFloor(Math.max(1, Number(run.floor) || 1));
-  const bonusOptions = runLawMechanics(run, "freeReroll").reduce((max, entry) => Math.max(max, Math.floor(Number(entry.params.bonusOptions) || 0)), 0);
-  const masteryOptions = Number(run.floor) === 1 ? Math.max(0, Math.floor(Number(run.masteryLawOptions) || 0)) : 0;
-  const offer = sampleDaoTrialEqualOffer("law", `${run.seed}|law|${run.floor}|${nonce}`, 3 + bonusOptions + masteryOptions);
+  const offer = sampleDaoTrialEqualOffer("law", `${run.seed}|law|${run.floor}|${nonce}`, 3);
   run.lastLawRarityRates = { silver: rates.silver, gold: rates.gold, diamond: rates.diamond };
   rememberDaoTrialOffer(state, run, offer, "law");
   return offer;
 }
 
 function trialStackMultiplier(level) {
-  const extras = [0, 0.6, 0.4, 0.25, 0.15];
+  const extras = [0, 0.15, 0.15, 0.15, 0.15];
   const count = Math.max(1, Math.min(5, Math.floor(Number(level) || 1)));
   return 1 + extras.slice(1, count).reduce((sum, value) => sum + value, 0);
 }
@@ -11065,7 +11065,7 @@ function daoTrialMasteryView(record = {}) {
   const unlocks = [];
   if (level >= 2) unlocks.push({ id: "insight", name: "初悟", text: "入境时额外获得 1 点悟机。" });
   if (level >= 4) unlocks.push({ id: "reroll", name: "重观", text: "每轮额外获得 1 次免费重观。" });
-  if (level >= 6) unlocks.push({ id: "affinity", name: "路线共鸣", text: "首轮法则候选增加 1 项，所有具体法则仍保持等权。" });
+  if (level >= 6) unlocks.push({ id: "affinity", name: "路线共鸣", text: "每轮额外获得 1 次免费重观，法则候选固定三项且保持等权。" });
   return { ...record, level, nextLevelAt: Math.min(30, (clamp(level, 0, 9) + 1) * 3), progressScore, unlocks };
 }
 
@@ -11398,7 +11398,7 @@ export function startDaoTrial(state, payload = {}) {
     offeredSealIds: [],
     taskBoons,
     dailyRootFortuneXpMultiplier: dailyRootFortuneXpMultiplier(state, state.player),
-    freeRerolls: (taskBoons.some((boon) => boon.id === "study") ? 1 : 0) + (mastery.level >= 4 ? 1 : 0) + (firstExploreApplied ? firstExplore.freeRerolls : 0),
+    freeRerolls: (taskBoons.some((boon) => boon.id === "study") ? 1 : 0) + (mastery.level >= 4 ? 1 : 0) + (mastery.level >= 6 ? 1 : 0) + (firstExploreApplied ? firstExplore.freeRerolls : 0),
     lifeHealAvailable: taskBoons.some((boon) => boon.id === "life"),
     eliteCleared: false,
     bossCleared: false,

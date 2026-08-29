@@ -14,7 +14,7 @@ import {
 
 const statKeys = ["attack", "defense", "maxHp", "maxMana", "divineSense"];
 const outOfBattleActions = new Set(["battleMomentum", "freeReroll", "residualChoice", "eventCompensation", "fortune"]);
-const stackMultiplier = (stack) => [1, 1.6, 2, 2.25, 2.4][Math.max(1, Math.min(5, stack)) - 1];
+const stackMultiplier = (stack) => [1, 1.15, 1.3, 1.45, 1.6][Math.max(1, Math.min(5, stack)) - 1];
 const rootMap = Object.fromEntries(roots.map((root) => [root.key, root]));
 const almostEqual = (actual, expected, message) => assert.ok(Math.abs(Number(actual) - Number(expected)) < 1e-9, `${message}: ${actual} !== ${expected}`);
 
@@ -481,9 +481,9 @@ function auditMasteryLongTerm() {
   Object.assign(veteran.daoTrial.routeMastery["golden-pass"], { runs: 30, clears: 10, eliteClears: 10, bossClears: 10 });
   startDaoTrial(veteran, { routeId: "golden-pass" });
   assert.equal(veteran.daoTrial.activeRun.masteryLevel, 10, "长期精通样本应达到十级");
-  assert.equal(veteran.daoTrial.activeRun.lawOffer.length, 4, "六级路线共鸣应让首轮法则候选增加一项");
-  assert.equal(new Set(veteran.daoTrial.activeRun.lawOffer).size, 4, "精通增加的法则候选不得重复");
-  return { noviceOptions: 3, veteranOptions: 4, masteryLevel: veteran.daoTrial.activeRun.masteryLevel };
+  assert.equal(veteran.daoTrial.activeRun.lawOffer.length, 3, "路线精通也应保持三项法则候选");
+  assert.equal(new Set(veteran.daoTrial.activeRun.lawOffer).size, 3, "三项法则候选不得重复");
+  return { noviceOptions: 3, veteranOptions: 3, masteryLevel: veteran.daoTrial.activeRun.masteryLevel };
 }
 
 function auditRouteFloors(maxFloor = 30) {

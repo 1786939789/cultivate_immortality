@@ -577,7 +577,7 @@ const generatedDaoTrialLaws = Object.entries(generatedLawProfiles).flatMap(([sch
       id: `expanded-law-${lawSchoolIds[school]}-${index + 1}`,
       name: `${school}${["天机", "玄变", "归藏", "问真", "太初", "无极", "鸿蒙", "极境"][tier]}${index % 4 + 1}`,
       school, rarity, tags: school === "命数经营" ? ["fate", "vitality"] : school === "同行共鸣" ? ["companion", "vitality"] : ["arcane", "tempo"], trigger,
-      text: `${generatedSealText(effects)}（${trigger}，第${tier + 1}阶）`, effects
+      text: generatedSealText(effects), effects
     };
   });
 });
