@@ -85,10 +85,12 @@ assert.equal(daoTrialSealSchoolResonances.length, 24, "八个道印流派应各�
 for (const law of daoTrialLaws) {
   assert.ok(law.name && law.school && law.trigger && law.text, `${law.id} 缺少展示或触发信息`);
   assert.ok(Object.keys(law.effects || {}).length, `${law.id} 必须包含结构化效果`);
+  assert.ok(!/[（(](?:onEvent|afterBattle|highManaSense|lowManaCost)/.test(law.text), `${law.id} 不得向玩家暴露内部触发键`);
 }
 for (const seal of daoTrialSeals) {
   assert.ok(seal.name && seal.school && seal.text, `${seal.id} 缺少展示信息`);
   assert.ok(Object.keys(seal.effects || {}).length, `${seal.id} 必须包含结构化效果`);
+  assert.ok(!/(?:onEvent|afterBattle|highManaSense|lowManaCost)/.test(seal.text), `${seal.id} 不得向玩家暴露内部效果键`);
 }
 
 const goldPityState = createDefaultState();
