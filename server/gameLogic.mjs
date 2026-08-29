@@ -1021,7 +1021,7 @@ function combatSnapshot(entity, state) {
     };
   const snapshot = {
     ...effective,
-    hp: Math.max(0, Math.min(entity.hp || effective.maxHp, effective.maxHp)),
+    hp: Math.max(0, Math.min(entity.hp ?? effective.maxHp, effective.maxHp)),
     mana: Math.max(0, Math.min(entity.mana ?? effective.maxMana, effective.maxMana))
   };
   const buffs = entity?.trialBuffs || {};

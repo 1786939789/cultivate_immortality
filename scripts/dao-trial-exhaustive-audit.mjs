@@ -89,6 +89,7 @@ function assertBattleShape(battle, context) {
   assert.ok(battle.rightHp >= 0 && battle.rightHp <= battle.rightStart.maxHp, `${context} 右方结束气血越界`);
   assert.ok(battle.leftMana >= 0 && battle.leftMana <= battle.leftStart.maxMana, `${context} 左方法力越界`);
   assert.ok(battle.rightMana >= 0 && battle.rightMana <= battle.rightStart.maxMana, `${context} 右方法力越界`);
+  let hp = { left: battle.leftStart.hp, right: battle.rightStart.hp };
   let round = 0;
   for (const event of battle.events) {
     finiteNumber(event.round, `${context} 事件回合`);
@@ -97,8 +98,19 @@ function assertBattleShape(battle, context) {
     for (const key of ["leftHp", "rightHp", "leftMana", "rightMana", "damage", "healing", "shields", "mana"]) {
       if (event[key] !== undefined) finiteNumber(event[key], `${context} ${event.kind}.${key}`);
     }
-    if (event.leftHp !== undefined) assert.ok(event.leftHp >= 0 && event.leftHp <= battle.leftStart.maxHp, `${context} 事件左方气血越界`);
-    if (event.rightHp !== undefined) assert.ok(event.rightHp >= 0 && event.rightHp <= battle.rightStart.maxHp, `${context} 事件右方气血越界`);
+    const beforeHp = { ...hp };
+    if (event.leftHp !== undefined) {
+      assert.ok(event.leftHp >= 0 && event.leftHp <= battle.leftStart.maxHp, `${context} 事件左方气血越界`);
+      hp.left = event.leftHp;
+    }
+    if (event.rightHp !== undefined) {
+      assert.ok(event.rightHp >= 0 && event.rightHp <= battle.rightStart.maxHp, `${context} 事件右方气血越界`);
+      hp.right = event.rightHp;
+    }
+    if (Number(event.damage) > 0 && ["left", "right"].includes(event.actorSide) && ["left", "right"].includes(event.targetSide)) {
+      const targetDelta = beforeHp[event.targetSide] - hp[event.targetSide];
+      assert.ok(targetDelta >= 0, `${context} 伤害事件不能让目标回血：${event.text}`);
+    }
   }
 }
 
@@ -297,6 +309,19 @@ function auditEveryAdvancedMechanic() {
 }
 
 function auditExactCombatMath() {
+  const defeated = runTurnBattle(baseFighter({ hp: 0, mana: 0 }), baseOpponent({ hp: 0, mana: 0 }), { maxRounds: 1, random: () => 0.999 });
+  assert.equal(defeated.leftStart.hp, 0, "零血角色进入战斗快照时不得被错误恢复满血");
+  assert.equal(defeated.rightStart.hp, 0, "零血对手进入战斗快照时不得被错误恢复满血");
+
+  const leftLethal = runTurnBattle(baseFighter({ attack: 500, maxHp: 1_000, hp: 1_000, maxMana: 1, mana: 0 }), baseOpponent({ attack: 1, defense: 0, maxHp: 80, hp: 80, divineSense: 10 }), { maxRounds: 1, random: () => 0.999 });
+  assert.equal(leftLethal.winner, "left", "左方致死最后一击应判左方获胜");
+  assert.equal(leftLethal.rightHp, 0, "左方致死最后一击应将右方气血降为 0");
+  assert.equal(leftLethal.leftHp, 1_000, "左方致死最后一击不得误扣左方气血");
+  const rightLethal = runTurnBattle(baseFighter({ attack: 1, defense: 0, maxHp: 80, hp: 80, divineSense: 10 }), baseOpponent({ attack: 500, defense: 0, maxHp: 1_000, hp: 1_000, divineSense: 100 }), { maxRounds: 1, random: () => 0.999 });
+  assert.equal(rightLethal.winner, "right", "右方致死最后一击应判右方获胜");
+  assert.equal(rightLethal.leftHp, 0, "右方致死最后一击应将左方气血降为 0");
+  assert.equal(rightLethal.rightHp, 1_000, "右方致死最后一击不得误扣右方气血");
+
   const left = baseFighter({ attack: 100, defense: 20, maxHp: 500, hp: 500, maxMana: 1, mana: 0, divineSense: 20 });
   const right = baseOpponent({ attack: 80, defense: 30, maxHp: 500, hp: 500, divineSense: 10 });
   const battle = runTurnBattle(left, right, { maxRounds: 1, random: () => 0.999 });
