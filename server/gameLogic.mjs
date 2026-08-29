@@ -8739,13 +8739,17 @@ const daoTrialNpcPreferredRate = 0.82;
 const daoTrialNpcRecentDays = 3;
 const daoTrialNpcPoolReturnDays = 3;
 const daoTrialNpcApexPoolSize = 12;
-const daoTrialBattleRewardCap = { spirit: 36, dust: 6 };
+const daoTrialBattleRewardCap = { spirit: 80, dust: 12 };
+const daoTrialFrontTwentySpiritCap = 100;
 const daoTrialHarmonyMaxPerRoute = 15;
 const daoTrialCoreRewardDefinitions = {
-  1: { xp: 2, spiritBase: 8, spiritPerStage: 2, dustBase: 0, dustPerTier: 0, label: "入境" },
-  5: { xp: 2, spiritBase: 0, spiritPerStage: 0, dustBase: 1, dustPerTier: 1, label: "精英" },
-  10: { xp: 3, spiritBase: 18, spiritPerStage: 4, dustBase: 1, dustPerTier: 1, label: "问心" },
-  15: { xp: 3, spiritBase: 12, spiritPerStage: 3, dustBase: 2, dustPerTier: 1, label: "归一" }
+  1: { xp: 2, spiritBase: 4, spiritPerStage: 1, dustBase: 0, dustPerTier: 0, label: "入境" },
+  5: { xp: 2, spiritBase: 3, spiritPerStage: 0, dustBase: 1, dustPerTier: 1, label: "初试" },
+  10: { xp: 3, spiritBase: 7, spiritPerStage: 2, dustBase: 1, dustPerTier: 1, label: "问心" },
+  15: { xp: 3, spiritBase: 9, spiritPerStage: 2, dustBase: 2, dustPerTier: 1, label: "深入" },
+  20: { xp: 4, spiritBase: 12, spiritPerStage: 2, dustBase: 2, dustPerTier: 1, label: "二十层" },
+  25: { xp: 4, spiritBase: 14, spiritPerStage: 2, dustBase: 3, dustPerTier: 1, label: "破关" },
+  30: { xp: 5, spiritBase: 18, spiritPerStage: 3, dustBase: 3, dustPerTier: 1, label: "归一" }
 };
 const daoTrialHarmonyMilestoneDefinitions = [
   { id: "harmony-15", target: 15, label: "初窥三脉", reward: { xp: 0, spiritBase: 8, spiritPerStage: 2, dust: 1 } },
@@ -9403,12 +9407,15 @@ function daoTrialAffixForCycle(cycle) {
   return daoTrialCycleAffixes[(Math.max(1, Number(cycle) || 1) - 1) % daoTrialCycleAffixes.length] || daoTrialCycleAffixes[0];
 }
 
-const daoTrialCoreFloorCount = 15;
+const daoTrialCoreFloorCount = 30;
 
 const daoTrialCoreNodePattern = [
   "battle", "event", "battle", "rest", "elite",
   "battle", "event", "battle", "rest", "boss",
-  "battle", "event", "elite", "rest", "boss"
+  "battle", "event", "elite", "rest", "battle",
+  "battle", "event", "battle", "rest", "boss",
+  "battle", "event", "elite", "rest", "battle",
+  "battle", "event", "battle", "rest", "boss"
 ];
 const daoTrialEndlessNodePattern = ["battle", "event", "battle", "rest", "boss"];
 const daoTrialCheckpointRecovery = { hp: 0.25, mana: 0.35 };
@@ -10106,19 +10113,21 @@ function trialEnemyPowerFactor(node, floor, seed = "") {
   const base = safeFloor <= 2
     ? 0.5
     : safeFloor <= 5
-      ? 0.65
-      : safeFloor <= 8
-        ? 0.8
-        : safeFloor <= 12
-          ? 0.98
-          : safeFloor <= 15
-            ? 1.15
-            : 1.3 + Math.min(0.2, (safeFloor - 16) * 0.025);
+      ? 0.58
+      : safeFloor <= 10
+        ? 0.68
+        : safeFloor <= 15
+          ? 0.8
+          : safeFloor <= 20
+            ? 0.94
+            : safeFloor <= 25
+              ? 1.1
+              : 1.26 + Math.min(0.24, (safeFloor - 26) * 0.03);
   const jitter = (stableUnit(`${seed}|floor-target`) - 0.5) * (safeFloor <= 5 ? 0.06 : 0.08);
   const nodeMultiplier = node?.boss
-    ? safeFloor <= 5 ? 1.25 : safeFloor <= 10 ? 1.3 : 1.35
+    ? safeFloor <= 10 ? 1.25 : safeFloor <= 20 ? 1.32 : 1.4
     : node?.elite
-      ? safeFloor <= 5 ? 1.12 : safeFloor <= 10 ? 1.15 : 1.18
+      ? safeFloor <= 10 ? 1.1 : safeFloor <= 20 ? 1.15 : 1.2
       : 1;
   return Math.max(0.48, (base + jitter) * nodeMultiplier);
 }
@@ -10173,7 +10182,7 @@ function trialOpponentSelectionScore(state, run, node, npc) {
   const realmCloseness = 1 - clamp(Math.abs((Number(npc.realm) || 0) - playerRealm) / realmSpan, 0, 1);
   const desiredRatio = (run.isApex ?? trialPlayerIsApex(state, run))
     ? (floor <= 5 ? 1.05 : floor <= 10 ? 1.15 : 1.3)
-    : (floor <= 5 ? 0.64 : floor <= 10 ? 0.88 : floor <= 15 ? 1.04 : 1.18);
+    : (floor <= 5 ? 0.64 : floor <= 10 ? 0.88 : floor <= 20 ? 1.04 : floor <= 25 ? 1.18 : 1.3);
   const powerCloseness = 1 - clamp(Math.abs(Math.log(npcPower / (playerPower * desiredRatio))) / powerSpan, 0, 1);
   const closeness = (realmCloseness + powerCloseness) / 2;
   const closenessWeight = floor <= 5 ? 0.35 : floor <= 10 ? 0.3 : 0.2;
@@ -10441,12 +10450,13 @@ function trialNpcFor(state, run, node) {
 
 function trialBattleRewardForNode(node, floor) {
   const safeFloor = Math.max(1, Math.floor(Number(floor) || 1));
-  const phase = safeFloor <= 5 ? 1 : safeFloor <= 10 ? 2 : safeFloor <= 15 ? 3 : 4;
-  const multiplier = node?.boss ? 1.7 : node?.elite ? 1.35 : 1;
+  const phase = Math.ceil(safeFloor / 5);
+  const baseSpirit = safeFloor <= 5 ? 1 : safeFloor <= 10 ? 2 : safeFloor <= 15 ? 3 : safeFloor <= 20 ? 4 : safeFloor <= 25 ? 5 : 6;
+  const multiplier = node?.boss ? 1.35 : node?.elite ? 1.15 : 1;
   if (safeFloor > daoTrialCoreFloorCount) return { xp: 0, spirit: 0, dust: 0, multiplier, phase };
-  const base = { xp: 0, spirit: 2 + Math.min(2, Math.floor((safeFloor - 1) / 5)), dust: safeFloor >= 4 ? 1 : 0 };
+  const base = { xp: safeFloor >= 21 ? 1 : 0, spirit: baseSpirit, dust: safeFloor >= 4 ? 1 : 0 };
   return {
-    xp: Math.min(1, Math.floor(base.xp * multiplier)),
+    xp: Math.min(1, Math.max(0, Math.floor(base.xp * multiplier))),
     spirit: Math.max(0, Math.round(base.spirit * multiplier)),
     dust: Math.max(0, Math.round(base.dust * multiplier)),
     multiplier,
@@ -10561,6 +10571,8 @@ function settleDaoTrialBag(state, run, success, result) {
     workMultiplier,
     dailyRootFortuneXpMultiplier: fortuneXpMultiplier
   };
+  const reachedFloor = Math.max(0, Math.floor(Number(run.maxFloor || run.nodesCleared) || 0));
+  if (reachedFloor > 0 && reachedFloor <= 20) settled.spirit = Math.min(settled.spirit, daoTrialFrontTwentySpiritCap);
   if (!run.practice) {
     state.player.xp += settled.xp;
     state.player.spirit += settled.spirit;

@@ -144,7 +144,7 @@ function runSimulation(scenario, state, route) {
   while (guard < 160) {
     const run = getPublicState(state).daoTrial.activeRun;
     if (!run) break;
-    if (run.maxFloor >= 15) return { floor: run.maxFloor, clear: true, routeId: route.id, routeName: route.name };
+    if (run.maxFloor >= 30) return { floor: run.maxFloor, clear: true, routeId: route.id, routeName: route.name };
     if (run.lawOffer.length) {
       const best = bestBuildChoice(run.lawOffer);
       const offerKey = `law-${run.floor}`;
@@ -168,14 +168,14 @@ function runSimulation(scenario, state, route) {
       } else advanceDaoTrial(state, { action: "seal", sealId: best.id });
     } else if (run.currentNode.type === "battle") {
       const result = advanceDaoTrial(state, { action: "battle" });
-      if (result.completed) return { floor: result.summary.floor, clear: result.summary.floor >= 15, routeId: route.id, routeName: route.name };
+      if (result.completed) return { floor: result.summary.floor, clear: result.summary.floor >= 30, routeId: route.id, routeName: route.name };
     } else {
       advanceDaoTrial(state, { optionId: bestEventChoice(run).id });
     }
     guard += 1;
   }
   const history = getPublicState(state).daoTrial.history[0];
-  return { floor: history?.floor || 0, clear: Number(history?.floor) >= 15, routeId: route.id, routeName: route.name };
+  return { floor: history?.floor || 0, clear: Number(history?.floor) >= 30, routeId: route.id, routeName: route.name };
 }
 
 const simulationStates = Array.from({ length: runsPerRoute }, (_, index) => createSimulationState(index));
@@ -188,11 +188,11 @@ for (const scenario of scenarios.filter((entry) => !scenarioFilter || entry.id =
   });
   const reached = (floor) => results.filter((result) => result.floor >= floor).length;
   const average = results.reduce((sum, result) => sum + result.floor, 0) / results.length;
-  console.log(`${scenario.label}: ${results.length} 局，5层 ${reached(5)}/${results.length}，10层 ${reached(10)}/${results.length}，15层 ${reached(15)}/${results.length}，平均 ${average.toFixed(1)} 层`);
+  console.log(`${scenario.label}: ${results.length} 局，10层 ${reached(10)}/${results.length}，20层 ${reached(20)}/${results.length}，30层 ${reached(30)}/${results.length}，平均 ${average.toFixed(1)} 层`);
   for (const route of daoTrialRoutes) {
     const routeResults = results.filter((result) => result.routeId === route.id);
     const routeReached = (floor) => routeResults.filter((result) => result.floor >= floor).length;
     const routeAverage = routeResults.reduce((sum, result) => sum + result.floor, 0) / Math.max(1, routeResults.length);
-    console.log(`  ${route.name}: ${routeResults.length} 局，5层 ${routeReached(5)}/${routeResults.length}，10层 ${routeReached(10)}/${routeResults.length}，15层 ${routeReached(15)}/${routeResults.length}，平均 ${routeAverage.toFixed(1)} 层`);
+    console.log(`  ${route.name}: ${routeResults.length} 局，10层 ${routeReached(10)}/${routeResults.length}，20层 ${routeReached(20)}/${routeResults.length}，30层 ${routeReached(30)}/${routeResults.length}，平均 ${routeAverage.toFixed(1)} 层`);
   }
 }

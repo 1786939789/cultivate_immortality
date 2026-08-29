@@ -406,17 +406,20 @@ const routePublic = getPublicState(routeState).daoTrial;
 const expectedCorePattern = [
   "battle", "event", "battle", "rest", "elite",
   "battle", "event", "battle", "rest", "boss",
-  "battle", "event", "elite", "rest", "boss"
+  "battle", "event", "elite", "rest", "battle",
+  "battle", "event", "battle", "rest", "boss",
+  "battle", "event", "elite", "rest", "battle",
+  "battle", "event", "battle", "rest", "boss"
 ];
 for (const route of routePublic.routes) {
-  assert.equal(route.nodes.length, 15, `${route.id} 必须生成十五个核心层`);
+  assert.equal(route.nodes.length, 30, `${route.id} 必须生成三十个核心层`);
   assert.deepEqual(
     route.nodes.map((node) => node.boss ? "boss" : node.elite ? "elite" : node.type),
     expectedCorePattern,
     `${route.id} 必须遵循固定的战斗、取舍和调息节奏`
   );
-  assert.deepEqual(route.nodes.map((node, index) => node.boss ? index + 1 : 0).filter(Boolean), [10, 15], `${route.id} 应在 10/15 层生成首领`);
-  assert.deepEqual(route.nodes.map((node, index) => node.elite ? index + 1 : 0).filter(Boolean), [5, 13], `${route.id} 应在 5/13 层生成精英`);
+  assert.deepEqual(route.nodes.map((node, index) => node.boss ? index + 1 : 0).filter(Boolean), [10, 20, 30], `${route.id} 应在 10/20/30 层生成首领`);
+  assert.deepEqual(route.nodes.map((node, index) => node.elite ? index + 1 : 0).filter(Boolean), [5, 13, 23], `${route.id} 应在 5/13/23 层生成精英`);
 }
 
 const opponentRosterState = createDefaultState();
@@ -425,8 +428,8 @@ ensureStateShape(opponentRosterState);
 const rosterCompanion = getPublicState(opponentRosterState).daoTrial.companions[0];
 startDaoTrial(opponentRosterState, { routeId: "golden-pass", companionId: rosterCompanion.person.id });
 const coreOpponentIds = [...opponentRosterState.daoTrial.activeRun.opponentIds];
-assert.equal(coreOpponentIds.length, 9, "十五层核心路线的九个战斗节点应预先分配九名真实 NPC");
-assert.equal(new Set(coreOpponentIds).size, 9, "同一轮核心路线不得重复出现同一名守关 NPC");
+assert.equal(coreOpponentIds.length, 18, "三十层核心路线的十八个战斗节点应预先分配守关对手");
+assert.equal(new Set(coreOpponentIds).size, 18, "同一轮核心路线不得重复出现同一名守关对手");
 assert.ok(!coreOpponentIds.includes(rosterCompanion.person.id), "同行修士不得被选为本轮守关 NPC");
 const rosterReload = structuredClone(opponentRosterState);
 assert.deepEqual(
@@ -473,12 +476,14 @@ assert.ok(depletedPreview.playerPower < depletedPreview.playerMaxPower, "战前�
 
 startDaoTrial(routeState, { routeId: daoTrialRoutes[0].id });
 strengthenTrialCombatant(routeState);
-const initialOpponentSnapshots = structuredClone(routeState.daoTrial.activeRun.opponentSnapshots);
+const initialOpponentSnapshots = structuredClone(Object.fromEntries(
+  Object.entries(routeState.daoTrial.activeRun.opponentSnapshots).filter(([floor]) => Number(floor) <= 15)
+));
 let active = getPublicState(routeState).daoTrial.activeRun;
 assert.equal(active.lawOffer.length, 3, "入境应先提供三项问道法则");
 active = reachCheckpoint(routeState, 5);
 assert.equal(active.maxFloor, 5, "第一阶段应记录通过五层");
-assert.deepEqual(active.bag, { xp: 4, spirit: 15, dust: 2, milestones: ["入境", "精英"] }, "前五层日常奖励应包含受控的战斗掉落与里程碑奖励");
+assert.deepEqual(active.bag, { xp: 4, spirit: 10, dust: 2, milestones: ["入境", "初试"] }, "前五层日常奖励应包含受控的战斗掉落与里程碑奖励");
 assert.equal(active.scoreBreakdown.progress, 700, "前五层进度分应为 100+120+140+160+180");
 assert.ok(active.scoreBreakdown.quality > 0, "战斗层应产生表现分");
 const floorFiveScore = active.score;
@@ -501,26 +506,37 @@ assert.equal(cappedRecoveryRun.combatant.hp, cappedRecoveryRun.combatant.maxHp, 
 assert.equal(cappedRecoveryRun.combatant.mana, cappedRecoveryRun.combatant.maxMana, "检查点法力恢复不得超过上限");
 advanceDaoTrial(routeState, { action: "continue" });
 active = reachCheckpoint(routeState, 10);
-assert.deepEqual(active.bag, { xp: 7, spirit: 44, dust: 7, milestones: ["入境", "精英", "问心"] }, "前十层累计奖励应正确叠加战斗掉落与里程碑奖励");
+assert.deepEqual(active.bag, { xp: 7, spirit: 24, dust: 6, milestones: ["入境", "初试", "问心"] }, "前十层累计奖励应正确叠加战斗掉落与里程碑奖励");
 assert.ok(active.score > floorFiveScore, "更深层数的总分必须严格提高");
 advanceDaoTrial(routeState, { action: "continue" });
 active = reachCheckpoint(routeState, 15);
-assert.equal(active.maxFloor, 15, "应完成十五层核心秘境");
-assert.deepEqual(active.bag, { xp: 10, spirit: 72, dust: 10, milestones: ["入境", "精英", "问心", "归一"] }, "炼气十五层奖励应精确包含封顶后的战斗掉落和里程碑奖励");
+assert.equal(active.maxFloor, 15, "应完成十五层阶段挑战");
+assert.deepEqual(active.bag, { xp: 10, spirit: 42, dust: 11, milestones: ["入境", "初试", "问心", "深入"] }, "炼气十五层奖励应低于旧版并保持渐进增长");
 advanceDaoTrial(routeState, { action: "continue" });
 active = getPublicState(routeState).daoTrial.activeRun;
-assert.equal(active.floor, 16, "十五层后应进入第十六层问天阶");
-assert.equal(active.nodes.length, 20, "问天阶应按五层继续扩展节点");
-assert.equal(active.endless, true, "第十六层应标记为问天阶");
-assert.equal(routeState.daoTrial.activeRun.opponentIds.length, 12, "扩展至二十层后应新增三名不重复守关 NPC");
-assert.equal(new Set(routeState.daoTrial.activeRun.opponentIds).size, 12, "问天阶新增的守关 NPC 不得与前十五层重复");
+assert.equal(active.floor, 16, "十五层后应进入第十六层核心挑战");
+assert.equal(active.nodes.length, 30, "核心秘境应预先生成三十层节点");
+assert.equal(active.endless, false, "第三十层之前不应标记为问天阶");
+assert.equal(routeState.daoTrial.activeRun.opponentIds.length, 18, "三十层核心应预先分配十八名不重复守关对手");
+assert.equal(new Set(routeState.daoTrial.activeRun.opponentIds).size, 18, "三十层守关对手不得重复");
 assert.deepEqual(
   Object.fromEntries(Object.entries(routeState.daoTrial.activeRun.opponentSnapshots).filter(([floor]) => Number(floor) <= 15)),
   initialOpponentSnapshots,
   "扩展问天阶时不得改写核心层已经确定的 NPC 快照"
 );
 active = reachCheckpoint(routeState, 20);
-assert.deepEqual(active.bag, { xp: 10, spirit: 72, dust: 10, milestones: ["入境", "精英", "问心", "归一"] }, "问天阶只应提供分数与纪录，不得让单张问道签无限产出资源");
+assert.deepEqual(active.bag, { xp: 14, spirit: 67, dust: 16, milestones: ["入境", "初试", "问心", "深入", "二十层"] }, "前二十层奖励应受控且显著低于一百灵石结算上限");
+const cappedTwentyState = structuredClone(routeState);
+cappedTwentyState.daoTrial.activeRun.rewards.spirit = 200;
+cappedTwentyState.daoTrial.activeRun.taskBoons = [{ id: "work" }];
+const cappedTwentyResult = advanceDaoTrial(cappedTwentyState, { action: "checkpoint-exit" });
+assert.equal(cappedTwentyResult.summary.rewards.spirit, 100, "二十层及以前的灵石总收入必须硬封顶一百");
+advanceDaoTrial(routeState, { action: "continue" });
+active = reachCheckpoint(routeState, 25);
+assert.deepEqual(active.bag, { xp: 21, spirit: 97, dust: 21, milestones: ["入境", "初试", "问心", "深入", "二十层", "破关"] }, "二十层后应继续提供额外灵石与里程碑奖励");
+advanceDaoTrial(routeState, { action: "continue" });
+active = reachCheckpoint(routeState, 30);
+assert.deepEqual(active.bag, { xp: 29, spirit: 135, dust: 24, milestones: ["入境", "初试", "问心", "深入", "二十层", "破关", "归一"] }, "三十层终关应完整结算后十层额外奖励");
 
 const exitState = createDefaultState();
 strengthenPlayer(exitState);
@@ -532,7 +548,7 @@ const earnedScore = exitRun.score;
 const exitResult = advanceDaoTrial(exitState, { action: "checkpoint-exit" });
 assert.equal(exitResult.summary.score, earnedScore, "安全离境不得折损已经取得的分数");
 assert.equal(exitResult.summary.rewards.retention, 1.2, "检查点安全离境应按 120% 结算奖励");
-assert.deepEqual({ xp: exitResult.summary.rewards.xp, spirit: exitResult.summary.rewards.spirit, dust: exitResult.summary.rewards.dust }, { xp: 4, spirit: 18, dust: 2 }, "炼气五层安全收功后的实际入账应保持克制");
+assert.deepEqual({ xp: exitResult.summary.rewards.xp, spirit: exitResult.summary.rewards.spirit, dust: exitResult.summary.rewards.dust }, { xp: 4, spirit: 12, dust: 2 }, "炼气五层安全收功后的实际入账应保持克制");
 assert.equal(exitResult.summary.floor, 5, "历史应保存最深层数");
 assert.equal(exitResult.summary.rewards.opponentReward, undefined, "主动安全离境不得向任何 NPC 发放奖励");
 const exitPublic = getPublicState(exitState).daoTrial;
@@ -549,9 +565,9 @@ ensureStateShape(foundationRewardState);
 startDaoTrial(foundationRewardState, { routeId: "golden-pass" });
 strengthenTrialCombatant(foundationRewardState);
 const foundationRewardRun = reachCheckpoint(foundationRewardState, 15);
-assert.deepEqual(foundationRewardRun.bag, { xp: 10, spirit: 81, dust: 10, milestones: ["入境", "精英", "问心", "归一"] }, "筑基日常问道的境界成长应集中在适量灵石，不得额外放大修为和灵尘");
+assert.deepEqual(foundationRewardRun.bag, { xp: 10, spirit: 47, dust: 11, milestones: ["入境", "初试", "问心", "深入"] }, "筑基十五层奖励应明显低于旧版灵石产出");
 const foundationRewardResult = advanceDaoTrial(foundationRewardState, { action: "checkpoint-exit" });
-assert.deepEqual({ xp: foundationRewardResult.summary.rewards.xp, spirit: foundationRewardResult.summary.rewards.spirit, dust: foundationRewardResult.summary.rewards.dust }, { xp: 12, spirit: 97, dust: 12 }, "筑基十五层安全收功应精确结算受控的战斗与里程碑奖励");
+assert.deepEqual({ xp: foundationRewardResult.summary.rewards.xp, spirit: foundationRewardResult.summary.rewards.spirit, dust: foundationRewardResult.summary.rewards.dust }, { xp: 12, spirit: 56, dust: 13 }, "筑基十五层安全收功应精确结算削减后的奖励");
 
 const masteryState = createDefaultState();
 ensureStateShape(masteryState);
@@ -772,4 +788,4 @@ const windAnalytics = getDaoTrialAnalytics(analyticsState, { range: 7, routeId: 
 assert.equal(windAnalytics.summary.attempts, 1, "路线筛选必须只保留指定路线的趋势数据");
 assert.equal(windAnalytics.routeStats.find((entry) => entry.routeId === "golden-pass").attempts, 3, "路线筛选不应破坏全路线效率对比");
 
-console.log("dao-trial-check: passed (256 laws, 1024 seals, uniform offers, stacking, resonance, 15 core floors, endless, scoring, companion, determinism, migration)");
+console.log("dao-trial-check: passed (256 laws, 1024 seals, uniform offers, stacking, resonance, 30 core floors, endless, scoring, companion, determinism, migration)");

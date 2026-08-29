@@ -5,6 +5,9 @@ import { advanceDaoTrial, createDefaultState, ensureStateShape, getPublicState, 
 const corePattern = [
   "battle", "event", "battle", "rest", "battle",
   "battle", "event", "battle", "rest", "battle",
+  "battle", "event", "battle", "rest", "battle",
+  "battle", "event", "battle", "rest", "battle",
+  "battle", "event", "battle", "rest", "battle",
   "battle", "event", "battle", "rest", "battle"
 ];
 const permanentKeys = ["realm", "layer", "maxHp", "hp", "attack", "defense", "divineSense", "maxMana", "mana"];
@@ -25,10 +28,10 @@ function auditDeepRun(route, routeIndex) {
   const companion = companions[routeIndex % companions.length];
   startDaoTrial(state, { routeId: route.id, companionId: companion.person.id });
   const internal = state.daoTrial.activeRun;
-  assert.equal(internal.nodes.length, 15, `${route.name} 应生成 15 个核心节点`);
+  assert.equal(internal.nodes.length, 30, `${route.name} 应生成 30 个核心节点`);
   assert.deepEqual(internal.nodes.map((node) => node.type), corePattern, `${route.name} 节点节奏错误`);
-  assert.equal(internal.opponentIds.length, 9, `${route.name} 核心层应分配 9 名守关对手`);
-  assert.equal(new Set(internal.opponentIds).size, 9, `${route.name} 核心层守关对手不得重复`);
+  assert.equal(internal.opponentIds.length, 18, `${route.name} 核心层应分配 18 名守关对手`);
+  assert.equal(new Set(internal.opponentIds).size, 18, `${route.name} 核心层守关对手不得重复`);
   assert.ok(!internal.opponentIds.includes(companion.person.id), `${route.name} 不得选择同行者守关`);
 
   for (const key of ["maxHp", "hp", "attack", "defense", "divineSense", "maxMana", "mana"]) {
@@ -79,8 +82,8 @@ function auditDeepRun(route, routeIndex) {
   const checkpoint = getPublicState(state).daoTrial.activeRun;
   assert.equal(checkpoint.maxFloor, 20, `${route.name} 应抵达第 20 层检查点`);
   assert.equal(seen.size, 12, `${route.name} 前 20 层应遇到 12 名唯一守关对手`);
-  assert.equal(state.daoTrial.activeRun.opponentIds.length, 12, `${route.name} 问天阶名单应扩展到 12 人`);
-  assert.deepEqual(checkpoint.bag, { xp: 10, spirit: 72, dust: 10, milestones: ["入境", "精英", "问心", "归一"] }, `${route.name} 前 20 层里程碑与逐战奖励包不一致`);
+  assert.equal(state.daoTrial.activeRun.opponentIds.length, 18, `${route.name} 三十层核心名单应包含 18 名对手`);
+  assert.deepEqual(checkpoint.bag, { xp: 14, spirit: 67, dust: 16, milestones: ["入境", "初试", "问心", "深入", "二十层"] }, `${route.name} 前 20 层里程碑与逐战奖励包不一致`);
   const summary = advanceDaoTrial(state, { action: "checkpoint-exit" }).summary;
   assert.equal(summary.routeId, route.id, `${route.name} 结算路线错误`);
   assert.equal(summary.floor, 20, `${route.name} 结算层数错误`);

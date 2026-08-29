@@ -18,9 +18,9 @@ for (const route of daoTrialRoutes) {
   state.rebirth = 8_000 + daoTrialRoutes.indexOf(route);
   ensureStateShape(state);
   const start = startDaoTrial(state, { routeId: route.id }).run;
-  assert.equal(start.nodes.length, 15, `${route.name} 应生成 15 层核心节点`);
+  assert.equal(start.nodes.length, 30, `${route.name} 应生成 30 层核心节点`);
   const snapshots = Object.values(state.daoTrial.activeRun.opponentSnapshots);
-  assert.equal(snapshots.length, 9, `${route.name} 应为 9 个战斗节点生成快照`);
+  assert.equal(snapshots.length, 18, `${route.name} 应为 18 个战斗节点生成快照`);
   assert.equal(new Set(snapshots.map((snapshot) => snapshot.kind === "npc" ? snapshot.npcId : snapshot.id)).size, snapshots.length, `${route.name} 战斗对手不得重复`);
   for (const snapshot of snapshots) {
     encounterKinds.add(snapshot.kind);

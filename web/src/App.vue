@@ -1903,7 +1903,7 @@
 
                 <div class="dao-trial-path" aria-label="问道节点进度">
                   <div v-for="node in visibleDaoTrialNodes" :key="node.id" :class="[`state-${node.state}`, { boss: node.boss }]">
-                    <span>{{ node.floor || node.index + 1 }}</span><b>{{ node.name }}</b><small>{{ node.boss ? (node.floor === 15 ? "问心终试" : "阶段守关") : node.elite ? (node.checkpoint ? "精英检查点" : "精英") : node.type === "battle" ? "斗法" : node.type === "rest" ? "调息" : "取舍" }}</small>
+                    <span>{{ node.floor || node.index + 1 }}</span><b>{{ node.name }}</b><small>{{ node.boss ? (node.floor === 30 ? "问心终试" : "阶段守关") : node.elite ? (node.checkpoint ? "精英检查点" : "精英") : node.type === "battle" ? "斗法" : node.type === "rest" ? "调息" : "取舍" }}</small>
                   </div>
                 </div>
 
@@ -2068,7 +2068,7 @@
               </section>
               <div class="dao-trial-route-grid">
                 <button v-for="route in daoTrialState.routes" :key="route.id" type="button" :class="[`route-${route.accent}`, { active: selectedDaoTrialRoute?.id === route.id }]" :aria-pressed="selectedDaoTrialRoute?.id === route.id" @click="selectedDaoTrialRouteId = route.id">
-                  <span class="dao-route-root"><img :src="rootIconPath(route.rootKey)" alt=""></span><span><small>十五层核心 · 路线精通 {{ daoTrialState.routeMastery?.[route.id]?.level || 0 }} 级</small><strong>{{ route.name }}</strong><em>{{ route.subtitle }}</em><small>最深 {{ daoTrialState.routeMastery?.[route.id]?.bestFloor || 0 }} 层 · 最佳 {{ daoTrialState.routeMastery?.[route.id]?.bestScore || 0 }} 分</small><span class="dao-trial-route-cycle"><b>{{ route.cycleProgress?.bestFloor ? `本期 ${route.cycleProgress.bestFloor} 层` : "本期未探索" }}</b><small>合参 {{ route.cycleProgress?.contribution || 0 }} / {{ daoTrialState.harmony?.perRouteCap || 15 }}</small><span v-if="route.firstExplore?.available && route.firstExplore?.rewardEligible" class="dao-trial-route-first-explore">首探 · 悟机 +{{ route.firstExplore.insight }}<template v-if="route.firstExplore.freeRerolls"> · 重观 +{{ route.firstExplore.freeRerolls }}</template></span></span></span>
+                  <span class="dao-route-root"><img :src="rootIconPath(route.rootKey)" alt=""></span><span><small>三十层核心 · 路线精通 {{ daoTrialState.routeMastery?.[route.id]?.level || 0 }} 级</small><strong>{{ route.name }}</strong><em>{{ route.subtitle }}</em><small>最深 {{ daoTrialState.routeMastery?.[route.id]?.bestFloor || 0 }} 层 · 最佳 {{ daoTrialState.routeMastery?.[route.id]?.bestScore || 0 }} 分</small><span class="dao-trial-route-cycle"><b>{{ route.cycleProgress?.bestFloor ? `本期 ${route.cycleProgress.bestFloor} 层` : "本期未探索" }}</b><small>合参 {{ route.cycleProgress?.contribution || 0 }} / {{ daoTrialState.harmony?.perRouteCap || 15 }}</small><span v-if="route.firstExplore?.available && route.firstExplore?.rewardEligible" class="dao-trial-route-first-explore">首探 · 悟机 +{{ route.firstExplore.insight }}<template v-if="route.firstExplore.freeRerolls"> · 重观 +{{ route.firstExplore.freeRerolls }}</template></span></span></span>
                 </button>
               </div>
               <section v-if="selectedDaoTrialRoute" class="dao-trial-mastery-card" aria-live="polite">
@@ -5597,7 +5597,7 @@ const adminWikiArticles = [
       {
         title: "问道秘境：七日一期的路线试炼",
         paragraphs: [
-          "秘境页提供每日可主动进入的问道路线试炼，同时每 7 天更换一期异象。当前有金石关、风雷径、玄阴泽三条路线，前 15 层为核心层，第 16 层后进入问天阶；战斗层会在真实修士与路线妖物之间轮换，精英与首领拥有更高强度和奖励。",
+          "秘境页提供每日可主动进入的问道路线试炼，同时每 7 天更换一期异象。当前有金石关、风雷径、玄阴泽三条路线，前 30 层为核心层，第 31 层后进入问天阶；战斗层会在真实修士与路线妖物之间轮换，精英与首领拥有更高强度和奖励。",
           "每日补充 1 枚问道签，最多积存 2 枚；没有问道签时仍可无奖励演练。路线中的选择会改变血量、法力、悟机、道印和同行者效果。"
         ],
         bullets: [
