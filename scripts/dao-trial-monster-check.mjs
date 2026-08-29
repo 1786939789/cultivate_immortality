@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { combatSkills, roots } from "../server/gameData.mjs";
+import { daoTrialLawMap } from "../server/daoTrialData.mjs";
 import { createDefaultState, ensureStateShape, getPublicState, startDaoTrial } from "../server/gameLogic.mjs";
 
 const routeIds = ["golden-pass", "wind-thunder-path", "nether-marsh"];
@@ -33,7 +34,15 @@ function auditSingleRun() {
     assert.ok(roots.some((root) => root.key === snapshot.primaryRootKey), `${floor} 层妖物灵根不在目录中`);
     assert.ok(combatSkills.some((skill) => skill.id === snapshot.skillId), `${floor} 层妖物技能不在完整技能池中`);
     assert.equal(snapshot.skillRanks?.[snapshot.skillId], 2, `${floor} 层筑基妖物技能应为 2 级`);
+    assert.ok(daoTrialLawMap[snapshot.lawId], `${floor} 层妖物应有有效法则加成`);
+    assert.equal(snapshot.lawStack, 1, `${floor} 层妖物法则默认应为 1 层`);
   }
+  for (const snapshot of Object.values(run.opponentSnapshots)) {
+    assert.ok(daoTrialLawMap[snapshot.lawId], `${snapshot.name} 应有有效法则加成`);
+    assert.equal(snapshot.lawStack, 1, `${snapshot.name} 法则默认应为 1 层`);
+  }
+  const lawIds = new Set(Object.values(run.opponentSnapshots).map((snapshot) => snapshot.lawId));
+  assert.ok(lawIds.size >= 2, "同一轮不同敌人应能随机到不同法则");
 
   const before = JSON.stringify(run.opponentSnapshots);
   const publicState = getPublicState(state);
@@ -44,9 +53,25 @@ function auditSingleRun() {
     assert.equal(preview.skillId, snapshot.skillId, "前端预览技能与后端快照不一致");
     assert.equal(preview.skillRank, snapshot.skillRanks[snapshot.skillId], "前端预览技能等级与后端快照不一致");
     assert.equal(preview.primaryRootKey, snapshot.primaryRootKey, "前端预览灵根与后端快照不一致");
+    assert.equal(preview.lawId, snapshot.lawId, "前端预览法则与后端快照不一致");
+    assert.equal(preview.law?.id, snapshot.lawId, "前端预览应包含敌方法则详情");
   }
   assert.equal(JSON.stringify(run.opponentSnapshots), before, "重复读取状态不应重抽妖物配置");
   return { monsters: monsters.length, roots: firstRoots, preview: preview?.skillId || null };
+}
+
+function auditOpponentLawDistribution() {
+  const lawIds = new Set();
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const state = newPracticeState(10);
+    startDaoTrial(state, { routeId: routeIds[attempt % routeIds.length] });
+    for (const snapshot of Object.values(state.daoTrial.activeRun.opponentSnapshots)) {
+      assert.ok(daoTrialLawMap[snapshot.lawId], "敌方法则必须来自法则目录");
+      lawIds.add(snapshot.lawId);
+    }
+  }
+  assert.ok(lawIds.size >= 6, "多轮秘境应覆盖多个随机敌方法则");
+  return [...lawIds].sort();
 }
 
 function auditRealmSkillRanks() {
@@ -78,5 +103,6 @@ function auditUnrestrictedPool() {
 const singleRun = auditSingleRun();
 const ranks = auditRealmSkillRanks();
 const skills = auditUnrestrictedPool();
-console.log(JSON.stringify({ singleRun, ranks: [...new Set(ranks.map((entry) => `${entry.realm}:${entry.rank}`))].sort(), skills }, null, 2));
+const laws = auditOpponentLawDistribution();
+console.log(JSON.stringify({ singleRun, ranks: [...new Set(ranks.map((entry) => `${entry.realm}:${entry.rank}`))].sort(), skills, laws }, null, 2));
 console.log("dao-trial-monster-check: passed");

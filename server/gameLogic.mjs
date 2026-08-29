@@ -3636,6 +3636,9 @@ function publicMonster(monster) {
     skillRank: skillRankOf(monster, monster.skillId),
     effectiveSkill: effectiveSkillForEntity(monster),
     skill: findSkill(monster.skillId)?.name || "妖兽本能",
+    lawId: monster.lawId || "",
+    lawStack: Number(monster.lawStack) || 0,
+    law: monster.lawId ? publicTrialLaw(daoTrialLawMap[monster.lawId], Number(monster.lawStack) || 1) : null,
     archetype: monster.archetype || monsterArchetypeForName(monster.name).id,
     archetypeLabel: monster.archetypeLabel || monsterArchetypeForName(monster.name).label,
     archetypeText: monster.archetypeText || monsterArchetypeForName(monster.name).text,
@@ -10221,6 +10224,35 @@ function trialMonsterRootKey(run, monsterOrdinal) {
   return order[(Math.max(1, Math.floor(Number(monsterOrdinal) || 1)) - 1) % order.length] || roots[0].key;
 }
 
+const trialOpponentBattleEvents = new Set([
+  "battleStart", "roundStart", "onDamageTaken", "afterDamage", "beforeSkill", "afterSkill",
+  "afterAttack", "afterStatus", "onLethal", "afterHeal", "afterCompanion"
+]);
+const trialOpponentBattleEffects = new Set([
+  "attack", "defense", "maxHp", "maxMana", "divineSense", "skillPower", "statusPower", "healing",
+  "manaCost", "cooldown", "rootResist", "lethalGuard", "reflectCharge", "attackEchoEvery", "attackEchoPower",
+  "openingSkillPower", "dotStack", "freeSkillEvery", "healCountBoost", "overhealShield", "noHitShield",
+  "skillEchoChance", "skillEchoPower", "nextBattleAttack", "lowHpAttack", "lowHpSense", "highManaSense",
+  "lowManaCost", "maxHpWithoutCompanion"
+]);
+
+function trialOpponentBattleLawPool() {
+  return daoTrialLaws
+    .filter((law) => Object.keys(law.effects || {}).some((key) => trialOpponentBattleEffects.has(key))
+      || (law.mechanics || []).some((mechanic) => {
+        const events = Array.isArray(mechanic.event) ? mechanic.event : [mechanic.event];
+        return events.some((event) => trialOpponentBattleEvents.has(event));
+      }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+}
+
+function trialOpponentLawSnapshot(run, node, kind, identity) {
+  const random = seededBattleRandom(`${run.seed}|opponent-law|${node?.floor || 1}|${node?.id || "node"}|${kind}|${identity || "opponent"}`);
+  const pool = trialOpponentBattleLawPool();
+  const law = pool[Math.floor(random() * pool.length) % pool.length] || pool[0] || daoTrialLaws[0];
+  return { lawId: law.id, lawStack: 1 };
+}
+
 function ensureTrialMonsterSnapshotFields(snapshot, run, floor) {
   if (!snapshot || snapshot.kind !== "monster") return snapshot;
   const rank = monsterSkillRankForRealm(snapshot.realm);
@@ -10233,6 +10265,29 @@ function ensureTrialMonsterSnapshotFields(snapshot, run, floor) {
     : {};
   if (!Number.isFinite(Number(snapshot.skillRanks[snapshot.skillId]))) snapshot.skillRanks[snapshot.skillId] = rank;
   return snapshot;
+}
+
+function ensureTrialOpponentLawFields(snapshot, run, node, floor) {
+  if (!snapshot || !["monster", "npc"].includes(snapshot.kind)) return snapshot;
+  if (!daoTrialLawMap[snapshot.lawId]) {
+    const law = trialOpponentLawSnapshot(run, node, snapshot.kind, snapshot.id || snapshot.npcId || floor);
+    snapshot.lawId = law.lawId;
+    snapshot.lawStack = law.lawStack;
+  }
+  snapshot.lawStack = Math.max(1, Math.min(5, Math.floor(Number(snapshot.lawStack) || 1)));
+  return snapshot;
+}
+
+function trialOpponentLawBuffs(snapshot, entity) {
+  const law = daoTrialLawMap[snapshot?.lawId];
+  if (!law) return {};
+  return combinedTrialBuffs({
+    lawIds: [law.id],
+    lawStacks: { [law.id]: Math.max(1, Math.min(5, Math.floor(Number(snapshot.lawStack) || 1))) },
+    sealIds: [],
+    combatant: entity,
+    affixId: ""
+  });
 }
 
 function ensureTrialOpponents(state, run) {
@@ -10248,6 +10303,7 @@ function ensureTrialOpponents(state, run) {
     if (snapshot?.kind === "npc" && (!snapshot.npcId || snapshot.npcId === companionId || usedIds.has(snapshot.npcId) || !state.npcs.some((npc) => npc.id === snapshot.npcId))) snapshot = null;
     if (snapshot?.kind === "monster" && !snapshot.id) snapshot = null;
     snapshot = ensureTrialMonsterSnapshotFields(snapshot, run, floor);
+    snapshot = ensureTrialOpponentLawFields(snapshot, run, node, floor);
     const recentKinds = priorKinds.slice(-2);
     const mustUseNpc = floor % 5 === 0 && !priorKinds.slice(-2).includes("npc");
     const forcedKind = recentKinds.length === 2 && recentKinds[0] === recentKinds[1] ? (recentKinds[0] === "npc" ? "monster" : "npc") : null;
@@ -10262,6 +10318,7 @@ function ensureTrialOpponents(state, run) {
       const npc = kind === "npc" ? selectTrialOpponent(state, run, node, usedIds) : null;
       if (npc) {
         snapshot = trialOpponentSnapshot(state, npc);
+        Object.assign(snapshot, trialOpponentLawSnapshot(run, node, "npc", npc.id));
         if (!run.practice) {
           const usage = state.daoTrial.npcTrialUsage ??= {};
           const record = usage[npc.id] || { lastDay: 0, recentDays: [], count: 0, lastDayCount: 0, tier: "preferred" };
@@ -10306,6 +10363,7 @@ function ensureTrialOpponents(state, run) {
           primaryRootKey: monster.primaryRootKey,
           skillId: monster.skillId,
           skillRanks: { ...(monster.skillRanks || {}) },
+          ...trialOpponentLawSnapshot(run, node, "monster", monster.id),
           archetype: monster.archetype,
           archetypeLabel: monster.archetypeLabel,
           archetypeText: monster.archetypeText,
@@ -10344,7 +10402,7 @@ function trialOpponentFor(state, run, node) {
     key,
     Math.max(key === "defense" ? 0 : 1, Math.floor((Number(baseStats[key]) || 0) * ratio))
   ]));
-  return {
+  const opponent = {
     kind: snapshot.kind || "npc",
     id: snapshot.kind === "monster" ? snapshot.id : snapshot.npcId,
     name: snapshot.name,
@@ -10357,6 +10415,8 @@ function trialOpponentFor(state, run, node) {
     primaryRootKey: snapshot.primaryRootKey,
     skillId: snapshot.skillId,
     skillRanks: { ...(snapshot.skillRanks || {}) },
+    lawId: snapshot.lawId || "",
+    lawStack: Number(snapshot.lawStack) || 0,
     archetype: snapshot.archetype,
     archetypeLabel: snapshot.archetypeLabel,
     archetypeText: snapshot.archetypeText,
@@ -10371,6 +10431,8 @@ function trialOpponentFor(state, run, node) {
     enhancePercent: Math.max(0, Math.round((ratio - 1) * 100)),
     trialFloor: floor
   };
+  opponent.trialBuffs = trialOpponentLawBuffs(snapshot, opponent);
+  return opponent;
 }
 
 function trialNpcFor(state, run, node) {
