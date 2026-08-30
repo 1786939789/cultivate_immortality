@@ -1981,13 +1981,12 @@
                     <div v-if="activeDaoTrialRun.lawOffer.length" class="dao-trial-law-offer">
                       <div class="dao-trial-offer-head"><span title="法则等权随机出现；重复选择会提升叠层效果">择一问道法则改变本轮构筑 · 等权随机</span><button class="secondary compact-button" type="button" :disabled="!activeDaoTrialRun.canReroll || isActionPending('/api/dao-trial/advance')" @click="rerollDaoTrialLaws"><RefreshCw :size="14" aria-hidden="true" /> {{ activeDaoTrialRun.freeRerolls ? "免费重观" : "重观 · 1悟机" }}</button></div>
                       <button v-for="law in activeDaoTrialRun.lawOffer" :key="law.id" :class="`rarity-${law.rarity}`" type="button" :disabled="isActionPending('/api/dao-trial/advance')" @click="chooseDaoTrialLaw(law.id)">
-                        <span><i aria-hidden="true">◆</i>{{ law.rarityLabel }} · {{ law.school }}</span>
-                        <small class="dao-law-branch">{{ law.branch }} · {{ law.designRole }}</small>
-                        <strong>{{ law.name }}<small v-if="law.stack > 1"> · 叠层 {{ law.stack }}</small></strong>
-                        <small>{{ law.text }}</small>
-                        <em>{{ daoTrialTriggerLabel(law.trigger) }}<template v-if="law.mechanics?.[0]?.summary"> · {{ law.mechanics[0].summary }}</template></em>
-                        <small v-if="law.nextStack" class="dao-law-next">再次选择：{{ law.nextStack.text }}</small>
-                        <small v-else class="dao-law-next complete">已达五层圆满</small>
+                        <span class="dao-law-kicker"><Gem :size="14" aria-hidden="true" /><b>{{ law.rarityLabel }}</b><i>{{ law.school }}</i><small class="dao-law-branch">{{ law.branch }}</small></span>
+                        <strong class="dao-law-name"><Sparkles :size="15" aria-hidden="true" />{{ law.name }}<small v-if="law.stack > 1">叠层 {{ law.stack }}</small></strong>
+                        <p class="dao-law-effect" :title="law.text"><Zap :size="14" aria-hidden="true" />{{ law.text }}</p>
+                        <span class="dao-law-meta"><span><Orbit :size="12" aria-hidden="true" />{{ daoTrialTriggerLabel(law.trigger) }}</span><span v-if="law.mechanics?.[0]?.summary" :title="law.mechanics[0].summary">{{ law.mechanics[0].summary }}</span></span>
+                        <small v-if="law.nextStack" class="dao-law-next"><TrendingUp :size="12" aria-hidden="true" />再次选择：{{ law.nextStack.text }}</small>
+                        <small v-else class="dao-law-next complete"><CheckCircle2 :size="12" aria-hidden="true" />已达五层圆满</small>
                       </button>
                     </div>
                     <div v-else-if="activeDaoTrialRun.checkpointPending" class="dao-trial-checkpoint">
