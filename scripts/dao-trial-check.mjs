@@ -52,6 +52,18 @@ function startedNpcTrial({ multiplier = 1, practice = false } = {}) {
   assert.fail("应能通过不同固定种子生成首层 NPC 遭遇");
 }
 
+function startedMonsterTrial() {
+  for (let seed = 0; seed < 80; seed += 1) {
+    const state = createDefaultState();
+    state.day = 8 + seed * 7;
+    state.rebirth = 3_000 + seed;
+    ensureStateShape(state);
+    startDaoTrial(state, { routeId: "golden-pass" });
+    if (state.daoTrial.activeRun.opponentSnapshots["1"]?.kind === "monster") return state;
+  }
+  assert.fail("应能通过不同固定种子生成首层妖物遭遇");
+}
+
 function forcedFailureState({ affixId = "ore-awakening", sealIds = [], requireNpc = false } = {}) {
   const state = requireNpc ? startedNpcTrial() : (() => {
     const fresh = createDefaultState();
@@ -191,6 +203,7 @@ const stalePowerReplay = structuredClone(lawBattle.replay);
 stalePowerReplay.left.power = 1;
 assert.equal(getPublicReplay(stalePowerReplay, lawBattleState).left.power, expectedReplayPower, "旧回放应按已保存的战斗快照修正历史战力");
 assert.equal(replayStatMax({ stats: { maxHp: 180, maxMana: 90 }, baseStats: { maxHp: 120, maxMana: 60 }, startHp: 150, startMana: 70 }, "hp"), 180, "回放上限工具应避免基础属性覆盖有效属性");
+assert.equal(replayStatMax({ stats: { maxHp: 180, hp: 180 }, baseStats: { maxHp: 240 }, startHp: 180, endHp: 0 }, "hp"), 180, "秘境投影属性已生效时不得被重复计算后的基础气血覆盖");
 
 const worldMutationState = structuredClone(worldBaselineState);
 for (const key of ["maxHp", "attack", "defense", "divineSense", "maxMana"]) {
@@ -251,6 +264,23 @@ assert.deepEqual(
 const npcWinHistory = npcWinOpponent.dungeonHistory.find((record) => record.type === "dao-trial-defense" && record.replayId === npcWinResult.replay.replayId);
 assert.deepEqual({ result: npcWinHistory.result, xp: npcWinHistory.xp, spirit: npcWinHistory.spirit, dust: npcWinHistory.dust }, { result: "守关得胜", xp: 7, spirit: 8, dust: 3 }, "NPC 守关历史应保存胜负和实际所得");
 assert.throws(() => advanceDaoTrial(npcWinState, { action: "battle" }), /没有进行中的问道/, "已结算挑战不得重复触发 NPC 奖励");
+
+const monsterWinState = startedMonsterTrial();
+monsterWinState.daoTrial.activeRun.lawOffer = [];
+monsterWinState.daoTrial.activeRun.rewards = { xp: 11, spirit: 13, dust: 5, milestones: ["测试"] };
+for (const key of ["maxHp", "hp", "attack", "divineSense", "maxMana"]) monsterWinState.daoTrial.activeRun.combatant[key] = 1;
+monsterWinState.daoTrial.activeRun.combatant.defense = 0;
+monsterWinState.daoTrial.activeRun.combatant.mana = 0;
+const monsterWinResult = advanceDaoTrial(monsterWinState, { action: "battle" });
+assert.equal(monsterWinResult.completed, true, "妖物击败玩家后应立即结束本轮问道");
+assert.equal(monsterWinResult.summary.rewards.retention, 0.4, "妖物击败玩家时也应保留本轮行囊的 40%");
+assert.deepEqual(
+  { xp: monsterWinResult.summary.rewards.xp, spirit: monsterWinResult.summary.rewards.spirit, dust: monsterWinResult.summary.rewards.dust },
+  { xp: 4, spirit: 5, dust: 2 },
+  "妖物战败结算应精确保留 40% 修为、灵石与灵尘"
+);
+assert.equal(monsterWinResult.summary.rewards.opponentReward, undefined, "妖物不得取得玩家行囊剩余的 60%");
+assert.equal(monsterWinResult.summary.defeatedBy, null, "妖物胜利不得伪装成修士分账对象");
 
 const playerWinState = startedNpcTrial({ multiplier: 100 });
 playerWinState.daoTrial.activeRun.lawOffer = [];
@@ -475,6 +505,25 @@ pressureRun.combatant.hp = Math.max(1, Math.floor(pressureRun.combatant.maxHp * 
 pressureRun.combatant.mana = Math.floor(pressureRun.combatant.maxMana * 0.1);
 const depletedPreview = getPublicState(npcPressureState).daoTrial.activeRun.opponentPreview;
 assert.ok(depletedPreview.playerPower < depletedPreview.playerMaxPower, "战前预览应按当前气血与法力降低玩家状态战力");
+
+const opponentRootResistState = startedMonsterTrial();
+const opponentRootResistRun = opponentRootResistState.daoTrial.activeRun;
+strengthenTrialCombatant(opponentRootResistState);
+opponentRootResistRun.lawOffer = [];
+opponentRootResistRun.combatant.roots = [{ key: "metal", bonus: 0.1 }];
+opponentRootResistRun.combatant.root = opponentRootResistRun.combatant.roots[0];
+opponentRootResistRun.combatant.primaryRootKey = "metal";
+const opponentRootResistSnapshot = opponentRootResistRun.opponentSnapshots["1"];
+opponentRootResistSnapshot.roots = [{ key: "wood", bonus: 0.1 }];
+opponentRootResistSnapshot.root = opponentRootResistSnapshot.roots[0];
+opponentRootResistSnapshot.primaryRootKey = "wood";
+opponentRootResistSnapshot.lawId = "root-ward-law";
+opponentRootResistSnapshot.lawStack = 1;
+const opponentRootResistPreview = getPublicState(opponentRootResistState).daoTrial.activeRun.opponentPreview;
+assert.ok(opponentRootResistPreview.rootCounterPenalty > 0, "敌方受克制时应公开经法则削减后的灵根惩罚");
+const opponentRootResistBattle = advanceDaoTrial(opponentRootResistState, { action: "battle" });
+assert.equal(opponentRootResistBattle.replay.right.rootCounterPenalty, opponentRootResistPreview.rootCounterPenalty, "敌方法则的灵根抗性在预览与实战中必须一致");
+assert.equal(opponentRootResistBattle.replay.right.power, opponentRootResistPreview.power, "敌方法则的灵根抗性不得造成预览战力低报");
 
 startDaoTrial(routeState, { routeId: daoTrialRoutes[0].id });
 strengthenTrialCombatant(routeState);

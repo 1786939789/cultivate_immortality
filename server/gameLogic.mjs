@@ -10558,8 +10558,7 @@ function daoTrialTaskBoonsForDay(state, day = state.day) {
 
 function settleDaoTrialBag(state, run, success, result) {
   const raw = run.rewards || { xp: 0, spirit: 0, dust: 0, milestones: [] };
-  const defeatedByMonster = !success && run.lastBattle?.opponent?.kind === "monster";
-  const retention = success ? 1.2 : result === "主动离境" ? 0.8 : defeatedByMonster ? 0 : 0.4;
+  const retention = success ? 1.2 : result === "主动离境" ? 0.8 : 0.4;
   const workMultiplier = run.taskBoons?.some((boon) => boon.id === "work") ? 1.15 : 1;
   const fortuneXpMultiplier = Math.max(1, Number(run.dailyRootFortuneXpMultiplier) || dailyRootFortuneXpMultiplier(state, state.player, run.startedDay || state.day));
   const settled = {
@@ -10940,7 +10939,8 @@ function publicTrialRun(state, run) {
     const opponent = trialOpponentFor(state, run, node);
     if (opponent) {
       const playerPenalty = rootCounterPenalty(opponent, fighter) * (1 - clamp(Number(fighter?.trialBuffs?.rootResist) || 0, 0, 1));
-      const opponentPenalty = rootCounterPenalty(fighter, opponent);
+      const opponentPenalty = rootCounterPenalty(fighter, opponent)
+        * (1 - clamp(Number(opponent?.trialBuffs?.rootResist) || 0, 0, 1));
       const playerBattleStats = applyBattleRootPenalty(stats, playerPenalty);
       const opponentBattleStats = applyBattleRootPenalty(combatSnapshot(opponent, state), opponentPenalty);
       const opponentPower = powerOfStats(opponentBattleStats);
