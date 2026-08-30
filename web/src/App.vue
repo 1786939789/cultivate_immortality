@@ -1980,8 +1980,8 @@
                     <div v-if="activeDaoTrialRun.lastLawEvent" class="dao-trial-law-event"><Sparkles :size="14" aria-hidden="true" /><span><b>{{ activeDaoTrialRun.lastLawEvent.lawName }}</b><small>{{ activeDaoTrialRun.lastLawEvent.text }}</small></span></div>
                     <div v-if="activeDaoTrialRun.lawOffer.length" class="dao-trial-law-offer">
                       <div class="dao-trial-offer-head"><span title="法则等权随机出现；重复选择会提升叠层效果">择一问道法则改变本轮构筑 · 等权随机</span><button class="secondary compact-button" type="button" :disabled="!activeDaoTrialRun.canReroll || isActionPending('/api/dao-trial/advance')" @click="rerollDaoTrialLaws"><RefreshCw :size="14" aria-hidden="true" /> {{ activeDaoTrialRun.freeRerolls ? "免费重观" : "重观 · 1悟机" }}</button></div>
-                      <button v-for="law in activeDaoTrialRun.lawOffer" :key="law.id" :class="`rarity-${law.rarity}`" type="button" :disabled="isActionPending('/api/dao-trial/advance')" @click="chooseDaoTrialLaw(law.id)">
-                        <span class="dao-law-kicker"><Gem :size="14" aria-hidden="true" /><b>{{ law.rarityLabel }}</b><i>{{ law.school }}</i><small class="dao-law-branch">{{ law.branch }}</small></span>
+                      <button v-for="law in activeDaoTrialRun.lawOffer" :key="law.id" :class="`rarity-${law.rarity}`" type="button" :aria-label="`${law.rarityLabel}法则：${law.name}。${law.text}`" :disabled="isActionPending('/api/dao-trial/advance')" @click="chooseDaoTrialLaw(law.id)">
+                        <span class="dao-law-kicker"><Gem :size="14" :title="law.rarityLabel" aria-hidden="true" /><i>{{ law.school }}</i><small class="dao-law-branch">{{ law.branch }}</small></span>
                         <strong class="dao-law-name"><Sparkles :size="15" aria-hidden="true" />{{ law.name }}<small v-if="law.stack > 1">叠层 {{ law.stack }}</small></strong>
                         <p class="dao-law-effect" :title="law.text"><Zap :size="14" aria-hidden="true" />{{ law.text }}</p>
                         <span class="dao-law-meta"><span><Orbit :size="12" aria-hidden="true" />{{ daoTrialTriggerLabel(law.trigger) }}</span><span v-if="law.mechanics?.[0]?.summary" :title="law.mechanics[0].summary">{{ law.mechanics[0].summary }}</span></span>
@@ -1994,7 +1994,12 @@
                     </div>
                     <div v-else-if="activeDaoTrialRun.sealOffer.length" class="dao-trial-seal-offer">
                       <div class="dao-trial-offer-head"><span>择一道印收入本轮</span><button class="secondary compact-button" type="button" :disabled="!activeDaoTrialRun.canReroll || isActionPending('/api/dao-trial/advance')" @click="rerollDaoTrialSeals"><RefreshCw :size="14" aria-hidden="true" /> {{ activeDaoTrialRun.freeRerolls ? "免费重观" : "重观 · 1悟机" }}</button></div>
-                      <button v-for="seal in activeDaoTrialRun.sealOffer" :key="seal.id" type="button" :disabled="isActionPending('/api/dao-trial/advance')" @click="chooseDaoTrialSeal(seal.id)"><span>{{ seal.school }}<template v-if="seal.family"> · {{ seal.family }}</template></span><strong>{{ seal.name }}<small v-if="seal.stack > 1"> · 叠层 {{ seal.stack }}</small></strong><small>{{ seal.text }}</small></button>
+                      <button v-for="seal in activeDaoTrialRun.sealOffer" :key="seal.id" class="dao-seal-card" type="button" :disabled="isActionPending('/api/dao-trial/advance')" @click="chooseDaoTrialSeal(seal.id)">
+                        <span class="dao-seal-kicker"><ShieldCheck :size="14" aria-hidden="true" /><b>{{ seal.school }}</b><i v-if="seal.family">{{ seal.family }}</i></span>
+                        <strong class="dao-seal-name"><Sparkles :size="15" aria-hidden="true" />{{ seal.name }}<small v-if="seal.stack > 1">叠层 {{ seal.stack }}</small></strong>
+                        <p class="dao-seal-effect"><Zap :size="14" aria-hidden="true" />{{ seal.text }}</p>
+                        <small class="dao-seal-hint"><TrendingUp :size="12" aria-hidden="true" />收入本轮构筑</small>
+                      </button>
                     </div>
                     <div v-else-if="activeDaoTrialRun.currentNode?.type === 'battle' && activeDaoTrialRun.opponentPreview" class="dao-trial-enemy-preview">
                       <div class="dao-trial-enemy-head">
