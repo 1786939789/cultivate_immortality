@@ -94,6 +94,10 @@ assert.equal(new Set(daoTrialSeals.map((seal) => seal.id)).size, daoTrialSeals.l
 assert.ok(Object.values(Object.groupBy(daoTrialLaws, (law) => law.school)).every((entries) => entries.length === 32), "八个法则流派应各有三十二项法则");
 assert.ok(Object.values(Object.groupBy(daoTrialSeals, (seal) => seal.school)).every((entries) => entries.length === 128), "八个道印流派应各有一百二十八项道印");
 assert.equal(daoTrialSealSchoolResonances.length, 24, "八个道印流派应各有 2/4/6 三档共鸣");
+const freeCastLaws = daoTrialLaws.filter((law) => Number(law.effects?.freeSkillEvery) > 0);
+assert.ok(freeCastLaws.length > 0, "应存在免费施法间隔法则");
+assert.ok(freeCastLaws.every((law) => !law.text.includes("提高 400%") && /施法/.test(law.text)), "免费施法间隔必须按施法次数展示，不得误显示为百分比");
+assert.ok(daoTrialLaws.filter((law) => Number(law.effects?.companionFrequency)).every((law) => /同行支援间隔(?:缩短|延长)(?: \d+ 回合)?/.test(law.text)), "同行间隔必须按回合展示");
 for (const law of daoTrialLaws) {
   assert.ok(law.name && law.school && law.trigger && law.text, `${law.id} 缺少展示或触发信息`);
   assert.ok(Object.keys(law.effects || {}).length, `${law.id} 必须包含结构化效果`);

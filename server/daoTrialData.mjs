@@ -390,6 +390,19 @@ const daoTrialSealEffectLabels = {
 function generatedSealText(effects) {
   return Object.entries(effects).map(([key, value]) => {
     const label = daoTrialSealEffectLabels[key] || key;
+    if (key === "freeSkillEvery") {
+      const every = Math.max(1, Math.floor(Math.abs(Number(value)) || 1));
+      return `每${every}次施法免费一次`;
+    }
+    if (key === "attackEchoEvery") {
+      const every = Math.max(1, Math.floor(Math.abs(Number(value)) || 1));
+      return `每${every}次普通攻击追加一次余波`;
+    }
+    if (key === "companionFrequency") {
+      const rounds = Math.abs(Math.floor(Number(value) || 0));
+      if (!rounds) return "同行支援间隔不变";
+      return `同行支援间隔${Number(value) < 0 ? "缩短" : "延长"} ${rounds} 回合`;
+    }
     if (key === "cooldown") return `${label}减少 ${Math.abs(value)} 回合`;
     const percent = Math.round(Math.abs(value) * 100);
     return `${label}${value >= 0 ? "提高" : "降低"} ${percent}%`;
