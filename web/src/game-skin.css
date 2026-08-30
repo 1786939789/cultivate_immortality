@@ -16360,12 +16360,46 @@ body::before {
   color: #4f3a23;
 }
 
+/* The run sidebar is a quick inventory, so each owned entry stays one line. */
+.view.active .dao-trial-running .dao-trial-seal-rack > .dao-trial-rack-item {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-width: 0;
+  min-height: 32px;
+  padding: 6px 9px;
+  white-space: nowrap;
+}
+
+.view.active .dao-trial-running .dao-trial-seal-rack > .dao-trial-rack-item b {
+  min-width: 0;
+  overflow: hidden;
+  color: #f0dfae;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.view.active .dao-trial-running .dao-trial-seal-rack > .dao-trial-rack-item em {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: #f2d58a;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.view.active .dao-trial-running .dao-trial-seal-rack > .dao-trial-rack-item.rarity-silver em { color: #c8d7dc; }
+.view.active .dao-trial-running .dao-trial-seal-rack > .dao-trial-rack-item.rarity-gold em { color: #f0cc70; }
+.view.active .dao-trial-running .dao-trial-seal-rack > .dao-trial-rack-item.rarity-diamond em { color: #8fe5e8; }
+
 /* Compact law cards: keep the choice readable while preserving rarity cues. */
 .view.active .dao-trial-running .dao-trial-law-offer > button {
   position: relative;
   grid-template-rows: auto auto minmax(40px, auto) auto auto;
-  gap: 7px;
-  min-height: 182px;
+  gap: 9px;
+  min-height: 194px;
   padding: 12px 13px 11px 15px;
   overflow: hidden;
   border-width: 1px;
@@ -16448,6 +16482,8 @@ body::before {
   color: #ffe3a0;
   font-size: 18px;
   line-height: 1.2;
+  padding-bottom: 7px;
+  border-bottom: 1px solid rgba(255, 227, 160, .18);
 }
 
 .view.active .dao-trial-running .dao-trial-law-offer .dao-law-name small {
@@ -16464,7 +16500,7 @@ body::before {
   margin: 0;
   color: #f1ead8;
   font-size: 15px;
-  line-height: 1.45;
+  line-height: 1.55;
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -16482,7 +16518,7 @@ body::before {
   gap: 7px;
   color: #c9d8c8;
   font-size: 13px;
-  line-height: 1.25;
+  line-height: 1.4;
 }
 
 .view.active .dao-trial-running .dao-trial-law-offer .dao-law-meta > span {
@@ -16504,7 +16540,7 @@ body::before {
   align-items: center;
   gap: 4px;
   margin-top: auto;
-  padding-top: 6px;
+  padding-top: 9px;
   color: #f0d58e;
   font-size: 14px;
   line-height: 1.2;
@@ -16520,8 +16556,8 @@ body::before {
   position: relative;
   display: grid;
   grid-template-rows: auto auto minmax(42px, auto) auto;
-  gap: 8px;
-  min-height: 174px;
+  gap: 9px;
+  min-height: 186px;
   padding: 13px 14px 11px 16px;
   overflow: hidden;
   border: 1px solid rgba(151, 206, 183, .48);
@@ -16586,6 +16622,8 @@ body::before {
   color: #f3d994;
   font-size: 18px;
   line-height: 1.2;
+  padding-bottom: 7px;
+  border-bottom: 1px solid rgba(243, 217, 148, .18);
 }
 
 .view.active .dao-trial-running .dao-seal-name small {
@@ -16600,7 +16638,7 @@ body::before {
   margin: 0;
   color: #edf3e8;
   font-size: 14px;
-  line-height: 1.45;
+  line-height: 1.55;
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -16617,15 +16655,15 @@ body::before {
   align-items: center;
   gap: 4px;
   margin-top: auto;
-  padding-top: 6px;
+  padding-top: 9px;
   border-top: 1px solid rgba(205, 239, 215, .16);
   color: #b4d8c0;
   font-size: 12px;
 }
 
 @media (max-width: 720px) {
-  .view.active .dao-trial-running .dao-trial-law-offer > button { min-height: 158px; }
+  .view.active .dao-trial-running .dao-trial-law-offer > button { min-height: 170px; }
   .view.active .dao-trial-running .dao-trial-law-offer .dao-law-effect { font-size: 14px; }
-  .view.active .dao-trial-running .dao-trial-seal-offer > .dao-seal-card { min-height: 154px; }
+  .view.active .dao-trial-running .dao-trial-seal-offer > .dao-seal-card { min-height: 166px; }
   .view.active .dao-trial-running .dao-trial-seal-offer .dao-seal-effect { font-size: 13px; }
 }
