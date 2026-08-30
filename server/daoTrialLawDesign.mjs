@@ -1,3 +1,5 @@
+import { formatTrialEffects } from "./daoTrialText.mjs";
+
 const stackLevels = [1, 2, 3, 4, 5];
 
 export const daoTrialLawBranches = {
@@ -235,7 +237,7 @@ function goldMechanic(school, branchIndex, variant) {
 
 function genericStackPlan(rarity, summary = "核心效果") {
   if (rarity === "silver") {
-    return ["获得基础效果", "效果提升至 115%", "效果提升至 130%", "效果提升至 145%", "效果提升至 160%"]
+    return ["获得基础效果", "效果提升至原值的 1.15 倍", "效果提升至原值的 1.3 倍", "效果提升至原值的 1.45 倍", "效果提升至原值的 1.6 倍"]
       .map((text, index) => ({ stack: index + 1, text }));
   }
   return [
@@ -277,6 +279,8 @@ export function applyDaoTrialLawDesign(baseLaws) {
       safeEffects.maxHp = Math.max(Number(safeEffects.maxHp) || 0, law.rarity === "gold" ? 0.1 : 0.07);
     }
     const base = { ...law, effects: safeEffects, branch, mechanics: [...(law.mechanics || [])], designRole: law.rarity === "silver" ? "基础组件" : "构筑核心" };
+    const generated = law.id.startsWith("expanded-law-");
+    const displayText = generated ? formatTrialEffects(safeEffects) : law.text;
 
     if (law.rarity === "diamond") {
       const definition = diamondDefinitions[law.school]?.[branchIndex];
@@ -290,17 +294,17 @@ export function applyDaoTrialLawDesign(baseLaws) {
         ...base,
         mechanics: [gold],
         designRole: "构筑核心",
-        text: `${law.text.replace(/。$/, "")}；${gold.summary}。`,
+        text: `${displayText.replace(/。$/, "")}；${gold.summary}。`,
         stackPlan: genericStackPlan("gold", gold.summary),
         tags: [...new Set([...(law.tags || []), schoolIds[law.school], "engine"])]
       };
     }
 
     const branchOccurrence = Math.floor(rarityIndex / branches.length);
-    const generated = law.id.startsWith("expanded-law-");
     return {
       ...base,
       name: generated ? `${branch}${silverSuffixes[branchOccurrence]}` : law.name,
+      text: displayText,
       stackPlan: genericStackPlan("silver"),
       tags: [...new Set([...(law.tags || []), schoolIds[law.school], "foundation"])]
     };
