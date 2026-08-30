@@ -283,10 +283,17 @@ const daoTrialSealSchoolDefinitions = [
   { id: "risk", school: "险道", tags: ["risk", "attack"], roots: ["燃命", "饮血", "蚀骨", "孤注", "逆脉", "焚心", "绝境", "夺寿", "断生", "噬魂", "血契", "残阳", "孤锋", "裂心", "负天", "焚脉", "碎命", "狂骨", "逆火", "葬锋", "血河", "枯荣", "绝念", "沉渊", "伤魂", "忘生", "煞星", "孤城", "断念", "枯血", "天罚", "末途"] },
   { id: "vitality", school: "生机", tags: ["vitality", "guard"], roots: ["回春", "青木", "长息", "润脉", "生莲", "复苏", "养元", "不息", "甘霖", "暖脉", "春生", "青华", "玉露", "芳洲", "荣枯", "长青", "灵芽", "花生", "沐元", "归暖", "生息", "和光", "温养", "润泽", "扶苏", "木心", "春山", "回澜", "滋荣", "长宁", "清养", "不凋"] },
   { id: "element", school: "五行", tags: ["arcane", "element"], roots: ["金生", "木荣", "水衍", "火明", "土镇", "雷转", "冰凝", "风化", "金鸣", "木灵", "水镜", "火羽", "土厚", "雷引", "冰魄", "风吟", "金轮", "木华", "水心", "火炼", "土藏", "雷极", "冰河", "风息", "金砂", "木脉", "水月", "火种", "土星", "雷门", "冰尘", "风界"] },
-  { id: "bond", school: "同契", tags: ["companion", "vitality"], roots: ["并肩", "照影", "合鸣", "守望", "同尘", "共济", "双曜", "一心", "携手", "同舟", "相照", "共鸣", "连枝", "并行", "同契", "合璧", "扶携", "相知", "并羽", "同调", "共生", "联心", "照胆", "双行", "同归", "相守", "并济", "合势", "同尘", "携光", "连心", "一念"] }
+  { id: "bond", school: "同契", tags: ["companion", "vitality"], roots: ["并肩", "照影", "合鸣", "守望", "同尘", "共济", "双曜", "一心", "携手", "同舟", "相照", "共鸣", "连枝", "并行", "同契", "合璧", "扶携", "相知", "并羽", "同调", "共生", "联心", "照胆", "双行", "同归", "相守", "并济", "合势", "共尘", "携光", "连心", "一念"] }
 ];
 
 const daoTrialSealForms = ["印", "诀", "环", "契"];
+const generatedSealRootAliases = {
+  attack: { "照胆": "破胆" },
+  focus: { "回澜": "灵澜" },
+  tempo: { "照影": "轻影" },
+  vitality: { "回澜": "春澜" },
+  bond: { "照影": "同辉", "照胆": "护心" }
+};
 const roundedSealEffect = (value) => Math.round(value * 1000) / 1000;
 
 function generatedSealEffects(schoolId, index) {
@@ -384,7 +391,10 @@ const expandedDaoTrialSeals = daoTrialSealSchoolDefinitions.flatMap((definition)
   const existingCount = legacyDaoTrialSeals.filter((seal) => seal.school === definition.school).length;
   return Array.from({ length: 128 - existingCount }, (_, offset) => {
     const index = existingCount + offset;
-    const root = definition.roots[Math.floor(index / 4)];
+    const rootIndex = Math.floor(index / 4);
+    const originalRoot = definition.roots[rootIndex];
+    const alias = generatedSealRootAliases[definition.id]?.[originalRoot];
+    const root = alias || originalRoot;
     const form = daoTrialSealForms[index % daoTrialSealForms.length];
     const effects = generatedSealEffects(definition.id, index);
     return {
@@ -539,6 +549,17 @@ const generatedLawProfiles = {
   ]
 };
 const lawSchoolIds = { "攻伐连锁": "attack", "技能循环": "focus", "守御反击": "guard", "生机转化": "vitality", "风险流派": "risk", "同行共鸣": "bond", "五行衍化": "element", "命数经营": "fate" };
+const generatedLawNameBranches = {
+  "攻伐连锁": ["连击", "破甲", "追击", "战意"],
+  "技能循环": ["免耗", "术法回响", "冷却", "灵潮"],
+  "守御反击": ["护命", "蓄反", "无伤护盾", "反照"],
+  "生机转化": ["复苏", "吸血", "回生", "疗愈"],
+  "风险流派": ["燃血", "绝境", "劫意", "赌命"],
+  "同行共鸣": ["技能共鸣", "协击", "替劫", "独行道影"],
+  "五行衍化": ["五行轮转", "异常熔炼", "逆克化生", "天劫降临"],
+  "命数经营": ["改命", "残悟", "转福", "天命"]
+};
+const generatedLawNameTiers = ["启灵", "流光", "玄变", "化境", "归真", "无极", "鸿蒙", "极境"];
 // The generated laws used to share the same numeric curve regardless of rarity.
 // Keep diamond near that baseline, while laws moved down to gold/silver also lose
 // a matching amount of numeric strength instead of only changing their badge.
@@ -557,9 +578,11 @@ const generatedDaoTrialLaws = Object.entries(generatedLawProfiles).flatMap(([sch
     const effects = Object.fromEntries(Object.entries(baseEffects).map(([key, value]) => [key, typeof value === "boolean" || generatedLawIntegerEffects.has(key)
       ? value
       : Math.round((Number(value) + Math.min(0.04, tier * 0.004)) * scale * 1000) / 1000]));
+    const nameBranch = generatedLawNameBranches[school]?.[index % 4] || school;
+    const nameTier = generatedLawNameTiers[Math.min(generatedLawNameTiers.length - 1, Math.floor(index / 4))];
     return {
       id: `expanded-law-${lawSchoolIds[school]}-${index + 1}`,
-      name: `${school}${["天机", "玄变", "归藏", "问真", "太初", "无极", "鸿蒙", "极境"][tier]}${index % 4 + 1}`,
+      name: `${nameBranch}${nameTier}`,
       school, rarity, tags: school === "命数经营" ? ["fate", "vitality"] : school === "同行共鸣" ? ["companion", "vitality"] : ["arcane", "tempo"], trigger,
       text: generatedSealText(effects), effects
     };

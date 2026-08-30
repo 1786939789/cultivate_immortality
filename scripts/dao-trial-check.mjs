@@ -91,6 +91,10 @@ assert.equal(daoTrialLaws.length, 256, "应配置二百五十六项问道法则"
 assert.equal(daoTrialSeals.length, 1024, "应配置一千零二十四项问道道印");
 assert.equal(new Set(daoTrialLaws.map((law) => law.id)).size, daoTrialLaws.length, "问道法则 ID 必须唯一");
 assert.equal(new Set(daoTrialSeals.map((seal) => seal.id)).size, daoTrialSeals.length, "问道道印 ID 必须唯一");
+assert.equal(new Set(daoTrialLaws.map((law) => law.name)).size, daoTrialLaws.length, "问道法则名称必须唯一");
+assert.equal(new Set(daoTrialSeals.map((seal) => seal.name)).size, daoTrialSeals.length, "问道道印名称必须唯一");
+assert.ok(daoTrialLaws.every((law) => !/\d$/.test(law.name)), "问道法则名称不得带数字尾缀");
+assert.ok(daoTrialLaws.every((law) => !/(攻伐连锁|技能循环|守御反击|生机转化|风险流派|同行共鸣|五行衍化|命数经营)(无极|鸿蒙|极境)\d/.test(law.name)), "问道法则名称不得使用旧机器拼接格式");
 assert.ok(Object.values(Object.groupBy(daoTrialLaws, (law) => law.school)).every((entries) => entries.length === 32), "八个法则流派应各有三十二项法则");
 assert.ok(Object.values(Object.groupBy(daoTrialSeals, (seal) => seal.school)).every((entries) => entries.length === 128), "八个道印流派应各有一百二十八项道印");
 assert.equal(daoTrialSealSchoolResonances.length, 24, "八个道印流派应各有 2/4/6 三档共鸣");

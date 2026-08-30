@@ -3,13 +3,13 @@ import { formatTrialEffects } from "./daoTrialText.mjs";
 const stackLevels = [1, 2, 3, 4, 5];
 
 export const daoTrialLawBranches = {
-  "攻伐连锁": ["连击", "破防", "斩杀", "战意延续"],
-  "技能循环": ["免耗", "术法回响", "冷却", "法力转化"],
-  "守御反击": ["致命防护", "储伤反击", "无伤护盾", "反照"],
-  "生机转化": ["复苏", "吸血", "持续恢复", "治疗反转"],
+  "攻伐连锁": ["连击", "破甲", "追击", "战意"],
+  "技能循环": ["免耗", "术法回响", "冷却", "灵潮"],
+  "守御反击": ["护命", "蓄反", "无伤护盾", "反照"],
+  "生机转化": ["复苏", "吸血", "回生", "疗愈"],
   "风险流派": ["低血爆发", "燃血施法", "受伤成长", "风险收益"],
-  "同行共鸣": ["技能共鸣", "协击", "替劫", "独行化身"],
-  "五行衍化": ["五行轮转", "异常熔炼", "逆克化生", "天劫道域"],
+  "同行共鸣": ["技能共鸣", "协击", "替劫", "独行道影"],
+  "五行衍化": ["五行轮转", "异常熔炼", "逆克化生", "天劫降临"],
   "命数经营": ["重观改命", "残悟", "福祸转化", "命数积累"]
 };
 
@@ -24,7 +24,8 @@ const schoolIds = {
   "命数经营": "fate"
 };
 
-const silverSuffixes = ["启灵", "循行", "凝意", "化境", "归真"];
+const silverSuffixes = ["启灵", "凝意", "化境", "归真", "星阶", "月阶", "地阶", "道成"];
+const goldSuffixes = ["玄章", "天阶", "圣境", "无极", "鸿蒙", "极境", "天成", "道极"];
 
 function mechanic(type, action, event, summary, params = {}, buffs = {}) {
   return { type, action, event, summary, params, buffs };
@@ -292,6 +293,7 @@ export function applyDaoTrialLawDesign(baseLaws) {
       const gold = goldMechanic(law.school, branchIndex, variant);
       return {
         ...base,
+        name: generated ? `${branch}${goldSuffixes[variant % goldSuffixes.length]}` : law.name,
         mechanics: [gold],
         designRole: "构筑核心",
         text: `${displayText.replace(/。$/, "")}；${gold.summary}。`,
