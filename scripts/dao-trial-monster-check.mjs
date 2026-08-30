@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { combatSkills, roots } from "../server/gameData.mjs";
 import { daoTrialLawMap } from "../server/daoTrialData.mjs";
-import { createDefaultState, ensureStateShape, getPublicState, startDaoTrial } from "../server/gameLogic.mjs";
+import { createDefaultState, dailySettlement, ensureStateShape, getPublicState, startDaoTrial } from "../server/gameLogic.mjs";
 
 const routeIds = ["golden-pass", "wind-thunder-path", "nether-marsh"];
-const unrestrictedSkills = new Set(["blood_escape", "poison_flame", "bone_spike", "fire_crow", "wood_recovery"]);
 
-function newPracticeState(realm = 10) {
+function newPracticeState(realm = 10, seedOffset = 0) {
   const state = createDefaultState();
-  state.day = 8;
+  state.day = 8 + seedOffset;
+  state.rebirth = 1 + seedOffset;
   state.daoTrial.tickets = 0;
   state.player.realm = realm;
   ensureStateShape(state);
@@ -29,9 +29,10 @@ function auditSingleRun() {
   assert.ok(monsters.length >= 2, "一轮秘境至少应生成两个妖物用于验证");
 
   const firstRoots = monsters.slice(0, Math.min(roots.length, monsters.length)).map(([, snapshot]) => snapshot.primaryRootKey);
-  assert.equal(new Set(firstRoots).size, firstRoots.length, "同一轮前六个妖物灵根不应重复");
   for (const [floor, snapshot] of monsters) {
     assert.ok(roots.some((root) => root.key === snapshot.primaryRootKey), `${floor} 层妖物灵根不在目录中`);
+    assert.equal(snapshot.roots?.length, 1, `${floor} 层妖物必须是单灵根`);
+    assert.equal(snapshot.roots[0].key, snapshot.primaryRootKey, `${floor} 层妖物主灵根与单灵根快照不一致`);
     assert.ok(combatSkills.some((skill) => skill.id === snapshot.skillId), `${floor} 层妖物技能不在完整技能池中`);
     assert.equal(snapshot.skillRanks?.[snapshot.skillId], 2, `${floor} 层筑基妖物技能应为 2 级`);
     assert.ok(daoTrialLawMap[snapshot.lawId], `${floor} 层妖物应有有效法则加成`);
@@ -63,7 +64,7 @@ function auditSingleRun() {
 function auditOpponentLawDistribution() {
   const lawIds = new Set();
   for (let attempt = 0; attempt < 12; attempt += 1) {
-    const state = newPracticeState(10);
+    const state = newPracticeState(10, attempt);
     startDaoTrial(state, { routeId: routeIds[attempt % routeIds.length] });
     for (const snapshot of Object.values(state.daoTrial.activeRun.opponentSnapshots)) {
       assert.ok(daoTrialLawMap[snapshot.lawId], "敌方法则必须来自法则目录");
@@ -91,18 +92,61 @@ function auditRealmSkillRanks() {
 
 function auditUnrestrictedPool() {
   const seen = new Set();
-  for (let attempt = 0; attempt < 24; attempt += 1) {
-    const state = newPracticeState(10);
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const state = newPracticeState(10, attempt);
     startDaoTrial(state, { routeId: routeIds[attempt % routeIds.length] });
     for (const [, snapshot] of monsterSnapshots(state.daoTrial.activeRun)) seen.add(snapshot.skillId);
   }
-  assert.ok([...seen].some((skillId) => unrestrictedSkills.has(skillId)), "秘境妖物应能抽到 archetype 之外的完整技能池技能");
+  assert.deepEqual([...seen].sort(), combatSkills.map((skill) => skill.id).sort(), "秘境妖物应能从完整技能池抽到全部技能");
   return [...seen].sort();
+}
+
+function auditRandomSingleRoots() {
+  const seen = new Set();
+  for (let attempt = 0; attempt < 48; attempt += 1) {
+    const state = newPracticeState(10, attempt);
+    startDaoTrial(state, { routeId: routeIds[attempt % routeIds.length] });
+    for (const [, snapshot] of monsterSnapshots(state.daoTrial.activeRun)) {
+      assert.equal(snapshot.roots?.length, 1, "秘境妖物必须保持单灵根");
+      seen.add(snapshot.primaryRootKey);
+    }
+  }
+  assert.deepEqual([...seen].sort(), roots.map((root) => root.key).sort(), "秘境妖物随机灵根应覆盖完整基础灵根池");
+  return [...seen].sort();
+}
+
+function auditDailyDungeonMonsters() {
+  const state = createDefaultState();
+  state.player.realm = 10;
+  ensureStateShape(state);
+  dailySettlement(state, { manual: true });
+  const dungeonDay = state.dungeonDays[0];
+  const groups = {
+    bloodTrial: (dungeonDay?.bloodTrial?.caves || []).map((cave) => cave.monster).filter(Boolean),
+    voidHall: (dungeonDay?.sects || []).map((record) => record.monsterStats).filter(Boolean),
+    starSea: (dungeonDay?.public?.monsters || []).filter(Boolean)
+  };
+  const summary = {};
+  for (const [group, monsters] of Object.entries(groups)) {
+    assert.ok(monsters.length, `${group} 应生成副本妖物`);
+    const unique = [...new Map(monsters.map((monster) => [monster.id, monster])).values()];
+    for (const monster of unique) {
+      const expectedRank = Math.floor(Number(monster.realmIndex) / 10) + 1;
+      assert.equal(monster.skillRank, expectedRank, `${monster.name} 技能等级应与境界对应`);
+      assert.ok(combatSkills.some((skill) => skill.id === monster.skillId), `${monster.name} 技能必须来自完整技能池`);
+      assert.equal(monster.roots?.length, 1, `${monster.name} 必须是单灵根`);
+      assert.ok(roots.some((root) => root.key === monster.primaryRootKey), `${monster.name} 灵根必须来自完整基础灵根池`);
+    }
+    summary[group] = unique.map((monster) => `${monster.realmIndex}:${monster.skillRank}:${monster.primaryRootKey}:${monster.skillId}`);
+  }
+  return summary;
 }
 
 const singleRun = auditSingleRun();
 const ranks = auditRealmSkillRanks();
 const skills = auditUnrestrictedPool();
+const randomRoots = auditRandomSingleRoots();
 const laws = auditOpponentLawDistribution();
-console.log(JSON.stringify({ singleRun, ranks: [...new Set(ranks.map((entry) => `${entry.realm}:${entry.rank}`))].sort(), skills, laws }, null, 2));
+const dailyDungeons = auditDailyDungeonMonsters();
+console.log(JSON.stringify({ singleRun, ranks: [...new Set(ranks.map((entry) => `${entry.realm}:${entry.rank}`))].sort(), skills, randomRoots, laws, dailyDungeons }, null, 2));
 console.log("dao-trial-monster-check: passed");

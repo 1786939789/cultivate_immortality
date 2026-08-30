@@ -2039,10 +2039,10 @@ const monsterNamesByStage = [
 ];
 const monsterNames = monsterNamesByStage.flat();
 const monsterArchetypes = [
-  { id: "hp", label: "血量高", shortLabel: "血厚", text: "气血厚重，能扛更久。", multipliers: { maxHp: 1.34, attack: 0.92, defense: 1.06, divineSense: 0.92, maxMana: 0.96 }, skillIds: ["wood_recovery", "golden_body", "spirit_armor", "mirror_water"] },
-  { id: "sense", label: "神识高", shortLabel: "神识", text: "神识敏锐，更容易预判闪避。", multipliers: { maxHp: 0.96, attack: 0.94, defense: 0.96, divineSense: 1.42, maxMana: 1.16 }, skillIds: ["soul_hook", "ice_seal", "magnetic_light", "ghost_step"] },
-  { id: "attack", label: "攻击高", shortLabel: "凶攻", text: "攻伐凶猛，正面伤害更高。", multipliers: { maxHp: 0.98, attack: 1.34, defense: 0.92, divineSense: 0.96, maxMana: 1.02 }, skillIds: ["starfall", "demon_cut", "blood_drink", "thunder_pearl"] },
-  { id: "balanced", label: "均衡型", shortLabel: "均衡", text: "五维平衡，没有明显短板。", multipliers: { maxHp: 1.08, attack: 1.08, defense: 1.08, divineSense: 1.08, maxMana: 1.08 }, skillIds: ["five_element", "wind_blade", "azure_sword", "green_bamboo"] }
+  { id: "hp", label: "血量高", shortLabel: "血厚", text: "气血厚重，能扛更久。", multipliers: { maxHp: 1.34, attack: 0.92, defense: 1.06, divineSense: 0.92, maxMana: 0.96 } },
+  { id: "sense", label: "神识高", shortLabel: "神识", text: "神识敏锐，更容易预判闪避。", multipliers: { maxHp: 0.96, attack: 0.94, defense: 0.96, divineSense: 1.42, maxMana: 1.16 } },
+  { id: "attack", label: "攻击高", shortLabel: "凶攻", text: "攻伐凶猛，正面伤害更高。", multipliers: { maxHp: 0.98, attack: 1.34, defense: 0.92, divineSense: 0.96, maxMana: 1.02 } },
+  { id: "balanced", label: "均衡型", shortLabel: "均衡", text: "五维平衡，没有明显短板。", multipliers: { maxHp: 1.08, attack: 1.08, defense: 1.08, divineSense: 1.08, maxMana: 1.08 } }
 ];
 const monsterArchetypeById = Object.fromEntries(monsterArchetypes.map((archetype) => [archetype.id, archetype]));
 const monsterArchetypeByName = Object.fromEntries(monsterNamesByStage.flatMap((names) => names.map((name, index) => [name, monsterArchetypes[index % monsterArchetypes.length].id])));
@@ -3536,12 +3536,6 @@ function monsterArchetypeForName(name = "") {
   return monsterArchetypeById[monsterArchetypeByName[baseMonsterName(name)]] || monsterArchetypes[3];
 }
 
-function monsterSkillForArchetype(name, archetype) {
-  const ids = (archetype?.skillIds || []).filter((id) => combatSkills.some((skill) => skill.id === id));
-  if (!ids.length) return randomSkillId();
-  return ids[stableHash(name) % ids.length];
-}
-
 function applyMonsterArchetypeStats(stats, archetype) {
   const multipliers = archetype?.multipliers || {};
   return {
@@ -3555,7 +3549,7 @@ function applyMonsterArchetypeStats(stats, archetype) {
 
 function makeMonster(name, realm, rootKey, intensity = 1, archetypeId = "", random = Math.random, options = {}) {
   const stats = rollBirthStats(capRealm(realm), random);
-  const monsterRootKey = rootKey || pick(roots).key;
+  const monsterRootKey = rootKey || roots[Math.floor(random() * roots.length) % roots.length]?.key || roots[0].key;
   const monsterRoot = roots.find((root) => root.key === monsterRootKey) || roots[0];
   const monsterRootBonus = monsterRootKey === "heaven"
     ? 0
@@ -3586,7 +3580,7 @@ function makeMonster(name, realm, rootKey, intensity = 1, archetypeId = "", rand
     archetype: archetype.id,
     archetypeLabel: archetype.label,
     archetypeText: archetype.text,
-    skillId: options.unrestrictedSkills ? randomSkillId(random) : monsterSkillForArchetype(name, archetype)
+    skillId: randomSkillId(random)
   };
   monster.skillRanks = { [monster.skillId]: clamp(Math.floor(Number(options.skillRank) || monsterSkillRankForRealm(realm)), 1, maxSkillRank) };
   applyRootSet(monster);
@@ -3819,7 +3813,7 @@ function createBloodTrialCave(caveIndex) {
   return {
     cave: caveIndex + 1,
     name: dungeonTierNames[stage],
-    monster: makeMonster(`${dungeonTierNames[stage]}·${monsterName}`, realm, pick(roots).key, 0.8 + caveIndex * 0.18, archetype.id),
+    monster: makeMonster(`${dungeonTierNames[stage]}·${monsterName}`, realm, undefined, 0.8 + caveIndex * 0.18, archetype.id),
     clears: [],
     challengers: []
   };
@@ -4079,8 +4073,8 @@ function createVoidHallMonster(state, monsterRealm) {
   const targetStage = stageIndexOfRealm(monsterRealm);
   const seed = `void_hall|${state.calendarStartDate || ""}|${state.day || 1}|${monsterRealm}`;
   const monsterName = monsterNameForStage(targetStage, seed);
-  const rootKey = roots[stableHash(`${seed}|root`) % roots.length]?.key;
-  return makeMonster(`虚天殿·${monsterName}王`, monsterRealm, rootKey, 1.2 + targetStage * 0.14);
+  const random = seededBattleRandom(`${seed}|monster`);
+  return makeMonster(`虚天殿·${monsterName}王`, monsterRealm, undefined, 1.2 + targetStage * 0.14, "", random);
 }
 
 function runSectDungeon(state, sectName, members, date, foughtAt = timestampKey(), sharedMonster = null) {
@@ -4306,8 +4300,9 @@ function starSeaMonsterRealmForHighestRealm(highestRealm) {
 function makeStarSeaMonster(state, highestRealm) {
   const realm = starSeaMonsterRealmForHighestRealm(highestRealm);
   const stage = stageIndexOfRealm(realm);
-  const monsterName = monsterNameForStage(stage, `star_sea|${state.day || 1}|${realm}`);
-  const monster = makeMonster(`乱星海·${monsterName}`, realm, pick(roots).key, 1.15 + stage * 0.1);
+  const seed = `star_sea|${state.calendarStartDate || ""}|${state.day || 1}|${realm}`;
+  const monsterName = monsterNameForStage(stage, seed);
+  const monster = makeMonster(`乱星海·${monsterName}`, realm, undefined, 1.15 + stage * 0.1, "", seededBattleRandom(`${seed}|monster`));
   monster.defense = Math.max(1, Math.floor(monster.defense * 0.52));
   monster.attack = Math.max(1, Math.floor(monster.attack * 0.82));
   monster.maxHp = Math.max(monster.maxHp * 4, Math.floor(allCultivators(state).reduce((sum, { entity }) => sum + powerOf(entity, state, { includeDailyRootFortune: false }), 0) * 0.34));
@@ -10343,21 +10338,6 @@ function selectTrialOpponent(state, run, node, usedIds) {
       || a.npc.id.localeCompare(b.npc.id))[0]?.npc || null;
 }
 
-function trialMonsterRootOrder(seed) {
-  const order = roots.map((root) => root.key);
-  const random = seededBattleRandom(`${seed}|monster-root-order`);
-  for (let index = order.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(random() * (index + 1));
-    [order[index], order[swapIndex]] = [order[swapIndex], order[index]];
-  }
-  return order;
-}
-
-function trialMonsterRootKey(run, monsterOrdinal) {
-  const order = trialMonsterRootOrder(run.seed);
-  return order[(Math.max(1, Math.floor(Number(monsterOrdinal) || 1)) - 1) % order.length] || roots[0].key;
-}
-
 const trialOpponentBattleEvents = new Set([
   "battleStart", "roundStart", "onDamageTaken", "afterDamage", "beforeSkill", "afterSkill",
   "afterAttack", "afterStatus", "onLethal", "afterHeal", "afterCompanion"
@@ -10469,15 +10449,14 @@ function ensureTrialOpponents(state, run) {
         const route = daoTrialRouteMap[run.routeId];
         const random = seededBattleRandom(monsterSeed);
         const intensity = 0.82 + Math.min(0.75, floor * 0.045) + (node.elite ? 0.12 : 0) + (node.boss ? 0.2 : 0);
-        const monsterOrdinal = priorKinds.filter((kind) => kind === "monster").length + 1;
         const monster = makeMonster(
           `${route?.name || "秘境"}·${node.monster || node.name}`,
           state.player.realm,
-          trialMonsterRootKey(run, monsterOrdinal),
+          undefined,
           intensity,
           "",
           random,
-          { unrestrictedSkills: true, skillRank: monsterSkillRankForRealm(state.player.realm) }
+          { skillRank: monsterSkillRankForRealm(state.player.realm) }
         );
         const rolledStats = effectiveCombatStats(monster, state, { includeDailyRootFortune: false });
         const playerPower = Math.max(1, Number(run.worldSnapshot?.playerPower) || powerOf(state.player, state, { includeDailyRootFortune: false }));
@@ -15405,11 +15384,15 @@ export function runDungeon(state, id) {
     return;
   }
 
+  const guardianRoot = normalizeRoot(roots[Math.floor(Math.random() * roots.length)] || roots[0]);
+  const guardianSkillId = randomSkillId();
   const guardian = {
     id: `dungeon-${dungeon.id}`,
     name: `${dungeon.name}守关者`,
     realm: dungeon.min,
-    root: normalizeRoot({ key: "earth" }),
+    root: guardianRoot,
+    roots: [{ ...guardianRoot }],
+    primaryRootKey: guardianRoot.key,
     attack: Math.floor(dungeon.power / 7) + dungeon.min * 2,
     defense: Math.floor(dungeon.power / 10) + dungeon.min,
     hp: dungeon.power + dungeon.min * 10,
@@ -15417,9 +15400,11 @@ export function runDungeon(state, id) {
     mana: 40 + dungeon.min * 6,
     maxMana: 40 + dungeon.min * 6,
     divineSense: 10 + dungeon.min * 2,
-    skillId: randomSkillId()
+    skillId: guardianSkillId,
+    skillRanks: { [guardianSkillId]: monsterSkillRankForRealm(dungeon.min) }
   };
   applyRootSet(guardian);
+  guardian.roots = [{ ...guardian.root }];
   guardian.hp = effectiveMaxHp(guardian);
   guardian.mana = effectiveMaxMana(guardian);
 
