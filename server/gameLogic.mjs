@@ -586,13 +586,61 @@ export function effectiveDivineSense(entity, state) {
 
 function effectiveCombatStats(entity, state, options = {}) {
   const equipmentBonuses = { attack: 0, defense: 0, maxHp: 0, divineSense: 0, maxMana: 0 };
-  for (const item of equippedItemsFor(state, entity)) {
+  const equippedItems = equippedItemsFor(state, entity);
+  for (const item of equippedItems) {
     const stat = equipmentSlot(item).stat;
     if (stat in equipmentBonuses) equipmentBonuses[stat] += item.bonus || 0;
   }
   const pearlBonuses = state && entity?.id ? spiritPearlBonusesFor(state, entity) : {};
   const fortuneDay = options.day ?? state?.day;
   const fortuneBonus = (stat) => options.includeDailyRootFortune === false ? 0 : dailyRootFortuneStatBonus(state, entity, stat, fortuneDay);
+  const rootStatFor = { attack: "attack", defense: "defense", maxHp: "hp", divineSense: "divineSense", maxMana: "mana" };
+  const baseStatFor = { attack: "attack", defense: "defense", maxHp: "maxHp", divineSense: "divineSense", maxMana: "maxMana" };
+  const roots = normalizeRootSet(entity).roots;
+  const rootSources = (stat) => roots
+    .filter((root) => root.effect === rootStatFor[stat])
+    .map((root) => ({ label: `灵根·${root.name}`, rate: rootBonus(root) / Math.max(1, roots.length) }));
+  const fortuneSources = (stat) => {
+    if (options.includeDailyRootFortune === false || !state) return [];
+    const match = dailyRootFortuneMatch(state, entity, fortuneDay);
+    return match.stat === stat && match.rate ? [{ label: `今日天运·${rootByKey(match.rootKey).name}`, rate: match.rate }] : [];
+  };
+  const equipmentSources = (stat) => equippedItems
+    .filter((item) => equipmentSlot(item).stat === stat && Number(item.bonus))
+    .map((item) => ({ label: `装备·${item.name || equipmentSlot(item).name}`, rate: Number(item.bonus) || 0 }));
+  const pearlSources = (stat) => {
+    if (!state || !entity?.id) return [];
+    const asset = entity.spiritPearls || state.spiritPearls;
+    return spiritPearls.flatMap((config) => {
+      const entry = asset?.pearls?.[config.id];
+      if (!entry?.tier) return [];
+      const value = spiritPearlValue(entry.tier, entry.star);
+      const match = entitySpiritPearlMatchMultiplier(entity, config);
+      const rate = (config.effects || [])
+        .filter((effect) => effect.stat === stat)
+        .reduce((sum, effect) => sum + value * (effect.weight || 1) * match, 0);
+      return rate ? [{ label: config.name, rate: Number(rate.toFixed(4)) }] : [];
+    });
+  };
+  const bonusSources = {};
+  for (const stat of Object.keys(baseStatFor)) {
+    const sources = [
+      ...rootSources(stat),
+      ...fortuneSources(stat),
+      ...equipmentSources(stat),
+      ...pearlSources(stat)
+    ].filter((source) => Number(source.rate));
+    const baseValue = Math.max(0, Number(entity?.[baseStatFor[stat]]) || 0);
+    let currentValue = Math.floor(baseValue);
+    let cumulativeRate = 0;
+    bonusSources[stat] = sources.map((source) => {
+      cumulativeRate += Number(source.rate) || 0;
+      const nextValue = Math.floor(baseValue * (1 + cumulativeRate));
+      const value = nextValue - currentValue;
+      currentValue = nextValue;
+      return { label: source.label, rate: Number(source.rate.toFixed(4)), value };
+    }).filter((source) => source.value || source.rate);
+  }
   const effectiveValue = (base, rootStat, stat) => Math.floor(
     (entity?.[base] || 0) * (1 + rootEffectBonus(entity, rootStat) + fortuneBonus(stat) + equipmentBonuses[stat] + (pearlBonuses[stat] || 0))
   );
@@ -601,11 +649,11 @@ function effectiveCombatStats(entity, state, options = {}) {
   const maxHp = effectiveValue("maxHp", "hp", "maxHp");
   const divineSense = effectiveValue("divineSense", "divineSense", "divineSense");
   const maxMana = effectiveValue("maxMana", "mana", "maxMana");
-  return { attack, defense, maxHp, divineSense, maxMana };
+  return { attack, defense, maxHp, divineSense, maxMana, bonusSources };
 }
 
 export function effectiveStats(entity, state, options = {}) {
-  const { attack, defense, maxHp, divineSense, maxMana } = effectiveCombatStats(entity, state, options);
+  const { attack, defense, maxHp, divineSense, maxMana, bonusSources } = effectiveCombatStats(entity, state, options);
   return {
     attack, defense, maxHp, divineSense, maxMana,
     xpMultiplier: xpGainMultiplier(entity, state) * talentSnapshot(entity).xpMultiplier,
@@ -615,7 +663,8 @@ export function effectiveStats(entity, state, options = {}) {
       maxHp: maxHp - (entity.maxHp || 0),
       divineSense: divineSense - (entity.divineSense || 0),
       maxMana: maxMana - (entity.maxMana || 0)
-    }
+    },
+    bonusSources
   };
 }
 
@@ -958,6 +1007,7 @@ function attemptSkillUpgrade(state, entity, { auto = false } = {}) {
   }
   const chance = skillUpgradeChance(targetRank);
   entity.spirit -= cost;
+  recordSpiritExpense(state, entity, cost, `技能升阶·${skill.name}`, "skill");
   entity.lastSkillUpgradeDay = state.day;
   const success = Math.random() < chance;
   if (success) entity.skillRanks[skill.id] = targetRank;
@@ -4985,6 +5035,7 @@ function settleStarSeaAuctionReward(state, summary, monster, options = {}) {
       const value = equipmentValue(item);
       if ((entity.spirit || 0) < value) continue;
       entity.spirit -= value;
+      recordSpiritExpense(state, entity, value, `装备竞拍·${item.name}`, "equipment");
       const soldItem = current || null;
       const soldValue = soldItem ? equipmentSellValue(soldItem) : 0;
       if (soldItem) {
@@ -8392,6 +8443,7 @@ function makeNpc(name, index) {
     portraitVariant: 0,
     dungeonHistory: [],
     dailyRecords: [],
+    spiritExpenses: [],
     breakthroughs: [],
     skillUpgrades: [],
     duelHistory: []
@@ -8415,6 +8467,77 @@ function log(state, text, type = "") {
   state.log = state.log.slice(0, flatLogLimit);
   addLogDayEntry(state, entry);
   return entry;
+}
+
+function recordSpiritExpense(state, entity, amount, purpose, category = "other") {
+  const safeAmount = Math.max(0, Math.floor(Number(amount) || 0));
+  if (!entity || !safeAmount) return null;
+  if (!Array.isArray(entity.spiritExpenses)) entity.spiritExpenses = [];
+  const day = Math.max(1, Math.floor(Number(state?.day) || 1));
+  const date = stateDateForDay(state, day);
+  const existing = entity.spiritExpenses.find((record) => (
+    Number(record.day) === day
+    && record.purpose === purpose
+    && record.category === category
+  ));
+  if (existing) {
+    existing.amount = Math.max(0, Math.floor(Number(existing.amount) || 0)) + safeAmount;
+    existing.time = timestampKey();
+    return existing;
+  }
+  const record = {
+    day,
+    date,
+    time: timestampKey(),
+    amount: safeAmount,
+    purpose: String(purpose || "其他支出"),
+    category
+  };
+  entity.spiritExpenses.unshift(record);
+  entity.spiritExpenses = entity.spiritExpenses
+    .filter((entry) => Number(entry.day) >= Math.max(1, day - growthRecordDays + 1))
+    .slice(0, 120);
+  return record;
+}
+
+function ensureSpiritExpenseHistory(state, entity) {
+  let changed = false;
+  if (!Array.isArray(entity.spiritExpenses)) {
+    entity.spiritExpenses = [];
+    changed = true;
+  }
+  const groupedSkillCosts = new Map();
+  for (const upgrade of entity.skillUpgrades || []) {
+    const amount = Math.max(0, Math.floor(Number(upgrade.cost) || 0));
+    if (!amount) continue;
+    const day = Math.max(1, Math.floor(Number(upgrade.day) || 1));
+    const skillName = upgrade.skillName || upgrade.name || combatSkills.find((skill) => skill.id === upgrade.skillId)?.name || "未知技能";
+    const purpose = `技能升阶·${skillName}`;
+    const key = `${day}|${purpose}`;
+    groupedSkillCosts.set(key, {
+      day,
+      date: upgrade.date || stateDateForDay(state, day),
+      time: upgrade.time || "",
+      amount: (groupedSkillCosts.get(key)?.amount || 0) + amount,
+      purpose,
+      category: "skill"
+    });
+  }
+  if (groupedSkillCosts.size) {
+    const skillDays = new Set([...groupedSkillCosts.values()].map((expense) => expense.day));
+    const previousSkillExpenses = entity.spiritExpenses.filter((record) => record.category === "skill" && skillDays.has(Number(record.day)));
+    const canonicalSkillExpenses = [...groupedSkillCosts.values()];
+    if (JSON.stringify(previousSkillExpenses) !== JSON.stringify(canonicalSkillExpenses)) changed = true;
+    entity.spiritExpenses = [
+      ...entity.spiritExpenses.filter((record) => record.category !== "skill" || !skillDays.has(Number(record.day))),
+      ...canonicalSkillExpenses
+    ];
+  }
+  entity.spiritExpenses = entity.spiritExpenses
+    .filter((record) => record && Math.max(0, Math.floor(Number(record.amount) || 0)) > 0)
+    .sort((left, right) => Number(right.day) - Number(left.day) || String(right.time || "").localeCompare(String(left.time || "")))
+    .slice(0, 120);
+  return changed;
 }
 
 function normalizeLogEntry(state, entry = {}) {
@@ -9295,7 +9418,9 @@ export function resolveEncounter(state, payload = {}) {
   relation.interactions += 1;
   relation.lastDay = state.day;
   state.player.xp = Math.max(0, state.player.xp + encounterXp);
+  const spiritExpense = Math.max(0, -(Number(effects.spirit) || 0));
   state.player.spirit = Math.max(0, state.player.spirit + (Number(effects.spirit) || 0));
+  if (spiritExpense) recordSpiritExpense(state, state.player, spiritExpense, `因缘·${event.title}`, "encounter");
   state.player.hp = clamp(state.player.hp + (Number(effects.hp) || 0), 1, effectiveMaxHp(state.player, state));
   state.player.mana = clamp(state.player.mana + (Number(effects.mana) || 0), 0, effectiveMaxMana(state.player, state));
   state.player.reputation = Math.max(0, state.player.reputation + (Number(effects.reputation) || 0));
@@ -11697,7 +11822,11 @@ function resolveTrialBattle(state, run, node) {
   if (!won) {
     if (opponent.kind !== "monster") run.defeatedByOpponentId = opponent.id;
     const failureSpirit = Number(daoTrialCycleAffixes.find((item) => item.id === run.affixId)?.effects?.failureSpirit || 0);
-    if (failureSpirit) state.player.spirit = Math.max(0, state.player.spirit - failureSpirit);
+    if (failureSpirit) {
+      const paidSpirit = Math.min(Math.max(0, Math.floor(Number(state.player.spirit) || 0)), failureSpirit);
+      state.player.spirit = Math.max(0, state.player.spirit - failureSpirit);
+      recordSpiritExpense(state, state.player, paidSpirit, "问道秘境·败退损失", "dao-trial");
+    }
     const summary = finishDaoTrialRun(state, run, false, `止步${node.name}`);
     return { replay: publicReplay(replay), completed: true, summary };
   }
@@ -11857,6 +11986,7 @@ export function createDefaultState() {
       bestDungeonName: "未入秘境",
       dungeonHistory: [],
       dailyRecords: [],
+      spiritExpenses: [],
       breakthroughs: [],
       skillUpgrades: [],
       duelHistory: []
@@ -12337,12 +12467,15 @@ export function ensureStateShape(state) {
   state.player.bestDungeonName ??= "未入秘境";
   state.player.dungeonHistory ??= [];
   state.player.dailyRecords ??= [];
+  state.player.spiritExpenses ??= [];
   state.player.breakthroughs ??= [];
   state.player.skillUpgrades ??= [];
   state.player.duelHistory ??= [];
   for (const record of state.player.dailyRecords) changed = ensureDatedRecord(record) || changed;
+  for (const record of state.player.spiritExpenses) changed = ensureDatedRecord(record) || changed;
   for (const record of state.player.breakthroughs) changed = ensureDatedRecord(record) || changed;
   for (const record of state.player.skillUpgrades) changed = ensureDatedRecord(record) || changed;
+  changed = ensureSpiritExpenseHistory(state, state.player) || changed;
   if (needsSkillMigration(state.player.skillId)) {
     state.player.skillId = randomSkillId();
     changed = true;
@@ -12511,12 +12644,15 @@ export function ensureStateShape(state) {
     changed = ensureField(full, "heartDemon", () => Math.floor(Math.random() * 8)) || changed;
     changed = ensureField(full, "mood", () => pick(["谨慎", "好斗", "闭关", "游历"])) || changed;
     changed = ensureField(full, "dailyRecords", []) || changed;
+    changed = ensureField(full, "spiritExpenses", []) || changed;
     changed = ensureField(full, "breakthroughs", []) || changed;
     changed = ensureField(full, "skillUpgrades", []) || changed;
     changed = ensureField(full, "duelHistory", []) || changed;
     for (const record of full.dailyRecords) changed = ensureDatedRecord(record) || changed;
+    for (const record of full.spiritExpenses) changed = ensureDatedRecord(record) || changed;
     for (const record of full.breakthroughs) changed = ensureDatedRecord(record) || changed;
     for (const record of full.skillUpgrades) changed = ensureDatedRecord(record) || changed;
+    changed = ensureSpiritExpenseHistory(state, full) || changed;
     changed = ensureField(full, "duelWins", () => Math.floor(Math.random() * 6)) || changed;
     changed = ensureField(full, "duelLosses", () => Math.floor(Math.random() * 4)) || changed;
     changed = ensureField(full, "lastBreakthroughDay", 0) || changed;
@@ -13160,6 +13296,7 @@ function publicCultivatorDetailHistory(state, match) {
     person: {
       id: entity.id,
       dailyRecords: trimRecordsByDay(entity.dailyRecords || [], currentDay, growthRecordDays, growthRecordLimit),
+      spiritExpenses: trimRecordsByDay(entity.spiritExpenses || [], currentDay, growthRecordDays, 120),
       breakthroughs: trimRecordsByDay(entity.breakthroughs || [], currentDay, growthRecordDays, growthRecordLimit),
       skillUpgrades: trimRecordsByDay(entity.skillUpgrades || [], currentDay, growthRecordDays, growthRecordLimit),
       duelSeasonHistory: entity.duelSeasonHistory || [],
@@ -14642,6 +14779,7 @@ export function dailySettlement(state, options = {}) {
     const missingXp = Math.max(0, needBeforeBreak - npc.xp);
     if (missingXp > 0 && missingXp <= 100 && missingXp <= npc.spirit && npc.realm < realms.length - 1) {
       npc.spirit -= missingXp;
+      recordSpiritExpense(state, npc, missingXp, "补足突破修为", "cultivation");
       npc.xp += missingXp;
       boughtXp = missingXp;
     }
@@ -15762,6 +15900,7 @@ export function buyItem(state, kind) {
   }
   const record = shopPurchaseRecord(state, kind);
   state.player.spirit -= itemState.price;
+  recordSpiritExpense(state, state.player, itemState.price, `坊市·${item.name}`, "shop");
   state.bag[kind] = Math.max(0, Math.floor(Number(state.bag[kind]) || 0)) + 1;
   record.count = Math.max(0, Math.floor(Number(record.count) || 0)) + 1;
   if (item.limit?.type === "permanent") {

@@ -13278,6 +13278,7 @@ body::before {
 
 .rank-surface.view.active > .character-dossier .dossier-ranking-vault {
   position: relative;
+  order: 99;
   overflow: hidden;
   margin-top: 14px;
   padding: 16px 18px 18px;

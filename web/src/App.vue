@@ -10087,6 +10087,7 @@ function detailedPerson(person) {
     : person;
   return withDuelRank({
     ...merged,
+    spiritExpenses: merged.spiritExpenses || [],
     dailyRecords: merged.dailyRecords || [],
     breakthroughs: merged.breakthroughs || [],
     duelHistory: merged.duelHistory || [],
@@ -11248,13 +11249,14 @@ function compactRecordNote(note) {
 function dailyRecordMainText(record) {
   const totalXp = Number(record.xp) || 0;
   const spirit = Number(record.spirit) || 0;
-  return `经验 +${totalXp} · 灵石 +${spirit}`;
+  return `经验 +${totalXp} · 灵石收入 +${spirit}`;
 }
 
 function recentDayFloor(person) {
   const days = [
     gameState.value.day,
     ...(person?.dailyRecords || []).map((record) => record.day),
+    ...(person?.spiritExpenses || []).map((record) => record.day),
     ...(person?.dungeonHistory || []).map((record) => record.day)
   ]
     .map((day) => Number(day) || 0)
@@ -11264,7 +11266,16 @@ function recentDayFloor(person) {
 
 function personDailyRecords(person) {
   const floor = recentDayFloor(person);
-  return (person?.dailyRecords || []).filter((record) => (Number(record.day) || 0) >= floor).slice(0, 30);
+  const records = new Map((person?.dailyRecords || []).map((record) => [Number(record.day), record]));
+  for (const expense of person?.spiritExpenses || []) {
+    const day = Number(expense.day) || 0;
+    if (!day || records.has(day)) continue;
+    records.set(day, { day, date: expense.date, time: expense.time, xp: 0, spirit: 0, note: "当日灵石支出" });
+  }
+  return [...records.values()]
+    .filter((record) => (Number(record.day) || 0) >= floor)
+    .sort((left, right) => Number(right.day) - Number(left.day))
+    .slice(0, 30);
 }
 
 function dailyEquipmentDrops(person, record) {
@@ -11280,8 +11291,13 @@ function dailyEquipmentDrops(person, record) {
 
 function dailyRecordMetaText(person, record) {
   const drops = dailyEquipmentDrops(person, record);
-  if (!drops.length) return "";
-  return `装备 ${drops.slice(0, 2).join("、")}${drops.length > 2 ? `等${drops.length}件` : ""}`;
+  const expenses = (person?.spiritExpenses || []).filter((entry) => Number(entry.day) === Number(record?.day));
+  const expenseTotal = expenses.reduce((sum, entry) => sum + Math.max(0, Math.floor(Number(entry.amount) || 0)), 0);
+  const expenseText = expenses.slice(0, 3).map((entry) => `${entry.purpose || "其他支出"} ${Math.max(0, Math.floor(Number(entry.amount) || 0))}`).join("、");
+  const parts = [];
+  if (expenseTotal) parts.push(`支出 ${expenseTotal}：${expenseText}${expenses.length > 3 ? `等${expenses.length}项` : ""}`);
+  if (drops.length) parts.push(`装备 ${drops.slice(0, 2).join("、")}${drops.length > 2 ? `等${drops.length}件` : ""}`);
+  return parts.join(" · ");
 }
 
 function recordTextFailed(text = "") {
@@ -12099,11 +12115,11 @@ function personStats(person) {
   return [
     { label: "性别", value: genderLabel(person.gender), icon: "gender" },
     { label: "灵石", value: Math.floor(person.spirit || 0), icon: "spirit" },
-    dossierStatLine("血量", effective.maxHp, effective.bonuses.maxHp, "hp"),
-    dossierStatLine("法力", effective.maxMana, effective.bonuses.maxMana, "mana"),
-    dossierStatLine("攻击", effective.attack, effective.bonuses.attack, "attack"),
-    dossierStatLine("防御", effective.defense, effective.bonuses.defense, "defense"),
-    dossierStatLine("神识", effective.divineSense, effective.bonuses.divineSense, "sense"),
+    dossierStatLine("血量", effective.maxHp, effective.bonuses.maxHp, "hp", effective.bonusSources?.maxHp),
+    dossierStatLine("法力", effective.maxMana, effective.bonuses.maxMana, "mana", effective.bonusSources?.maxMana),
+    dossierStatLine("攻击", effective.attack, effective.bonuses.attack, "attack", effective.bonusSources?.attack),
+    dossierStatLine("防御", effective.defense, effective.bonuses.defense, "defense", effective.bonusSources?.defense),
+    dossierStatLine("神识", effective.divineSense, effective.bonuses.divineSense, "sense", effective.bonusSources?.divineSense),
     { label: "技能", value: skillNameOnlyLabel(person), icon: "skill", help: skillTip(person) },
     { label: "天赋", value: talent.score, icon: "power", help: talentHint(person) },
     { label: "战力排名", value: powerRank ? `#${powerRank}` : "未上榜", icon: "rank", help: powerRank ? `当前个人战力榜第 ${powerRank} 名。` : "当前不在个人战力榜中。" },
@@ -12112,14 +12128,21 @@ function personStats(person) {
   ];
 }
 
-function dossierStatLine(label, total, bonus = 0, icon = "default") {
+function dossierStatLine(label, total, bonus = 0, icon = "default", sources = []) {
   const value = statTotal(total);
-  const gain = Math.max(0, Math.floor(Number(bonus) || 0));
+  const gain = Math.floor(Number(bonus) || 0);
+  const signed = (amount) => `${amount >= 0 ? "+" : ""}${amount}`;
+  const sourceText = (Array.isArray(sources) ? sources : [])
+    .filter((source) => Number(source?.value) || Number(source?.rate))
+    .map((source) => `${source.label} ${formatPercent(Number(source.rate) || 0)}（${signed(Math.floor(Number(source.value) || 0))}）`)
+    .join("；");
   return {
     label,
     value,
     icon,
-    help: gain > 0 ? `当前为 ${value}，其中加成 +${gain}。` : `当前为 ${value}。`
+    help: gain !== 0
+      ? `基础 ${value - gain}；${sourceText || `属性加成 ${signed(gain)}`}；合计 ${signed(gain)}。`
+      : `基础 ${value}；暂无属性加成。`
   };
 }
 

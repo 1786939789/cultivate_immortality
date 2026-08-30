@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   addTask,
   advanceDailyRootFortuneDay,
+  buyItem,
   createDefaultState,
   dailySettlement,
   deleteTaskCompletion,
@@ -14,7 +15,7 @@ import {
   powerOf,
   runDailyDuels
 } from "../server/gameLogic.mjs";
-import { duelRanks } from "../server/gameData.mjs";
+import { duelRanks, roots } from "../server/gameData.mjs";
 
 function mustThrow(action, message) {
   let thrown = false;
@@ -27,6 +28,45 @@ function mustThrow(action, message) {
 }
 
 const state = createDefaultState();
+
+const expenseState = createDefaultState();
+expenseState.day = 1;
+expenseState.player.spirit = 1000;
+const spiritBeforePurchase = expenseState.player.spirit;
+buyItem(expenseState, "huanglong_dan");
+assert.equal(expenseState.player.spiritExpenses.length, 1, "坊市购买应记录灵石支出");
+assert.equal(expenseState.player.spiritExpenses[0].amount, spiritBeforePurchase - expenseState.player.spirit, "灵石支出金额应等于实际扣款");
+assert.match(expenseState.player.spiritExpenses[0].purpose, /坊市/);
+const expenseDetail = getPublicCultivatorDetail(expenseState, "player", { scope: "history" });
+assert.equal(expenseDetail.person.spiritExpenses[0].amount, expenseState.player.spiritExpenses[0].amount, "人物历史接口应返回灵石支出流水");
+
+const legacyExpenseState = createDefaultState();
+legacyExpenseState.day = 3;
+delete legacyExpenseState.player.spiritExpenses;
+legacyExpenseState.player.skillUpgrades = [{ day: 2, name: "长春回灵诀", cost: 80, success: true }];
+ensureStateShape(legacyExpenseState);
+assert.deepEqual(
+  legacyExpenseState.player.spiritExpenses.map(({ day, amount, purpose }) => ({ day, amount, purpose })),
+  [{ day: 2, amount: 80, purpose: "技能升阶·长春回灵诀" }],
+  "旧存档应从精确的技能升阶记录补齐灵石支出"
+);
+
+const bonusSourceState = createDefaultState();
+const attackRoot = { ...roots.find((entry) => entry.key === "metal"), bonus: 0.2 };
+bonusSourceState.player.root = attackRoot;
+bonusSourceState.player.roots = [attackRoot];
+bonusSourceState.player.primaryRootKey = attackRoot.key;
+ensureStateShape(bonusSourceState);
+const bonusSourceStats = effectiveStats(bonusSourceState.player, bonusSourceState);
+assert.equal(
+  bonusSourceStats.bonusSources.attack.reduce((sum, source) => sum + source.value, 0),
+  bonusSourceStats.bonuses.attack,
+  "属性来源明细之和应等于最终攻击加成"
+);
+assert.ok(
+  bonusSourceStats.bonusSources.attack.some((source) => source.label.startsWith("灵根·")),
+  "属性来源明细应包含灵根来源"
+);
 
 const fortuneRotationState = createDefaultState();
 const fortuneDays = Array.from({ length: 12 }, (_, day) => getDailyRootFortune(fortuneRotationState, fortuneRotationState.player, day));
